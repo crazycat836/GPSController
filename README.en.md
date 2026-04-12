@@ -105,7 +105,7 @@
 
 ## Prerequisites
 
-**Download the installer**: https://github.com/keezxc1223/locwarp/releases
+**[Download the installer](https://github.com/keezxc1223/locwarp/releases)**
 
 End users must complete the following four steps before use:
 
