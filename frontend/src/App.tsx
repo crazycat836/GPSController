@@ -233,6 +233,11 @@ const App: React.FC = () => {
     : null
 
   const speed = SPEED_MAP[sim.moveMode] || 5
+  // Status-bar display: range > custom > mode default. Backend re-picks per
+  // leg when a range is set, so show "min~max" as an indicator.
+  const displaySpeed: number | string = (sim.speedMinKmh != null && sim.speedMaxKmh != null)
+    ? `${Math.min(sim.speedMinKmh, sim.speedMaxKmh)}~${Math.max(sim.speedMinKmh, sim.speedMaxKmh)}`
+    : (sim.customSpeedKmh ?? speed)
 
   // Determine running/paused state from status
   const isRunning = sim.status.running
@@ -532,7 +537,7 @@ const App: React.FC = () => {
           deviceName={device.connectedDevice?.name ?? ''}
           iosVersion={device.connectedDevice?.ios_version ?? ''}
           currentPosition={currentPos}
-          speed={speed}
+          speed={displaySpeed}
           mode={sim.mode}
           cooldown={cooldown}
           cooldownEnabled={cooldownEnabled}

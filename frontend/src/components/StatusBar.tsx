@@ -11,7 +11,7 @@ interface StatusBarProps {
   deviceName: string;
   iosVersion: string;
   currentPosition: Position | null;
-  speed: number;
+  speed: number | string;
   mode: SimMode;
   cooldown: number; // seconds remaining, 0 if inactive
   cooldownEnabled: boolean;
