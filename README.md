@@ -2,6 +2,8 @@
 
 **iOS 虛擬定位模擬器** — 在 Windows 上控制 iPhone 的 GPS 定位,支援直接跳點、導航、路線循環、多點停留、隨機漫步、搖桿操作等模擬模式,可經由 USB 或 WiFi 連線。
 
+> **Languages**: 繁體中文 · [English](README.en.md)
+
 > ### 相容性測試狀態
 >
 > | iOS 版本 | 驗證來源 | 狀態 |
