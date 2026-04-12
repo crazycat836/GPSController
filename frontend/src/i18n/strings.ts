@@ -17,6 +17,7 @@ export const STRINGS = {
   'generic.pause': { zh: '暫停', en: 'Pause' },
   'generic.resume': { zh: '繼續', en: 'Resume' },
   'generic.clear': { zh: '清除', en: 'Clear' },
+  'generic.add': { zh: '加入', en: 'Add' },
   'generic.km_h': { zh: 'km/h', en: 'km/h' },
 
   // ── Status bar ───────────────────────────────
@@ -155,6 +156,58 @@ export const STRINGS = {
   'err.no_position': { zh: '尚未取得目前位置,請先跳點到一個座標', en: 'No current position — teleport to a coordinate first' },
   'err.tunnel_lost': { zh: 'WiFi Tunnel 連線中斷,請重新建立', en: 'Wi-Fi tunnel dropped — please reconnect' },
   'err.cooldown_active': { zh: '冷卻中,請等待後再跳點', en: 'Cooldown active — wait before teleporting' },
+
+  // ── Panel extras ────────────────────────────
+  'panel.mode': { zh: '模式', en: 'Mode' },
+  'panel.address_search': { zh: '地址搜尋', en: 'Address Search' },
+  'panel.library': { zh: '收藏與路線', en: 'Library' },
+  'panel.library_drag_hint': { zh: '收藏與路線 · 拖曳此處移動', en: 'Library · Drag to move' },
+  'panel.bookmarks_count': { zh: '座標收藏', en: 'Bookmarks' },
+  'panel.routes_count': { zh: '路線', en: 'Routes' },
+  'panel.close': { zh: '關閉', en: 'Close' },
+  'panel.route_load_tooltip': { zh: '點擊載入路線', en: 'Click to load route' },
+  'panel.random_walk_range': { zh: '隨機漫步範圍', en: 'Random walk range' },
+  'panel.meters_radius': { zh: '公尺 (半徑)', en: 'meters (radius)' },
+  'panel.current_pos': { zh: '目前位置:', en: 'Current position:' },
+  'panel.waypoints_pts': { zh: '個', en: '' },
+  'panel.waypoints_remove': { zh: '移除', en: 'Remove' },
+  'panel.waypoint_num': { zh: '路徑點 {n}', en: 'Waypoint {n}' },
+  'panel.waypoints_gen_tooltip': { zh: '在當前位置周圍隨機產生路徑點', en: 'Random waypoints around current position' },
+  'panel.waypoints_gen_all_tooltip': { zh: '半徑與數量全隨機', en: 'Fully randomize radius and count' },
+  'panel.points': { zh: '點', en: 'pts' },
+  'panel.start_prefix': { zh: '開始', en: 'Start ' },
+  'panel.pts_short': { zh: 'pts', en: 'pts' },
+
+  // ── Toasts extra ─────────────────────────────
+  'toast.no_position_random': { zh: '尚未取得目前位置,無法產生隨機路徑點', en: 'No current position — cannot generate random waypoints' },
+  'toast.pause_countdown': { zh: '到點暫停中 · 剩餘 {n}s', en: 'Paused at waypoint · {n}s left' },
+
+  // ── Bookmarks ────────────────────────────────
+  'bm.default': { zh: '預設', en: 'Default' },
+  'bm.add_here': { zh: '在目前位置新增收藏', en: 'Add bookmark at current position' },
+  'bm.add': { zh: '新增收藏', en: 'Add Bookmark' },
+  'bm.manage_categories': { zh: '管理分類', en: 'Manage Categories' },
+  'bm.name_placeholder': { zh: '收藏名稱', en: 'Bookmark name' },
+  'bm.no_position': { zh: '目前無可用位置', en: 'No position available' },
+  'bm.add_category': { zh: '新增分類', en: 'Add Category' },
+  'bm.new_category': { zh: '新增', en: 'New' },
+  'bm.blank': { zh: '空白', en: 'Empty' },
+  'bm.empty': { zh: '尚無收藏', en: 'No bookmarks' },
+  'bm.edit': { zh: '編輯', en: 'Edit' },
+  'bm.move_to': { zh: '移動到:', en: 'Move to:' },
+
+  // ── Address search ───────────────────────────
+  'search.placeholder': { zh: '搜尋地址...', en: 'Search address...' },
+  'search.searching': { zh: '搜尋中...', en: 'Searching...' },
+  'search.no_results': { zh: '無搜尋結果', en: 'No results' },
+
+  // ── Device status extra ──────────────────────
+  'device.connect_failed': { zh: '連線失敗', en: 'Connection failed' },
+  'wifi.tunnel_lost_banner': { zh: 'WiFi Tunnel 連線中斷,請重新建立', en: 'Wi-Fi tunnel dropped — please reconnect' },
+  'wifi.legacy_unavailable': { zh: 'iOS 17 以下連線方式目前不可用。', en: 'iOS 17 and below connection mode is not available.' },
+
+  // ── Map extras ──────────────────────────────
+  'map.destination': { zh: '目的地', en: 'Destination' },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

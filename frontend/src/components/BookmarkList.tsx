@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useT } from '../i18n';
 
 interface Bookmark {
   id?: string;
@@ -55,10 +56,11 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
   onCategoryAdd,
   onCategoryDelete,
 }) => {
+  const t = useT();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newCategory, setNewCategory] = useState(categories[0] || '預設');
+  const [newCategory, setNewCategory] = useState(categories[0] || 'Default');
   const [showCategoryMgr, setShowCategoryMgr] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [contextMenu, setContextMenu] = useState<{ bm: Bookmark; x: number; y: number } | null>(null);
@@ -128,19 +130,19 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
           className="action-btn"
           onClick={() => setShowAddDialog(!showAddDialog)}
           style={{ padding: '3px 8px', fontSize: 12 }}
-          title="在目前位置新增收藏"
+          title={t('bm.add_here')}
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          新增收藏
+          {t('bm.add')}
         </button>
         <button
           className="action-btn"
           onClick={() => setShowCategoryMgr(!showCategoryMgr)}
           style={{ padding: '3px 8px', fontSize: 12, marginLeft: 'auto' }}
-          title="管理分類"
+          title={t('bm.manage_categories')}
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="3" />
@@ -163,7 +165,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
           <input
             type="text"
             className="search-input"
-            placeholder="收藏名稱"
+            placeholder={t('bm.name_placeholder')}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddBookmark()}
@@ -192,15 +194,15 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
           </select>
           <div style={{ display: 'flex', gap: 6 }}>
             <button className="action-btn primary" onClick={handleAddBookmark} style={{ flex: 1, fontSize: 12 }}>
-              儲存
+              {t('generic.save')}
             </button>
             <button className="action-btn" onClick={() => setShowAddDialog(false)} style={{ fontSize: 12 }}>
-              取消
+              {t('generic.cancel')}
             </button>
           </div>
           {!currentPosition && (
             <div style={{ fontSize: 11, color: '#f44336', marginTop: 6 }}>
-              目前無可用位置
+              {t('bm.no_position')}
             </div>
           )}
         </div>
@@ -218,7 +220,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
           }}
         >
           <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 6, opacity: 0.7 }}>
-            管理分類
+            {t('bm.manage_categories')}
           </div>
           {categories.map((cat) => (
             <div
@@ -265,7 +267,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
             <input
               type="text"
               className="search-input"
-              placeholder="新增分類"
+              placeholder={t('bm.add_category')}
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
               onKeyDown={(e) => {
@@ -286,7 +288,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
               }}
               style={{ fontSize: 11 }}
             >
-              新增
+              {t('bm.new_category')}
             </button>
           </div>
         </div>
@@ -340,7 +342,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
           {!collapsed[cat] && (
             <div style={{ paddingLeft: 20 }}>
               {bms.length === 0 && (
-                <div style={{ fontSize: 11, opacity: 0.4, padding: '4px 0' }}>空白</div>
+                <div style={{ fontSize: 11, opacity: 0.4, padding: '4px 0' }}>{t('bm.blank')}</div>
               )}
               {bms.map((bm) => (
                 <div
@@ -415,7 +417,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
 
       {bookmarks.length === 0 && (
         <div style={{ fontSize: 12, opacity: 0.5, padding: '8px 0', textAlign: 'center' }}>
-          尚無收藏
+          {t('bm.empty')}
         </div>
       )}
 
@@ -453,7 +455,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                 <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
                 <path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
-              編輯
+              {t('bm.edit')}
             </div>
             <div
               style={ctxItemStyle}
@@ -468,12 +470,12 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                 <polyline points="3,6 5,6 21,6" />
                 <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               </svg>
-              <span style={{ color: '#f44336' }}>刪除</span>
+              <span style={{ color: '#f44336' }}>{t('generic.delete')}</span>
             </div>
             {categories.length > 1 && (
               <>
                 <div style={{ height: 1, background: '#444', margin: '4px 0' }} />
-                <div style={{ padding: '4px 12px', fontSize: 10, opacity: 0.5 }}>移動到：</div>
+                <div style={{ padding: '4px 12px', fontSize: 10, opacity: 0.5 }}>{t('bm.move_to')}</div>
                 {categories
                   .filter((c) => c !== contextMenu.bm.category)
                   .map((cat) => (

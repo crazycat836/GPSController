@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { wifiTunnelDiscover } from '../services/api';
+import { useT } from '../i18n';
 
 interface Device {
   id: string;
@@ -37,6 +38,7 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
   tunnelStatus = { running: false },
   onWifiConnect,
 }) => {
+  const t = useT();
   const [showDropdown, setShowDropdown] = useState(false);
   const [tunnelIp, setTunnelIp] = useState(() => localStorage.getItem('locwarp.tunnel.ip') || '');
   const [tunnelPort, setTunnelPort] = useState(() => localStorage.getItem('locwarp.tunnel.port') || '49152');
@@ -81,7 +83,7 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
     try {
       await onWifiConnect(legacyIp.trim());
     } catch (err: any) {
-      setLegacyError(err.message || '連線失敗');
+      setLegacyError(err.message || t('device.connect_failed'));
     } finally {
       setLegacyConnecting(false);
     }
@@ -97,10 +99,10 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
         setTunnelIp(first.ip);
         setTunnelPort(String(first.port));
       } else {
-        setTunnelError('未偵測到裝置,請確認 iPhone 與電腦在同一 WiFi');
+        setTunnelError(t('wifi.device_not_detected'));
       }
     } catch (err: any) {
-      setTunnelError(err.message || '偵測失敗');
+      setTunnelError(err.message || t('wifi.detect_failed'));
     } finally {
       setDiscovering(false);
     }
@@ -167,21 +169,21 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
           onClick={handleScan}
           disabled={scanning}
           style={{ padding: '4px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 70, justifyContent: 'center' }}
-          title="掃描 USB 裝置"
+          title={t('device.scan_tooltip')}
         >
           {scanning ? (
             <>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
                 <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="16" />
               </svg>
-              掃描中
+              {t('device.scan_scanning')}
             </>
           ) : scanResult != null && scanResult > 0 ? (
             <>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="3">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              <span style={{ color: '#4caf50' }}>找到 {scanResult} 台</span>
+              <span style={{ color: '#4caf50' }}>{t('device.scan_found', { n: scanResult })}</span>
             </>
           ) : scanResult === 0 ? (
             <>
@@ -190,7 +192,7 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                 <line x1="15" y1="9" x2="9" y2="15" />
                 <line x1="9" y1="9" x2="15" y2="15" />
               </svg>
-              <span style={{ color: '#f44336' }}>未偵測到</span>
+              <span style={{ color: '#f44336' }}>{t('device.scan_none')}</span>
             </>
           ) : (
             <>
@@ -319,7 +321,7 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
               </svg>
-              WiFi 無線連線
+              {t('wifi.section_title')}
               {tunnelStatus.running && (
                 <span style={{
                   fontSize: 10, padding: '1px 6px', borderRadius: 3,
@@ -363,7 +365,7 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                     fontWeight: wifiTab === 'ios17minus' ? 600 : 400, cursor: 'pointer',
                   }}
                 >
-                  iOS 17 以下
+                  {t('wifi.tab_ios17minus')}
                 </button>
               </div>
 
@@ -378,13 +380,13 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                     cursor: 'pointer',
                   }}
                 >
-                  如何找 IP?
+                  {t('wifi.help_ip')}
                 </button>
                 {wifiTab === 'ios17plus' && (
                   <button
                     onClick={handleDiscover}
                     disabled={discovering || tunnelStatus.running}
-                    title="自動偵測同網段 iPhone 的 IP 與 Port"
+                    title={t('wifi.detect_tooltip')}
                     style={{
                       flex: 1, fontSize: 10, padding: '3px 6px', borderRadius: 3,
                       border: '1px solid rgba(108, 140, 255, 0.5)',
@@ -397,7 +399,7 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                       <circle cx="11" cy="11" r="7" />
                       <line x1="21" y1="21" x2="16.65" y2="16.65" />
                     </svg>
-                    {discovering ? '偵測中' : '自動偵測'}
+                    {discovering ? t('wifi.detect_scanning') : t('wifi.detect')}
                   </button>
                 )}
               </div>
@@ -410,14 +412,13 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                   borderRadius: 4, lineHeight: 1.6,
                 }}>
                   <div style={{ fontWeight: 600, marginBottom: 4, color: '#6c8cff' }}>
-                    如何找到 iPhone 的 IP?
+                    {t('wifi.help_title')}
                   </div>
                   <div style={{ opacity: 0.85 }}>
-                    iPhone 上:<br />
-                    <b>設定 → Wi-Fi → 點目前連線網路旁的 (i) → 往下找「IP 位址」</b>
+                    {t('wifi.help_steps')}
                   </div>
                   <div style={{ fontSize: 10, opacity: 0.6, marginTop: 6 }}>
-                    iPhone 與電腦必須在同一個 WiFi 網段
+                    {t('wifi.help_hint')}
                   </div>
                 </div>
               )}
@@ -428,14 +429,14 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                   <div>
                     <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6, padding: '4px 6px', background: 'rgba(76, 175, 80, 0.08)', borderRadius: 3 }}>
                       <div>RSD: {tunnelStatus.rsd_address}:{tunnelStatus.rsd_port}</div>
-                      <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>USB 可拔除</div>
+                      <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>{t('wifi.tunnel_usb_can_disconnect')}</div>
                     </div>
                     <button
                       className="action-btn"
                       onClick={async () => { if (onStopTunnel) await onStopTunnel(); }}
                       style={{ width: '100%', fontSize: 11, color: '#f44336' }}
                     >
-                      Stop Tunnel
+                      {t('wifi.tunnel_stop')}
                     </button>
                   </div>
                 ) : (
@@ -444,7 +445,7 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                       <span style={{ opacity: 0.7, width: 36 }}>IP</span>
                       <input
                         type="text" className="search-input"
-                        placeholder="iPhone IP(例如 192.168.0.205)"
+                        placeholder={t('wifi.ip_placeholder')}
                         value={tunnelIp} onChange={(e) => setTunnelIp(e.target.value)}
                         style={{ flex: 1, fontSize: 12 }} disabled={tunnelConnecting}
                       />
@@ -479,9 +480,9 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
                             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83" />
                           </svg>
-                          建立 tunnel 中...
+                          {t('wifi.tunnel_establishing')}
                         </span>
-                      ) : 'Start WiFi Tunnel'}
+                      ) : t('wifi.tunnel_start')}
                     </button>
                     {tunnelError && (
                       <div style={{ fontSize: 11, color: '#f44336', marginTop: 4, padding: '4px 6px', background: 'rgba(244,67,54,0.1)', borderRadius: 3 }}>
@@ -489,7 +490,7 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                       </div>
                     )}
                     <div style={{ fontSize: 10, opacity: 0.4, marginTop: 6 }}>
-                      請使用身分管理員開啟 LocWarp,必須先通過 USB 信任。
+                      {t('wifi.tunnel_admin_hint')}
                     </div>
                   </div>
                 )
@@ -504,7 +505,7 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                         <span style={{ opacity: 0.7, width: 36 }}>IP</span>
                         <input
                           type="text" className="search-input"
-                          placeholder="iPhone IP(例如 192.168.0.205)"
+                          placeholder={t('wifi.ip_placeholder')}
                           value={legacyIp} onChange={(e) => setLegacyIp(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleLegacyConnect()}
                           style={{ flex: 1, fontSize: 12 }} disabled={legacyConnecting}
@@ -516,7 +517,7 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                         disabled={legacyConnecting || !legacyIp.trim()}
                         style={{ width: '100%', fontSize: 12 }}
                       >
-                        {legacyConnecting ? '連線中...' : 'Connect'}
+                        {legacyConnecting ? t('wifi.legacy_connecting') : t('wifi.legacy_connect')}
                       </button>
                       {legacyError && (
                         <div style={{ fontSize: 11, color: '#f44336', marginTop: 4, padding: '4px 6px', background: 'rgba(244,67,54,0.1)', borderRadius: 3 }}>
@@ -524,12 +525,12 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
                         </div>
                       )}
                       <div style={{ fontSize: 10, opacity: 0.4, marginTop: 6 }}>
-                        iPhone 解鎖並已配對即可直接連線。
+                        {t('wifi.legacy_hint')}
                       </div>
                     </>
                   ) : (
                     <div style={{ fontSize: 11, opacity: 0.6, padding: '8px 0' }}>
-                      iOS 17 以下連線方式目前不可用。
+                      {t('wifi.legacy_unavailable')}
                     </div>
                   )}
                 </div>

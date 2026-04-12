@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useT } from '../i18n';
 import L from 'leaflet';
 
 interface Position {
@@ -47,6 +48,7 @@ const MapView: React.FC<MapViewProps> = ({
   onAddWaypoint,
   showWaypointOption,
 }) => {
+  const t = useT();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const currentMarkerRef = useRef<L.CircleMarker | null>(null);
@@ -262,7 +264,7 @@ const MapView: React.FC<MapViewProps> = ({
         icon: redIcon,
       }).addTo(map);
 
-      marker.bindTooltip('目的地', { direction: 'top', offset: [0, -48] });
+      marker.bindTooltip(t('map.destination'), { direction: 'top', offset: [0, -48] });
       destMarkerRef.current = marker;
     }
   }, [destination]);
@@ -304,7 +306,7 @@ const MapView: React.FC<MapViewProps> = ({
       });
 
       const marker = L.marker([wp.lat, wp.lng], { icon: wpIcon }).addTo(map);
-      marker.bindTooltip(`路徑點 ${wp.index + 1}`, {
+      marker.bindTooltip(t('panel.waypoint_num', { n: wp.index + 1 }), {
         direction: 'top',
         offset: [0, -14],
       });
@@ -386,7 +388,7 @@ const MapView: React.FC<MapViewProps> = ({
       <button
         onClick={recenter}
         disabled={!currentPosition}
-        title="定位到目前位置"
+        title={t('map.recenter')}
         style={{
           position: 'absolute',
           left: 16,
@@ -450,7 +452,7 @@ const MapView: React.FC<MapViewProps> = ({
               <line x1="2" y1="12" x2="6" y2="12" />
               <line x1="18" y1="12" x2="22" y2="12" />
             </svg>
-            瞬移到這裡
+            {t('map.teleport_here')}
           </div>
           <div
             className="context-menu-item"
@@ -466,7 +468,7 @@ const MapView: React.FC<MapViewProps> = ({
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
               <polygon points="3,11 22,2 13,21 11,13" />
             </svg>
-            導航到這裡
+            {t('map.navigate_here')}
           </div>
           {showWaypointOption && onAddWaypoint && (
             <div
@@ -486,7 +488,7 @@ const MapView: React.FC<MapViewProps> = ({
                 <line x1="5" y1="12" x2="1" y2="12" />
                 <line x1="23" y1="12" x2="19" y2="12" />
               </svg>
-              添加路徑點
+              {t('map.add_waypoint')}
             </div>
           )}
           <div
@@ -505,7 +507,7 @@ const MapView: React.FC<MapViewProps> = ({
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
               <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
             </svg>
-            加入收藏
+            {t('map.add_bookmark')}
           </div>
         </div>
       )}

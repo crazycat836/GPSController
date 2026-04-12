@@ -1,4 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
+import { useT } from '../i18n';
 
 interface JoystickPadProps {
   direction: number;
@@ -17,6 +18,7 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
   onMove,
   onRelease,
 }) => {
+  const t = useT();
   const padRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const [handlePos, setHandlePos] = useState({ x: 0, y: 0 });
@@ -24,14 +26,14 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
   const getDirectionLabel = (deg: number): string => {
     // deg is compass degrees: 0=N, 90=E, 180=S, 270=W
     const d = ((deg % 360) + 360) % 360;
-    if (d >= 337.5 || d < 22.5) return '北';
-    if (d >= 22.5 && d < 67.5) return '東北';
-    if (d >= 67.5 && d < 112.5) return '東';
-    if (d >= 112.5 && d < 157.5) return '東南';
-    if (d >= 157.5 && d < 202.5) return '南';
-    if (d >= 202.5 && d < 247.5) return '西南';
-    if (d >= 247.5 && d < 292.5) return '西';
-    return '西北';
+    if (d >= 337.5 || d < 22.5) return t('joy.north');
+    if (d >= 22.5 && d < 67.5) return t('joy.northeast');
+    if (d >= 67.5 && d < 112.5) return t('joy.east');
+    if (d >= 112.5 && d < 157.5) return t('joy.southeast');
+    if (d >= 157.5 && d < 202.5) return t('joy.south');
+    if (d >= 202.5 && d < 247.5) return t('joy.southwest');
+    if (d >= 247.5 && d < 292.5) return t('joy.west');
+    return t('joy.northwest');
   };
 
   const calcFromEvent = useCallback(
@@ -178,10 +180,10 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
 
   // Direction arrows around the pad
   const arrows = [
-    { deg: 0, label: '東', x: PAD_RADIUS + 20, y: 0 },
-    { deg: 90, label: '北', x: 0, y: -(PAD_RADIUS + 20) },
-    { deg: 180, label: '西', x: -(PAD_RADIUS + 20), y: 0 },
-    { deg: 270, label: '南', x: 0, y: PAD_RADIUS + 20 },
+    { deg: 0, label: t('joy.east'), x: PAD_RADIUS + 20, y: 0 },
+    { deg: 90, label: t('joy.north'), x: 0, y: -(PAD_RADIUS + 20) },
+    { deg: 180, label: t('joy.west'), x: -(PAD_RADIUS + 20), y: 0 },
+    { deg: 270, label: t('joy.south'), x: 0, y: PAD_RADIUS + 20 },
   ];
 
   return (
@@ -299,7 +301,7 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
             {getDirectionLabel(direction)} | {(intensity * 100).toFixed(0)}%
           </>
         ) : (
-          '拖曳或按 WASD / 方向鍵'
+          t('joy.drag_or_keys')
         )}
       </div>
     </div>

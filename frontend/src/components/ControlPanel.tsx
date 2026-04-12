@@ -128,13 +128,14 @@ const modeIcons: Record<SimMode, JSX.Element> = {
   ),
 };
 
-const modeLabels: Record<SimMode, string> = {
-  [SimMode.Teleport]: '瞬間移動',
-  [SimMode.Navigate]: '導航移動',
-  [SimMode.Loop]: '路線巡迴',
-  [SimMode.MultiStop]: '多點導航',
-  [SimMode.RandomWalk]: '隨機漫步',
-  [SimMode.Joystick]: '搖桿操控',
+import type { StringKey } from '../i18n';
+const modeLabelKeys: Record<SimMode, StringKey> = {
+  [SimMode.Teleport]: 'mode.teleport',
+  [SimMode.Navigate]: 'mode.navigate',
+  [SimMode.Loop]: 'mode.loop',
+  [SimMode.MultiStop]: 'mode.multi_stop',
+  [SimMode.RandomWalk]: 'mode.random_walk',
+  [SimMode.Joystick]: 'mode.joystick',
 };
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -272,7 +273,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           onClick={() => toggleSection('mode')}
           style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
         >
-          {chevron(sections.mode)} 模式
+          {chevron(sections.mode)} {t('panel.mode')}
         </div>
         {sections.mode && (
           <div className="section-content" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -281,10 +282,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 key={mode}
                 className={`mode-btn${simMode === mode ? ' active' : ''}`}
                 onClick={() => onModeChange(mode)}
-                title={modeLabels[mode]}
+                title={t(modeLabelKeys[mode])}
               >
                 {modeIcons[mode]}
-                <span style={{ fontSize: 11, marginTop: 2 }}>{modeLabels[mode]}</span>
+                <span style={{ fontSize: 11, marginTop: 2 }}>{t(modeLabelKeys[mode])}</span>
               </button>
             ))}
           </div>
@@ -301,7 +302,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               <circle cx="12" cy="12" r="10" />
               <circle cx="12" cy="12" r="3" />
             </svg>
-            隨機漫步範圍
+            {t('panel.random_walk_range')}
           </div>
           <div className="section-content">
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -317,7 +318,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 min="50"
                 step="50"
               />
-              <span style={{ fontSize: 12, opacity: 0.6 }}>公尺 (半徑)</span>
+              <span style={{ fontSize: 12, opacity: 0.6 }}>{t('panel.meters_radius')}</span>
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
               {[200, 500, 1000, 2000].map((r) => (
@@ -414,7 +415,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                     style={{ padding: '2px 8px', fontSize: 11 }}
                     onClick={() => { onSpeedMinChange(null); onSpeedMaxChange(null); }}
                   >
-                    清除
+                    {t('generic.clear')}
                   </button>
                 )}
               </div>
@@ -469,7 +470,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="5,3 19,12 5,21" />
               </svg>
-              開始
+              {t('generic.start')}
             </button>
           )}
           {isRunning && (
@@ -515,7 +516,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               <input
                 type="text"
                 className="search-input"
-                placeholder="緯度"
+                placeholder={t('panel.coord_lat')}
                 value={coordLat}
                 onChange={(e) => setCoordLat(e.target.value)}
                 style={{ flex: 1 }}
@@ -523,18 +524,18 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               <input
                 type="text"
                 className="search-input"
-                placeholder="經度"
+                placeholder={t('panel.coord_lng')}
                 value={coordLng}
                 onChange={(e) => setCoordLng(e.target.value)}
                 style={{ flex: 1 }}
               />
             </div>
             <button className="action-btn primary" onClick={handleCoordGo} style={{ width: '100%' }}>
-              前往
+              {t('panel.coord_go')}
             </button>
             {currentPosition && (
               <div style={{ fontSize: 11, opacity: 0.6, marginTop: 6 }}>
-                目前位置: {currentPosition.lat.toFixed(6)}, {currentPosition.lng.toFixed(6)}
+                {t('panel.current_pos')} {currentPosition.lat.toFixed(6)}, {currentPosition.lng.toFixed(6)}
               </div>
             )}
           </div>
@@ -548,7 +549,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           onClick={() => toggleSection('search')}
           style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
         >
-          {chevron(sections.search)} 地址搜尋
+          {chevron(sections.search)} {t('panel.address_search')}
         </div>
         {sections.search && (
           <div className="section-content">
@@ -567,7 +568,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
           </svg>
-          收藏與路線
+          {t('panel.library')}
           <span style={{ opacity: 0.6, fontSize: 11 }}>
             ({bookmarks.length} / {savedRoutes.length})
           </span>
@@ -598,24 +599,24 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 <circle cx="9" cy="6" r="1" /><circle cx="9" cy="12" r="1" /><circle cx="9" cy="18" r="1" />
                 <circle cx="15" cy="6" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="15" cy="18" r="1" />
               </svg>
-              收藏與路線 · 拖曳此處移動
+              {t('panel.library_drag_hint')}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #3a3a42' }}>
               <button
                 className={`action-btn${libraryTab === 'bookmarks' ? ' primary' : ''}`}
                 style={{ flex: 1, borderRadius: 0, padding: '10px', background: libraryTab === 'bookmarks' ? '#2d4373' : 'transparent' }}
                 onClick={() => setLibraryTab('bookmarks')}
-              >座標收藏 ({bookmarks.length})</button>
+              >{t('panel.bookmarks_count')} ({bookmarks.length})</button>
               <button
                 className={`action-btn${libraryTab === 'routes' ? ' primary' : ''}`}
                 style={{ flex: 1, borderRadius: 0, padding: '10px', background: libraryTab === 'routes' ? '#2d4373' : 'transparent' }}
                 onClick={() => setLibraryTab('routes')}
-              >路線 ({savedRoutes.length})</button>
+              >{t('panel.routes_count')} ({savedRoutes.length})</button>
               <button
                 className="action-btn"
                 style={{ padding: '10px 14px', borderRadius: 0 }}
                 onClick={() => setLibraryOpen(false)}
-                title="關閉"
+                title={t('panel.close')}
               >✕</button>
             </div>
             <div style={{ padding: 12, overflowY: 'auto', flex: 1 }}>
@@ -720,7 +721,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                           <span
                             style={{ fontSize: 13, flex: 1, cursor: 'pointer' }}
                             onClick={() => { onRouteLoad(route.id); setLibraryOpen(false); }}
-                            title="點擊載入路線"
+                            title={t('panel.route_load_tooltip')}
                           >
                             {route.name}
                           </span>
@@ -731,7 +732,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                         {!isEditing && onRouteRename && (
                           <button
                             className="action-btn"
-                            title="重新命名"
+                            title={t('generic.rename')}
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditingRouteId(route.id);
@@ -748,7 +749,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                         {onRouteGpxExport && (
                           <button
                             className="action-btn"
-                            title="匯出為 GPX"
+                            title={t('panel.route_gpx_export_tooltip')}
                             onClick={(e) => { e.stopPropagation(); onRouteGpxExport(route.id); }}
                             style={{ padding: '2px 6px', fontSize: 10 }}
                           >
@@ -758,7 +759,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                         {onRouteDelete && (
                           <button
                             className="action-btn"
-                            title="刪除路線"
+                            title={t('generic.delete')}
                             onClick={(e) => {
                               e.stopPropagation();
                               if (confirm(t('panel.route_delete_confirm', { name: route.name }))) onRouteDelete(route.id);

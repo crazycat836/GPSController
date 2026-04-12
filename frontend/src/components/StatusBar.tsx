@@ -97,7 +97,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
           }}
         />
         <span style={{ color: isConnected ? '#4caf50' : '#f44336', fontWeight: 500 }}>
-          {isConnected ? '已連線' : '未連線'}
+          {isConnected ? t('status.connected') : t('status.disconnected')}
         </span>
       </div>
 
@@ -255,7 +255,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
 
       {/* Timestamp */}
       <span style={{ opacity: 0.4, fontSize: 10 }}>
-        {new Date().toLocaleTimeString()}
+        {new Date().toLocaleTimeString(undefined, { hour12: false })}
       </span>
     </div>
   );

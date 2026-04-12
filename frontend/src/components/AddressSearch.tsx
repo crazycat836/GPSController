@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { searchAddress } from '../services/api';
+import { useT } from '../i18n';
 
 interface SearchResult {
   name: string;
@@ -13,6 +14,7 @@ interface AddressSearchProps {
 }
 
 const AddressSearch: React.FC<AddressSearchProps> = ({ onSelect }) => {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -89,7 +91,7 @@ const AddressSearch: React.FC<AddressSearchProps> = ({ onSelect }) => {
         <input
           type="text"
           className="search-input"
-          placeholder="搜尋地址..."
+          placeholder={t('search.placeholder')}
           value={query}
           onChange={handleInputChange}
           onFocus={() => {
@@ -120,7 +122,7 @@ const AddressSearch: React.FC<AddressSearchProps> = ({ onSelect }) => {
       </div>
 
       {isLoading && (
-        <div style={{ fontSize: 11, opacity: 0.5, padding: '4px 0' }}>搜尋中...</div>
+        <div style={{ fontSize: 11, opacity: 0.5, padding: '4px 0' }}>{t('search.searching')}</div>
       )}
 
       {showResults && results.length > 0 && (
@@ -208,7 +210,7 @@ const AddressSearch: React.FC<AddressSearchProps> = ({ onSelect }) => {
             zIndex: 200,
           }}
         >
-          無搜尋結果
+          {t('search.no_results')}
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react'
+import { useT } from './i18n'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useDevice } from './hooks/useDevice'
 import { useSimulation } from './hooks/useSimulation'
@@ -22,6 +23,7 @@ const SPEED_MAP: Record<MoveMode, number> = {
 }
 
 const App: React.FC = () => {
+  const t = useT()
   const ws = useWebSocket()
   const device = useDevice()
   const sim = useSimulation(ws.lastMessage)
@@ -42,9 +44,9 @@ const App: React.FC = () => {
   const handleRestore = useCallback(async () => {
     try {
       await sim.restore()
-      showToast('已清除虛擬定位')
+      showToast(t('status.restore_success'))
     } catch {
-      showToast('清除失敗')
+      showToast(t('status.restore_failed'))
     }
   }, [showToast])
   const [wpGenRadius, setWpGenRadius] = useState(300)
@@ -52,7 +54,7 @@ const App: React.FC = () => {
 
   const generateWaypoints = useCallback((radius: number, count: number) => {
     if (!sim.currentPosition) {
-      alert('尚未取得目前位置,無法產生隨機路徑點')
+      alert(t('toast.no_position_random'))
       return
     }
     const { lat, lng } = sim.currentPosition
@@ -217,16 +219,16 @@ const App: React.FC = () => {
 
   const handleRouteSave = useCallback(async (name: string) => {
     if (sim.waypoints.length === 0) {
-      showToast('請先加入至少一個路徑點')
+      showToast(t('toast.route_need_waypoint'))
       return
     }
     try {
       await api.saveRoute({ name, waypoints: sim.waypoints, profile: sim.moveMode })
       const routes = await api.getSavedRoutes()
       setSavedRoutes(routes)
-      showToast(`已儲存路線「${name}」`)
+      showToast(t('toast.route_saved', { name }))
     } catch (err: any) {
-      showToast(`儲存失敗: ${err.message || '未知錯誤'}`)
+      showToast(t('toast.route_save_failed', { msg: err.message || '' }))
     }
   }, [sim, showToast])
 
@@ -235,9 +237,9 @@ const App: React.FC = () => {
       const res = await api.importGpx(file)
       const routes = await api.getSavedRoutes()
       setSavedRoutes(routes)
-      showToast(`已匯入 ${res.points} 個路徑點`)
+      showToast(t('toast.gpx_imported', { n: res.points }))
     } catch (err: any) {
-      showToast(`匯入失敗: ${err.message || '未知錯誤'}`)
+      showToast(t('toast.gpx_import_failed', { msg: err.message || '' }))
     }
   }, [showToast])
 
@@ -252,7 +254,7 @@ const App: React.FC = () => {
       const routes = await api.getSavedRoutes()
       setSavedRoutes(routes)
     } catch (err: any) {
-      showToast(err.message || '重新命名失敗')
+      showToast(err.message || t('toast.route_rename_failed'))
     }
   }, [showToast])
 
@@ -261,9 +263,9 @@ const App: React.FC = () => {
       await api.deleteRoute(id)
       const routes = await api.getSavedRoutes()
       setSavedRoutes(routes)
-      showToast('已刪除路線')
+      showToast(t('toast.route_deleted'))
     } catch (err: any) {
-      showToast(err.message || '刪除失敗')
+      showToast(err.message || t('toast.route_delete_failed'))
     }
   }, [showToast])
 
@@ -377,13 +379,13 @@ const App: React.FC = () => {
                 <line x1="12" y1="5" x2="12" y2="1" />
                 <line x1="12" y1="23" x2="12" y2="19" />
               </svg>
-              路徑點 ({sim.waypoints.length})
-              <span style={{ fontSize: 10, opacity: 0.5, marginLeft: 4 }}>右鍵地圖添加</span>
+              {t('panel.waypoints')} ({sim.waypoints.length})
+              <span style={{ fontSize: 10, opacity: 0.5, marginLeft: 4 }}>{t('panel.waypoints_hint')}</span>
             </div>
             <div className="section-content">
               <div style={{ marginBottom: 6, fontSize: 11 }}>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ opacity: 0.7, width: 36 }}>半徑</span>
+                  <span style={{ opacity: 0.7, width: 36 }}>{t('panel.waypoints_radius')}</span>
                   <input
                     type="number"
                     min={10}
@@ -394,7 +396,7 @@ const App: React.FC = () => {
                   <span style={{ opacity: 0.5, width: 16 }}>m</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ opacity: 0.7, width: 36 }}>數量</span>
+                  <span style={{ opacity: 0.7, width: 36 }}>{t('panel.waypoints_count')}</span>
                   <input
                     type="number"
                     min={1}
@@ -403,26 +405,26 @@ const App: React.FC = () => {
                     onChange={(e) => setWpGenCount(Math.max(1, parseInt(e.target.value) || 0))}
                     style={{ flex: 1, padding: '2px 4px', fontSize: 11 }}
                   />
-                  <span style={{ opacity: 0.5, width: 16 }}>點</span>
+                  <span style={{ opacity: 0.5, width: 16 }}>{t('panel.points')}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button
                     className="action-btn"
                     style={{ flex: 1, padding: '3px 8px', fontSize: 11 }}
                     onClick={handleGenerateRandomWaypoints}
-                    title="在當前位置周圍隨機產生路徑點"
-                  >隨機產生</button>
+                    title={t('panel.waypoints_gen_tooltip')}
+                  >{t('panel.waypoints_generate')}</button>
                   <button
                     className="action-btn"
                     style={{ flex: 1, padding: '3px 8px', fontSize: 11 }}
                     onClick={handleGenerateAllRandom}
-                    title="半徑與數量全隨機"
-                  >全隨機</button>
+                    title={t('panel.waypoints_gen_all_tooltip')}
+                  >{t('panel.waypoints_generate_all')}</button>
                 </div>
               </div>
               {sim.waypoints.length === 0 && (
                 <div style={{ fontSize: 12, opacity: 0.5, padding: '4px 0' }}>
-                  在地圖上右鍵點擊 → 「添加路徑點」,或使用上方隨機產生
+                  {t('panel.waypoints_empty')}
                 </div>
               )}
               {sim.waypoints.map((wp: any, i: number) => (
@@ -433,7 +435,7 @@ const App: React.FC = () => {
                     className="action-btn"
                     style={{ padding: '2px 6px', fontSize: 10 }}
                     onClick={() => handleRemoveWaypoint(i)}
-                    title="移除"
+                    title={t('panel.waypoints_remove')}
                   >✕</button>
                 </div>
               ))}
@@ -445,9 +447,9 @@ const App: React.FC = () => {
                     onClick={handleStartWaypointRoute}
                     disabled={sim.waypoints.length < 1 || !sim.currentPosition}
                   >
-                    開始{sim.mode === SimMode.Loop ? '巡迴' : sim.mode === SimMode.MultiStop ? '多點導航' : '導航'}
+                    {sim.mode === SimMode.Loop ? t('panel.waypoints_start_loop') : sim.mode === SimMode.MultiStop ? t('panel.waypoints_start_multi') : t('panel.waypoints_start_navigate')}
                   </button>
-                  <button className="action-btn" onClick={handleClearWaypoints}>清除</button>
+                  <button className="action-btn" onClick={handleClearWaypoints}>{t('generic.clear')}</button>
                 </div>
               )}
             </div>
@@ -489,7 +491,7 @@ const App: React.FC = () => {
               <rect x="6" y="4" width="4" height="16" rx="1" />
               <rect x="14" y="4" width="4" height="16" rx="1" />
             </svg>
-            到點暫停中 · 剩餘 {sim.pauseRemaining}s
+            {t('toast.pause_countdown', { n: sim.pauseRemaining })}
           </div>
         )}
         <MapView
@@ -526,14 +528,14 @@ const App: React.FC = () => {
               boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
             }}
           >
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>加入收藏</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{t('bm.add')}</div>
             <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 8 }}>
               {addBmDialog.lat.toFixed(5)}, {addBmDialog.lng.toFixed(5)}
             </div>
             <input
               type="text"
               className="search-input"
-              placeholder="收藏名稱"
+              placeholder={t('bm.name_placeholder')}
               autoFocus
               value={addBmDialog.name}
               onChange={(e) => setAddBmDialog({ ...addBmDialog, name: e.target.value })}
@@ -562,8 +564,8 @@ const App: React.FC = () => {
                 style={{ flex: 1 }}
                 disabled={!addBmDialog.name.trim()}
                 onClick={submitAddBookmark}
-              >加入</button>
-              <button className="action-btn" onClick={() => setAddBmDialog(null)}>取消</button>
+              >{t('generic.add')}</button>
+              <button className="action-btn" onClick={() => setAddBmDialog(null)}>{t('generic.cancel')}</button>
             </div>
           </div>
         )}

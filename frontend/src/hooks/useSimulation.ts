@@ -124,7 +124,10 @@ export function useSimulation(wsMessage: WsMessage | null) {
         break
       }
       case 'tunnel_lost': {
-        setError('WiFi Tunnel 連線中斷,請重新建立')
+        // Uses localStorage to get current language (hooks don't have i18n context easily here)
+        setError((typeof localStorage !== 'undefined' && localStorage.getItem('locwarp.lang') === 'en')
+          ? 'Wi-Fi tunnel dropped — please reconnect'
+          : 'WiFi Tunnel 連線中斷,請重新建立')
         break
       }
       case 'pause_countdown':
