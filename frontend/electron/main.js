@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, shell } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
 const http = require('http')
@@ -67,6 +67,15 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
+  })
+
+  // Open target="_blank" / external links in the user's default browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url)
+      return { action: 'deny' }
+    }
+    return { action: 'deny' }
   })
 
   const isDev = process.argv.includes('--dev') || !app.isPackaged

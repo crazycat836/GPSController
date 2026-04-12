@@ -1,12 +1,28 @@
 const API = 'http://127.0.0.1:8777'
 
+// Connection-refused means backend isn't up yet — retry with backoff.
+// Other HTTP errors (4xx/5xx) are real errors and propagate immediately.
+async function fetchWithRetry(url: string, opts: RequestInit, maxAttempts = 15): Promise<Response> {
+  let lastErr: unknown
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      return await fetch(url, opts)
+    } catch (e) {
+      lastErr = e
+      const delay = Math.min(500 + i * 300, 2000)
+      await new Promise((r) => setTimeout(r, delay))
+    }
+  }
+  throw lastErr ?? new Error('fetch failed')
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const opts: RequestInit = {
     method,
     headers: { 'Content-Type': 'application/json' },
   }
   if (body !== undefined) opts.body = JSON.stringify(body)
-  const res = await fetch(`${API}${path}`, opts)
+  const res = await fetchWithRetry(`${API}${path}`, opts)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(err.detail || res.statusText)
