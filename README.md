@@ -2,7 +2,7 @@
 
 **iOS 虛擬定位模擬器** — 在 Windows 上控制 iPhone 的 GPS 定位,支援直接跳點、導航、路線循環、多點停留、隨機漫步、搖桿操作等模擬模式,可經由 USB 或 WiFi 連線。
 
-> ⚠ **目前僅測試過 iOS 26 以上**。其他版本(iOS 17~25)理論上也能運作(pymobiledevice3 皆支援),但未經實測,遇到問題歡迎回報。
+> ⚠ **目前僅測試過 iOS 26**,其餘版本請自行測試。
 
 <p align="center">
   <img src="frontend/build/icon.png" width="128" alt="LocWarp">
