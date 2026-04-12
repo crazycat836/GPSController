@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { wifiTunnelDiscover } from '../services/api';
 
 interface Device {
   id: string;
@@ -40,6 +41,26 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
   const [tunnelConnecting, setTunnelConnecting] = useState(false);
   const [tunnelError, setTunnelError] = useState<string | null>(null);
   const [showIpHelp, setShowIpHelp] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+
+  const handleDiscover = async () => {
+    setDiscovering(true);
+    setTunnelError(null);
+    try {
+      const res = await wifiTunnelDiscover();
+      const first = res?.devices?.[0];
+      if (first) {
+        setTunnelIp(first.ip);
+        setTunnelPort(String(first.port));
+      } else {
+        setTunnelError('未偵測到裝置,請確認 iPhone 與電腦在同一 WiFi');
+      }
+    } catch (err: any) {
+      setTunnelError(err.message || '偵測失敗');
+    } finally {
+      setDiscovering(false);
+    }
+  };
 
   return (
     <div className={`device-status ${isConnected ? 'device-connected' : 'device-disconnected'}`}>
@@ -232,6 +253,24 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
               >
                 ?
               </button>
+              <button
+                onClick={handleDiscover}
+                disabled={discovering || tunnelStatus.running}
+                title="自動偵測同網段 iPhone 的 IP 與 Port"
+                style={{
+                  fontSize: 10, padding: '2px 8px', borderRadius: 3,
+                  border: '1px solid rgba(108, 140, 255, 0.5)',
+                  background: 'rgba(108, 140, 255, 0.12)',
+                  color: '#6c8cff', cursor: discovering ? 'wait' : 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={discovering ? { animation: 'spin 1s linear infinite' } : undefined}>
+                  <circle cx="11" cy="11" r="7" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                {discovering ? '偵測中' : '偵測'}
+              </button>
             </span>
             {tunnelStatus.running && (
               <span style={{
@@ -283,25 +322,31 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
             </div>
           ) : (
             <div>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                <input
-                  type="text"
-                  className="search-input"
-                  placeholder="iPhone IP"
-                  value={tunnelIp}
-                  onChange={(e) => setTunnelIp(e.target.value)}
-                  style={{ flex: 1, fontSize: 12 }}
-                  disabled={tunnelConnecting}
-                />
-                <input
-                  type="text"
-                  className="search-input"
-                  placeholder="Port"
-                  value={tunnelPort}
-                  onChange={(e) => setTunnelPort(e.target.value)}
-                  style={{ width: 60, fontSize: 12, textAlign: 'center' }}
-                  disabled={tunnelConnecting}
-                />
+              <div style={{ marginBottom: 6 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, marginBottom: 4 }}>
+                  <span style={{ opacity: 0.7, width: 36 }}>IP</span>
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="iPhone IP(例如 192.168.0.205)"
+                    value={tunnelIp}
+                    onChange={(e) => setTunnelIp(e.target.value)}
+                    style={{ flex: 1, fontSize: 12 }}
+                    disabled={tunnelConnecting}
+                  />
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+                  <span style={{ opacity: 0.7, width: 36 }}>Port</span>
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="49152"
+                    value={tunnelPort}
+                    onChange={(e) => setTunnelPort(e.target.value)}
+                    style={{ flex: 1, fontSize: 12 }}
+                    disabled={tunnelConnecting}
+                  />
+                </label>
               </div>
               <button
                 className="action-btn primary"

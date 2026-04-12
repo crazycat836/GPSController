@@ -39,6 +39,7 @@ export const wifiScan = () => request<any[]>('GET', '/api/device/wifi/scan')
 export const wifiTunnelStartAndConnect = (ip: string, port = 49152, udid?: string) =>
   request<any>('POST', '/api/device/wifi/tunnel/start-and-connect', { ip, port, ...(udid ? { udid } : {}) })
 export const wifiTunnelStatus = () => request<any>('GET', '/api/device/wifi/tunnel/status')
+export const wifiTunnelDiscover = () => request<{ devices: { ip: string; port: number; host: string; name: string }[] }>('GET', '/api/device/wifi/tunnel/discover')
 export const wifiTunnelStop = () => request<any>('POST', '/api/device/wifi/tunnel/stop')
 
 // Location simulation

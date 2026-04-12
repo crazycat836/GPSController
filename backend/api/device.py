@@ -169,6 +169,46 @@ class WifiTunnelStartRequest(BaseModel):
     udid: str = "00008140-001C096E02EA801C"
 
 
+@router.get("/wifi/tunnel/discover")
+async def wifi_tunnel_discover():
+    """Browse the local network via Bonjour/mDNS for iOS devices advertising
+    the RemotePairing service. Returns a list of candidate (ip, port) pairs."""
+    try:
+        from pymobiledevice3.bonjour import browse_remotepairing
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"bonjour module unavailable: {e}")
+
+    try:
+        instances = await browse_remotepairing(timeout=3.0)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"mDNS browse failed: {e}")
+
+    results = []
+    for inst in instances:
+        # Prefer IPv4 addresses for WiFi tunnel use
+        ipv4s = [a for a in (inst.addresses or []) if ":" not in a]
+        addrs = ipv4s if ipv4s else list(inst.addresses or [])
+        for addr in addrs:
+            results.append({
+                "ip": addr,
+                "port": inst.port,
+                "host": inst.host,
+                "name": inst.instance or inst.host,
+            })
+
+    # De-dupe on (ip, port)
+    seen = set()
+    unique = []
+    for r in results:
+        key = (r["ip"], r["port"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(r)
+
+    return {"devices": unique}
+
+
 def _find_python313() -> list[str] | None:
     """Find a Python 3.13+ interpreter on the system.  Returns the
     command as a list of strings suitable for ``subprocess.Popen``."""
