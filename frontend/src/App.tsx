@@ -239,6 +239,27 @@ const App: React.FC = () => {
     window.open(url, '_blank')
   }, [])
 
+  const handleRouteRename = useCallback(async (id: string, name: string) => {
+    try {
+      await api.renameRoute(id, name)
+      const routes = await api.getSavedRoutes()
+      setSavedRoutes(routes)
+    } catch (err: any) {
+      showToast(err.message || '重新命名失敗')
+    }
+  }, [showToast])
+
+  const handleRouteDelete = useCallback(async (id: string) => {
+    try {
+      await api.deleteRoute(id)
+      const routes = await api.getSavedRoutes()
+      setSavedRoutes(routes)
+      showToast('已刪除路線')
+    } catch (err: any) {
+      showToast(err.message || '刪除失敗')
+    }
+  }, [showToast])
+
   // Build props for components
   const currentPos = sim.currentPosition
     ? { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng }
@@ -334,6 +355,8 @@ const App: React.FC = () => {
           savedRoutes={savedRoutes.map(r => ({ id: r.id, name: r.name, waypoints: r.waypoints ?? [] }))}
           onRouteGpxImport={handleGpxImport}
           onRouteGpxExport={handleGpxExport}
+          onRouteRename={handleRouteRename}
+          onRouteDelete={handleRouteDelete}
           onRouteLoad={handleRouteLoad}
           onRouteSave={handleRouteSave}
           randomWalkRadius={randomWalkRadius}

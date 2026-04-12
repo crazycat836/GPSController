@@ -124,6 +124,7 @@ export const planRoute = (start: any, end: any, profile: string) =>
 export const getSavedRoutes = () => request<any[]>('GET', '/api/route/saved')
 export const saveRoute = (route: any) => request<any>('POST', '/api/route/saved', route)
 export const deleteRoute = (id: string) => request<any>('DELETE', `/api/route/saved/${id}`)
+export const renameRoute = (id: string, name: string) => request<any>('PATCH', `/api/route/saved/${id}`, { name })
 
 // GPX import/export
 export async function importGpx(file: File): Promise<{ status: string; id: string; points: number }> {

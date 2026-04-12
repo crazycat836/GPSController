@@ -86,38 +86,46 @@ const MapView: React.FC<MapViewProps> = ({
       maxZoom: 20,
     }).addTo(map);
 
+    const clickIcon = L.divIcon({
+      className: 'click-marker',
+      html: `<svg width="40" height="54" viewBox="0 0 40 54">
+        <defs>
+          <filter id="clickShadow" x="-20%" y="-10%" width="140%" height="130%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.4"/>
+          </filter>
+        </defs>
+        <path d="M20 50 L20 46" stroke="#6c8cff" stroke-width="2" opacity="0.5"/>
+        <ellipse cx="20" cy="50" rx="6" ry="2" fill="#000" opacity="0.2"/>
+        <path d="M20 2C10.6 2 3 9.6 3 19c0 12.7 17 31 17 31s17-18.3 17-31C37 9.6 29.4 2 20 2z"
+              fill="#6c8cff" filter="url(#clickShadow)"/>
+        <path d="M20 4C11.7 4 5 10.7 5 19c0 11.5 15 28 15 28s15-16.5 15-28C35 10.7 28.3 4 20 4z"
+              fill="#5a7ff0"/>
+        <circle cx="20" cy="19" r="7" fill="#ffffff" opacity="0.95"/>
+        <circle cx="20" cy="19" r="3" fill="#6c8cff"/>
+      </svg>`,
+      iconSize: [40, 54],
+      iconAnchor: [20, 50],
+    });
+
     map.on('click', (e: L.LeafletMouseEvent) => {
       closeContextMenu();
 
-      // Show click marker
-      if (clickMarkerRef.current) {
-        clickMarkerRef.current.remove();
+      // Reuse the same marker to avoid a visible remount flash at (0,0)
+      // before CSS transform kicks in. setLatLng is atomic.
+      if (!clickMarkerRef.current) {
+        clickMarkerRef.current = L.marker([e.latlng.lat, e.latlng.lng], { icon: clickIcon });
+        clickMarkerRef.current.bindTooltip(
+          `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`,
+          { direction: 'top', offset: [0, -52], permanent: false },
+        );
+        clickMarkerRef.current.addTo(map);
+      } else {
+        clickMarkerRef.current.setLatLng([e.latlng.lat, e.latlng.lng]);
+        clickMarkerRef.current.setTooltipContent(
+          `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`,
+        );
       }
-      const clickIcon = L.divIcon({
-        className: 'click-marker',
-        html: `<svg width="40" height="54" viewBox="0 0 40 54">
-          <defs>
-            <filter id="clickShadow" x="-20%" y="-10%" width="140%" height="130%">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.4"/>
-            </filter>
-          </defs>
-          <path d="M20 50 L20 46" stroke="#6c8cff" stroke-width="2" opacity="0.5"/>
-          <ellipse cx="20" cy="50" rx="6" ry="2" fill="#000" opacity="0.2"/>
-          <path d="M20 2C10.6 2 3 9.6 3 19c0 12.7 17 31 17 31s17-18.3 17-31C37 9.6 29.4 2 20 2z"
-                fill="#6c8cff" filter="url(#clickShadow)"/>
-          <path d="M20 4C11.7 4 5 10.7 5 19c0 11.5 15 28 15 28s15-16.5 15-28C35 10.7 28.3 4 20 4z"
-                fill="#5a7ff0"/>
-          <circle cx="20" cy="19" r="7" fill="#ffffff" opacity="0.95"/>
-          <circle cx="20" cy="19" r="3" fill="#6c8cff"/>
-        </svg>`,
-        iconSize: [40, 54],
-        iconAnchor: [20, 50],
-      });
-      clickMarkerRef.current = L.marker([e.latlng.lat, e.latlng.lng], { icon: clickIcon }).addTo(map);
-      clickMarkerRef.current.bindTooltip(
-        `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`,
-        { direction: 'top', offset: [0, -52], permanent: false }
-      ).openTooltip();
+      clickMarkerRef.current.openTooltip();
 
       onMapClick(e.latlng.lat, e.latlng.lng);
     });

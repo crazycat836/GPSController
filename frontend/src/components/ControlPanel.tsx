@@ -57,6 +57,8 @@ interface ControlPanelProps {
   savedRoutes: SavedRoute[];
   onRouteLoad: (id: string) => void;
   onRouteSave: (name: string) => void;
+  onRouteRename?: (id: string, name: string) => void;
+  onRouteDelete?: (id: string) => void;
   onRouteGpxImport?: (file: File) => Promise<void>;
   onRouteGpxExport?: (id: string) => void;
   randomWalkRadius: number;
@@ -168,6 +170,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   savedRoutes,
   onRouteLoad,
   onRouteSave,
+  onRouteRename,
+  onRouteDelete,
   onRouteGpxImport,
   onRouteGpxExport,
   randomWalkRadius,
@@ -187,6 +191,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   const [coordLat, setCoordLat] = useState('');
   const [coordLng, setCoordLng] = useState('');
   const [routeName, setRouteName] = useState('');
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
+  const [editingRouteName, setEditingRouteName] = useState('');
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryTab, setLibraryTab] = useState<'bookmarks' | 'routes'>('bookmarks');
   const [libraryPos, setLibraryPos] = useState<{ x: number; y: number }>(() => ({
@@ -679,36 +685,90 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   {savedRoutes.length === 0 && (
                     <div style={{ fontSize: 12, opacity: 0.5, padding: '8px 0' }}>尚無儲存的路線</div>
                   )}
-                  {savedRoutes.map((route) => (
-                    <div
-                      key={route.id}
-                      className="bookmark-item"
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px', borderRadius: 4 }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" />
-                      </svg>
-                      <span
-                        style={{ fontSize: 13, flex: 1, cursor: 'pointer' }}
-                        onClick={() => { onRouteLoad(route.id); setLibraryOpen(false); }}
+                  {savedRoutes.map((route) => {
+                    const isEditing = editingRouteId === route.id;
+                    const commitRename = () => {
+                      const n = editingRouteName.trim();
+                      if (n && n !== route.name && onRouteRename) onRouteRename(route.id, n);
+                      setEditingRouteId(null);
+                    };
+                    return (
+                      <div
+                        key={route.id}
+                        className="bookmark-item"
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px', borderRadius: 4 }}
                       >
-                        {route.name}
-                      </span>
-                      <span style={{ opacity: 0.5, fontSize: 11 }}>
-                        {route.waypoints.length} pts
-                      </span>
-                      {onRouteGpxExport && (
-                        <button
-                          className="action-btn"
-                          title="匯出為 GPX"
-                          onClick={(e) => { e.stopPropagation(); onRouteGpxExport(route.id); }}
-                          style={{ padding: '2px 6px', fontSize: 10 }}
-                        >
-                          GPX
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" />
+                        </svg>
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            autoFocus
+                            value={editingRouteName}
+                            onChange={(e) => setEditingRouteName(e.target.value)}
+                            onBlur={commitRename}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitRename();
+                              else if (e.key === 'Escape') setEditingRouteId(null);
+                            }}
+                            style={{ flex: 1, fontSize: 13, padding: '2px 4px' }}
+                          />
+                        ) : (
+                          <span
+                            style={{ fontSize: 13, flex: 1, cursor: 'pointer' }}
+                            onClick={() => { onRouteLoad(route.id); setLibraryOpen(false); }}
+                            title="點擊載入路線"
+                          >
+                            {route.name}
+                          </span>
+                        )}
+                        <span style={{ opacity: 0.5, fontSize: 11 }}>
+                          {route.waypoints.length} pts
+                        </span>
+                        {!isEditing && onRouteRename && (
+                          <button
+                            className="action-btn"
+                            title="重新命名"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingRouteId(route.id);
+                              setEditingRouteName(route.name);
+                            }}
+                            style={{ padding: '2px 6px', fontSize: 10 }}
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 20h9" />
+                              <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                            </svg>
+                          </button>
+                        )}
+                        {onRouteGpxExport && (
+                          <button
+                            className="action-btn"
+                            title="匯出為 GPX"
+                            onClick={(e) => { e.stopPropagation(); onRouteGpxExport(route.id); }}
+                            style={{ padding: '2px 6px', fontSize: 10 }}
+                          >
+                            GPX
+                          </button>
+                        )}
+                        {onRouteDelete && (
+                          <button
+                            className="action-btn"
+                            title="刪除路線"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`刪除路線「${route.name}」?`)) onRouteDelete(route.id);
+                            }}
+                            style={{ padding: '2px 6px', fontSize: 10, color: '#f44336' }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </>
               )}
             </div>

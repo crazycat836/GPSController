@@ -45,6 +45,24 @@ async def delete_saved(route_id: str):
     return {"status": "deleted"}
 
 
+from pydantic import BaseModel as _BM
+
+
+class _RouteRenameRequest(_BM):
+    name: str
+
+
+@router.patch("/saved/{route_id}")
+async def rename_saved(route_id: str, req: _RouteRenameRequest):
+    if route_id not in _saved_routes:
+        raise HTTPException(status_code=404, detail="Route not found")
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail={"code": "invalid_name", "message": "路線名稱不可為空"})
+    _saved_routes[route_id].name = name
+    return _saved_routes[route_id]
+
+
 @router.post("/gpx/import")
 async def import_gpx(file: UploadFile = File(...)):
     content = await file.read()
