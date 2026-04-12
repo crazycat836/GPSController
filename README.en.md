@@ -2,7 +2,10 @@
 
 **iOS Virtual Location Simulator** — a Windows-based tool that controls an iPhone's GPS location. Supports Teleport, Navigate, Route Loop, Multi-Stop, Random Walk, and Joystick modes over USB or Wi-Fi.
 
-> **Languages**: English · [繁體中文](README.md)
+<p align="right">
+  <a href="README.md"><img alt="繁體中文" src="https://img.shields.io/badge/繁體中文-gray?style=flat-square"></a>
+  <a href="README.en.md"><img alt="English" src="https://img.shields.io/badge/English-active-2d3748?style=flat-square"></a>
+</p>
 
 > ### Compatibility Status
 >
