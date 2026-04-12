@@ -46,18 +46,29 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
   const [discovering, setDiscovering] = useState(false);
   const [wifiExpanded, setWifiExpanded] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [scanDone, setScanDone] = useState(0); // counter to show brief "done" flash
+  // null = no recent scan; number = device count from most recent scan (flash display)
+  const [scanResult, setScanResult] = useState<number | null>(null);
+  const scanResultTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const devicesRef = React.useRef(devices);
+  devicesRef.current = devices;
 
   const handleScan = async () => {
+    if (scanResultTimer.current) clearTimeout(scanResultTimer.current);
     setScanning(true);
+    setScanResult(null);
     try {
       await Promise.resolve(onScan());
     } finally {
       setScanning(false);
-      setScanDone((n) => n + 1);
-      setTimeout(() => setScanDone(0), 1200);
+      // Read the freshest devices state via ref — parent has updated by now
+      setScanResult(devicesRef.current.length);
+      scanResultTimer.current = setTimeout(() => setScanResult(null), 2000);
     }
   };
+
+  React.useEffect(() => () => {
+    if (scanResultTimer.current) clearTimeout(scanResultTimer.current);
+  }, []);
   const [wifiTab, setWifiTab] = useState<'ios17plus' | 'ios17minus'>('ios17plus');
   const [legacyIp, setLegacyIp] = useState('');
   const [legacyConnecting, setLegacyConnecting] = useState(false);
@@ -165,12 +176,21 @@ const DeviceStatus: React.FC<DeviceStatusProps> = ({
               </svg>
               掃描中
             </>
-          ) : scanDone > 0 ? (
+          ) : scanResult != null && scanResult > 0 ? (
             <>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="3">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              <span style={{ color: '#4caf50' }}>完成</span>
+              <span style={{ color: '#4caf50' }}>找到 {scanResult} 台</span>
+            </>
+          ) : scanResult === 0 ? (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="15" y1="9" x2="9" y2="15" />
+                <line x1="9" y1="9" x2="15" y2="15" />
+              </svg>
+              <span style={{ color: '#f44336' }}>未偵測到</span>
             </>
           ) : (
             <>
