@@ -25,6 +25,7 @@ interface BookmarkListProps {
   onBookmarkEdit: (id: string, bm: Partial<Bookmark>) => void;
   onCategoryAdd: (name: string) => void;
   onCategoryDelete: (name: string) => void;
+  onCategoryRename?: (oldName: string, newName: string) => void;
   onImport?: (file: File) => Promise<void>;
   exportUrl?: string;
 }
@@ -58,6 +59,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
   onBookmarkEdit,
   onCategoryAdd,
   onCategoryDelete,
+  onCategoryRename,
   onImport,
   exportUrl,
 }) => {
@@ -71,6 +73,16 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
   const [newCategory, setNewCategory] = useState(categories[0] || 'Default');
   const [showCategoryMgr, setShowCategoryMgr] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState('');
+  // Split "24.14, 120.65" (or tab/whitespace) into [lat, lng] so a user can
+  // paste a Google-Maps-style pair into just the lat field instead of
+  // splitting it themselves.
+  const trySplitLatLng = (s: string): [string, string] | null => {
+    const m = s.trim().match(/^(-?\d+(?:\.\d+)?)\s*[,\t ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+    return m ? [m[1], m[2]] : null;
+  };
+
   const [contextMenu, setContextMenu] = useState<{ bm: Bookmark; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -365,8 +377,47 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                   flexShrink: 0,
                 }}
               />
-              <span style={{ flex: 1 }}>{displayCat(cat)}</span>
-              {cat !== 'Default' && (
+              {editingCategory === cat ? (
+                <input
+                  type="text"
+                  className="search-input"
+                  autoFocus
+                  value={editCategoryName}
+                  onChange={(e) => setEditCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const next = editCategoryName.trim();
+                      if (next && next !== cat && onCategoryRename) onCategoryRename(cat, next);
+                      setEditingCategory(null);
+                    }
+                    if (e.key === 'Escape') setEditingCategory(null);
+                  }}
+                  onBlur={() => setEditingCategory(null)}
+                  style={{ flex: 1, padding: '2px 4px', fontSize: 12 }}
+                />
+              ) : (
+                <span style={{ flex: 1 }}>{displayCat(cat)}</span>
+              )}
+              {cat !== 'Default' && cat !== '預設' && onCategoryRename && editingCategory !== cat && (
+                <button
+                  onClick={() => { setEditingCategory(cat); setEditCategoryName(cat); }}
+                  title={t('bm.rename_category')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--fg-muted, #888)',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    fontSize: 11,
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                    <path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+              )}
+              {cat !== 'Default' && cat !== '預設' && (
                 <button
                   onClick={() => onCategoryDelete(cat)}
                   style={{
@@ -757,9 +808,14 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                 type="text"
                 className="search-input"
                 inputMode="decimal"
-                placeholder={t('bm.lat_placeholder')}
+                placeholder={t('bm.latlng_placeholder')}
                 value={editDialogLat}
-                onChange={(e) => setEditDialogLat(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const split = trySplitLatLng(v);
+                  if (split) { setEditDialogLat(split[0]); setEditDialogLng(split[1]); }
+                  else setEditDialogLat(v);
+                }}
                 style={{ flex: 1 }}
               />
               <input
@@ -850,9 +906,14 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                 type="text"
                 className="search-input"
                 inputMode="decimal"
-                placeholder={t('bm.lat_placeholder')}
+                placeholder={t('bm.latlng_placeholder')}
                 value={customLat}
-                onChange={(e) => setCustomLat(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const split = trySplitLatLng(v);
+                  if (split) { setCustomLat(split[0]); setCustomLng(split[1]); }
+                  else setCustomLat(v);
+                }}
                 style={{ flex: 1 }}
               />
               <input

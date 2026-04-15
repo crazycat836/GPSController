@@ -68,6 +68,8 @@ interface SimContextValue {
   handleGenerateAllRandom: () => void
   handleOpenLog: () => void
   handleMapClick: (lat: number, lng: number) => void
+  clickToAddWaypoint: boolean
+  setClickToAddWaypoint: (v: boolean) => void
   // Derived
   displaySpeed: number | string
   isRunning: boolean
@@ -95,6 +97,7 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
   const [cooldown, setCooldown] = useState(0)
   const [cooldownEnabled, setCooldownEnabled] = useState(false)
   const [randomWalkRadius, setRandomWalkRadius] = useState(500)
+  const [clickToAddWaypoint, setClickToAddWaypoint] = useState(false)
   const [wpGenRadius, setWpGenRadius] = useState(300)
   const [wpGenCount, setWpGenCount] = useState(5)
 
@@ -183,9 +186,19 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
     api.setCooldownEnabled(enabled).catch(() => setCooldownEnabled((v) => !v))
   }, [])
 
-  const handleMapClick = useCallback((_lat: number, _lng: number) => {
-    // Just set as destination for now
-  }, [])
+  const handleMapClick = useCallback((lat: number, lng: number) => {
+    if (!clickToAddWaypoint) return
+    if (sim.mode !== SimMode.Loop && sim.mode !== SimMode.MultiStop) return
+    sim.setWaypoints((prev: any[]) => {
+      if (prev.length === 0 && sim.currentPosition) {
+        return [
+          { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng },
+          { lat, lng },
+        ]
+      }
+      return [...prev, { lat, lng }]
+    })
+  }, [clickToAddWaypoint, sim])
 
   const handleTeleport = useCallback(async (lat: number, lng: number) => {
     const udids = device.connectedDevices.map((d) => d.udid)
@@ -400,6 +413,8 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
     handleGenerateAllRandom,
     handleOpenLog,
     handleMapClick,
+    clickToAddWaypoint,
+    setClickToAddWaypoint,
     displaySpeed,
     isRunning,
     isPaused,

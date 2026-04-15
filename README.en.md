@@ -20,20 +20,23 @@
 >
 > **Starting with v0.1.49, LocWarp only supports iOS / iPadOS 17 and later.**
 >
-> iOS 16 and earlier are no longer supported because of differences in the Developer Disk Image mechanism and multiple community reports of failures. Connecting an iOS <17 device will be rejected with an explanatory message.
+> iOS 17+ is the primary supported range (developer-tested). **iOS 16.x is community-maintained by @bitifyChen (#9) starting from v0.2.5**, via the LegacyLocationService path; the effective minimum is iOS 16.0. iOS 15 and below remain unsupported.
 
 > ### Compatibility Status
 >
 > | iOS Version | Source | Status |
 > | --- | --- | --- |
 > | **26.4.1** | Developer-tested | ![Verified](https://img.shields.io/badge/Verified-4caf50?style=flat-square) |
+> | **26.4.1** (iPadOS) | Community-reported | ![Reported](https://img.shields.io/badge/Reported-6c8cff?style=flat-square) |
 > | **26.4** | Community-reported | ![Reported](https://img.shields.io/badge/Reported-6c8cff?style=flat-square) |
+> | **26.2** | Community-reported | ![Reported](https://img.shields.io/badge/Reported-6c8cff?style=flat-square) |
 > | **26.2.1** (iPadOS, M1 iPad) | Community-reported | ![Reported](https://img.shields.io/badge/Reported-6c8cff?style=flat-square) |
 > | **18.7.7** | Community-reported | ![Reported](https://img.shields.io/badge/Reported-6c8cff?style=flat-square) |
 > | **18.5** (iPadOS) | Community-reported | ![Reported](https://img.shields.io/badge/Reported-6c8cff?style=flat-square) |
 > | **18.1.1** | Community-reported | ![Reported](https://img.shields.io/badge/Reported-6c8cff?style=flat-square) |
 > | **17.6.1** | Community-reported | ![Reported](https://img.shields.io/badge/Reported-6c8cff?style=flat-square) |
-> | **16.x and below** | n/a | ![Unsupported](https://img.shields.io/badge/Unsupported-f44336?style=flat-square) |
+> | **16.7.12** (community) | @bitifyChen · [#9](https://github.com/keezxc1223/locwarp/pull/9) | ![Community](https://img.shields.io/badge/Community-ffa726?style=flat-square) |
+> | **15.x and below** | n/a | ![Unsupported](https://img.shields.io/badge/Unsupported-f44336?style=flat-square) |
 >
 > **Note**: The table above aggregates developer-tested results and a handful of community reports. It **does not guarantee that every device on the same iOS version, network environment, or system configuration will work**. iOS virtual location stability depends on the exact iOS patch revision, pymobiledevice3's support for that revision, whether the Developer Disk Image mounts successfully, and the Windows host's driver / VPN / firewall / AV stack. "Reported" therefore means **at least one user succeeded in their specific environment**, it is not a universal compatibility claim.
 >
@@ -98,7 +101,7 @@ The world is bucketed into 1° x 1° grid cells with a per-region OSRM-coverage 
 - Status bar shows the **backend-reported active speed** (typed-but-not-applied values don't lie about what's running)
 - Orange countdown banner shows on top of the map during pauses
 
-### Connection (iOS 17+)
+### Connection (iOS 16+)
 
 - **USB**: plug in and auto-connect; screen can be locked freely
 - **Wi-Fi Tunnel (USB-free mode)**:
@@ -109,7 +112,7 @@ The world is bucketed into 1° x 1° grid cells with a per-region OSRM-coverage 
 - **Real-time USB hotplug detection**:
   - Unplug detected within ~4 s: drops engine + red banner + right-click menu shows "USB disconnected"
   - Re-plug auto-detected and reconnected, engine rebuilt, **no refresh needed**
-- **Version check on connect**: iOS <17 devices are rejected with an explicit version + upgrade prompt
+- **Version check on connect**: iOS <16 devices are rejected with an explicit version + upgrade prompt
 
 ### Developer Disk Image
 
@@ -156,9 +159,9 @@ The world is bucketed into 1° x 1° grid cells with a per-region OSRM-coverage 
 ### Stack
 
 - **Frontend**: Electron 30, React 18.3, TypeScript 5.5, Vite 5.4, Leaflet 1.9
-- **Backend**: Python 3.12, FastAPI, uvicorn, websockets
+- **Backend**: Python 3.13, FastAPI, uvicorn, websockets
 - **iOS control**: [pymobiledevice3](https://github.com/doronz88/pymobiledevice3) (DVT / RemoteServices / lockdown)
-- **Wi-Fi Tunnel helper**: standalone Python 3.13 helper (TLS-PSK support)
+- **Wi-Fi Tunnel**: runs in-process inside the backend event loop (v0.2.3+; previously a standalone Python 3.13 helper)
 - **External services**: [OSRM](https://project-osrm.org/) (routing), [Nominatim](https://nominatim.openstreetmap.org/) (geocoding), [CartoDB Voyager](https://carto.com/) (map tiles)
 
 ---
@@ -181,7 +184,7 @@ Windows needs Apple's USB driver to communicate with iPhone.
 
 On first use, connect the iPhone via USB. When prompted "Trust this computer?", tap **Trust** and enter the passcode. This creates a pair record so that LocWarp can communicate with the device afterwards.
 
-### 3. Enable Developer Mode (iOS 17+)
+### 3. Enable Developer Mode (iOS 16+)
 
 On iPhone: **Settings → Privacy & Security → Developer Mode → Enable**
 
@@ -219,20 +222,16 @@ After installation, LocWarp will appear on the desktop and Start Menu. It requir
 ### Prerequisites
 
 - Windows 10 / 11
-- Python **3.12** (backend)
-- Python **3.13** (Wi-Fi tunnel; required for TLS-PSK)
+- Python **3.13** (backend + Wi-Fi tunnel; required for TLS-PSK)
 - Node.js 18+
 
 ### Setup
 
 ```bash
-# 1. Backend dependencies
-py -3.12 -m pip install -r backend/requirements.txt
+# 1. Backend dependencies (includes Wi-Fi tunnel)
+py -3.13 -m pip install -r backend/requirements.txt
 
-# 2. Wi-Fi tunnel dependencies (Python 3.13)
-py -3.13 -m pip install pymobiledevice3
-
-# 3. Frontend dependencies
+# 2. Frontend dependencies
 cd frontend
 npm install
 ```
@@ -251,8 +250,7 @@ Double-click `LocWarp.bat`, it auto-elevates and invokes `start.py`, which launc
 ### One-time setup
 
 ```bash
-py -3.12 -m pip install pyinstaller
-py -3.13 -m pip install pyinstaller pymobiledevice3
+py -3.13 -m pip install pyinstaller
 cd frontend && npm install -D electron-builder
 ```
 
@@ -263,10 +261,9 @@ build-installer.bat
 ```
 
 Pipeline:
-1. **PyInstaller (3.12)** → `dist-py/locwarp-backend/`
-2. **PyInstaller (3.13)** → `dist-py/wifi-tunnel/`
-3. **Vite** → `frontend/dist/`
-4. **electron-builder** → NSIS installer `frontend/release/LocWarp Setup X.Y.Z.exe` (~140 MB)
+1. **PyInstaller (3.13)** → `dist-py/locwarp-backend/` (backend + embedded WiFi tunnel)
+2. **Vite** → `frontend/dist/`
+3. **electron-builder** → NSIS installer `frontend/release/LocWarp Setup X.Y.Z.exe` (~110 MB)
 
 The installer is self-contained, end users need no Python or Node installed.
 
@@ -279,16 +276,16 @@ The installer is self-contained, end users need no Python or Node installed.
 | Backend unreachable after tunnel started | Make sure LocWarp was launched as Administrator |
 | `No such service: com.apple.instruments.dtservicehub` (iOS 17+/26) | LocWarp auto-mounts the Developer Disk Image. If it still fails: (1) Settings → Privacy & Security → **Developer Mode** off, reboot, turn it back on; (2) make sure github.com is reachable (DDI is downloaded from there, ~20 MB); (3) unplug and reconnect the device. Since v0.1.34 LocWarp also falls back to the legacy `com.apple.dt.simulatelocation` service automatically. |
 | DDI download hangs / times out | Check that github.com / raw.githubusercontent.com is reachable, some corporate or campus networks block it. |
-| **Developer Mode option missing** (iOS 17+) | The device must have had a signed app deployed to it before the option appears in Settings. See [Appendix: Enabling Developer Mode on iPhone (Windows)](#appendix-enabling-developer-mode-on-iphone-windows) below. |
+| **Developer Mode option missing** (iOS 16+) | The device must have had a signed app deployed to it before the option appears in Settings. See [Appendix: Enabling Developer Mode on iPhone (Windows)](#appendix-enabling-developer-mode-on-iphone-windows) below. |
 
 ---
 
 ### Appendix: Enabling Developer Mode on iPhone (Windows)
 
-On iOS 17+, **Settings → Privacy & Security → Developer Mode** is hidden by default. Apple only surfaces the toggle after the device has been deployed to by a developer-signed app at least once. Windows users can trigger this by sideloading any self-signed IPA:
+On iOS 16+, **Settings → Privacy & Security → Developer Mode** is hidden by default. Apple only surfaces the toggle after the device has been deployed to by a developer-signed app at least once. Windows users can trigger this by sideloading any self-signed IPA:
 
 1. Install [**Sideloadly**](https://sideloadly.io/).
-2. Obtain an IPA file from a decrypted IPA source such as [**Decrypt IPA Store**](https://decrypt.day/). A small file-manager-style app is recommended to keep sideload time short.
+2. Obtain an IPA file from a decrypted IPA source such as [**Decrypt IPA Store**](https://decrypt.day/) or [**ARM Converter Decrypted App Store**](https://armconverter.com/decryptedappstore/us). A small file-manager-style app is recommended to keep sideload time short.
 3. Drag the IPA into the Sideloadly window.
 4. Connect the iPhone via USB and enter your personal Apple ID in Sideloadly.
 5. Press **Start** and wait for the sideload to complete.

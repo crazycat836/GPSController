@@ -85,6 +85,7 @@ interface ControlPanelProps {
   onBookmarkEdit: (id: string, bm: Partial<Bookmark>) => void;
   onCategoryAdd: (name: string) => void;
   onCategoryDelete: (name: string) => void;
+  onCategoryRename?: (oldName: string, newName: string) => void;
   onBookmarkImport?: (file: File) => Promise<void>;
   bookmarkExportUrl?: string;
   savedRoutes: SavedRoute[];
@@ -102,6 +103,10 @@ interface ControlPanelProps {
   onRandomWalkRadiusChange: (radius: number) => void;
   modeExtraSection?: React.ReactNode;
   currentWaypointsCount?: number;
+  straightLine?: boolean;
+  onStraightLineChange?: (v: boolean) => void;
+  clickToAddWaypoint?: boolean;
+  onClickToAddWaypointChange?: (v: boolean) => void;
 }
 
 interface SectionState {
@@ -207,6 +212,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onBookmarkEdit,
   onCategoryAdd,
   onCategoryDelete,
+  onCategoryRename,
   onBookmarkImport,
   bookmarkExportUrl,
   savedRoutes,
@@ -224,6 +230,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onRandomWalkRadiusChange,
   modeExtraSection,
   currentWaypointsCount = 0,
+  straightLine = false,
+  onStraightLineChange,
+  clickToAddWaypoint = false,
+  onClickToAddWaypointChange,
 }) => {
   const [sections, setSections] = useState<SectionState>({
     mode: true,
@@ -342,6 +352,40 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 </span>
               </button>
             ))}
+            {onStraightLineChange && (
+              <label
+                className={`mode-btn${straightLine ? ' active' : ''}`}
+                title={t('panel.straight_line_tooltip')}
+                style={{ justifyContent: 'flex-start', minWidth: 0, gridColumn: '1 / -1', cursor: 'pointer' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={straightLine}
+                  onChange={(e) => onStraightLineChange(e.target.checked)}
+                  style={{ margin: 0 }}
+                />
+                <span style={{ fontSize: 11, whiteSpace: 'normal', lineHeight: 1.15 }}>
+                  {t('panel.straight_line')}
+                </span>
+              </label>
+            )}
+            {onClickToAddWaypointChange && (simMode === SimMode.Loop || simMode === SimMode.MultiStop) && (
+              <label
+                className={`mode-btn${clickToAddWaypoint ? ' active' : ''}`}
+                title={t('panel.click_waypoint_tooltip')}
+                style={{ justifyContent: 'flex-start', minWidth: 0, gridColumn: '1 / -1', cursor: 'pointer' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={clickToAddWaypoint}
+                  onChange={(e) => onClickToAddWaypointChange(e.target.checked)}
+                  style={{ margin: 0 }}
+                />
+                <span style={{ fontSize: 11, whiteSpace: 'normal', lineHeight: 1.15 }}>
+                  {t('panel.click_waypoint')}
+                </span>
+              </label>
+            )}
           </div>
         )}
       </div>
@@ -662,6 +706,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   onBookmarkEdit={onBookmarkEdit}
                   onCategoryAdd={onCategoryAdd}
                   onCategoryDelete={onCategoryDelete}
+                  onCategoryRename={onCategoryRename}
                   onImport={onBookmarkImport}
                   exportUrl={bookmarkExportUrl}
                 />

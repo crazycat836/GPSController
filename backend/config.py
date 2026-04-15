@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pathlib import Path
 from typing import TypedDict
 
@@ -83,5 +81,5 @@ RECONNECT_MAX_RETRIES = 30
 DEFAULT_LOCATION = {"lat": 25.0375, "lng": 121.5637}
 
 # Server
-API_HOST = "127.0.0.1"
+API_HOST = "0.0.0.0"
 API_PORT = 8777
