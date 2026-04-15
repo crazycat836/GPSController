@@ -620,10 +620,9 @@ textarea:focus {
 
 /* ---------- Map Container ---------- */
 .map-container {
-  flex: 1;
   position: relative;
-  display: flex;
-  flex-direction: column;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
 }
 
