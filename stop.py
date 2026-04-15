@@ -1,5 +1,5 @@
 """
-LocWarp 一鍵停止
+GPSController 一鍵停止
 """
 
 import os
@@ -7,7 +7,7 @@ import subprocess
 
 
 def main():
-    print("  正在停止 LocWarp...")
+    print("  正在停止 GPSController...")
 
     for port in [8777, 5173]:
         if os.name == "nt":
@@ -32,7 +32,7 @@ def main():
                     subprocess.run(["kill", "-9", pid],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    print("  LocWarp 已停止。")
+    print("  GPSController 已停止。")
 
 
 if __name__ == "__main__":

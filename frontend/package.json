@@ -1,6 +1,6 @@
 {
-  "name": "locwarp",
-  "version": "0.2.12",
+  "name": "gps-controller",
+  "version": "0.2.13",
   "description": "iOS Virtual Location Simulator",
   "author": "keezxc1223",
   "main": "electron/main.js",
@@ -12,7 +12,6 @@
     "dist": "electron-builder --win nsis"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3",
     "leaflet": "^1.9.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
@@ -30,19 +29,18 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.locwarp.app",
-    "productName": "LocWarp",
+    "appId": "com.gpscontroller.app",
+    "productName": "GPSController",
     "directories": {
       "output": "release"
     },
-    "artifactName": "${productName}-Setup-${version}.${ext}",
     "files": [
       "dist/**/*",
       "electron/**/*"
     ],
     "extraResources": [
       {
-        "from": "../dist-py/locwarp-backend",
+        "from": "../dist-py/gpscontroller-backend",
         "to": "backend",
         "filter": [
           "**/*"
@@ -61,20 +59,13 @@
       "requestedExecutionLevel": "requireAdministrator",
       "icon": "build/icon.ico"
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "keezxc1223",
-        "repo": "locwarp"
-      }
-    ],
     "nsis": {
       "oneClick": false,
       "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "LocWarp",
+      "shortcutName": "GPSController",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico"

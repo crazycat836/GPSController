@@ -1,6 +1,6 @@
 """
-LocWarp 一鍵啟動器
-雙擊此檔案即可啟動 LocWarp
+GPSController 一鍵啟動器
+雙擊此檔案即可啟動 GPSController
 """
 
 import subprocess
@@ -26,7 +26,7 @@ procs = []
 def print_banner():
     print()
     print("  ╔══════════════════════════════════════════╗")
-    print("  ║   LocWarp — iOS 虛擬定位模擬器 v0.1     ║")
+    print("  ║   GPSController — iOS 虛擬定位模擬器 v0.1     ║")
     print("  ╚══════════════════════════════════════════╝")
     print()
 
@@ -186,7 +186,7 @@ def check_admin():
 
 def main():
     if os.name == "nt":
-        os.system("title LocWarp")
+        os.system("title GPSController")
     print_banner()
 
     # 檢查管理員權限 (iOS 17+ 需要)
@@ -194,14 +194,15 @@ def main():
         print("  [!] 未以系統管理員身份執行")
         print("      iOS 17+ 裝置需要管理員權限才能建立通道")
         if os.name == "nt":
-            print("      請右鍵 LocWarp.bat → 以系統管理員身份執行")
+            print("      請右鍵 GPSController.bat → 以系統管理員身份執行")
         else:
             print("      請使用 sudo python3 start.py 執行")
         print()
 
     # 檢查環境
     ok = True
-    ok = check_tool("python", "https://www.python.org/downloads/") and ok
+    py_name = "python" if shutil.which("python") else "python3"
+    ok = check_tool(py_name, "https://www.python.org/downloads/") and ok
     ok = check_tool("node", "https://nodejs.org/") and ok
     ok = check_tool("npm", "隨 Node.js 一起安裝") and ok
     print()
@@ -237,7 +238,7 @@ def main():
     webbrowser.open(url)
 
     print("  ╔══════════════════════════════════════════╗")
-    print("  ║          LocWarp 已就緒！                ║")
+    print("  ║          GPSController 已就緒！                ║")
     print("  ╠══════════════════════════════════════════╣")
     print(f"  ║  前端畫面:  http://localhost:{FRONTEND_PORT}        ║")
     print(f"  ║  後端 API:  http://localhost:{BACKEND_PORT}        ║")

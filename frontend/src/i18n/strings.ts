@@ -1,4 +1,4 @@
-// Central string table for LocWarp.
+// Central string table for GPSController.
 // Keys are dotted paths by area; missing translations fall back to the other locale.
 
 export type Lang = 'zh' | 'en';
@@ -40,7 +40,7 @@ export const STRINGS = {
   'status.copy_coord': { zh: '複製座標', en: 'Copy coordinates' },
   'status.restore_all': { zh: '全部還原', en: 'Restore all' },
   'status.set_initial': { zh: '初始位置', en: 'Initial pos' },
-  'status.set_initial_tooltip': { zh: '設定 LocWarp 開啟時地圖預設中心座標 (留空恢復預設)', en: 'Set the default map center on launch (blank to reset to default)' },
+  'status.set_initial_tooltip': { zh: '設定 GPSController 開啟時地圖預設中心座標 (留空恢復預設)', en: 'Set the default map center on launch (blank to reset to default)' },
   'status.set_initial_prompt': { zh: '輸入初始位置座標 (格式 lat, lng,例如 25.033, 121.564)。留空清除自訂值。', en: 'Enter initial position as "lat, lng" (e.g. 25.033, 121.564). Leave blank to clear.' },
   'status.set_initial_invalid': { zh: '座標格式錯誤,請輸入「緯度, 經度」,範圍 lat ±90 / lng ±180', en: 'Invalid format. Use "lat, lng" with lat in ±90 and lng in ±180.' },
   'status.set_initial_saved': { zh: '已儲存初始位置:{lat}, {lng} (下次開啟生效)', en: 'Initial position saved: {lat}, {lng} (effective next launch)' },
@@ -145,7 +145,7 @@ export const STRINGS = {
   'wifi.repair_button': { zh: '重新配對', en: 'Re-pair' },
   'wifi.repair_tooltip': { zh: '用 USB 重建 RemotePairing 記錄,修復 WiFi Tunnel 無法啟動的問題', en: 'Rebuild the RemotePairing record via USB to fix WiFi Tunnel startup failures' },
   'wifi.repair_confirm_title': { zh: '重新配對 iPhone', en: 'Re-pair iPhone' },
-  'wifi.repair_confirm_body': { zh: '此動作會用 USB 重建 RemotePairing 記錄。過程中 iPhone 可能會跳「信任這台電腦」,請解鎖並按信任。LocWarp 必須以系統管理員身分執行。\n\n確定要繼續嗎?', en: 'This rebuilds the RemotePairing record via USB. Your iPhone may show "Trust This Computer", unlock it and tap Trust. LocWarp must be running as Administrator.\n\nContinue?' },
+  'wifi.repair_confirm_body': { zh: '此動作會用 USB 重建 RemotePairing 記錄。過程中 iPhone 可能會跳「信任這台電腦」,請解鎖並按信任。GPSController 必須以系統管理員身分執行。\n\n確定要繼續嗎?', en: 'This rebuilds the RemotePairing record via USB. Your iPhone may show "Trust This Computer", unlock it and tap Trust. GPSController must be running as Administrator.\n\nContinue?' },
   'wifi.repair_running': { zh: '配對中...請在 iPhone 上按「信任」', en: 'Pairing... tap Trust on the iPhone' },
   'wifi.repair_success': { zh: '配對成功!現在可以試 WiFi Tunnel 了', en: 'Paired! You can try WiFi Tunnel now' },
   'wifi.repair_failed': { zh: '配對失敗', en: 'Pairing failed' },
@@ -168,7 +168,7 @@ export const STRINGS = {
   'wifi.tunnel_stop': { zh: 'Stop Tunnel', en: 'Stop Tunnel' },
   'wifi.tunnel_active': { zh: 'Active', en: 'Active' },
   'wifi.tunnel_usb_can_disconnect': { zh: 'USB 可拔除', en: 'USB can be disconnected' },
-  'wifi.tunnel_admin_hint': { zh: '請使用身分管理員開啟 LocWarp,必須先通過 USB 信任。', en: 'Run LocWarp as Administrator. Device must be paired via USB first.' },
+  'wifi.tunnel_admin_hint': { zh: '請使用身分管理員開啟 GPSController,必須先通過 USB 信任。', en: 'Run GPSController as Administrator. Device must be paired via USB first.' },
   'wifi.legacy_connect': { zh: 'Connect', en: 'Connect' },
   'wifi.legacy_connecting': { zh: '連線中...', en: 'Connecting...' },
   'wifi.legacy_hint': { zh: 'iPhone 解鎖並已配對即可直接連線。', en: 'iPhone unlocked and paired, connect directly.' },
@@ -299,16 +299,9 @@ export const STRINGS = {
   'update.title': { zh: '有新版本可更新', en: 'Update available' },
   'update.current': { zh: '目前版本', en: 'Current version' },
   'update.latest': { zh: '最新版本', en: 'Latest version' },
-  'update.install_now': { zh: '立即更新', en: 'Install now' },
-  'update.goto_github': { zh: '前往 GitHub', en: 'Open GitHub' },
-  'update.skip': { zh: '暫不更新', en: 'Skip' },
-  'update.downloading': { zh: '下載中', en: 'Downloading' },
-  'update.downloaded_hint': { zh: '下載完成,按「重啟安裝」後 LocWarp 將關閉並執行安裝程式。', en: 'Download complete. Click "Restart & install" to close LocWarp and run the installer.' },
-  'update.restart_install': { zh: '重啟安裝', en: 'Restart & install' },
-  'update.retry': { zh: '重試', en: 'Retry' },
   'update.go_to_github': { zh: '請前往 GitHub 下載更新。', en: 'Please visit GitHub to download the update.' },
   'update.download': { zh: '前往下載', en: 'Download' },
-  'update.later': { zh: '暫不更新', en: 'Skip' },
+  'update.later': { zh: '稍後提醒', en: 'Later' },
   'bm.edit': { zh: '編輯', en: 'Edit' },
   'bm.move_to': { zh: '移動到:', en: 'Move to:' },
 
