@@ -805,6 +805,12 @@ textarea:focus {
   filter: brightness(0.96) saturate(0.95);
 }
 
+/* Lower Leaflet control z-index so floating UI panels render above them */
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 700 !important;
+}
+
 /* Fix leaflet controls for dark theme */
 .leaflet-control-zoom a {
   background: var(--bg-surface) !important;

@@ -15,8 +15,8 @@ const modeLabelKeys: Record<SimMode, StringKey> = {
   [SimMode.Joystick]: 'mode.joystick',
 }
 
-const DEVICE_COLORS = ['#4285f4', '#ff9800'] as const
-const DEVICE_LETTERS = ['A', 'B'] as const
+const DEVICE_COLORS = ['#4285f4', '#ff9800', '#4ecdc4', '#e040fb'] as const
+const DEVICE_LETTERS = ['A', 'B', 'C', 'D'] as const
 
 function stateToMode(state: string): SimMode | null {
   switch (state) {

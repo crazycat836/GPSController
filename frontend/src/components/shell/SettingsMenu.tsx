@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Settings, RotateCcw, FileText, MapPin, Timer, Languages, Info } from 'lucide-react'
+import { RotateCcw, FileText, MapPin, Timer, Languages, Info } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
@@ -17,13 +17,17 @@ function formatCooldown(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function SettingsMenu() {
+interface SettingsMenuProps {
+  open: boolean
+  onClose: () => void
+}
+
+export default function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const t = useT()
   const { handleRestore, handleOpenLog, cooldown, cooldownEnabled, handleToggleCooldown } = useSimContext()
   const device = useDeviceContext()
   const { showToast } = useToastContext()
 
-  const [open, setOpen] = useState(false)
   const [initialOpen, setInitialOpen] = useState(false)
   const [initialLat, setInitialLat] = useState('')
   const [initialLng, setInitialLng] = useState('')
@@ -31,24 +35,23 @@ export default function SettingsMenu() {
   const [initialBusy, setInitialBusy] = useState(false)
 
   const popoverRef = useRef<HTMLDivElement>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
 
   const dualDevice = device.connectedDevices.length >= 2
 
-  // Close popover on outside click
+  // Close popover on outside click — skip clicks on the settings trigger button
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (
-        popoverRef.current && !popoverRef.current.contains(e.target as Node) &&
-        btnRef.current && !btnRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false)
+      const target = e.target as HTMLElement
+      // Don't close if clicking the TopBar settings trigger (it handles its own toggle)
+      if (target.closest('[data-settings-trigger]')) return
+      if (popoverRef.current && !popoverRef.current.contains(target)) {
+        onClose()
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  }, [open, onClose])
 
   const handleOpenInitial = useCallback(async () => {
     try {
@@ -112,31 +115,16 @@ export default function SettingsMenu() {
 
   const iconClass = 'w-4 h-4 text-[var(--color-text-3)] shrink-0'
 
+  if (!open && !initialOpen) return null
+
   return (
     <>
-      {/* Gear trigger */}
-      <button
-        ref={btnRef}
-        onClick={() => setOpen((v) => !v)}
-        className={[
-          'fixed bottom-3 right-3 z-[850] w-9 h-9 rounded-full',
-          'flex items-center justify-center',
-          'bg-[var(--color-glass)] backdrop-blur-2xl backdrop-saturate-[1.6]',
-          'border border-[var(--color-border)]',
-          'text-[var(--color-text-2)] hover:text-[var(--color-accent)] transition-colors cursor-pointer',
-          'shadow-[0_4px_16px_rgba(12,18,40,0.35)]',
-        ].join(' ')}
-        title="Settings"
-      >
-        <Settings className="w-4 h-4" />
-      </button>
-
       {/* Popover */}
       {open && (
         <div
           ref={popoverRef}
           className={[
-            'fixed bottom-14 right-3 w-64 z-[850]',
+            'fixed top-14 right-3 w-64 z-[850]',
             'bg-[var(--color-glass-heavy)] backdrop-blur-2xl',
             'border border-[var(--color-border)] rounded-xl',
             'shadow-[0_14px_36px_rgba(12,18,40,0.48),0_2px_8px_rgba(12,18,40,0.3)]',
@@ -144,19 +132,19 @@ export default function SettingsMenu() {
           ].join(' ')}
         >
           {/* Restore GPS */}
-          <button onClick={() => { handleRestore(); setOpen(false) }} className={menuRowClass}>
+          <button onClick={() => { handleRestore(); onClose() }} className={menuRowClass}>
             <RotateCcw className={iconClass} />
             <span className="flex-1 text-left">{dualDevice ? t('status.restore_all') : t('status.restore')}</span>
           </button>
 
           {/* Open Log */}
-          <button onClick={() => { handleOpenLog(); setOpen(false) }} className={menuRowClass}>
+          <button onClick={() => { handleOpenLog(); onClose() }} className={menuRowClass}>
             <FileText className={iconClass} />
             <span className="flex-1 text-left">{t('status.open_log')}</span>
           </button>
 
           {/* Set Initial Position */}
-          <button onClick={() => { handleOpenInitial(); setOpen(false) }} className={menuRowClass}>
+          <button onClick={() => { handleOpenInitial(); onClose() }} className={menuRowClass}>
             <MapPin className={iconClass} />
             <span className="flex-1 text-left">{t('status.set_initial')}</span>
           </button>
@@ -175,7 +163,7 @@ export default function SettingsMenu() {
             </span>
             <div className="flex items-center gap-2">
               {cooldown > 0 && (
-                <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full">
+                <span className="text-[10px] font-semibold text-amber-300 bg-amber-400/15 px-1.5 py-0.5 rounded-full">
                   {formatCooldown(cooldown)}
                 </span>
               )}
@@ -249,7 +237,7 @@ export default function SettingsMenu() {
                   'flex-1 px-3 py-2 rounded-lg font-mono text-sm',
                   'bg-black/30 border border-[var(--color-border)]',
                   'text-[var(--color-text-1)] outline-none',
-                  'focus:border-[var(--color-accent)] transition-colors',
+                  'focus:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors',
                 ].join(' ')}
               />
               <input
@@ -265,7 +253,7 @@ export default function SettingsMenu() {
                   'flex-1 px-3 py-2 rounded-lg font-mono text-sm',
                   'bg-black/30 border border-[var(--color-border)]',
                   'text-[var(--color-text-1)] outline-none',
-                  'focus:border-[var(--color-accent)] transition-colors',
+                  'focus:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors',
                 ].join(' ')}
               />
             </div>

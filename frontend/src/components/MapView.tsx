@@ -129,11 +129,12 @@ const MapView: React.FC<MapViewProps> = ({
     });
     const zoomCtrl = L.control.zoom({ position: 'topleft' });
     zoomCtrl.addTo(map);
-    // Nudge the whole topleft control cluster down so it sits below the
-    // EtaBar instead of behind it.
+    // Nudge the whole topleft control cluster down below the FloatingPanel
+    // (panel sits at top ~56px, ~320px tall max). Position below panel area.
     const topLeftEl = (map as any)._controlCorners?.topleft as HTMLElement | undefined;
     if (topLeftEl) {
       topLeftEl.style.marginTop = '56px';
+      topLeftEl.style.marginLeft = '0px';
     }
 
     // OSM Standard (Mapnik). Electron main hooks a compliant User-Agent
@@ -177,6 +178,12 @@ const MapView: React.FC<MapViewProps> = ({
 
     mapRef.current = map;
 
+    // Ensure the map fills its container after layout settles and on resize.
+    const ro = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    if (mapContainerRef.current) ro.observe(mapContainerRef.current);
+
     // Fetch the user-saved initial position from the backend (once, on mount).
     // If set, pan the map to it. Brief Taipei flash is acceptable.
     import('../services/api').then(({ getInitialPosition }) => {
@@ -188,6 +195,7 @@ const MapView: React.FC<MapViewProps> = ({
     });
 
     return () => {
+      ro.disconnect();
       map.remove();
       mapRef.current = null;
     };

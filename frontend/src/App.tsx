@@ -67,6 +67,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
   const [deviceDrawerOpen, setDeviceDrawerOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Auto-scan on WebSocket connect
   useEffect(() => {
@@ -122,7 +123,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
         {/* DDI mounting overlay */}
         {sim.ddiMounting && (
-          <div className="absolute inset-0 z-[10000] bg-[rgba(20,22,32,0.85)] backdrop-blur-[3px] flex items-center justify-center">
+          <div className="absolute inset-0 z-[1100] bg-[rgba(20,22,32,0.85)] backdrop-blur-[3px] flex items-center justify-center">
             <div className="bg-[#23232a] border border-[#3a3a42] rounded-lg px-7 py-5 max-w-[420px] text-center shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
               <svg
                 width="32" height="32" viewBox="0 0 24 24" fill="none"
@@ -143,7 +144,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
         {/* Pause countdown */}
         {sim.pauseRemaining != null && sim.pauseRemaining > 0 && (
-          <div className="absolute top-[38px] left-1/2 -translate-x-1/2 z-[901] bg-[rgba(255,152,0,0.95)] text-[#1a1a1a] px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md flex items-center gap-2">
+          <div className="absolute top-[38px] left-1/2 -translate-x-1/2 z-[900] bg-[rgba(255,152,0,0.95)] text-[#1a1a1a] px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md flex items-center gap-2">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <rect x="6" y="4" width="4" height="16" rx="1" />
               <rect x="14" y="4" width="4" height="16" rx="1" />
@@ -242,10 +243,12 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
         {sim.error && (
           <div
-            className="absolute top-3 left-1/2 -translate-x-1/2 z-[2000] bg-[var(--color-danger)] text-white px-5 py-2 rounded-md text-sm shadow-lg cursor-pointer max-w-[80%] text-center"
+            className="absolute top-3 left-1/2 -translate-x-1/2 z-[1100] bg-[var(--color-danger)] text-white px-5 py-2 rounded-md text-sm shadow-lg cursor-pointer max-w-[80%] text-center flex items-center gap-2"
             onClick={sim.clearError}
+            role="alert"
           >
-            {sim.error}
+            <span className="flex-1">{sim.error}</span>
+            <span className="opacity-70 text-xs shrink-0" aria-hidden>✕</span>
           </div>
         )}
 
@@ -256,7 +259,9 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         {toast.toastMsg && (
           <div
             key={toast.toastMsg}
-            className="anim-fade-slide-down fixed top-[72px] left-1/2 -translate-x-1/2 z-[1500] bg-[var(--color-glass-heavy)] backdrop-blur-xl text-white px-[18px] py-2.5 rounded-[10px] text-sm font-medium shadow-xl border border-[var(--color-border)] max-w-[70vw] text-center"
+            className="anim-fade-slide-down fixed top-[72px] left-1/2 -translate-x-1/2 z-[1000] bg-[var(--color-glass-heavy)] backdrop-blur-xl text-white px-[18px] py-2.5 rounded-[10px] text-sm font-medium shadow-xl border border-[var(--color-border)] max-w-[70vw] text-center"
+            role="status"
+            aria-live="polite"
           >
             {toast.toastMsg}
           </div>
@@ -267,8 +272,9 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
       <TopBar
         onSearchClick={() => setSearchOpen(true)}
         onLibraryClick={() => setLibraryOpen(true)}
+        onSettingsClick={() => setSettingsOpen(prev => !prev)}
         leftContent={
-          <div onClick={() => setDeviceDrawerOpen(true)} className="cursor-pointer">
+          <div onClick={() => setDeviceDrawerOpen(true)} className="cursor-pointer hover:opacity-80 transition-opacity">
             <DeviceChipRow
               devices={device.connectedDevices}
               runtimes={sim.runtimes}
@@ -306,7 +312,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
       </FloatingPanel>
 
       <ModeToolbar activeMode={sim.mode} onModeChange={sim.setMode} />
-      <SettingsMenu />
+      <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <DeviceDrawer open={deviceDrawerOpen} onClose={() => setDeviceDrawerOpen(false)} />
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
       <LibraryDrawer open={libraryOpen} onClose={() => setLibraryOpen(false)} />

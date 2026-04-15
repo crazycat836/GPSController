@@ -29,6 +29,7 @@ const LibraryDrawer: React.FC<LibraryDrawerProps> = ({ open, onClose }) => {
   const [routeName, setRouteName] = useState('')
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null)
   const [editingRouteName, setEditingRouteName] = useState('')
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   const handleBookmarkClick = useCallback(
     (b: { lat: number; lng: number }) => {
@@ -104,7 +105,8 @@ const LibraryDrawer: React.FC<LibraryDrawerProps> = ({ open, onClose }) => {
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md hover:bg-white/10 text-[var(--color-text-3)] transition-colors"
+            className="p-1 rounded-md hover:bg-white/10 text-[var(--color-text-3)] transition-colors cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
@@ -248,9 +250,14 @@ const LibraryDrawer: React.FC<LibraryDrawerProps> = ({ open, onClose }) => {
 
               {/* Route list */}
               {savedRoutes.length === 0 && (
-                <p className="text-xs text-[var(--color-text-3)] py-2">
-                  {t('panel.route_empty')}
-                </p>
+                <div className="text-center py-6">
+                  <p className="text-xs text-[var(--color-text-3)]">
+                    {t('panel.route_empty')}
+                  </p>
+                  <p className="text-[11px] text-[var(--color-text-3)] mt-1 opacity-60">
+                    {t('panel.route_save_hint', { n: 0 })}
+                  </p>
+                </div>
               )}
 
               {savedRoutes.map((route) => {
@@ -313,18 +320,36 @@ const LibraryDrawer: React.FC<LibraryDrawerProps> = ({ open, onClose }) => {
                       <Download className="w-3 h-3" />
                     </button>
 
-                    <button
-                      className="action-btn p-1 text-red-400 hover:text-red-300"
-                      title={t('generic.delete')}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (confirm(t('panel.route_delete_confirm', { name: route.name }))) {
-                          bm.handleRouteDelete(route.id)
-                        }
-                      }}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                    {pendingDeleteId === route.id ? (
+                      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        <button
+                          className="px-1.5 py-0.5 text-[10px] rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors cursor-pointer"
+                          onClick={() => {
+                            bm.handleRouteDelete(route.id)
+                            setPendingDeleteId(null)
+                          }}
+                        >
+                          {t('generic.delete')}
+                        </button>
+                        <button
+                          className="px-1.5 py-0.5 text-[10px] rounded bg-white/5 text-[var(--color-text-3)] hover:bg-white/10 transition-colors cursor-pointer"
+                          onClick={() => setPendingDeleteId(null)}
+                        >
+                          {t('generic.cancel')}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="action-btn p-1 text-red-400 hover:text-red-300 cursor-pointer"
+                        title={t('generic.delete')}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setPendingDeleteId(route.id)
+                        }}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 )
               })}

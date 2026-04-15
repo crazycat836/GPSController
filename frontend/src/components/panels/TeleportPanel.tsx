@@ -26,26 +26,28 @@ export default function TeleportPanel() {
           <input
             type="number"
             placeholder="Latitude"
+            aria-label="Latitude"
             value={coordLat}
             onChange={e => setCoordLat(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleCoordGo()}
-            className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-[var(--color-text-1)] text-xs placeholder:text-[var(--color-text-3)] focus:border-[var(--color-accent)] focus:outline-none transition-colors"
+            className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-[var(--color-text-1)] text-xs placeholder:text-[var(--color-text-2)] focus:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none transition-colors"
             step="any"
           />
           <input
             type="number"
             placeholder="Longitude"
+            aria-label="Longitude"
             value={coordLng}
             onChange={e => setCoordLng(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleCoordGo()}
-            className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-[var(--color-text-1)] text-xs placeholder:text-[var(--color-text-3)] focus:border-[var(--color-accent)] focus:outline-none transition-colors"
+            className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-[var(--color-text-1)] text-xs placeholder:text-[var(--color-text-2)] focus:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none transition-colors"
             step="any"
           />
         </div>
         <button
           onClick={handleCoordGo}
           disabled={!coordLat || !coordLng}
-          className="w-full py-2.5 rounded-xl bg-[var(--color-accent)] text-white font-medium text-sm flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-[0.97]"
+          className="w-full py-2.5 rounded-xl bg-[var(--color-accent)] text-white font-medium text-sm flex items-center justify-center gap-2 hover:opacity-90 disabled:bg-[var(--color-bg-surface-hover)] disabled:text-[var(--color-text-3)] disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95"
         >
           <MapPin className="w-4 h-4" />
           {t('generic.go' as any)}

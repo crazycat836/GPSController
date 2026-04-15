@@ -18,7 +18,7 @@ function ApplySpeedButton({ onApply }: { onApply: () => Promise<void> | void }) 
       <button
         className="w-full py-1.5 rounded-lg bg-[var(--color-accent)] text-white text-xs font-medium
                    flex items-center justify-center gap-1.5 transition-opacity
-                   disabled:opacity-50 disabled:cursor-not-allowed"
+                   disabled:bg-[var(--color-bg-surface-hover)] disabled:text-[var(--color-text-3)] disabled:cursor-not-allowed"
         disabled={busy}
         onClick={async () => {
           if (busy) return
@@ -83,7 +83,7 @@ export default function SpeedControls() {
           type="number"
           className="flex-1 max-w-[80px] rounded-lg bg-[var(--color-bg-elevated)] border border-white/10
                      px-2 py-1 text-xs text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)]
-                     focus:outline-none focus:border-[var(--color-accent)]/40"
+                     outline-none focus:border-[var(--color-accent)]/40 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
           placeholder="km/h"
           value={sim.customSpeedKmh ?? ''}
           onChange={(e) => {
@@ -132,7 +132,7 @@ export default function SpeedControls() {
             type="number"
             className="flex-1 rounded-lg bg-[var(--color-bg-elevated)] border border-white/10
                        px-2 py-1 text-xs text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)]
-                       focus:outline-none focus:border-[var(--color-accent)]/40"
+                       outline-none focus:border-[var(--color-accent)]/40 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
             placeholder={t('panel.speed_range_min')}
             value={sim.speedMinKmh ?? ''}
             onChange={(e) => {
@@ -149,7 +149,7 @@ export default function SpeedControls() {
             type="number"
             className="flex-1 rounded-lg bg-[var(--color-bg-elevated)] border border-white/10
                        px-2 py-1 text-xs text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)]
-                       focus:outline-none focus:border-[var(--color-accent)]/40"
+                       outline-none focus:border-[var(--color-accent)]/40 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
             placeholder={t('panel.speed_range_max')}
             value={sim.speedMaxKmh ?? ''}
             onChange={(e) => {

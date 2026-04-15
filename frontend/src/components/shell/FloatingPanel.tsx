@@ -63,7 +63,7 @@ export default function FloatingPanel({ mode, children }: FloatingPanelProps) {
 
       {/* Panel content - hidden when collapsed */}
       {!collapsed && (
-        <div className="px-3 pb-3 overflow-y-auto overflow-x-hidden flex-1 scrollbar-none">
+        <div className="px-3 pb-3 overflow-y-auto overflow-x-hidden flex-1 scrollbar-thin">
           {children}
         </div>
       )}

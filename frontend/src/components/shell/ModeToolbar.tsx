@@ -24,7 +24,7 @@ export default function ModeToolbar({ activeMode, onModeChange }: ModeToolbarPro
   return (
     <div
       className={[
-        'fixed right-3 top-1/2 -translate-y-1/2 z-[800]',
+        'fixed right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 -translate-y-1/2 z-[800]',
         'flex flex-col gap-1 p-1.5',
         'bg-[var(--color-glass)] backdrop-blur-2xl backdrop-saturate-[1.6]',
         'border border-[var(--color-border)] rounded-[22px]',
@@ -38,8 +38,9 @@ export default function ModeToolbar({ activeMode, onModeChange }: ModeToolbarPro
             key={mode}
             onClick={() => onModeChange(mode)}
             className={[
-              'w-10 h-10 rounded-full flex items-center justify-center',
+              'w-11 h-11 rounded-full flex items-center justify-center',
               'transition-all duration-150 cursor-pointer',
+              'focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none',
               isActive
                 ? 'bg-[var(--color-accent-dim)] text-[var(--color-accent)] shadow-[0_0_12px_rgba(108,140,255,0.25)]'
                 : 'text-[var(--color-text-2)] hover:bg-white/8 hover:text-[var(--color-text-1)]',
