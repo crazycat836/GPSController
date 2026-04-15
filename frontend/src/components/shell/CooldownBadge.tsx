@@ -1,30 +1,29 @@
 import React from 'react'
 import { Timer } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
+import Toast from './Toast'
 
 export default function CooldownBadge() {
   const { cooldown, cooldownEnabled } = useSimContext()
 
   if (!cooldownEnabled || cooldown <= 0) return null
 
-  const mins = Math.floor(cooldown / 60)
-  const secs = cooldown % 60
-  const display = mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`
+  const total = Math.round(cooldown)
+  const hrs = Math.floor(total / 3600)
+  const mins = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+
+  const display = hrs > 0
+    ? `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    : `${mins}:${secs.toString().padStart(2, '0')}`
 
   return (
-    <div
-      className={[
-        'absolute top-14 left-1/2 -translate-x-1/2 z-[1001]',
-        'flex items-center gap-2',
-        'px-4 py-1.5 rounded-full',
-        'bg-[rgba(255,152,0,0.95)] text-[#1a1a1a]',
-        'text-xs font-semibold',
-        'shadow-[var(--shadow-sm)]',
-        'anim-fade-slide-down',
-      ].join(' ')}
+    <Toast
+      visible
+      variant="warning"
+      icon={<Timer className="w-4 h-4" />}
     >
-      <Timer className="w-3.5 h-3.5" />
-      <span>Cooldown {display}</span>
-    </div>
+      Cooldown {display}
+    </Toast>
   )
 }

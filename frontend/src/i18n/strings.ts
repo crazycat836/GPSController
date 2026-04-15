@@ -176,6 +176,7 @@ export const STRINGS = {
   'wifi.detect_failed': { zh: '偵測失敗', en: 'Detection failed' },
 
   // ── Map ──────────────────────────────────────
+  'map.layers': { zh: '切換圖層', en: 'Switch layers' },
   'map.recenter': { zh: '定位到目前位置', en: 'Recenter on current position' },
   'map.click_not_locate': { zh: '此功能非定位', en: 'This is NOT teleport' },
   'map.click_use_right': { zh: '請用右鍵「瞬移到這裡」', en: 'Right-click to "Teleport here"' },

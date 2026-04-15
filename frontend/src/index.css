@@ -683,6 +683,39 @@
 .bookmark-item:hover svg { opacity: 0.8; }
 .bookmark-group { margin-bottom: 4px; }
 
+/* ── Toast / notification pill ───────────────────────────────
+   Unified floating notification style for toast, cooldown, pause. */
+.toast-pill {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1002;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-lg);
+  animation: fade-slide-down 200ms var(--ease-out-expo) both;
+}
+.toast-pill-dark {
+  background: rgba(24, 26, 32, 0.88);
+  color: var(--color-text-1);
+}
+.toast-pill-warning {
+  background: rgba(255, 152, 0, 0.92);
+  color: #1a1a1a;
+}
+.toast-pill-danger {
+  background: rgba(255, 71, 87, 0.92);
+  color: white;
+}
+
 /* ── Utility classes ────────────────────────────────────────── */
 .flex-1 { flex: 1; }
 .font-mono { font-family: var(--font-mono); }

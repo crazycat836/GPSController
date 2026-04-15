@@ -24,6 +24,7 @@ import ModeToolbar from './components/shell/ModeToolbar'
 import MiniStatusBar from './components/shell/MiniStatusBar'
 import SettingsMenu from './components/shell/SettingsMenu'
 import CooldownBadge from './components/shell/CooldownBadge'
+import Toast from './components/shell/Toast'
 
 // Panels
 import TeleportPanel from './components/panels/TeleportPanel'
@@ -51,6 +52,26 @@ const App: React.FC = () => {
         </SimProvider>
       </DeviceProvider>
     </ToastProvider>
+  )
+}
+
+// Auto-dismissing error banner (5s timeout, click to dismiss immediately)
+function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onDismiss, 5000)
+    return () => clearTimeout(timer)
+  }, [message, onDismiss])
+
+  return (
+    <div
+      className="toast-pill toast-pill-danger top-3"
+      onClick={onDismiss}
+      role="alert"
+      style={{ cursor: 'pointer' }}
+    >
+      <span>{message}</span>
+      <span style={{ opacity: 0.7, fontSize: 11, flexShrink: 0 }} aria-hidden>✕</span>
+    </div>
   )
 }
 
@@ -143,15 +164,19 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         )}
 
         {/* Pause countdown */}
-        {sim.pauseRemaining != null && sim.pauseRemaining > 0 && (
-          <div className="absolute top-[38px] left-1/2 -translate-x-1/2 z-[1002] bg-[rgba(255,152,0,0.95)] text-[#1a1a1a] px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md flex items-center gap-2">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <Toast
+          visible={sim.pauseRemaining != null && sim.pauseRemaining > 0}
+          variant="warning"
+          top="top-28"
+          icon={
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
               <rect x="6" y="4" width="4" height="16" rx="1" />
               <rect x="14" y="4" width="4" height="16" rx="1" />
             </svg>
-            {t('toast.pause_countdown', { n: sim.pauseRemaining })}
-          </div>
-        )}
+          }
+        >
+          {t('toast.pause_countdown', { n: Math.round(sim.pauseRemaining ?? 0) })}
+        </Toast>
 
         <MapView
           runtimes={sim.runtimes}
@@ -238,30 +263,16 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         )}
 
         {sim.error && (
-          <div
-            className="absolute top-3 left-1/2 -translate-x-1/2 z-[1100] bg-[var(--color-danger)] text-white px-5 py-2 rounded-md text-sm shadow-lg cursor-pointer max-w-[80%] text-center flex items-center gap-2"
-            onClick={sim.clearError}
-            role="alert"
-          >
-            <span className="flex-1">{sim.error}</span>
-            <span className="opacity-70 text-xs shrink-0" aria-hidden>✕</span>
-          </div>
+          <ErrorBanner message={sim.error} onDismiss={sim.clearError} />
         )}
 
         <MiniStatusBar />
         <CooldownBadge />
         <UpdateChecker />
 
-        {toast.toastMsg && (
-          <div
-            key={toast.toastMsg}
-            className="anim-fade-slide-down fixed top-[72px] left-1/2 -translate-x-1/2 z-[1002] surface-panel text-white px-[18px] py-2.5 rounded-xl text-sm font-medium max-w-[70vw] text-center"
-            role="status"
-            aria-live="polite"
-          >
-            {toast.toastMsg}
-          </div>
-        )}
+        <Toast key={toast.toastMsg ?? ''} visible={!!toast.toastMsg}>
+          {toast.toastMsg}
+        </Toast>
       </div>
 
       {/* Floating overlay components */}

@@ -107,6 +107,13 @@ const MapView: React.FC<MapViewProps> = ({
   // clickMarkerRef removed — left-click no longer drops a pin.
   const radiusCircleRef = useRef<L.Circle | null>(null);
 
+  const [layerKey, setLayerKey] = useState(() => {
+    try { return localStorage.getItem('locwarp.tile_layer') || 'osm'; }
+    catch { return 'osm'; }
+  });
+  const [layerOpen, setLayerOpen] = useState(false);
+  const layerMapRef = useRef<Record<string, L.TileLayer>>({});
+
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
     x: 0,
@@ -114,6 +121,18 @@ const MapView: React.FC<MapViewProps> = ({
     lat: 0,
     lng: 0,
   });
+
+  const switchLayer = useCallback((key: string) => {
+    const map = mapRef.current;
+    if (!map) return;
+    const layers = layerMapRef.current;
+    // Remove all tile layers, add the selected one
+    Object.values(layers).forEach((l) => { if (map.hasLayer(l)) map.removeLayer(l); });
+    if (layers[key]) layers[key].addTo(map);
+    setLayerKey(key);
+    setLayerOpen(false);
+    try { localStorage.setItem('locwarp.tile_layer', key); } catch {}
+  }, []);
 
   const closeContextMenu = useCallback(() => {
     setContextMenu((prev) => ({ ...prev, visible: false }));
@@ -126,12 +145,15 @@ const MapView: React.FC<MapViewProps> = ({
     const map = L.map(mapContainerRef.current, {
       center: [25.033, 121.5654],
       zoom: 13,
+      zoomSnap: 1,
+      wheelPxPerZoomLevel: 120,
+      wheelDebounceTime: 60,
       // Keep Leaflet's default control off so we can position our own
       // zoom control below the EtaBar on the left (default top-left
       // would collide with the overlay).
       zoomControl: false,
     });
-    const zoomCtrl = L.control.zoom({ position: 'topleft' });
+    const zoomCtrl = L.control.zoom({ position: 'bottomright' });
     zoomCtrl.addTo(map);
     // Nudge the whole topleft control cluster down below the FloatingPanel
     // (panel sits at top ~56px, ~320px tall max). Position below panel area.
@@ -140,27 +162,44 @@ const MapView: React.FC<MapViewProps> = ({
       topLeftEl.style.marginTop = '56px';
       topLeftEl.style.marginLeft = '0px';
     }
+    const topRightEl = (map as any)._controlCorners?.topright as HTMLElement | undefined;
+    if (topRightEl) {
+      topRightEl.style.marginTop = '56px';
+    }
 
-    // OSM Standard (Mapnik). Electron main hooks a compliant User-Agent
-    // for these hosts (see electron/main.js), otherwise the tile.osm.org
-    // endpoint returns HTTP 418 for the default Chromium UA.
-    const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Tile layers — three base maps with localStorage persistence.
+    // Electron main hooks a compliant User-Agent for tile hosts
+    // (see electron/main.js), otherwise tile.osm.org returns HTTP 418.
+    const baseOpts: L.TileLayerOptions = {
+      updateWhenIdle: false,
+      updateWhenZooming: true,
+      keepBuffer: 4,
+      crossOrigin: true,
+      detectRetina: true,
+    };
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      subdomains: 'abc',
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      ...baseOpts,
     });
-    // OSM France mirror — same Mapnik style, looser policy, used as a fallback
-    // when the main tile server is rate-limited or regionally unreachable.
-    const osmFrLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
-      subdomains: 'abc', maxZoom: 20,
-      attribution: '&copy; <a href="https://www.openstreetmap.fr/">OSM France</a>',
+    const cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd',
+      maxZoom: 20,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      ...baseOpts,
     });
-    osmLayer.on('tileerror', () => {
-      if (!map.hasLayer(osmFrLayer)) {
-        map.removeLayer(osmLayer);
-        osmFrLayer.addTo(map);
-      }
+    const esriLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.esri.com/">Esri</a>',
+      ...baseOpts,
     });
-    osmLayer.addTo(map);
+
+    const layers: Record<string, L.TileLayer> = { osm: osmLayer, carto: cartoLayer, esri: esriLayer };
+    layerMapRef.current = layers;
+    const savedLayer = localStorage.getItem('locwarp.tile_layer') || 'osm';
+    const activeLayer = layers[savedLayer] || osmLayer;
+    activeLayer.addTo(map);
 
     // Left-click on the map dismisses any open context menu.
     // If the parent wires `onMapClick` (currently used by the "left-click
@@ -724,6 +763,72 @@ const MapView: React.FC<MapViewProps> = ({
           <line x1="19" y1="12" x2="22" y2="12" />
         </svg>
       </button>
+
+      {/* Layer switcher — top-right, custom React component instead of
+          Leaflet's built-in control for consistent dark-theme styling. */}
+      <div style={{ position: 'absolute', top: 62, right: 10, zIndex: 1001 }}>
+        <button
+          onClick={() => setLayerOpen((v) => !v)}
+          title={t('map.layers')}
+          className="surface-control"
+          style={{
+            width: 34, height: 34, borderRadius: 'var(--radius-md)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 0, color: 'var(--color-text-1)',
+          }}
+        >
+          {/* Lucide "Layers" icon */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
+            <path d="m2 12 8.58 3.91a2 2 0 0 0 1.66 0L20.73 12" opacity=".7" />
+            <path d="m2 17 8.58 3.91a2 2 0 0 0 1.66 0L20.73 17" opacity=".4" />
+          </svg>
+        </button>
+        {layerOpen && (
+          <>
+            {/* Invisible backdrop to close on outside click */}
+            <div
+              style={{ position: 'fixed', inset: 0, zIndex: -1 }}
+              onClick={() => setLayerOpen(false)}
+            />
+            <div
+              className="surface-popup anim-scale-in-tl"
+              style={{
+                position: 'absolute', top: 40, right: 0,
+                borderRadius: 'var(--radius-lg)',
+                padding: 6, minWidth: 190,
+                display: 'flex', flexDirection: 'column', gap: 2,
+              }}
+            >
+              {([
+                ['osm', 'OpenStreetMap', <svg key="osm" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" /></svg>],
+                ['carto', 'CartoDB Voyager', <svg key="carto" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" /></svg>],
+                ['esri', 'ESRI Satellite', <svg key="esri" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 18H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><path d="M22 12a10 10 0 1 0-20 0 10 10 0 0 0 20 0Z" opacity=".3" /><circle cx="16" cy="9" r="3" /><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L9 18" /></svg>],
+              ] as [string, string, React.ReactNode][]).map(([key, label, icon]) => (
+                <button
+                  key={key}
+                  onClick={() => switchLayer(key)}
+                  className="context-menu-item"
+                  style={{
+                    borderRadius: 'var(--radius-sm)',
+                    fontWeight: layerKey === key ? 600 : 500,
+                    background: layerKey === key ? 'var(--color-accent-dim)' : 'transparent',
+                    color: layerKey === key ? 'var(--color-accent)' : 'var(--color-text-1)',
+                  }}
+                >
+                  {icon}
+                  <span style={{ flex: 1 }}>{label}</span>
+                  {layerKey === key && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Coord input overlay — bottom-left, above the map's status footer.
           Takes a single "lat, lng" string; Enter or the teleport button goes.
