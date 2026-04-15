@@ -7,15 +7,13 @@ import ActionButtons from './ActionButtons'
 export default function NavigatePanel() {
   const t = useT()
   return (
-    <>
-      <div className="seg-hint seg-hint-accent mb-2">
+    <div className="seg-stack">
+      <div className="seg-hint seg-hint-accent">
         <MousePointerClick className="w-3.5 h-3.5 shrink-0" />
         <span>{t('panel.navigate_hint' as any)}</span>
       </div>
-      <div className="seg-stack">
-        <SpeedControls />
-      </div>
+      <SpeedControls />
       <ActionButtons />
-    </>
+    </div>
   )
 }

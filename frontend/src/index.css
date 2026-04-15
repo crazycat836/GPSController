@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════
-   LocWarp Design System
+   GPSController Design System
    Single source of truth for all design tokens.
    Tailwind v4 generates utility classes from @theme values.
    ═══════════════════════════════════════════════════════════════ */
@@ -73,14 +73,23 @@
   /* ── Spacing ────────────────────────────────────────────────
      4px base grid. Use these for padding, gaps, margins.
      Prefer gap-* Tailwind utilities that map to these. */
+  --spacing-0_5: 2px;
   --spacing-1: 4px;
+  --spacing-1_5: 6px;
   --spacing-2: 8px;
+  --spacing-2_5: 10px;
   --spacing-3: 12px;
+  --spacing-3_5: 14px;
   --spacing-4: 16px;
   --spacing-5: 20px;
   --spacing-6: 24px;
+  --spacing-7: 28px;
   --spacing-8: 32px;
+  --spacing-9: 36px;
   --spacing-10: 40px;
+  --spacing-12: 48px;
+  --spacing-14: 56px;
+  --spacing-16: 64px;
 
   /* ── Typography ─────────────────────────────────────────────
      Font sizes with corresponding line heights. */
@@ -144,17 +153,15 @@
 .seg-stack {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
-.seg-stack > .seg { border-radius: 4px; }
-.seg-stack > .seg:first-child { border-radius: 12px 12px 4px 4px; }
-.seg-stack > .seg:last-child { border-radius: 4px 4px 12px 12px; }
-.seg-stack > .seg:only-child { border-radius: 12px; }
 
-/* ── Segment card ────────────────────────────────────────────
-   Single group within a stack. Contains one or more rows. */
+/* ── Card ────────────────────────────────────────────────────
+   Each section is an independent floating card. */
 .seg {
   background: var(--color-surface-3);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
   overflow: hidden;
 }
 

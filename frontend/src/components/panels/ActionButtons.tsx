@@ -8,22 +8,19 @@ export default function ActionButtons() {
 
   if (!isRunning) {
     return (
-      <div className="pt-2">
-        <button className="seg-cta seg-cta-accent" onClick={handleStart}>
-          <Play size={14} fill="currentColor" />
-          {t('generic.start')}
-        </button>
-      </div>
+      <button className="seg-cta seg-cta-accent mt-1" onClick={handleStart}>
+        <Play size={14} fill="currentColor" />
+        {t('generic.start')}
+      </button>
     )
   }
 
   return (
-    <div className="flex gap-2 pt-2">
+    <div className="flex gap-2 mt-1">
       <button className="seg-cta seg-cta-danger flex-1" onClick={handleStop}>
         <Square size={12} fill="currentColor" />
         {t('generic.stop')}
       </button>
-
       {!isPaused ? (
         <button className="seg-cta seg-cta-ghost flex-1" onClick={handlePause}>
           <Pause size={12} fill="currentColor" />

@@ -1,5 +1,5 @@
 /* ============================================
-   LocWarp - Dark Theme Stylesheet
+   GPSController - Dark Theme Stylesheet
    ============================================ */
 
 /* ---------- CSS Variables ---------- */
@@ -73,12 +73,18 @@
 }
 
 /* ---------- Reset & Base ---------- */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* NOTE: Tailwind v4 preflight already resets box-sizing/margin/padding
+   inside @layer base. The manual * reset was unlayered, which caused it
+   to override ALL Tailwind utilities (padding, margin, etc.).
+   Wrapping in @layer base lets Tailwind utilities win as intended. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 }
 
 html,

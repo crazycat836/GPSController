@@ -37,16 +37,16 @@ export default function FloatingPanel({ mode, children }: FloatingPanelProps) {
       className={[
         'fixed top-14 left-3 w-[22rem] z-[1001]',
         'bg-[var(--color-surface-1)] border border-[var(--color-border)]',
-        'rounded-2xl overflow-hidden flex flex-col',
+        'rounded-2xl overflow-hidden flex flex-col p-3_5 gap-3',
         'shadow-[var(--shadow-lg)]',
         'transition-all duration-200 ease-[var(--ease-out-expo)]',
         collapsed ? '' : 'max-h-[calc(100vh-80px)]',
       ].join(' ')}
     >
-      {/* Header with gradient accent */}
+      {/* Header — floats inside panel with its own rounding */}
       <div
-        className="flex items-center gap-2.5 px-4 py-3.5 cursor-pointer select-none shrink-0"
-        style={{ background: 'linear-gradient(180deg, rgba(108,140,255,0.08) 0%, transparent 100%)' }}
+        className="flex items-center gap-2_5 px-4 py-3 rounded-xl cursor-pointer select-none shrink-0"
+        style={{ background: 'linear-gradient(135deg, rgba(108,140,255,0.1) 0%, rgba(108,140,255,0.03) 100%)' }}
         onClick={() => setCollapsed(prev => !prev)}
       >
         <Icon className="w-5 h-5 text-[var(--color-accent)]" />
@@ -63,7 +63,7 @@ export default function FloatingPanel({ mode, children }: FloatingPanelProps) {
 
       {/* Scrollable content */}
       {!collapsed && (
-        <div className="px-3 pb-3 overflow-y-auto overflow-x-hidden flex-1 scrollbar-thin">
+        <div className="overflow-y-auto overflow-x-hidden flex-1 scrollbar-thin anim-fade-slide-up pb-1">
           {children}
         </div>
       )}

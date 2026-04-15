@@ -5,12 +5,10 @@ import WaypointList from './WaypointList'
 
 export default function MultiStopPanel() {
   return (
-    <>
-      <div className="seg-stack">
-        <WaypointList mode="multistop" />
-        <SpeedControls />
-      </div>
+    <div className="seg-stack">
+      <WaypointList mode="multistop" />
+      <SpeedControls />
       <ActionButtons />
-    </>
+    </div>
   )
 }

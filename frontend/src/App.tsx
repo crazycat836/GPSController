@@ -296,15 +296,13 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         }
       />
 
-      <FloatingPanel mode={sim.mode}>
-        <div key={sim.mode} className="anim-fade-slide-up">
-          {sim.mode === SimMode.Teleport && <TeleportPanel />}
-          {sim.mode === SimMode.Navigate && <NavigatePanel />}
-          {sim.mode === SimMode.Loop && <LoopPanel />}
-          {sim.mode === SimMode.MultiStop && <MultiStopPanel />}
-          {sim.mode === SimMode.RandomWalk && <RandomWalkPanel />}
-          {sim.mode === SimMode.Joystick && <JoystickPanel />}
-        </div>
+      <FloatingPanel mode={sim.mode} key={sim.mode}>
+        {sim.mode === SimMode.Teleport && <TeleportPanel />}
+        {sim.mode === SimMode.Navigate && <NavigatePanel />}
+        {sim.mode === SimMode.Loop && <LoopPanel />}
+        {sim.mode === SimMode.MultiStop && <MultiStopPanel />}
+        {sim.mode === SimMode.RandomWalk && <RandomWalkPanel />}
+        {sim.mode === SimMode.Joystick && <JoystickPanel />}
       </FloatingPanel>
 
       <ModeToolbar activeMode={sim.mode} onModeChange={sim.setMode} />
