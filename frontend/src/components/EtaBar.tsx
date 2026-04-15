@@ -67,16 +67,14 @@ const EtaBar: React.FC<EtaBarProps> = ({
 
   return (
     <div
-      className="eta-bar"
+      className="eta-bar surface-panel"
       style={{
         position: 'absolute',
         top: 10,
         left: 10,
         right: 10,
-        zIndex: 850,
-        background: 'rgba(18, 21, 32, 0.72)',
-        backdropFilter: 'blur(24px) saturate(160%)',
-        WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+        zIndex: 1001,
+        borderRadius: 'var(--radius-lg)',
         padding: '7px 18px',
         display: 'flex',
         alignItems: 'center',
@@ -85,10 +83,6 @@ const EtaBar: React.FC<EtaBarProps> = ({
         gap: 16,
         fontSize: 12,
         color: '#e8eaf0',
-        border: '1px solid rgba(108, 140, 255, 0.18)',
-        borderRadius: 18,
-        boxShadow:
-          '0 12px 32px rgba(12, 18, 40, 0.45), 0 2px 6px rgba(12, 18, 40, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
         letterSpacing: '-0.005em',
       }}
     >
@@ -98,7 +92,7 @@ const EtaBar: React.FC<EtaBarProps> = ({
           flex: 1,
           height: 4,
           borderRadius: 2,
-          background: 'rgba(255,255,255,0.1)',
+          background: 'var(--color-surface-2)',
           overflow: 'hidden',
           minWidth: 80,
         }}

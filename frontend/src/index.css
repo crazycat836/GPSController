@@ -1,22 +1,39 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════════════
+   LocWarp Design System
+   Single source of truth for all design tokens.
+   Tailwind v4 generates utility classes from @theme values.
+   ═══════════════════════════════════════════════════════════════ */
+
 @theme {
-  /* Background surfaces */
+  /* ── Surfaces ───────────────────────────────────────────────
+     Layered dark backgrounds. Each step is one elevation higher.
+     surface-0 = app canvas, surface-3 = highest floating layer. */
+  --color-surface-0: #0a0a0c;
+  --color-surface-1: #131416;
+  --color-surface-2: #1a1b20;
+  --color-surface-3: #222328;
+  --color-surface-hover: #282a31;
+
+  /* Legacy aliases — referenced by older components.
+     Point them at the new surface scale so nothing breaks. */
   --color-bg-deep: #050506;
   --color-bg-base: #0a0a0c;
-  --color-bg-elevated: #141620;
-  --color-bg-surface-hover: #1b1f2d;
+  --color-bg-elevated: #1a1b20;
+  --color-bg-surface-hover: #282a31;
+  --color-glass: #131416;
+  --color-glass-heavy: #131416;
 
-  /* Glass */
-  --color-glass: rgba(14, 16, 26, 0.72);
-  --color-glass-heavy: rgba(14, 16, 26, 0.95);
-
-  /* Accent */
+  /* ── Accent ─────────────────────────────────────────────────
+     Primary blue. Used for active states, focus rings, CTAs. */
   --color-accent: #6c8cff;
   --color-accent-hover: #8aa3ff;
-  --color-accent-dim: rgba(108, 140, 255, 0.15);
+  --color-accent-dim: rgba(108, 140, 255, 0.12);
+  --color-accent-glow: rgba(108, 140, 255, 0.25);
 
-  /* Semantic */
+  /* ── Semantic ───────────────────────────────────────────────
+     Signal colors for status, feedback, alerts. */
   --color-success: #4ecdc4;
   --color-success-dim: rgba(78, 205, 196, 0.15);
   --color-danger: #ff4757;
@@ -24,61 +41,373 @@
   --color-warning: #ffd93d;
   --color-warning-dim: rgba(255, 217, 61, 0.15);
 
-  /* Text */
+  /* ── Text ───────────────────────────────────────────────────
+     Three tiers: primary → secondary → muted.
+     Never use raw white — always pick a tier. */
   --color-text-1: #e8eaf0;
-  --color-text-2: #9499ac;
-  --color-text-3: #6b7089;
+  --color-text-2: #8b8fa3;
+  --color-text-3: #555869;
 
-  /* Border */
-  --color-border: rgba(108, 140, 255, 0.18);
-  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  /* ── Border ─────────────────────────────────────────────────
+     White-alpha borders for dark surfaces. */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-subtle: rgba(255, 255, 255, 0.05);
+  --color-border-strong: rgba(255, 255, 255, 0.12);
+  --color-border-focus: rgba(108, 140, 255, 0.4);
 
-  /* Radius */
+  /* ── Shadows ────────────────────────────────────────────────
+     Cool-tinted shadows that feel native to the dark UI. */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --shadow-glow: 0 0 20px rgba(108, 140, 255, 0.2);
+
+  /* ── Radius ─────────────────────────────────────────────────
+     Consistent rounding scale. */
   --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 18px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-full: 9999px;
 
-  /* Easing */
+  /* ── Spacing ────────────────────────────────────────────────
+     4px base grid. Use these for padding, gaps, margins.
+     Prefer gap-* Tailwind utilities that map to these. */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-10: 40px;
+
+  /* ── Typography ─────────────────────────────────────────────
+     Font sizes with corresponding line heights. */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+
+  /* ── Control Heights ────────────────────────────────────────
+     Standardised interactive element heights.
+     sm  = compact (tags, badges, secondary actions)
+     md  = default (inputs, selects, toolbar buttons)
+     lg  = primary (CTA buttons, main actions) */
+  --control-sm: 32px;
+  --control-md: 38px;
+  --control-lg: 44px;
+
+  /* ── Easing ─────────────────────────────────────────────────
+     Named curves for consistent motion. */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  /* Font */
+  /* ── Font ───────────────────────────────────────────────────  */
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
 }
 
-/* ── Animations ─────────────────────────────────────────────── */
+
+/* ═══════════════════════════════════════════════════════════════
+   Surface Utilities
+   Pre-composed surface treatments for floating UI elements.
+   ═══════════════════════════════════════════════════════════════ */
+
+.surface-panel {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+}
+.surface-control {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+.surface-popup {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Segment System  (iOS-style stacked groups)
+   Composable classes for floating panel UI.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Stack container ─────────────────────────────────────────
+   Vertically stacks segments with 2px gaps.
+   Auto-rounds first/last children for a continuous feel. */
+.seg-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.seg-stack > .seg { border-radius: 4px; }
+.seg-stack > .seg:first-child { border-radius: 12px 12px 4px 4px; }
+.seg-stack > .seg:last-child { border-radius: 4px 4px 12px 12px; }
+.seg-stack > .seg:only-child { border-radius: 12px; }
+
+/* ── Segment card ────────────────────────────────────────────
+   Single group within a stack. Contains one or more rows. */
+.seg {
+  background: var(--color-surface-3);
+  overflow: hidden;
+}
+
+/* ── Row ─────────────────────────────────────────────────────
+   Horizontal layout inside a segment. */
+.seg-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  gap: 10px;
+  min-height: 40px;
+}
+.seg-row + .seg-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* Full-bleed row — tighter padding for grids / chips. */
+.seg-row-flush { padding: 8px 10px; }
+
+/* Compact header row — section label inside a segment. */
+.seg-row-header {
+  padding: 8px 14px 2px;
+  min-height: auto;
+}
+
+/* Compact row — reduced height for secondary content. */
+.seg-row-compact {
+  min-height: 32px;
+  padding: 6px 14px;
+}
+
+/* ── Row label ───────────────────────────────────────────────
+   Left-aligned label text inside a row. */
+.seg-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-text-2);
+}
+
+/* ── Compact input ───────────────────────────────────────────
+   Small input for inside segment rows. */
+.seg-input {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--color-text-1);
+  font-size: var(--text-sm);
+  outline: none;
+  min-width: 0;
+  transition: border-color 150ms;
+}
+.seg-input:focus {
+  border-color: var(--color-border-focus);
+}
+.seg-input::placeholder {
+  color: var(--color-text-3);
+}
+
+/* ── Chip button ─────────────────────────────────────────────
+   Selectable option inside a row (speed presets, radius). */
+.seg-chip {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  transition: all 120ms;
+}
+.seg-chip-off {
+  background: var(--color-surface-1);
+  color: var(--color-text-3);
+}
+.seg-chip-off:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-2);
+}
+.seg-chip-on {
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  font-weight: 600;
+  border-color: rgba(108, 140, 255, 0.2);
+}
+
+/* Horizontal pill variant (single-line chips). */
+.seg-pill {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-align: center;
+  transition: all 120ms;
+}
+.seg-pill-off {
+  background: var(--color-surface-1);
+  color: var(--color-text-3);
+}
+.seg-pill-off:hover {
+  color: var(--color-text-2);
+}
+.seg-pill-on {
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  font-weight: 600;
+  border-color: rgba(108, 140, 255, 0.2);
+}
+
+/* ── Unit label ──────────────────────────────────────────────
+   Standardised suffix text (km/h, m, pts, s). */
+.seg-unit {
+  font-size: var(--text-2xs);
+  color: var(--color-text-3);
+  flex-shrink: 0;
+}
+
+/* ── Text button ─────────────────────────────────────────────
+   Subtle inline action for secondary operations. */
+.seg-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: none;
+  background: none;
+  color: var(--color-text-3);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 120ms;
+}
+.seg-text-btn:hover {
+  color: var(--color-text-2);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ── CTA button ──────────────────────────────────────────────
+   Full-width action button for Start / Go / Apply. */
+.seg-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 11px;
+  border: none;
+  border-radius: 10px;
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 150ms, transform 100ms;
+}
+.seg-cta:hover { opacity: 0.9; }
+.seg-cta:active { transform: scale(0.97); }
+.seg-cta:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.seg-cta-accent { background: var(--color-accent); color: white; }
+.seg-cta-danger { background: var(--color-danger); color: white; }
+.seg-cta-ghost { background: var(--color-surface-3); color: var(--color-text-1); }
+.seg-cta-ghost:hover { background: var(--color-surface-hover); opacity: 1; }
+
+/* Compact CTA variant for inline / secondary actions. */
+.seg-cta-sm {
+  padding: 7px;
+  font-size: var(--text-sm);
+  border-radius: 8px;
+}
+
+/* ── Hint bar ────────────────────────────────────────────────
+   Informational inline callout. */
+.seg-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: var(--text-xs);
+  color: var(--color-text-3);
+  background: rgba(255, 255, 255, 0.02);
+}
+.seg-hint-accent {
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+}
+
+/* ── Toggle switch ───────────────────────────────────────────
+   Custom on/off toggle replacing native checkbox. */
+.toggle-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background 150ms;
+  flex-shrink: 0;
+}
+.toggle-switch[data-checked="true"] {
+  background: var(--color-accent);
+}
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 150ms var(--ease-out-expo);
+}
+.toggle-switch[data-checked="true"]::after {
+  transform: translateX(16px);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Animations
+   ═══════════════════════════════════════════════════════════════ */
+
 @keyframes fade-slide-up {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes fade-slide-down {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes scale-in {
   from { opacity: 0; transform: scale(0.96); }
   to { opacity: 1; transform: scale(1); }
 }
-
 @keyframes pulse-glow {
   0%, 100% { box-shadow: 0 0 8px rgba(108, 140, 255, 0.2); }
   50% { box-shadow: 0 0 16px rgba(108, 140, 255, 0.4); }
 }
 
-@keyframes wp-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-/* Utility animation classes */
 .anim-fade-slide-up { animation: fade-slide-up 200ms var(--ease-out-expo) both; }
 .anim-fade-slide-down { animation: fade-slide-down 200ms var(--ease-out-expo) both; }
 .anim-scale-in { animation: scale-in 200ms var(--ease-out-expo) both; }
 
-/* ── Reduced motion ─────────────────────────────────────────── */
+
+/* ═══════════════════════════════════════════════════════════════
+   Accessibility
+   ═══════════════════════════════════════════════════════════════ */
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -87,9 +416,12 @@
   }
 }
 
-/* ── Responsive: narrow Electron window ─────────────────────── */
+
+/* ═══════════════════════════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════════════════════════ */
+
 @media (max-width: 640px) {
-  /* FloatingPanel becomes bottom sheet */
   .floating-panel-responsive {
     top: auto !important;
     bottom: 0 !important;
@@ -99,7 +431,6 @@
     max-height: 50vh !important;
     border-radius: 18px 18px 0 0 !important;
   }
-  /* ModeToolbar becomes horizontal bottom strip */
   .mode-toolbar-responsive {
     right: auto !important;
     top: auto !important;
@@ -111,28 +442,24 @@
   }
 }
 
-/* ── Scrollbar styles ──────────────────────────────────────── */
-.scrollbar-none {
-  scrollbar-width: none;
-}
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
+
+/* ═══════════════════════════════════════════════════════════════
+   Scrollbar
+   ═══════════════════════════════════════════════════════════════ */
+
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
 
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }
-.scrollbar-thin::-webkit-scrollbar {
-  width: 4px;
-}
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: transparent;
-}
+.scrollbar-thin::-webkit-scrollbar { width: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.18);
 }

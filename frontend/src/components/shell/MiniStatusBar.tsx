@@ -52,12 +52,10 @@ export default function MiniStatusBar() {
   return (
     <div
       className={[
-        'absolute bottom-3 left-1/2 -translate-x-1/2 z-[850]',
+        'absolute bottom-3 left-1/2 -translate-x-1/2 z-[1001]',
         'flex items-center gap-2 px-4 py-1.5',
-        'bg-[var(--color-glass)] backdrop-blur-2xl backdrop-saturate-[1.6]',
-        'border border-[var(--color-border)] rounded-full',
+        'surface-panel rounded-full',
         'text-xs text-[var(--color-text-2)]',
-        'shadow-[0_14px_36px_rgba(12,18,40,0.48),0_2px_8px_rgba(12,18,40,0.3)]',
       ].join(' ')}
     >
       {isDual ? (

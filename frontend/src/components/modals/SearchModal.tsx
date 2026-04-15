@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react'
-import { Search } from 'lucide-react'
 import AddressSearch from '../AddressSearch'
 import { useSimContext } from '../../contexts/SimContext'
 
@@ -28,13 +27,9 @@ const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
       onClick={onClose}
     >
       <div
-        className="mt-[15vh] w-[min(600px,85vw)] h-fit bg-[var(--color-glass-heavy)] backdrop-blur-2xl border border-[var(--color-border)] rounded-2xl shadow-2xl overflow-hidden"
+        className="mt-[15vh] w-[min(600px,85vw)] h-fit surface-popup rounded-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
-          <Search className="w-4 h-4 text-[var(--color-text-3)]" />
-          <span className="text-sm text-[var(--color-text-3)]">Search address...</span>
-        </div>
         <div className="p-4">
           <AddressSearch
             onSelect={(lat, lng) => {

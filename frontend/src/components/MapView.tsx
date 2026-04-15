@@ -690,24 +690,22 @@ const MapView: React.FC<MapViewProps> = ({
         onClick={recenter}
         disabled={!currentPosition}
         title={t('map.recenter')}
+        className="surface-control"
         style={{
           position: 'absolute',
           left: 10,
-          top: 132,  // just below the (shifted-down) zoom control
-          zIndex: 800,
-          width: 30,
-          height: 30,
-          borderRadius: 4,
-          border: '1px solid rgba(0,0,0,0.25)',
-          background: currentPosition ? '#6c8cff' : '#3a4050',
-          color: '#fff',
+          top: 132,
+          zIndex: 1001,
+          width: 34,
+          height: 34,
+          borderRadius: 'var(--radius-md)',
+          color: currentPosition ? '#6c8cff' : 'var(--color-text-3)',
           cursor: currentPosition ? 'pointer' : 'not-allowed',
-          boxShadow: '0 2px 6px rgba(0,0,0,0.35)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           padding: 0,
-          opacity: currentPosition ? 1 : 0.55,
+          opacity: currentPosition ? 1 : 0.4,
         }}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -727,17 +725,12 @@ const MapView: React.FC<MapViewProps> = ({
       <div
         onContextMenu={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
-        className="anim-fade-slide-up"
+        className="anim-fade-slide-up surface-panel"
         style={{
-          position: 'absolute', left: 12, bottom: 100, zIndex: 851,
+          position: 'absolute', left: 12, bottom: 100, zIndex: 1001,
           display: 'flex', alignItems: 'center', gap: 6,
-          background: 'rgba(26, 29, 39, 0.82)',
-          backdropFilter: 'blur(14px) saturate(140%)',
-          WebkitBackdropFilter: 'blur(14px) saturate(140%)',
-          borderRadius: 10,
+          borderRadius: 'var(--radius-lg)',
           padding: '7px 9px',
-          boxShadow: '0 10px 32px rgba(12, 18, 40, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06) inset',
-          border: '1px solid rgba(108, 140, 255, 0.15)',
         }}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6c8cff" strokeWidth="2" style={{ flexShrink: 0 }}>
@@ -767,9 +760,9 @@ const MapView: React.FC<MapViewProps> = ({
           }}
           title={tRef.current('panel.paste_tooltip')}
           style={{
-            background: 'rgba(255,255,255,0.08)',
-            color: '#c7d0e4', border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: 4, padding: '4px 8px', fontSize: 11, fontWeight: 600,
+            background: 'var(--color-surface-2)',
+            color: '#c7d0e4', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)', padding: '4px 8px', fontSize: 11, fontWeight: 600,
             cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3,
           }}
         >
@@ -784,8 +777,8 @@ const MapView: React.FC<MapViewProps> = ({
           disabled={!coordInput.trim() || !deviceConnected}
           title={t('map.teleport_here')}
           style={{
-            background: !coordInput.trim() || !deviceConnected ? 'rgba(108,140,255,0.3)' : '#6c8cff',
-            color: '#fff', border: 'none', borderRadius: 4,
+            background: !coordInput.trim() || !deviceConnected ? 'var(--color-accent-dim)' : 'var(--color-accent)',
+            color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)',
             padding: '4px 10px', fontSize: 11, fontWeight: 600,
             cursor: !coordInput.trim() || !deviceConnected ? 'not-allowed' : 'pointer',
           }}
@@ -799,14 +792,12 @@ const MapView: React.FC<MapViewProps> = ({
             position: 'fixed',
             left: contextMenu.x,
             top: contextMenu.y,
-            zIndex: 1000,
-            background: 'rgba(26, 29, 39, 0.95)',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
-            border: '1px solid rgba(108, 140, 255, 0.18)',
-            borderRadius: 10,
+            zIndex: 1002,
+            background: 'var(--color-surface-1)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-lg)',
             padding: '4px 0',
-            boxShadow: '0 10px 32px rgba(12, 18, 40, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04) inset',
+            boxShadow: 'var(--shadow-lg)',
             minWidth: 180,
           }}
           onClick={(e) => e.stopPropagation()}
@@ -833,7 +824,7 @@ const MapView: React.FC<MapViewProps> = ({
             </svg>
             {contextMenu.lat.toFixed(6)}, {contextMenu.lng.toFixed(6)}
           </div>
-          <div style={{ height: 1, background: '#444', margin: '2px 0 4px' }} />
+          <div style={{ height: 1, background: 'var(--color-border)', margin: '2px 0 4px' }} />
 
           {/* 2 + 3. Teleport / Navigate (device-gated). */}
           {deviceConnected ? (

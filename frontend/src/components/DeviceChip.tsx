@@ -72,12 +72,10 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
         }}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
-          height: 24, padding: '0 8px',
-          borderRadius: 12,
-          background: 'rgba(255,255,255,0.06)',
-          backdropFilter: 'blur(24px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(160%)',
-          border: '1px solid rgba(108, 140, 255, 0.18)',
+          height: 28, padding: '0 10px',
+          borderRadius: 'var(--radius-full)',
+          background: 'var(--color-surface-2)',
+          border: '1px solid var(--color-border)',
           fontSize: 11,
           color: 'rgba(255,255,255,0.9)',
           cursor: 'context-menu',
@@ -104,14 +102,11 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
       {menu && createPortal(
         <div
           onClick={(e) => e.stopPropagation()}
+          className="surface-popup"
           style={{
             position: 'fixed', left: menu.x, top: menu.y,
-            background: 'rgba(20,22,28,0.96)',
-            backdropFilter: 'blur(18px) saturate(160%)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 8, padding: 4, minWidth: 160,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-            zIndex: 9999, fontSize: 12, color: '#eaeaea',
+            borderRadius: 'var(--radius-md)', padding: 4, minWidth: 160,
+            zIndex: 1002, fontSize: 12, color: '#eaeaea',
           }}
         >
           <MenuItem onClick={() => { setMenu(null); onRestoreOne() }}>{t('device.chip_restore')}</MenuItem>
@@ -135,7 +130,7 @@ function MenuItem({ children, onClick }: { children: React.ReactNode; onClick: (
         padding: '6px 10px',
         borderRadius: 6,
         cursor: 'pointer',
-        background: hover ? 'rgba(108,140,255,0.18)' : 'transparent',
+        background: hover ? 'var(--color-surface-hover)' : 'transparent',
       }}
     >
       {children}

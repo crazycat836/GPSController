@@ -235,6 +235,8 @@ export const STRINGS = {
   'panel.mode': { zh: '模式', en: 'Mode' },
   'panel.address_search': { zh: '地址搜尋', en: 'Address Search' },
   'panel.or_search': { zh: '或搜尋地址', en: 'or search address' },
+  'panel.coordinates': { zh: '座標', en: 'Coordinates' },
+  'panel.search_hint': { zh: '使用搜尋來查找地址', en: 'Use search to find an address' },
   'panel.navigate_hint': { zh: '在地圖上右鍵選擇目的地', en: 'Right-click on the map to set destination' },
   'panel.joystick_hint': { zh: '使用畫面上的搖桿控制移動方向', en: 'Use the joystick pad on the map to control direction' },
   'settings.title': { zh: '設定', en: 'Settings' },

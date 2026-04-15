@@ -124,7 +124,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         {/* DDI mounting overlay */}
         {sim.ddiMounting && (
           <div className="absolute inset-0 z-[1100] bg-[rgba(20,22,32,0.85)] backdrop-blur-[3px] flex items-center justify-center">
-            <div className="bg-[#23232a] border border-[#3a3a42] rounded-lg px-7 py-5 max-w-[420px] text-center shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
+            <div className="surface-popup rounded-2xl px-7 py-5 max-w-[420px] text-center">
               <svg
                 width="32" height="32" viewBox="0 0 24 24" fill="none"
                 stroke="#6c8cff" strokeWidth="2"
@@ -144,7 +144,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
         {/* Pause countdown */}
         {sim.pauseRemaining != null && sim.pauseRemaining > 0 && (
-          <div className="absolute top-[38px] left-1/2 -translate-x-1/2 z-[900] bg-[rgba(255,152,0,0.95)] text-[#1a1a1a] px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md flex items-center gap-2">
+          <div className="absolute top-[38px] left-1/2 -translate-x-1/2 z-[1002] bg-[rgba(255,152,0,0.95)] text-[#1a1a1a] px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md flex items-center gap-2">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <rect x="6" y="4" width="4" height="16" rx="1" />
               <rect x="14" y="4" width="4" height="16" rx="1" />
@@ -188,14 +188,10 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         {bm.addBmDialog && createPortal(
           <div
             onClick={(e) => e.stopPropagation()}
-            className="anim-scale-in"
+            className="anim-scale-in surface-popup"
             style={{
               position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)',
-              zIndex: 1000, background: 'rgba(26, 29, 39, 0.96)',
-              backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
-              border: '1px solid rgba(108, 140, 255, 0.2)',
-              borderRadius: 12, padding: 16, width: 300,
-              boxShadow: '0 20px 60px rgba(12, 18, 40, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
+              zIndex: 1002, borderRadius: 'var(--radius-lg)', padding: 16, width: 300,
             }}
           >
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{t('bm.add')}</div>
@@ -259,7 +255,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         {toast.toastMsg && (
           <div
             key={toast.toastMsg}
-            className="anim-fade-slide-down fixed top-[72px] left-1/2 -translate-x-1/2 z-[1000] bg-[var(--color-glass-heavy)] backdrop-blur-xl text-white px-[18px] py-2.5 rounded-[10px] text-sm font-medium shadow-xl border border-[var(--color-border)] max-w-[70vw] text-center"
+            className="anim-fade-slide-down fixed top-[72px] left-1/2 -translate-x-1/2 z-[1002] surface-panel text-white px-[18px] py-2.5 rounded-xl text-sm font-medium max-w-[70vw] text-center"
             role="status"
             aria-live="polite"
           >

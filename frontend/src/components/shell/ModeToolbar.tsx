@@ -24,11 +24,9 @@ export default function ModeToolbar({ activeMode, onModeChange }: ModeToolbarPro
   return (
     <div
       className={[
-        'fixed right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 -translate-y-1/2 z-[800]',
-        'flex flex-col gap-1 p-1.5',
-        'bg-[var(--color-glass)] backdrop-blur-2xl backdrop-saturate-[1.6]',
-        'border border-[var(--color-border)] rounded-[22px]',
-        'shadow-[0_14px_36px_rgba(12,18,40,0.48),0_2px_8px_rgba(12,18,40,0.3)]',
+        'fixed right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 -translate-y-1/2 z-[1001]',
+        'flex flex-col gap-1.5 p-2',
+        'surface-panel rounded-2xl',
       ].join(' ')}
     >
       {modes.map(({ mode, icon: Icon, labelKey }) => {
@@ -43,7 +41,7 @@ export default function ModeToolbar({ activeMode, onModeChange }: ModeToolbarPro
               'focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none',
               isActive
                 ? 'bg-[var(--color-accent-dim)] text-[var(--color-accent)] shadow-[0_0_12px_rgba(108,140,255,0.25)]'
-                : 'text-[var(--color-text-2)] hover:bg-white/8 hover:text-[var(--color-text-1)]',
+                : 'text-[var(--color-text-2)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-1)]',
             ].join(' ')}
             title={t(labelKey as any)}
             aria-label={t(labelKey as any)}

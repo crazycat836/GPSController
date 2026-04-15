@@ -35,33 +35,33 @@ export default function FloatingPanel({ mode, children }: FloatingPanelProps) {
   return (
     <div
       className={[
-        'fixed top-14 left-3 w-80 z-[800]',
-        'bg-[var(--color-glass)] backdrop-blur-2xl backdrop-saturate-[1.6]',
-        'border border-[var(--color-border)] rounded-[18px]',
-        'shadow-[0_14px_36px_rgba(12,18,40,0.48),0_2px_8px_rgba(12,18,40,0.3),inset_0_1px_0_rgba(255,255,255,0.06)]',
-        'flex flex-col',
+        'fixed top-14 left-3 w-[22rem] z-[1001]',
+        'bg-[var(--color-surface-1)] border border-[var(--color-border)]',
+        'rounded-2xl overflow-hidden flex flex-col',
+        'shadow-[var(--shadow-lg)]',
         'transition-all duration-200 ease-[var(--ease-out-expo)]',
         collapsed ? '' : 'max-h-[calc(100vh-80px)]',
       ].join(' ')}
     >
-      {/* Panel header with mode icon + title + collapse toggle */}
+      {/* Header with gradient accent */}
       <div
-        className="flex items-center gap-2 px-3.5 py-2.5 cursor-pointer select-none shrink-0"
+        className="flex items-center gap-2.5 px-4 py-3.5 cursor-pointer select-none shrink-0"
+        style={{ background: 'linear-gradient(180deg, rgba(108,140,255,0.08) 0%, transparent 100%)' }}
         onClick={() => setCollapsed(prev => !prev)}
       >
-        <Icon className="w-[18px] h-[18px] text-[var(--color-accent)]" />
-        <h2 className="text-sm font-semibold text-[var(--color-text-1)] flex-1">
+        <Icon className="w-5 h-5 text-[var(--color-accent)]" />
+        <h2 className="text-[15px] font-bold text-[var(--color-text-1)] flex-1 tracking-tight">
           {t(modeLabelKeys[mode] as any)}
         </h2>
         <button
-          className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--color-text-3)] hover:text-[var(--color-text-2)] hover:bg-white/5 transition-colors"
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--color-text-3)] hover:text-[var(--color-text-2)] transition-colors"
           aria-label={collapsed ? 'Expand panel' : 'Collapse panel'}
         >
-          {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
         </button>
       </div>
 
-      {/* Panel content - hidden when collapsed */}
+      {/* Scrollable content */}
       {!collapsed && (
         <div className="px-3 pb-3 overflow-y-auto overflow-x-hidden flex-1 scrollbar-thin">
           {children}

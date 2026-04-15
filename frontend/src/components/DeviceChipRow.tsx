@@ -39,18 +39,17 @@ export function DeviceChipRow({ devices, runtimes, onAdd, onDisconnect, onRestor
       {!atMax && (
         <button
           onClick={onAdd}
-          title={devices.length === 0 ? t('device.add_device') : t('device.add_device')}
+          title={t('device.add_device')}
+          className="surface-control"
           style={{
-            height: 24, minWidth: 24, padding: '0 8px',
-            borderRadius: 12,
-            border: '1px dashed rgba(255,255,255,0.25)',
-            background: 'rgba(255,255,255,0.04)',
-            color: 'rgba(255,255,255,0.75)',
-            fontSize: 11, cursor: 'pointer',
-            display: 'inline-flex', alignItems: 'center', gap: 4,
+            height: 32, minWidth: 44, padding: '0 12px',
+            borderRadius: 'var(--radius-full)',
+            color: 'rgba(255,255,255,0.85)',
+            fontSize: 12, fontWeight: 500, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 5,
           }}
         >
-          <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
+          <span style={{ fontSize: 15, lineHeight: 1 }}>+</span>
           {devices.length === 0 && <span>{t('device.add_device')}</span>}
         </button>
       )}

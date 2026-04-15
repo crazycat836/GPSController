@@ -14,12 +14,12 @@ export default function CooldownBadge() {
   return (
     <div
       className={[
-        'absolute top-14 left-1/2 -translate-x-1/2 z-[901]',
+        'absolute top-14 left-1/2 -translate-x-1/2 z-[1001]',
         'flex items-center gap-2',
         'px-4 py-1.5 rounded-full',
         'bg-[rgba(255,152,0,0.95)] text-[#1a1a1a]',
         'text-xs font-semibold',
-        'shadow-[0_2px_8px_rgba(0,0,0,0.35)]',
+        'shadow-[var(--shadow-sm)]',
         'anim-fade-slide-down',
       ].join(' ')}
     >

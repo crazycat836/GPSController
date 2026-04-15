@@ -13,7 +13,7 @@ export default function TopBar({ leftContent, onSearchClick, onLibraryClick, onS
   const t = useT()
 
   return (
-    <div className="fixed top-3 left-3 right-3 z-[850] flex items-center justify-between pointer-events-none">
+    <div className="fixed top-3 left-3 right-3 z-[1001] flex items-center justify-between pointer-events-none">
       {/* Left: device chips */}
       <div className="pointer-events-auto">
         {leftContent}
@@ -41,13 +41,11 @@ function ToolButton({ icon: Icon, label, shortcut, ...rest }: ToolButtonProps) {
       {...rest}
       className={[
         'w-11 h-11 rounded-full flex items-center justify-center',
-        'bg-[var(--color-glass)] backdrop-blur-xl',
-        'border border-[var(--color-border)]',
+        'surface-control',
         'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
-        'hover:bg-white/8 active:scale-95',
+        'hover:bg-[var(--color-surface-hover)] active:scale-95',
         'transition-all duration-150 cursor-pointer',
-        'shadow-[0_4px_12px_rgba(12,18,40,0.3)]',
-        'focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-transparent outline-none',
+        'focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none',
       ].join(' ')}
       title={shortcut ? `${label} (${shortcut})` : label}
       aria-label={label}

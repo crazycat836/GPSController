@@ -7,13 +7,17 @@ import ActionButtons from './ActionButtons'
 export default function JoystickPanel() {
   const t = useT()
   return (
-    <div className="space-y-3">
-      <SpeedControls />
-      <ActionButtons />
-      <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-white/5 text-[var(--color-text-3)] text-xs">
-        <Gamepad2 className="w-4 h-4 shrink-0" />
-        <span>{t('panel.joystick_hint' as any)}</span>
+    <>
+      <div className="seg-stack">
+        <SpeedControls />
       </div>
-    </div>
+      <ActionButtons />
+      <div className="pt-2">
+        <div className="seg-hint">
+          <Gamepad2 className="w-3.5 h-3.5 shrink-0" />
+          <span>{t('panel.joystick_hint' as any)}</span>
+        </div>
+      </div>
+    </>
   )
 }

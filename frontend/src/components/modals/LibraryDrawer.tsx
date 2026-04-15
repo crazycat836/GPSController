@@ -170,7 +170,7 @@ const LibraryDrawer: React.FC<LibraryDrawerProps> = ({ open, onClose }) => {
               exportUrl={bm.bookmarkExportUrl}
             />
           ) : (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               {/* Route save */}
               <div>
                 <p className="text-[10px] text-[var(--color-text-3)] mb-1.5">

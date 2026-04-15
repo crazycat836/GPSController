@@ -5,10 +5,12 @@ import WaypointList from './WaypointList'
 
 export default function LoopPanel() {
   return (
-    <div className="space-y-3">
-      <WaypointList mode="loop" />
-      <SpeedControls />
+    <>
+      <div className="seg-stack">
+        <WaypointList mode="loop" />
+        <SpeedControls />
+      </div>
       <ActionButtons />
-    </div>
+    </>
   )
 }

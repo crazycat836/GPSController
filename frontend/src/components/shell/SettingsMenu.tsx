@@ -109,11 +109,11 @@ export default function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   }, [initialLat, initialLng, t, showToast])
 
   const menuRowClass = [
-    'flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm',
-    'text-[var(--color-text-1)] hover:bg-white/[0.06] transition-colors cursor-pointer',
+    'flex items-center gap-3.5 w-full px-3.5 py-2.5 rounded-xl text-[13px]',
+    'text-[var(--color-text-1)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer',
   ].join(' ')
 
-  const iconClass = 'w-4 h-4 text-[var(--color-text-3)] shrink-0'
+  const iconClass = 'w-[18px] h-[18px] text-[var(--color-text-2)] shrink-0'
 
   if (!open && !initialOpen) return null
 
@@ -124,77 +124,82 @@ export default function SettingsMenu({ open, onClose }: SettingsMenuProps) {
         <div
           ref={popoverRef}
           className={[
-            'fixed top-14 right-3 w-64 z-[850]',
-            'bg-[var(--color-glass-heavy)] backdrop-blur-2xl',
-            'border border-[var(--color-border)] rounded-xl',
-            'shadow-[0_14px_36px_rgba(12,18,40,0.48),0_2px_8px_rgba(12,18,40,0.3)]',
-            'p-2 flex flex-col gap-0.5',
+            'fixed top-14 right-3 w-[272px] z-[1001]',
+            'surface-popup rounded-2xl',
+            'p-2.5 flex flex-col',
           ].join(' ')}
         >
-          {/* Restore GPS */}
-          <button onClick={() => { handleRestore(); onClose() }} className={menuRowClass}>
-            <RotateCcw className={iconClass} />
-            <span className="flex-1 text-left">{dualDevice ? t('status.restore_all') : t('status.restore')}</span>
-          </button>
+          {/* Actions group */}
+          <div className="flex flex-col gap-0.5">
+            <button onClick={() => { handleRestore(); onClose() }} className={menuRowClass}>
+              <RotateCcw className={iconClass} />
+              <span className="flex-1 text-left">{dualDevice ? t('status.restore_all') : t('status.restore')}</span>
+            </button>
 
-          {/* Open Log */}
-          <button onClick={() => { handleOpenLog(); onClose() }} className={menuRowClass}>
-            <FileText className={iconClass} />
-            <span className="flex-1 text-left">{t('status.open_log')}</span>
-          </button>
+            <button onClick={() => { handleOpenLog(); onClose() }} className={menuRowClass}>
+              <FileText className={iconClass} />
+              <span className="flex-1 text-left">{t('status.open_log')}</span>
+            </button>
 
-          {/* Set Initial Position */}
-          <button onClick={() => { handleOpenInitial(); onClose() }} className={menuRowClass}>
-            <MapPin className={iconClass} />
-            <span className="flex-1 text-left">{t('status.set_initial')}</span>
-          </button>
-
-          {/* Cooldown toggle */}
-          <label
-            className={[
-              menuRowClass,
-              dualDevice ? 'opacity-55 cursor-not-allowed' : '',
-            ].join(' ')}
-            title={dualDevice ? t('status.cooldown_dual_disabled') : t('status.cooldown_tooltip')}
-          >
-            <Timer className={iconClass} />
-            <span className="flex-1 text-left">
-              {cooldownEnabled ? t('status.cooldown_enabled') : t('status.cooldown_disabled')}
-            </span>
-            <div className="flex items-center gap-2">
-              {cooldown > 0 && (
-                <span className="text-[10px] font-semibold text-amber-300 bg-amber-400/15 px-1.5 py-0.5 rounded-full">
-                  {formatCooldown(cooldown)}
-                </span>
-              )}
-              <div
-                className={[
-                  'relative w-8 h-[18px] rounded-full transition-colors',
-                  (cooldownEnabled && !dualDevice) ? 'bg-[var(--color-accent)]' : 'bg-white/15',
-                ].join(' ')}
-                onClick={(e) => {
-                  if (dualDevice) { e.preventDefault(); return }
-                  handleToggleCooldown(!cooldownEnabled)
-                }}
-              >
-                <div
-                  className={[
-                    'absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform',
-                    (cooldownEnabled && !dualDevice) ? 'translate-x-[14px]' : 'translate-x-0.5',
-                  ].join(' ')}
-                />
-              </div>
-            </div>
-          </label>
-
-          {/* Language */}
-          <div className={menuRowClass}>
-            <Languages className={iconClass} />
-            <span className="flex-1 text-left">{t('generic.cancel').includes('取消') ? '語言' : 'Language'}</span>
-            <LangToggle />
+            <button onClick={() => { handleOpenInitial(); onClose() }} className={menuRowClass}>
+              <MapPin className={iconClass} />
+              <span className="flex-1 text-left">{t('status.set_initial')}</span>
+            </button>
           </div>
 
-          {/* Version */}
+          {/* Divider */}
+          <div className="h-px bg-[var(--color-border)] mx-2 my-1.5" />
+
+          {/* Preferences group */}
+          <div className="flex flex-col gap-0.5">
+            <label
+              className={[
+                menuRowClass,
+                dualDevice ? 'opacity-55 cursor-not-allowed' : '',
+              ].join(' ')}
+              title={dualDevice ? t('status.cooldown_dual_disabled') : t('status.cooldown_tooltip')}
+            >
+              <Timer className={iconClass} />
+              <span className="flex-1 text-left">
+                {cooldownEnabled ? t('status.cooldown_enabled') : t('status.cooldown_disabled')}
+              </span>
+              <div className="flex items-center gap-2">
+                {cooldown > 0 && (
+                  <span className="text-[10px] font-semibold text-amber-300 bg-amber-400/15 px-1.5 py-0.5 rounded-full">
+                    {formatCooldown(cooldown)}
+                  </span>
+                )}
+                <div
+                  className={[
+                    'relative w-9 h-5 rounded-full transition-colors',
+                    (cooldownEnabled && !dualDevice) ? 'bg-[var(--color-accent)]' : 'bg-white/15',
+                  ].join(' ')}
+                  onClick={(e) => {
+                    if (dualDevice) { e.preventDefault(); return }
+                    handleToggleCooldown(!cooldownEnabled)
+                  }}
+                >
+                  <div
+                    className={[
+                      'absolute top-[3px] w-3.5 h-3.5 rounded-full bg-white transition-transform',
+                      (cooldownEnabled && !dualDevice) ? 'translate-x-[17px]' : 'translate-x-[3px]',
+                    ].join(' ')}
+                  />
+                </div>
+              </div>
+            </label>
+
+            <div className={menuRowClass}>
+              <Languages className={iconClass} />
+              <span className="flex-1 text-left">{t('generic.cancel').includes('取消') ? '語言' : 'Language'}</span>
+              <LangToggle />
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="h-px bg-[var(--color-border)] mx-2 my-1.5" />
+
+          {/* Info */}
           <div className={[menuRowClass, 'cursor-default hover:bg-transparent'].join(' ')}>
             <Info className={iconClass} />
             <span className="flex-1 text-left">Version</span>
@@ -212,9 +217,8 @@ export default function SettingsMenu({ open, onClose }: SettingsMenuProps) {
           <div
             onClick={(e) => e.stopPropagation()}
             className={[
-              'w-[360px] p-6 rounded-xl',
-              'bg-[var(--color-bg-elevated)] border border-[var(--color-border)]',
-              'shadow-[0_20px_60px_rgba(12,18,40,0.65)]',
+              'w-[360px] p-6 rounded-2xl',
+              'surface-popup',
               'text-[var(--color-text-1)]',
             ].join(' ')}
           >

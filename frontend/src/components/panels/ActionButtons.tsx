@@ -8,48 +8,30 @@ export default function ActionButtons() {
 
   if (!isRunning) {
     return (
-      <button
-        className="w-full py-2.5 rounded-xl bg-[var(--color-accent)] text-white font-medium
-                   flex items-center justify-center gap-2 transition-opacity
-                   hover:opacity-90 active:opacity-80"
-        onClick={handleStart}
-      >
-        <Play size={16} fill="currentColor" />
-        {t('generic.start')}
-      </button>
+      <div className="pt-2">
+        <button className="seg-cta seg-cta-accent" onClick={handleStart}>
+          <Play size={14} fill="currentColor" />
+          {t('generic.start')}
+        </button>
+      </div>
     )
   }
 
   return (
-    <div className="flex gap-2">
-      <button
-        className="flex-1 py-2 rounded-xl bg-[var(--color-danger)] text-white font-medium
-                   flex items-center justify-center gap-2 transition-opacity
-                   hover:opacity-90 active:opacity-80"
-        onClick={handleStop}
-      >
-        <Square size={14} fill="currentColor" />
+    <div className="flex gap-2 pt-2">
+      <button className="seg-cta seg-cta-danger flex-1" onClick={handleStop}>
+        <Square size={12} fill="currentColor" />
         {t('generic.stop')}
       </button>
 
       {!isPaused ? (
-        <button
-          className="flex-1 py-2 rounded-xl bg-[var(--color-bg-elevated)] text-[var(--color-text-1)]
-                     border border-white/10 font-medium flex items-center justify-center gap-2
-                     transition-colors hover:bg-white/10 active:bg-white/5"
-          onClick={handlePause}
-        >
-          <Pause size={14} fill="currentColor" />
+        <button className="seg-cta seg-cta-ghost flex-1" onClick={handlePause}>
+          <Pause size={12} fill="currentColor" />
           {t('generic.pause')}
         </button>
       ) : (
-        <button
-          className="flex-1 py-2 rounded-xl bg-[var(--color-accent)] text-white font-medium
-                     flex items-center justify-center gap-2 transition-opacity
-                     hover:opacity-90 active:opacity-80"
-          onClick={handleResume}
-        >
-          <Play size={14} fill="currentColor" />
+        <button className="seg-cta seg-cta-accent flex-1" onClick={handleResume}>
+          <Play size={12} fill="currentColor" />
           {t('generic.resume')}
         </button>
       )}

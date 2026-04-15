@@ -260,7 +260,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
             </button>
 
             {wifiExpanded && (
-              <div className="mt-2 space-y-2">
+              <div className="mt-2 flex flex-col gap-2">
                 {/* Repair button */}
                 <button
                   onClick={() => { setRepairState('idle'); setRepairMessage(''); setShowRepairConfirm(true) }}
@@ -311,7 +311,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-1.5">
+                  <div className="flex flex-col gap-1.5">
                     <label className="flex items-center gap-2 text-[11px]">
                       <span className="w-8 text-[var(--color-text-3)]">IP</span>
                       <input

@@ -1,8 +1,7 @@
 import React, { useState } from 'react'
-import { MapPin } from 'lucide-react'
+import { MapPin, Search } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
-import AddressSearch from '../AddressSearch'
 
 export default function TeleportPanel() {
   const { handleTeleport } = useSimContext()
@@ -19,50 +18,57 @@ export default function TeleportPanel() {
   }
 
   return (
-    <div className="space-y-3">
-      {/* Coordinate input */}
-      <div className="space-y-2">
-        <div className="flex gap-2">
-          <input
-            type="number"
-            placeholder="Latitude"
-            aria-label="Latitude"
-            value={coordLat}
-            onChange={e => setCoordLat(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleCoordGo()}
-            className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-[var(--color-text-1)] text-xs placeholder:text-[var(--color-text-2)] focus:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none transition-colors"
-            step="any"
-          />
-          <input
-            type="number"
-            placeholder="Longitude"
-            aria-label="Longitude"
-            value={coordLng}
-            onChange={e => setCoordLng(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleCoordGo()}
-            className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-[var(--color-text-1)] text-xs placeholder:text-[var(--color-text-2)] focus:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none transition-colors"
-            step="any"
-          />
+    <>
+      <div className="seg-stack">
+        <div className="seg">
+          <div className="seg-row">
+            <span className="seg-label">{t('panel.coordinates' as any)}</span>
+          </div>
+          <div className="seg-row seg-row-flush">
+            <div className="flex gap-2 w-full">
+              <input
+                type="number"
+                placeholder="Latitude"
+                aria-label="Latitude"
+                value={coordLat}
+                onChange={e => setCoordLat(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleCoordGo()}
+                className="seg-input flex-1"
+                step="any"
+              />
+              <input
+                type="number"
+                placeholder="Longitude"
+                aria-label="Longitude"
+                value={coordLng}
+                onChange={e => setCoordLng(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleCoordGo()}
+                className="seg-input flex-1"
+                step="any"
+              />
+            </div>
+          </div>
         </div>
+      </div>
+
+      <div className="pt-2">
         <button
           onClick={handleCoordGo}
           disabled={!coordLat || !coordLng}
-          className="w-full py-2.5 rounded-xl bg-[var(--color-accent)] text-white font-medium text-sm flex items-center justify-center gap-2 hover:opacity-90 disabled:bg-[var(--color-bg-surface-hover)] disabled:text-[var(--color-text-3)] disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95"
+          className="seg-cta seg-cta-accent"
         >
-          <MapPin className="w-4 h-4" />
+          <MapPin className="w-3.5 h-3.5" />
           {t('generic.go' as any)}
         </button>
       </div>
 
-      {/* Divider */}
-      <div className="flex items-center gap-3 text-[var(--color-text-3)] text-xs">
-        <div className="flex-1 h-px bg-[var(--color-border)]" />
-        <span>{t('panel.or_search' as any)}</span>
-        <div className="flex-1 h-px bg-[var(--color-border)]" />
+      <div className="pt-2">
+        <div className="seg-hint">
+          <Search className="w-3.5 h-3.5 shrink-0" />
+          <span className="flex-1">{t('panel.search_hint' as any)}</span>
+          <kbd className="px-1.5 py-0.5 rounded-md bg-white/[0.06] text-[10px] font-mono text-[var(--color-text-3)] border border-[var(--color-border)]">⌘K</kbd>
+        </div>
       </div>
-
-      {/* Address search */}
-      <AddressSearch onSelect={(lat, lng) => handleTeleport(lat, lng)} />
-    </div>
+    </>
   )
 }
