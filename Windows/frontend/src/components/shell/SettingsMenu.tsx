@@ -1,0 +1,302 @@
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
+import { Settings, RotateCcw, FileText, MapPin, Timer, Languages, Info } from 'lucide-react'
+import { useSimContext } from '../../contexts/SimContext'
+import { useDeviceContext } from '../../contexts/DeviceContext'
+import { useToastContext } from '../../contexts/ToastContext'
+import { useT } from '../../i18n'
+import * as api from '../../services/api'
+import LangToggle from '../LangToggle'
+import pkg from '../../../package.json'
+
+const APP_VERSION = (pkg as { version: string }).version
+
+function formatCooldown(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+export default function SettingsMenu() {
+  const t = useT()
+  const { handleRestore, handleOpenLog, cooldown, cooldownEnabled, handleToggleCooldown } = useSimContext()
+  const device = useDeviceContext()
+  const { showToast } = useToastContext()
+
+  const [open, setOpen] = useState(false)
+  const [initialOpen, setInitialOpen] = useState(false)
+  const [initialLat, setInitialLat] = useState('')
+  const [initialLng, setInitialLng] = useState('')
+  const [initialError, setInitialError] = useState<string | null>(null)
+  const [initialBusy, setInitialBusy] = useState(false)
+
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  const dualDevice = device.connectedDevices.length >= 2
+
+  // Close popover on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (
+        popoverRef.current && !popoverRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const handleOpenInitial = useCallback(async () => {
+    try {
+      const res = await api.getInitialPosition()
+      if (res.position) {
+        setInitialLat(String(res.position.lat))
+        setInitialLng(String(res.position.lng))
+      } else {
+        setInitialLat('')
+        setInitialLng('')
+      }
+    } catch {
+      setInitialLat('')
+      setInitialLng('')
+    }
+    setInitialError(null)
+    setInitialOpen(true)
+  }, [])
+
+  const handleInitialSave = useCallback(async () => {
+    setInitialError(null)
+    const latStr = initialLat.trim()
+    const lngStr = initialLng.trim()
+
+    if (latStr === '' && lngStr === '') {
+      setInitialBusy(true)
+      try {
+        await api.setInitialPosition(null, null)
+        setInitialOpen(false)
+      } catch (e: unknown) {
+        setInitialError(e instanceof Error ? e.message : 'error')
+      } finally {
+        setInitialBusy(false)
+      }
+      return
+    }
+
+    const lat = parseFloat(latStr)
+    const lng = parseFloat(lngStr)
+    if (!isFinite(lat) || !isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      setInitialError(t('status.set_initial_invalid'))
+      return
+    }
+
+    setInitialBusy(true)
+    try {
+      await api.setInitialPosition(lat, lng)
+      setInitialOpen(false)
+      showToast(t('status.set_initial') + ` (${lat.toFixed(5)}, ${lng.toFixed(5)})`)
+    } catch (e: unknown) {
+      setInitialError(e instanceof Error ? e.message : 'error')
+    } finally {
+      setInitialBusy(false)
+    }
+  }, [initialLat, initialLng, t, showToast])
+
+  const menuRowClass = [
+    'flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm',
+    'text-[var(--color-text-1)] hover:bg-white/[0.06] transition-colors cursor-pointer',
+  ].join(' ')
+
+  const iconClass = 'w-4 h-4 text-[var(--color-text-3)] shrink-0'
+
+  return (
+    <>
+      {/* Gear trigger */}
+      <button
+        ref={btnRef}
+        onClick={() => setOpen((v) => !v)}
+        className={[
+          'fixed bottom-3 right-3 z-[850] w-9 h-9 rounded-full',
+          'flex items-center justify-center',
+          'bg-[var(--color-glass)] backdrop-blur-2xl backdrop-saturate-[1.6]',
+          'border border-[var(--color-border)]',
+          'text-[var(--color-text-2)] hover:text-[var(--color-accent)] transition-colors cursor-pointer',
+          'shadow-[0_4px_16px_rgba(12,18,40,0.35)]',
+        ].join(' ')}
+        title="Settings"
+      >
+        <Settings className="w-4 h-4" />
+      </button>
+
+      {/* Popover */}
+      {open && (
+        <div
+          ref={popoverRef}
+          className={[
+            'fixed bottom-14 right-3 w-64 z-[850]',
+            'bg-[var(--color-glass-heavy)] backdrop-blur-2xl',
+            'border border-[var(--color-border)] rounded-xl',
+            'shadow-[0_14px_36px_rgba(12,18,40,0.48),0_2px_8px_rgba(12,18,40,0.3)]',
+            'p-2 flex flex-col gap-0.5',
+          ].join(' ')}
+        >
+          {/* Restore GPS */}
+          <button onClick={() => { handleRestore(); setOpen(false) }} className={menuRowClass}>
+            <RotateCcw className={iconClass} />
+            <span className="flex-1 text-left">{dualDevice ? t('status.restore_all') : t('status.restore')}</span>
+          </button>
+
+          {/* Open Log */}
+          <button onClick={() => { handleOpenLog(); setOpen(false) }} className={menuRowClass}>
+            <FileText className={iconClass} />
+            <span className="flex-1 text-left">{t('status.open_log')}</span>
+          </button>
+
+          {/* Set Initial Position */}
+          <button onClick={() => { handleOpenInitial(); setOpen(false) }} className={menuRowClass}>
+            <MapPin className={iconClass} />
+            <span className="flex-1 text-left">{t('status.set_initial')}</span>
+          </button>
+
+          {/* Cooldown toggle */}
+          <label
+            className={[
+              menuRowClass,
+              dualDevice ? 'opacity-55 cursor-not-allowed' : '',
+            ].join(' ')}
+            title={dualDevice ? t('status.cooldown_dual_disabled') : t('status.cooldown_tooltip')}
+          >
+            <Timer className={iconClass} />
+            <span className="flex-1 text-left">
+              {cooldownEnabled ? t('status.cooldown_enabled') : t('status.cooldown_disabled')}
+            </span>
+            <div className="flex items-center gap-2">
+              {cooldown > 0 && (
+                <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full">
+                  {formatCooldown(cooldown)}
+                </span>
+              )}
+              <div
+                className={[
+                  'relative w-8 h-[18px] rounded-full transition-colors',
+                  (cooldownEnabled && !dualDevice) ? 'bg-[var(--color-accent)]' : 'bg-white/15',
+                ].join(' ')}
+                onClick={(e) => {
+                  if (dualDevice) { e.preventDefault(); return }
+                  handleToggleCooldown(!cooldownEnabled)
+                }}
+              >
+                <div
+                  className={[
+                    'absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform',
+                    (cooldownEnabled && !dualDevice) ? 'translate-x-[14px]' : 'translate-x-0.5',
+                  ].join(' ')}
+                />
+              </div>
+            </div>
+          </label>
+
+          {/* Language */}
+          <div className={menuRowClass}>
+            <Languages className={iconClass} />
+            <span className="flex-1 text-left">{t('generic.cancel').includes('取消') ? '語言' : 'Language'}</span>
+            <LangToggle />
+          </div>
+
+          {/* Version */}
+          <div className={[menuRowClass, 'cursor-default hover:bg-transparent'].join(' ')}>
+            <Info className={iconClass} />
+            <span className="flex-1 text-left">Version</span>
+            <span className="text-[11px] font-mono text-[var(--color-text-3)]">v{APP_VERSION}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Set Initial Position modal */}
+      {initialOpen && createPortal(
+        <div
+          onClick={() => { if (!initialBusy) setInitialOpen(false) }}
+          className="fixed inset-0 z-[2000] bg-black/55 backdrop-blur-sm flex items-center justify-center"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={[
+              'w-[360px] p-6 rounded-xl',
+              'bg-[var(--color-bg-elevated)] border border-[var(--color-border)]',
+              'shadow-[0_20px_60px_rgba(12,18,40,0.65)]',
+              'text-[var(--color-text-1)]',
+            ].join(' ')}
+          >
+            <h3 className="text-[15px] font-semibold mb-2">{t('status.set_initial')}</h3>
+            <p className="text-xs text-[var(--color-text-3)] mb-4 leading-relaxed">
+              {t('status.set_initial_prompt')}
+            </p>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={initialLat}
+                onChange={(e) => { setInitialLat(e.target.value); setInitialError(null) }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !initialBusy) handleInitialSave()
+                  if (e.key === 'Escape' && !initialBusy) setInitialOpen(false)
+                }}
+                autoFocus
+                placeholder="Lat"
+                className={[
+                  'flex-1 px-3 py-2 rounded-lg font-mono text-sm',
+                  'bg-black/30 border border-[var(--color-border)]',
+                  'text-[var(--color-text-1)] outline-none',
+                  'focus:border-[var(--color-accent)] transition-colors',
+                ].join(' ')}
+              />
+              <input
+                type="text"
+                value={initialLng}
+                onChange={(e) => { setInitialLng(e.target.value); setInitialError(null) }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !initialBusy) handleInitialSave()
+                  if (e.key === 'Escape' && !initialBusy) setInitialOpen(false)
+                }}
+                placeholder="Lng"
+                className={[
+                  'flex-1 px-3 py-2 rounded-lg font-mono text-sm',
+                  'bg-black/30 border border-[var(--color-border)]',
+                  'text-[var(--color-text-1)] outline-none',
+                  'focus:border-[var(--color-accent)] transition-colors',
+                ].join(' ')}
+              />
+            </div>
+            {initialError && (
+              <p className="text-red-400 text-[11px] mt-1 mb-2">{initialError}</p>
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setInitialOpen(false)}
+                disabled={initialBusy}
+                className="px-4 py-1.5 text-xs rounded-lg border border-[var(--color-border)] text-[var(--color-text-3)] hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                {t('generic.cancel')}
+              </button>
+              <button
+                onClick={handleInitialSave}
+                disabled={initialBusy}
+                className={[
+                  'px-4 py-1.5 text-xs font-semibold rounded-lg cursor-pointer',
+                  'bg-[var(--color-accent)] text-white',
+                  'hover:opacity-90 transition-opacity',
+                  initialBusy ? 'opacity-60' : '',
+                ].join(' ')}
+              >
+                {t('generic.save')}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}

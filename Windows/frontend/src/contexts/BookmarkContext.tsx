@@ -1,0 +1,228 @@
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { useBookmarks, type Bookmark, type BookmarkCategory } from '../hooks/useBookmarks'
+import * as api from '../services/api'
+import { useToastContext } from './ToastContext'
+import { useT } from '../i18n'
+
+interface AddBmDialog {
+  lat: number
+  lng: number
+  name: string
+  category: string
+}
+
+interface BookmarkContextValue {
+  // From useBookmarks
+  bookmarks: Bookmark[]
+  categories: BookmarkCategory[]
+  createBookmark: (bm: Omit<Bookmark, 'id'>) => Promise<Bookmark>
+  updateBookmark: (id: string, data: Partial<Bookmark>) => Promise<Bookmark>
+  deleteBookmark: (id: string) => Promise<void>
+  createCategory: (cat: Omit<BookmarkCategory, 'id'>) => Promise<BookmarkCategory>
+  deleteCategory: (id: string) => Promise<void>
+  refresh: () => Promise<void>
+
+  // Add bookmark dialog
+  addBmDialog: AddBmDialog | null
+  setAddBmDialog: React.Dispatch<React.SetStateAction<AddBmDialog | null>>
+  handleAddBookmark: (lat: number, lng: number) => void
+  submitAddBookmark: () => void
+
+  // Bookmark import/export
+  handleBookmarkImport: (file: File) => Promise<void>
+  bookmarkExportUrl: string
+
+  // Saved routes
+  savedRoutes: readonly Record<string, unknown>[]
+  handleRouteLoad: (id: string) => { lat: number; lng: number }[] | null
+  handleRouteSave: (name: string, waypoints: { lat: number; lng: number }[], moveMode: string) => Promise<void>
+  handleRouteRename: (id: string, name: string) => Promise<void>
+  handleRouteDelete: (id: string) => Promise<void>
+
+  // GPX
+  handleGpxImport: (file: File) => Promise<void>
+  handleGpxExport: (id: string) => void
+
+  // Bulk route import/export
+  handleRoutesImportAll: (file: File) => Promise<void>
+  routesExportAllUrl: string
+}
+
+const BookmarkContext = createContext<BookmarkContextValue | null>(null)
+
+export function BookmarkProvider({ children }: { children: React.ReactNode }) {
+  const t = useT()
+  const { showToast } = useToastContext()
+  const bm = useBookmarks()
+
+  const [savedRoutes, setSavedRoutes] = useState<Record<string, unknown>[]>([])
+  const [addBmDialog, setAddBmDialog] = useState<AddBmDialog | null>(null)
+
+  // Load saved routes on mount
+  useEffect(() => {
+    api.getSavedRoutes().then(setSavedRoutes).catch(() => {})
+  }, [])
+
+  const handleAddBookmark = useCallback((lat: number, lng: number) => {
+    setAddBmDialog({
+      lat,
+      lng,
+      name: '',
+      category: bm.categories[0]?.name || t('bm.default'),
+    })
+  }, [bm.categories, t])
+
+  const submitAddBookmark = useCallback(() => {
+    if (!addBmDialog || !addBmDialog.name.trim()) return
+    const cat = bm.categories.find((c) => c.name === addBmDialog.category)
+    bm.createBookmark({
+      name: addBmDialog.name.trim(),
+      lat: addBmDialog.lat,
+      lng: addBmDialog.lng,
+      category_id: cat?.id || 'default',
+    })
+    setAddBmDialog(null)
+  }, [addBmDialog, bm])
+
+  const handleBookmarkImport = useCallback(async (file: File) => {
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      const res = await api.importBookmarks(data)
+      await bm.refresh()
+      showToast(t('bm.import_success', { n: res.imported }))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'unknown'
+      showToast(t('bm.import_failed', { error: message }))
+    }
+  }, [bm, showToast, t])
+
+  const handleRouteLoad = useCallback((id: string): { lat: number; lng: number }[] | null => {
+    const route = savedRoutes.find((r) => r.id === id)
+    if (!route || !Array.isArray(route.waypoints)) return null
+    return (route.waypoints as { lat: number; lng: number }[]).map((w) => ({
+      lat: w.lat,
+      lng: w.lng,
+    }))
+  }, [savedRoutes])
+
+  const handleRouteSave = useCallback(async (
+    name: string,
+    waypoints: { lat: number; lng: number }[],
+    moveMode: string,
+  ) => {
+    if (waypoints.length === 0) {
+      showToast(t('toast.route_need_waypoint'))
+      return
+    }
+    try {
+      await api.saveRoute({ name, waypoints, profile: moveMode })
+      const routes = await api.getSavedRoutes()
+      setSavedRoutes(routes)
+      showToast(t('toast.route_saved', { name }))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.route_save_failed', { msg: message }))
+    }
+  }, [showToast, t])
+
+  const handleRouteRename = useCallback(async (id: string, name: string) => {
+    try {
+      await api.renameRoute(id, name)
+      const routes = await api.getSavedRoutes()
+      setSavedRoutes(routes)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('toast.route_rename_failed')
+      showToast(message)
+    }
+  }, [showToast, t])
+
+  const handleRouteDelete = useCallback(async (id: string) => {
+    try {
+      await api.deleteRoute(id)
+      const routes = await api.getSavedRoutes()
+      setSavedRoutes(routes)
+      showToast(t('toast.route_deleted'))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('toast.route_delete_failed')
+      showToast(message)
+    }
+  }, [showToast, t])
+
+  const handleGpxImport = useCallback(async (file: File) => {
+    try {
+      const res = await api.importGpx(file)
+      const routes = await api.getSavedRoutes()
+      setSavedRoutes(routes)
+      showToast(t('toast.gpx_imported', { n: res.points }))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.gpx_import_failed', { msg: message }))
+    }
+  }, [showToast, t])
+
+  const handleGpxExport = useCallback((id: string) => {
+    const url = api.exportGpxUrl(id)
+    window.open(url, '_blank')
+  }, [])
+
+  const handleRoutesImportAll = useCallback(async (file: File) => {
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      if (!Array.isArray(data?.routes)) {
+        throw new Error('invalid file: missing routes array')
+      }
+      const res = await api.importAllRoutes({ routes: data.routes })
+      const routes = await api.getSavedRoutes()
+      setSavedRoutes(routes)
+      showToast(t('toast.routes_imported', { n: res.imported }))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.routes_import_failed', { msg: message }))
+    }
+  }, [showToast, t])
+
+  const value: BookmarkContextValue = {
+    bookmarks: bm.bookmarks,
+    categories: bm.categories,
+    createBookmark: bm.createBookmark,
+    updateBookmark: bm.updateBookmark,
+    deleteBookmark: bm.deleteBookmark,
+    createCategory: bm.createCategory,
+    deleteCategory: bm.deleteCategory,
+    refresh: bm.refresh,
+
+    addBmDialog,
+    setAddBmDialog,
+    handleAddBookmark,
+    submitAddBookmark,
+
+    handleBookmarkImport,
+    bookmarkExportUrl: api.bookmarksExportUrl(),
+
+    savedRoutes,
+    handleRouteLoad,
+    handleRouteSave,
+    handleRouteRename,
+    handleRouteDelete,
+
+    handleGpxImport,
+    handleGpxExport,
+
+    handleRoutesImportAll,
+    routesExportAllUrl: api.exportAllRoutesUrl(),
+  }
+
+  return (
+    <BookmarkContext.Provider value={value}>
+      {children}
+    </BookmarkContext.Provider>
+  )
+}
+
+export function useBookmarkContext() {
+  const ctx = useContext(BookmarkContext)
+  if (!ctx) throw new Error('useBookmarkContext must be used within BookmarkProvider')
+  return ctx
+}
