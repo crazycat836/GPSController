@@ -10,7 +10,7 @@ export default function NavigatePanel() {
     <div className="space-y-3">
       <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-[var(--color-accent-dim)] text-[var(--color-accent)] text-xs">
         <MousePointerClick className="w-4 h-4 shrink-0" />
-        <span>{t('panel.navigate_hint' as any) || 'Right-click on the map to set destination'}</span>
+        <span>{t('panel.navigate_hint' as any)}</span>
       </div>
       <SpeedControls />
       <ActionButtons />

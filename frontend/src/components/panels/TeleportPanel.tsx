@@ -48,14 +48,14 @@ export default function TeleportPanel() {
           className="w-full py-2.5 rounded-xl bg-[var(--color-accent)] text-white font-medium text-sm flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-[0.97]"
         >
           <MapPin className="w-4 h-4" />
-          {t('generic.go' as any) || 'Go'}
+          {t('generic.go' as any)}
         </button>
       </div>
 
       {/* Divider */}
       <div className="flex items-center gap-3 text-[var(--color-text-3)] text-xs">
         <div className="flex-1 h-px bg-[var(--color-border)]" />
-        <span>{t('panel.or_search' as any) || 'or search'}</span>
+        <span>{t('panel.or_search' as any)}</span>
         <div className="flex-1 h-px bg-[var(--color-border)]" />
       </div>
 

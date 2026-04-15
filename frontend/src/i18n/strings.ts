@@ -18,6 +18,7 @@ export const STRINGS = {
   'generic.resume': { zh: '繼續', en: 'Resume' },
   'generic.clear': { zh: '清除', en: 'Clear' },
   'generic.add': { zh: '加入', en: 'Add' },
+  'generic.go': { zh: '前往', en: 'Go' },
   'generic.km_h': { zh: 'km/h', en: 'km/h' },
 
   // ── Status bar ───────────────────────────────
@@ -233,6 +234,10 @@ export const STRINGS = {
   // ── Panel extras ────────────────────────────
   'panel.mode': { zh: '模式', en: 'Mode' },
   'panel.address_search': { zh: '地址搜尋', en: 'Address Search' },
+  'panel.or_search': { zh: '或搜尋地址', en: 'or search address' },
+  'panel.navigate_hint': { zh: '在地圖上右鍵選擇目的地', en: 'Right-click on the map to set destination' },
+  'panel.joystick_hint': { zh: '使用畫面上的搖桿控制移動方向', en: 'Use the joystick pad on the map to control direction' },
+  'settings.title': { zh: '設定', en: 'Settings' },
   'panel.library': { zh: '收藏座標與路線', en: 'Bookmarks & Routes' },
   'panel.library_drag_hint': { zh: '收藏座標與路線 · 拖曳此處移動', en: 'Bookmarks & Routes · Drag to move' },
   'panel.bookmarks_count': { zh: '座標收藏', en: 'Bookmarks' },
