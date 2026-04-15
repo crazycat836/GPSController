@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+__pycache__/
+*.pyc
+.DS_Store
+*.egg-info/
+.env
+.playwright-mcp/
+locwarp-current-ui.png
+locwarp-sidebar-detail.png

@@ -1,0 +1,38 @@
+name: 功能建議
+description: 提出新功能或改進建議
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感謝您的建議!請詳細說明需求,以便評估可行性與優先順序。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 問題描述
+      description: 目前有什麼不方便或缺少的功能?
+      placeholder: 目前使用時遇到...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建議方案
+      description: 期望 LocWarp 如何處理或新增什麼功能?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案(選填)
+      description: 是否考慮過其他作法?或目前是否有 workaround?
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其他補充(選填)
+      description: 參考資料、類似專案、UI mockup 等

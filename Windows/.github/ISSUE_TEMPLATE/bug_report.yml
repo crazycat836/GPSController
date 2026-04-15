@@ -1,0 +1,50 @@
+name: Bug 回報
+description: 回報使用上遇到的問題或異常行為
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: input
+    id: locwarp-version
+    attributes:
+      label: LocWarp 版本
+      placeholder: 例如 v0.1.16
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ios-version
+    attributes:
+      label: iOS 版本
+      options:
+        - iOS 26.x
+        - iOS 18.x
+        - iOS 17.x
+        - iOS 16.x
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: iphone-model
+    attributes:
+      label: iPhone 機型
+      placeholder: 例如 iPhone 16 Pro Max
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: 連線方式
+      options:
+        - USB 有線
+        - WiFi Tunnel(iOS 17+)
+        - 舊版 WiFi 直連(iOS 17 以下)
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 問題描述
+      description: 請描述遇到的問題、重現步驟、錯誤訊息、截圖等
+    validations:
+      required: true

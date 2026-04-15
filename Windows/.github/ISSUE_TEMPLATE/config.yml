@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 下載最新版 LocWarp
+    url: https://github.com/keezxc1223/locwarp/releases
+    about: 開 Issue 前請先確認已使用最新版本
+  - name: 使用說明(README)
+    url: https://github.com/keezxc1223/locwarp#使用者端需求
+    about: 安裝、連線、iOS 設定等常見問題
