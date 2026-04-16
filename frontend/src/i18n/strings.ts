@@ -232,6 +232,17 @@ export const STRINGS = {
   'err.tunnel_lost': { zh: 'WiFi Tunnel 連線中斷,請重新建立', en: 'Wi-Fi tunnel dropped, please reconnect' },
   'err.cooldown_active': { zh: '冷卻中,請等待後再跳點', en: 'Cooldown active, wait before teleporting' },
 
+  // ── Teleport panel ──────────────────────────
+  'teleport.route': { zh: '路線', en: 'Route' },
+  'teleport.my_location': { zh: '我的位置', en: 'My location' },
+  'teleport.destination': { zh: '目的地', en: 'Destination' },
+  'teleport.distance': { zh: '距離', en: 'Distance' },
+  'teleport.cooldown_time': { zh: '冷卻時間', en: 'Cooldown Time' },
+  'teleport.move': { zh: '移動', en: 'Move' },
+  'teleport.clear': { zh: '清除', en: 'Clear' },
+  'teleport.add_destination': { zh: '在地圖上設定目的地', en: 'Add destination on the map' },
+  'teleport.no_position': { zh: '尚無目前位置', en: 'No current position' },
+
   // ── Panel extras ────────────────────────────
   'panel.mode': { zh: '模式', en: 'Mode' },
   'panel.straight_line': { zh: '使用直線路徑', en: 'Use straight-line path' },

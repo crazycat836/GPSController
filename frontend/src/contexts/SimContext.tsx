@@ -75,6 +75,8 @@ interface SimContextValue {
   handleGenerateRandomWaypoints: () => void
   handleGenerateAllRandom: () => void
   handleOpenLog: () => void
+  handleSetTeleportDest: (lat: number, lng: number) => void
+  handleClearTeleportDest: () => void
   handleMapClick: (lat: number, lng: number) => void
   clickToAddWaypoint: boolean
   setClickToAddWaypoint: (v: boolean) => void
@@ -209,6 +211,16 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
       return [...prev, { lat: nlat, lng: nlng }]
     })
   }, [clickToAddWaypoint, sim])
+
+  const handleSetTeleportDest = useCallback((latIn: number, lngIn: number) => {
+    const lat = clampLat(latIn)
+    const lng = normalizeLng(lngIn)
+    sim.setDestination({ lat, lng })
+  }, [sim])
+
+  const handleClearTeleportDest = useCallback(() => {
+    sim.setDestination(null)
+  }, [sim])
 
   const handleTeleport = useCallback(async (latIn: number, lngIn: number) => {
     const lat = clampLat(latIn)
@@ -418,6 +430,8 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
     setWpGenCount,
     cooldown,
     cooldownEnabled,
+    handleSetTeleportDest,
+    handleClearTeleportDest,
     handleTeleport,
     handleNavigate,
     handleStart,
