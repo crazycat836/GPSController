@@ -8,7 +8,8 @@ import time
 
 import httpx
 
-from config import OSRM_BASE_URL
+from config import OSRM_BASE_URL, SPEED_PROFILES
+from utils.geo import haversine_m
 
 logger = logging.getLogger(__name__)
 
@@ -26,19 +27,13 @@ _PROFILE_MAP = {
 _TIMEOUT = httpx.Timeout(8.0, connect=4.0)
 
 
-def _haversine_m(a_lat: float, a_lng: float, b_lat: float, b_lng: float) -> float:
-    """Great-circle distance in meters."""
-    import math
-    R = 6371000.0
-    dlat = math.radians(b_lat - a_lat)
-    dlng = math.radians(b_lng - a_lng)
-    la1 = math.radians(a_lat)
-    la2 = math.radians(b_lat)
-    h = math.sin(dlat / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin(dlng / 2) ** 2
-    return 2 * R * math.asin(math.sqrt(h))
+_haversine_m = haversine_m
 
 
-def _straight_line_fallback(waypoints: list[tuple[float, float]], walking_speed_mps: float = 1.4) -> dict:
+def _straight_line_fallback(
+    waypoints: list[tuple[float, float]],
+    walking_speed_mps: float = SPEED_PROFILES["walking"]["speed_mps"],
+) -> dict:
     """Construct a straight-line route as a last resort when OSRM is unreachable.
     Densifies each segment so the interpolator has enough sample points."""
     coords: list[list[float]] = [[waypoints[0][0], waypoints[0][1]]]

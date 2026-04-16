@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import TypedDict
 
 # Paths
-DATA_DIR = Path.home() / ".locwarp"
+DATA_DIR = Path.home() / ".gpscontroller"
 DATA_DIR.mkdir(exist_ok=True)
 SETTINGS_FILE = DATA_DIR / "settings.json"
 BOOKMARKS_FILE = DATA_DIR / "bookmarks.json"
@@ -13,7 +13,7 @@ OSRM_BASE_URL = "https://router.project-osrm.org"
 
 # Nominatim
 NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org"
-NOMINATIM_USER_AGENT = "LocWarp/0.1"
+NOMINATIM_USER_AGENT = "GPSController/0.1"
 
 
 class SpeedProfile(TypedDict):
@@ -71,6 +71,11 @@ COOLDOWN_TABLE = [
     (1000, 5400),
     (float("inf"), 7200),
 ]
+
+# Pause defaults (used across all movement modes)
+DEFAULT_PAUSE_ENABLED = True
+DEFAULT_PAUSE_MIN = 5.0
+DEFAULT_PAUSE_MAX = 20.0
 
 # Reconnect
 RECONNECT_BASE_DELAY = 2.0

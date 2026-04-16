@@ -156,7 +156,8 @@ class CoordinateFormatter:
         if m.group(4) and m.group(4).upper() == "W":
             lng = -lng
 
-        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        from utils.geo import validate_coords
+        if not validate_coords(lat, lng):
             return None
 
         return Coordinate(lat=lat, lng=lng)

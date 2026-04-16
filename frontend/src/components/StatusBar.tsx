@@ -4,7 +4,7 @@ import { SimMode, stateToMode } from '../hooks/useSimulation';
 import type { RuntimesMap } from '../hooks/useSimulation';
 import type { DeviceInfo } from '../hooks/useDevice';
 import { useT } from '../i18n';
-import { DEVICE_COLORS, DEVICE_LETTERS } from '../lib/constants';
+import { DEVICE_COLORS, DEVICE_LETTERS, MODE_LABEL_KEYS } from '../lib/constants';
 import LangToggle from './LangToggle';
 import pkg from '../../package.json';
 
@@ -31,16 +31,6 @@ interface StatusBarProps {
   runtimes?: RuntimesMap;
   devices?: DeviceInfo[];
 }
-
-import type { StringKey } from '../i18n';
-const modeLabelKeys: Record<SimMode, StringKey> = {
-  [SimMode.Teleport]: 'mode.teleport',
-  [SimMode.Navigate]: 'mode.navigate',
-  [SimMode.Loop]: 'mode.loop',
-  [SimMode.MultiStop]: 'mode.multi_stop',
-  [SimMode.RandomWalk]: 'mode.random_walk',
-  [SimMode.Joystick]: 'mode.joystick',
-};
 
 function formatCooldown(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -144,7 +134,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
           : '—';
         const spd = rt?.currentSpeedKmh ? rt.currentSpeedKmh.toFixed(0) : String(speed);
         const dMode = rt ? stateToMode(rt.state) : null;
-        const modeLabel = dMode ? t(modeLabelKeys[dMode]) : t(modeLabelKeys[mode]);
+        const modeLabel = dMode ? t(MODE_LABEL_KEYS[dMode]) : t(MODE_LABEL_KEYS[mode]);
         return (
           <div
             key={dev.udid}
@@ -210,7 +200,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
           </svg>
           <span>{speed} km/h</span>
           <span className="opacity-40">|</span>
-          <span className="opacity-70">{t(modeLabelKeys[mode])}</span>
+          <span className="opacity-70">{t(MODE_LABEL_KEYS[mode])}</span>
         </div>
       )}
 

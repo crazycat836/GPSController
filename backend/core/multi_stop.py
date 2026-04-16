@@ -7,7 +7,8 @@ import logging
 import random
 
 from models.schemas import Coordinate, MovementMode, SimulationState
-from config import resolve_speed_profile
+from config import resolve_speed_profile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
+from utils.geo import haversine_m
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +29,9 @@ class MultiStopNavigator:
         speed_kmh: float | None = None,
         speed_min_kmh: float | None = None,
         speed_max_kmh: float | None = None,
-        pause_enabled: bool = True,
-        pause_min: float = 5.0,
-        pause_max: float = 20.0,
+        pause_enabled: bool = DEFAULT_PAUSE_ENABLED,
+        pause_min: float = DEFAULT_PAUSE_MIN,
+        pause_max: float = DEFAULT_PAUSE_MAX,
         straight_line: bool = False,
     ) -> None:
         """Navigate through *waypoints* one leg at a time.
@@ -77,11 +78,13 @@ class MultiStopNavigator:
 
         # Pre-calculate full route path for display
         all_wp_tuples = [(wp.lat, wp.lng) for wp in waypoints]
+        full_total_distance = 0.0
         try:
             full_route = await engine.route_service.get_multi_route(
                 all_wp_tuples, profile=osrm_profile,
                 force_straight=straight_line,
             )
+            full_total_distance = float(full_route.get("distance") or 0.0)
             await engine._emit("route_path", {
                 "coords": [{"lat": pt[0], "lng": pt[1]} for pt in full_route["coords"]],
             })
@@ -123,12 +126,14 @@ class MultiStopNavigator:
         engine._user_waypoints = list(waypoints)
         engine._user_waypoint_next = 1  # we already start at waypoints[0]
 
+        completed_distance = 0.0
         running = True
         while running and not engine._stop_event.is_set():
             # On each loop pass (only > 1 if loop=True) restart the highlight
             # at waypoint[1] so the UI re-highlights from the top.
             if loop and engine._user_waypoint_next >= len(waypoints):
                 engine._user_waypoint_next = 1
+                completed_distance = 0.0
             for i in range(len(waypoints) - 1):
                 if engine._stop_event.is_set():
                     break
@@ -152,10 +157,20 @@ class MultiStopNavigator:
                 )
 
                 coords = [Coordinate(lat=pt[0], lng=pt[1]) for pt in route_data["coords"]]
-                engine.distance_remaining = route_data["distance"]
+                leg_distance = float(route_data.get("distance") or 0.0)
+                engine.distance_remaining = leg_distance
+
+                if full_total_distance > 0:
+                    future_legs = max(full_total_distance - completed_distance - leg_distance, 0.0)
+                else:
+                    future_legs = 0.0
+                engine._route_offset_remaining = future_legs
 
                 if len(coords) >= 2:
                     await engine._move_along_route(coords, _pick_profile())
+
+                completed_distance += leg_distance
+                engine._route_offset_remaining = 0.0
 
                 if engine._stop_event.is_set():
                     break
@@ -205,6 +220,7 @@ class MultiStopNavigator:
                 await engine._emit("lap_complete", {"lap": engine.lap_count})
                 logger.info("Multi-stop lap %d complete", engine.lap_count)
 
+        engine._route_offset_remaining = 0.0
         if engine.state == SimulationState.MULTI_STOP:
             engine.state = SimulationState.IDLE
             await engine._emit("multi_stop_complete", {
@@ -216,8 +232,5 @@ class MultiStopNavigator:
 
     @staticmethod
     def _quick_distance(a: Coordinate, b: Coordinate) -> float:
-        """Rough distance in meters (good enough for threshold checks)."""
-        import math
-        dlat = math.radians(b.lat - a.lat)
-        dlng = math.radians(b.lng - a.lng) * math.cos(math.radians(a.lat))
-        return 6_371_000 * math.sqrt(dlat ** 2 + dlng ** 2)
+        """Distance in meters between two coordinates."""
+        return haversine_m(a.lat, a.lng, b.lat, b.lng)

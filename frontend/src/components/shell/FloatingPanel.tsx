@@ -2,8 +2,8 @@ import React, { useState } from 'react'
 import { ChevronDown, ChevronUp, Crosshair, Navigation, Repeat, Route, Shuffle, Gamepad2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useT } from '../../i18n'
-import type { StringKey } from '../../i18n'
 import { SimMode } from '../../hooks/useSimulation'
+import { MODE_LABEL_KEYS } from '../../lib/constants'
 
 const modeIcons: Record<SimMode, LucideIcon> = {
   [SimMode.Teleport]: Crosshair,
@@ -12,15 +12,6 @@ const modeIcons: Record<SimMode, LucideIcon> = {
   [SimMode.MultiStop]: Route,
   [SimMode.RandomWalk]: Shuffle,
   [SimMode.Joystick]: Gamepad2,
-}
-
-const modeLabelKeys: Record<SimMode, StringKey> = {
-  [SimMode.Teleport]: 'mode.teleport',
-  [SimMode.Navigate]: 'mode.navigate',
-  [SimMode.Loop]: 'mode.loop',
-  [SimMode.MultiStop]: 'mode.multi_stop',
-  [SimMode.RandomWalk]: 'mode.random_walk',
-  [SimMode.Joystick]: 'mode.joystick',
 }
 
 interface FloatingPanelProps {
@@ -52,7 +43,7 @@ export default function FloatingPanel({ mode, children }: FloatingPanelProps) {
       >
         <Icon className="w-5 h-5 text-[var(--color-accent)]" />
         <h2 className="text-[15px] font-bold text-[var(--color-text-1)] flex-1 tracking-tight">
-          {t(modeLabelKeys[mode])}
+          {t(MODE_LABEL_KEYS[mode])}
         </h2>
         <button
           className="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--color-text-3)] hover:text-[var(--color-text-2)] transition-colors"

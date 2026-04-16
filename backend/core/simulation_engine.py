@@ -16,7 +16,7 @@ from models.schemas import (
 )
 from services.interpolator import RouteInterpolator
 from services.route_service import RouteService
-from config import SPEED_PROFILES, SpeedProfile
+from config import SPEED_PROFILES, SpeedProfile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
 
 from core.teleport import TeleportHandler
 from core.navigator import Navigator
@@ -143,6 +143,11 @@ class SimulationEngine:
         # applied profile on the next lap instead of re-resolving from the
         # original request (which would revert speed every lap).
         self._speed_was_applied: bool = False
+        # Extra meters to add to every emitted distance_remaining / ETA while
+        # _move_along_route is running. Multi-stop sets this to the sum of
+        # future legs' distances so the UI shows total-trip ETA, not just
+        # current-leg ETA. Reset to 0 outside multi-stop.
+        self._route_offset_remaining: float = 0.0
 
     # ── Public API ───────────────────────────────────────────
 
@@ -199,9 +204,9 @@ class SimulationEngine:
         speed_kmh: float | None = None,
         speed_min_kmh: float | None = None,
         speed_max_kmh: float | None = None,
-        pause_enabled: bool = True,
-        pause_min: float = 5.0,
-        pause_max: float = 20.0,
+        pause_enabled: bool = DEFAULT_PAUSE_ENABLED,
+        pause_min: float = DEFAULT_PAUSE_MIN,
+        pause_max: float = DEFAULT_PAUSE_MAX,
         straight_line: bool = False,
     ) -> None:
         """Start looping through a closed route."""
@@ -242,9 +247,9 @@ class SimulationEngine:
         speed_kmh: float | None = None,
         speed_min_kmh: float | None = None,
         speed_max_kmh: float | None = None,
-        pause_enabled: bool = True,
-        pause_min: float = 5.0,
-        pause_max: float = 20.0,
+        pause_enabled: bool = DEFAULT_PAUSE_ENABLED,
+        pause_min: float = DEFAULT_PAUSE_MIN,
+        pause_max: float = DEFAULT_PAUSE_MAX,
         straight_line: bool = False,
     ) -> None:
         """Navigate through waypoints with optional stops."""
@@ -269,9 +274,9 @@ class SimulationEngine:
         speed_kmh: float | None = None,
         speed_min_kmh: float | None = None,
         speed_max_kmh: float | None = None,
-        pause_enabled: bool = True,
-        pause_min: float = 5.0,
-        pause_max: float = 20.0,
+        pause_enabled: bool = DEFAULT_PAUSE_ENABLED,
+        pause_min: float = DEFAULT_PAUSE_MIN,
+        pause_max: float = DEFAULT_PAUSE_MAX,
         seed: int | None = None,
         straight_line: bool = False,
     ) -> None:
@@ -557,15 +562,18 @@ class SimulationEngine:
                 self.eta_tracker.update(accumulated_distance)
                 self.segment_index = min(idx, self.total_segments)
 
+                combined_remaining = self.distance_remaining + self._route_offset_remaining
+                combined_eta = combined_remaining / max(speed_mps, 0.001)
+
                 await self._emit("position_update", {
                     "lat": jittered_lat,
                     "lng": jittered_lng,
                     "bearing": bearing,
                     "speed_mps": speed_mps,
                     "progress": self.eta_tracker.progress,
-                    "distance_remaining": self.distance_remaining,
+                    "distance_remaining": combined_remaining,
                     "distance_traveled": self.distance_traveled,
-                    "eta_seconds": self.eta_tracker.eta_seconds,
+                    "eta_seconds": combined_eta,
                 })
 
                 prev_lat, prev_lng = lat, lng

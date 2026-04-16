@@ -3,6 +3,7 @@ import { useSimulation, SimMode, MoveMode } from '../hooks/useSimulation'
 import type { WsSubscribe, FanoutOutcome } from '../hooks/useSimulation'
 import { useJoystick } from '../hooks/useJoystick'
 import * as api from '../services/api'
+import { DEFAULT_RANDOM_WALK_RADIUS, DEFAULT_WP_GEN_RADIUS } from '../lib/constants'
 import { useDeviceContext } from './DeviceContext'
 import { useToastContext } from './ToastContext'
 import { useT } from '../i18n'
@@ -103,9 +104,9 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
 
   const [cooldown, setCooldown] = useState(0)
   const [cooldownEnabled, setCooldownEnabled] = useState(false)
-  const [randomWalkRadius, setRandomWalkRadius] = useState(500)
+  const [randomWalkRadius, setRandomWalkRadius] = useState(DEFAULT_RANDOM_WALK_RADIUS)
   const [clickToAddWaypoint, setClickToAddWaypoint] = useState(false)
-  const [wpGenRadius, setWpGenRadius] = useState(300)
+  const [wpGenRadius, setWpGenRadius] = useState(DEFAULT_WP_GEN_RADIUS)
   const [wpGenCount, setWpGenCount] = useState(5)
 
   // --- Handlers ---

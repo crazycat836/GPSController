@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
+import { DEFAULT_TUNNEL_PORT } from '../lib/constants'
 import {
   listDevices, connectDevice, disconnectDevice,
   wifiConnect, wifiScan,
@@ -182,7 +183,7 @@ export function useDevice(subscribe?: WsSubscribe) {
   const [tunnelStatus, setTunnelStatus] = useState<{ running: boolean; rsd_address?: string; rsd_port?: number }>({ running: false })
 
   const startWifiTunnel = useCallback(
-    async (ip: string, port = 49152) => {
+    async (ip: string, port = DEFAULT_TUNNEL_PORT) => {
       try {
         const res = await wifiTunnelStartAndConnect(ip, port)
         const info: DeviceInfo = {

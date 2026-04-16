@@ -7,7 +7,7 @@ import logging
 import random
 
 from models.schemas import Coordinate, MovementMode, SimulationState
-from config import resolve_speed_profile
+from config import resolve_speed_profile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +26,9 @@ class RouteLooper:
         speed_kmh: float | None = None,
         speed_min_kmh: float | None = None,
         speed_max_kmh: float | None = None,
-        pause_enabled: bool = True,
-        pause_min: float = 5.0,
-        pause_max: float = 20.0,
+        pause_enabled: bool = DEFAULT_PAUSE_ENABLED,
+        pause_min: float = DEFAULT_PAUSE_MIN,
+        pause_max: float = DEFAULT_PAUSE_MAX,
         straight_line: bool = False,
     ) -> None:
         """Build a multi-waypoint route that forms a closed loop, then

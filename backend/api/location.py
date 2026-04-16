@@ -30,7 +30,7 @@ async def _engine(udid: str | None = None):
     where the RSD tunnel is alive but the DVT channel has silently gone stale)."""
     from main import app_state
     import logging as _logging
-    _log = _logging.getLogger("locwarp")
+    _log = _logging.getLogger("gpscontroller")
 
     # Direct hit on the requested udid.
     if udid is not None:
@@ -94,7 +94,7 @@ async def _engine(udid: str | None = None):
         status_code=400,
         detail={
             "code": "no_device",
-            "message": "裝置連線已失效,請嘗試重新插拔 USB 或重新啟動 LocWarp(詳見 ~/.locwarp/logs/backend.log)",
+            "message": "裝置連線已失效,請嘗試重新插拔 USB 或重新啟動 GPSController(詳見 ~/.gpscontroller/logs/backend.log)",
         },
     )
 
@@ -107,7 +107,7 @@ async def _handle_device_lost(exc: Exception) -> "HTTPException":
     from main import app_state
     from api.websocket import broadcast
     import logging as _logging
-    _log = _logging.getLogger("locwarp")
+    _log = _logging.getLogger("gpscontroller")
 
     dm = app_state.device_manager
     lost_udids = list(dm._connections.keys())
@@ -217,7 +217,7 @@ async def teleport(req: TeleportRequest):
         raise (await _handle_device_lost(e))
     except Exception as e:
         import traceback, logging
-        logging.getLogger("locwarp").error("Teleport failed:\n%s", traceback.format_exc())
+        logging.getLogger("gpscontroller").error("Teleport failed:\n%s", traceback.format_exc())
         # Also inspect the cause — nested DeviceLostError (e.g. re-raised from
         # the simulation engine retry loop) should still trigger cleanup.
         cause = e
@@ -251,7 +251,7 @@ def _spawn(coro):
         exc = t.exception()
         if exc is not None:
             import logging as _logging
-            _logging.getLogger("locwarp").exception(
+            _logging.getLogger("gpscontroller").exception(
                 "background task crashed: %s", exc, exc_info=exc
             )
 
@@ -457,7 +457,8 @@ async def set_initial_position(req: _InitialPosRequest):
     if req.lat is None or req.lng is None:
         app_state._initial_map_position = None
     else:
-        if not (-90 <= req.lat <= 90) or not (-180 <= req.lng <= 180):
+        from utils.geo import validate_coords
+        if not validate_coords(req.lat, req.lng):
             raise HTTPException(
                 status_code=400,
                 detail={"code": "invalid_coord", "message": "lat must be in [-90, 90], lng in [-180, 180]"},

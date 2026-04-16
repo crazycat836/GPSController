@@ -4,17 +4,7 @@ import { SimMode, stateToMode } from '../../hooks/useSimulation'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useT } from '../../i18n'
-import { DEVICE_COLORS, DEVICE_LETTERS } from '../../lib/constants'
-import type { StringKey } from '../../i18n'
-
-const modeLabelKeys: Record<SimMode, StringKey> = {
-  [SimMode.Teleport]: 'mode.teleport',
-  [SimMode.Navigate]: 'mode.navigate',
-  [SimMode.Loop]: 'mode.loop',
-  [SimMode.MultiStop]: 'mode.multi_stop',
-  [SimMode.RandomWalk]: 'mode.random_walk',
-  [SimMode.Joystick]: 'mode.joystick',
-}
+import { DEVICE_COLORS, DEVICE_LETTERS, MODE_LABEL_KEYS } from '../../lib/constants'
 
 export default function MiniStatusBar() {
   const t = useT()
@@ -53,7 +43,7 @@ export default function MiniStatusBar() {
             : '\u2014'
           const spd = rt?.currentSpeedKmh ? rt.currentSpeedKmh.toFixed(0) : String(displaySpeed)
           const dMode = rt ? stateToMode(rt.state) : null
-          const modeLabel = dMode ? t(modeLabelKeys[dMode]) : t(modeLabelKeys[sim.mode])
+          const modeLabel = dMode ? t(MODE_LABEL_KEYS[dMode]) : t(MODE_LABEL_KEYS[sim.mode])
           return (
             <React.Fragment key={dev.udid}>
               {i > 0 && <div className="w-px h-3.5 bg-[var(--color-border)]" />}
@@ -89,7 +79,7 @@ export default function MiniStatusBar() {
           )}
           <span className="text-[11px]">{displaySpeed} km/h</span>
           <div className="w-px h-3.5 bg-[var(--color-border)]" />
-          <span className="text-[11px] opacity-75">{t(modeLabelKeys[sim.mode])}</span>
+          <span className="text-[11px] opacity-75">{t(MODE_LABEL_KEYS[sim.mode])}</span>
         </>
       )}
     </div>

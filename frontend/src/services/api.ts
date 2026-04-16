@@ -1,6 +1,7 @@
 import { STORAGE_KEYS } from '../lib/storage-keys'
+import { API_BASE, DEFAULT_TUNNEL_PORT } from '../lib/constants'
 
-const API = 'http://127.0.0.1:8777'
+const API = API_BASE
 
 // Connection-refused means backend isn't up yet, retry with backoff.
 // Other HTTP errors (4xx/5xx) are real errors and propagate immediately.
@@ -83,7 +84,7 @@ export const connectDevice = (udid: string) => request<any>('POST', `/api/device
 export const disconnectDevice = (udid: string) => request<any>('DELETE', `/api/device/${udid}/connect`)
 export const wifiConnect = (ip: string) => request<any>('POST', '/api/device/wifi/connect', { ip })
 export const wifiScan = () => request<any[]>('GET', '/api/device/wifi/scan')
-export const wifiTunnelStartAndConnect = (ip: string, port = 49152, udid?: string) =>
+export const wifiTunnelStartAndConnect = (ip: string, port = DEFAULT_TUNNEL_PORT, udid?: string) =>
   request<any>('POST', '/api/device/wifi/tunnel/start-and-connect', { ip, port, ...(udid ? { udid } : {}) })
 export const wifiTunnelStatus = () => request<any>('GET', '/api/device/wifi/tunnel/status')
 export const wifiTunnelDiscover = () => request<{ devices: { ip: string; port: number; host: string; name: string }[] }>('GET', '/api/device/wifi/tunnel/discover')

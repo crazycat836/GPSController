@@ -6,9 +6,7 @@ import math
 import random
 
 from models.schemas import Coordinate
-
-# Earth radius in meters (WGS-84 mean)
-_R = 6_371_000.0
+from utils.geo import EARTH_RADIUS_M, haversine_m
 
 
 class RouteInterpolator:
@@ -21,17 +19,7 @@ class RouteInterpolator:
     @staticmethod
     def haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
         """Return the great-circle distance in **meters** between two points."""
-        rlat1, rlng1 = math.radians(lat1), math.radians(lng1)
-        rlat2, rlng2 = math.radians(lat2), math.radians(lng2)
-
-        dlat = rlat2 - rlat1
-        dlng = rlng2 - rlng1
-
-        a = (
-            math.sin(dlat / 2) ** 2
-            + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlng / 2) ** 2
-        )
-        return _R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        return haversine_m(lat1, lng1, lat2, lng2)
 
     @staticmethod
     def bearing(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
