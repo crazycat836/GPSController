@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useT } from './i18n'
 import { useWebSocket } from './hooks/useWebSocket'
 import { SimMode } from './hooks/useSimulation'
+import { STORAGE_KEYS } from './lib/storage-keys'
 
 // Context providers
 import { ToastProvider, useToastContext } from './contexts/ToastContext'
@@ -20,6 +21,7 @@ import { DeviceChipRow } from './components/DeviceChipRow'
 // Shell components
 import FloatingPanel from './components/shell/FloatingPanel'
 import TopBar from './components/shell/TopBar'
+import SearchBar from './components/shell/SearchBar'
 import ModeToolbar from './components/shell/ModeToolbar'
 import MiniStatusBar from './components/shell/MiniStatusBar'
 import SettingsMenu from './components/shell/SettingsMenu'
@@ -36,7 +38,6 @@ import JoystickPanel from './components/panels/JoystickPanel'
 
 // Modals/Drawers
 import DeviceDrawer from './components/device/DeviceDrawer'
-import SearchModal from './components/modals/SearchModal'
 import LibraryDrawer from './components/modals/LibraryDrawer'
 
 // Root component — just providers
@@ -62,7 +63,7 @@ function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () =>
     return () => clearTimeout(timer)
   }, [message, onDismiss])
 
-  return (
+  return createPortal(
     <div
       className="toast-pill toast-pill-danger top-3"
       onClick={onDismiss}
@@ -71,7 +72,8 @@ function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () =>
     >
       <span>{message}</span>
       <span style={{ opacity: 0.7, fontSize: 11, flexShrink: 0 }} aria-hidden>✕</span>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -86,9 +88,15 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
   // UI state
   const [deviceDrawerOpen, setDeviceDrawerOpen] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [layerKey, setLayerKey] = useState(() => {
+    try { return localStorage.getItem(STORAGE_KEYS.tileLayer) || 'osm' } catch { return 'osm' }
+  })
+  const handleLayerChange = useCallback((key: string) => {
+    setLayerKey(key)
+    try { localStorage.setItem(STORAGE_KEYS.tileLayer, key) } catch {}
+  }, [])
 
   // Auto-scan on WebSocket connect
   useEffect(() => {
@@ -100,14 +108,10 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
-      if ((e.metaKey && e.key === 'k') || (!isInput && e.key === '/')) {
-        e.preventDefault(); setSearchOpen(true); return
-      }
       if (e.metaKey && e.key === 'b') {
         e.preventDefault(); setLibraryOpen(true); return
       }
       if (e.key === 'Escape') {
-        if (searchOpen) { setSearchOpen(false); return }
         if (libraryOpen) { setLibraryOpen(false); return }
         if (deviceDrawerOpen) { setDeviceDrawerOpen(false); return }
         return
@@ -125,7 +129,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [searchOpen, libraryOpen, deviceDrawerOpen, sim, handlePause, handleResume])
+  }, [libraryOpen, deviceDrawerOpen, sim, handlePause, handleResume])
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
@@ -198,6 +202,8 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
           showWaypointOption={sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop || sim.mode === SimMode.Navigate}
           deviceConnected={device.connectedDevice !== null}
           onShowToast={toast.showToast}
+          layerKey={layerKey}
+          onLayerChange={handleLayerChange}
         />
 
         {sim.mode === SimMode.Joystick && (
@@ -277,33 +283,39 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
       {/* Floating overlay components */}
       <TopBar
-        onSearchClick={() => setSearchOpen(true)}
         onLibraryClick={() => setLibraryOpen(true)}
         onSettingsClick={() => setSettingsOpen(prev => !prev)}
+        onAddDevice={() => {
+          if (device.connectedDevices.length >= 2) {
+            toast.showToast(t('device.max_reached'))
+            return
+          }
+          device.scan()
+          setDeviceDrawerOpen(true)
+        }}
+        addDeviceDisabled={device.connectedDevices.length >= 2}
         leftContent={
-          <div onClick={() => setDeviceDrawerOpen(true)} className="cursor-pointer hover:opacity-80 transition-opacity">
-            <DeviceChipRow
-              devices={device.connectedDevices}
-              runtimes={sim.runtimes}
-              onAdd={() => {
-                if (device.connectedDevices.length >= 2) {
-                  toast.showToast(t('device.max_reached'))
-                  return
-                }
-                device.scan()
-              }}
-              onDisconnect={(udid) => device.disconnect(udid)}
-              onRestoreOne={async (udid) => {
-                try {
-                  const { restoreSim } = await import('./services/api')
-                  await restoreSim(udid)
-                  toast.showToast(t('status.restore_success'))
-                } catch (e: unknown) {
-                  toast.showToast(e instanceof Error ? e.message : 'restore failed')
-                }
-              }}
-            />
-          </div>
+          <>
+            {device.connectedDevices.length > 0 && (
+              <div onClick={() => setDeviceDrawerOpen(true)} className="cursor-pointer hover:opacity-80 transition-opacity">
+                <DeviceChipRow
+                  devices={device.connectedDevices}
+                  runtimes={sim.runtimes}
+                  onDisconnect={(udid) => device.disconnect(udid)}
+                  onRestoreOne={async (udid) => {
+                    try {
+                      const { restoreSim } = await import('./services/api')
+                      await restoreSim(udid)
+                      toast.showToast(t('status.restore_success'))
+                    } catch (e: unknown) {
+                      toast.showToast(e instanceof Error ? e.message : 'restore failed')
+                    }
+                  }}
+                />
+              </div>
+            )}
+            <SearchBar onTeleport={simCtx.handleTeleport} deviceConnected={device.connectedDevice !== null} />
+          </>
         }
       />
 
@@ -317,9 +329,8 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
       </FloatingPanel>
 
       <ModeToolbar activeMode={sim.mode} onModeChange={sim.setMode} />
-      <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} layerKey={layerKey} onLayerChange={handleLayerChange} />
       <DeviceDrawer open={deviceDrawerOpen} onClose={() => setDeviceDrawerOpen(false)} />
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
       <LibraryDrawer open={libraryOpen} onClose={() => setLibraryOpen(false)} />
     </div>
   )

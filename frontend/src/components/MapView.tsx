@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useT } from '../i18n';
-import { STORAGE_KEYS } from '../lib/storage-keys';
 import L from 'leaflet';
 
 interface Position {
@@ -39,6 +38,8 @@ interface MapViewProps {
   showWaypointOption?: boolean;
   deviceConnected?: boolean;
   onShowToast?: (msg: string) => void;
+  layerKey?: string;
+  onLayerChange?: (key: string) => void;
   // Group mode: when runtimes + devices are present and 2+ devices connected,
   // render per-device markers/polylines/circles. Single-device rendering is
   // still driven by the legacy currentPosition/destination/routePath props.
@@ -73,6 +74,8 @@ const MapView: React.FC<MapViewProps> = ({
   showWaypointOption,
   deviceConnected = true,
   onShowToast,
+  layerKey = 'osm',
+  onLayerChange,
   runtimes,
   devices,
 }) => {
@@ -108,11 +111,6 @@ const MapView: React.FC<MapViewProps> = ({
   // clickMarkerRef removed — left-click no longer drops a pin.
   const radiusCircleRef = useRef<L.Circle | null>(null);
 
-  const [layerKey, setLayerKey] = useState(() => {
-    try { return localStorage.getItem(STORAGE_KEYS.tileLayer) || 'osm'; }
-    catch { return 'osm'; }
-  });
-  const [layerOpen, setLayerOpen] = useState(false);
   const layerMapRef = useRef<Record<string, L.TileLayer>>({});
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -123,21 +121,20 @@ const MapView: React.FC<MapViewProps> = ({
     lng: 0,
   });
 
-  const switchLayer = useCallback((key: string) => {
-    const map = mapRef.current;
-    if (!map) return;
-    const layers = layerMapRef.current;
-    // Remove all tile layers, add the selected one
-    Object.values(layers).forEach((l) => { if (map.hasLayer(l)) map.removeLayer(l); });
-    if (layers[key]) layers[key].addTo(map);
-    setLayerKey(key);
-    setLayerOpen(false);
-    try { localStorage.setItem(STORAGE_KEYS.tileLayer, key); } catch {}
-  }, []);
-
   const closeContextMenu = useCallback(() => {
     setContextMenu((prev) => ({ ...prev, visible: false }));
   }, []);
+
+  // React to layerKey prop changes from SettingsMenu
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const layers = layerMapRef.current;
+    if (Object.keys(layers).length === 0) return;
+    Object.values(layers).forEach((l) => { if (map.hasLayer(l)) map.removeLayer(l); });
+    const key = layerKey ?? 'osm';
+    if (layers[key]) layers[key].addTo(map);
+  }, [layerKey]);
 
   // Initialize map
   useEffect(() => {
@@ -198,8 +195,7 @@ const MapView: React.FC<MapViewProps> = ({
 
     const layers: Record<string, L.TileLayer> = { osm: osmLayer, carto: cartoLayer, esri: esriLayer };
     layerMapRef.current = layers;
-    const savedLayer = localStorage.getItem(STORAGE_KEYS.tileLayer) || 'osm';
-    const activeLayer = layers[savedLayer] || osmLayer;
+    const activeLayer = layers[layerKey] || osmLayer;
     activeLayer.addTo(map);
 
     // Left-click on the map dismisses any open context menu.
@@ -707,28 +703,6 @@ const MapView: React.FC<MapViewProps> = ({
     });
   }, [currentPosition]);
 
-  // Coordinate-input overlay (replaces the sidebar's two-field coord input).
-  // Accepts any of: "25.04, 121.51", "25.04,121.51", or "25.04 121.51".
-  const [coordInput, setCoordInput] = useState('');
-  const parseCoordInput = (raw: string): { lat: number; lng: number } | null => {
-    const m = raw.trim().match(/^(-?\d+(?:\.\d+)?)[\s,]+(-?\d+(?:\.\d+)?)$/);
-    if (!m) return null;
-    const lat = parseFloat(m[1]);
-    const lng = parseFloat(m[2]);
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90) return null;
-    if (!Number.isFinite(lng) || lng < -180 || lng > 180) return null;
-    return { lat, lng };
-  };
-  const submitCoordGo = () => {
-    const parsed = parseCoordInput(coordInput);
-    if (!parsed) {
-      if (onShowToast) onShowToast(tRef.current('panel.coord_invalid'));
-      return;
-    }
-    onTeleport(parsed.lat, parsed.lng);
-    setCoordInput('');
-  };
-
   return (
     <div className="map-container" style={{ position: 'relative', flex: 1 }}>
       <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
@@ -764,140 +738,6 @@ const MapView: React.FC<MapViewProps> = ({
           <line x1="19" y1="12" x2="22" y2="12" />
         </svg>
       </button>
-
-      {/* Layer switcher — top-right, custom React component instead of
-          Leaflet's built-in control for consistent dark-theme styling. */}
-      <div style={{ position: 'absolute', top: 62, right: 10, zIndex: 1001 }}>
-        <button
-          onClick={() => setLayerOpen((v) => !v)}
-          title={t('map.layers')}
-          className="surface-control"
-          style={{
-            width: 34, height: 34, borderRadius: 'var(--radius-md)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 0, color: 'var(--color-text-1)',
-          }}
-        >
-          {/* Lucide "Layers" icon */}
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
-            <path d="m2 12 8.58 3.91a2 2 0 0 0 1.66 0L20.73 12" opacity=".7" />
-            <path d="m2 17 8.58 3.91a2 2 0 0 0 1.66 0L20.73 17" opacity=".4" />
-          </svg>
-        </button>
-        {layerOpen && (
-          <>
-            {/* Invisible backdrop to close on outside click */}
-            <div
-              style={{ position: 'fixed', inset: 0, zIndex: -1 }}
-              onClick={() => setLayerOpen(false)}
-            />
-            <div
-              className="surface-popup anim-scale-in-tl"
-              style={{
-                position: 'absolute', top: 40, right: 0,
-                borderRadius: 'var(--radius-lg)',
-                padding: 6, minWidth: 190,
-                display: 'flex', flexDirection: 'column', gap: 2,
-              }}
-            >
-              {([
-                ['osm', 'OpenStreetMap', <svg key="osm" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" /></svg>],
-                ['carto', 'CartoDB Voyager', <svg key="carto" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" /></svg>],
-                ['esri', 'ESRI Satellite', <svg key="esri" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 18H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><path d="M22 12a10 10 0 1 0-20 0 10 10 0 0 0 20 0Z" opacity=".3" /><circle cx="16" cy="9" r="3" /><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L9 18" /></svg>],
-              ] as [string, string, React.ReactNode][]).map(([key, label, icon]) => (
-                <button
-                  key={key}
-                  onClick={() => switchLayer(key)}
-                  className="context-menu-item"
-                  style={{
-                    borderRadius: 'var(--radius-sm)',
-                    fontWeight: layerKey === key ? 600 : 500,
-                    background: layerKey === key ? 'var(--color-accent-dim)' : 'transparent',
-                    color: layerKey === key ? 'var(--color-accent)' : 'var(--color-text-1)',
-                  }}
-                >
-                  {icon}
-                  <span style={{ flex: 1 }}>{label}</span>
-                  {layerKey === key && (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Coord input overlay — bottom-left, above the map's status footer.
-          Takes a single "lat, lng" string; Enter or the teleport button goes.
-          Stop right-click propagation so the browser's native context menu
-          (Paste / Copy) still works inside the input instead of the map's
-          custom teleport menu popping up. */}
-      <div
-        onContextMenu={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-        className="anim-fade-slide-up surface-panel"
-        style={{
-          position: 'absolute', left: 12, bottom: 100, zIndex: 1001,
-          display: 'flex', alignItems: 'center', gap: 6,
-          borderRadius: 'var(--radius-lg)',
-          padding: '7px 9px',
-        }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6c8cff" strokeWidth="2" style={{ flexShrink: 0 }}>
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
-          <circle cx="12" cy="10" r="3" />
-        </svg>
-        <input
-          type="text"
-          value={coordInput}
-          onChange={(e) => setCoordInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') submitCoordGo(); }}
-          placeholder={tRef.current('panel.coord_placeholder')}
-          style={{
-            width: 210, background: 'transparent', border: 'none',
-            color: '#e8e8e8', fontSize: 12, outline: 'none',
-            fontFamily: 'monospace',
-          }}
-        />
-        <button
-          onClick={async () => {
-            try {
-              const text = await navigator.clipboard.readText();
-              if (text) setCoordInput(text.trim());
-            } catch {
-              if (onShowToast) onShowToast(tRef.current('panel.paste_denied'));
-            }
-          }}
-          title={tRef.current('panel.paste_tooltip')}
-          style={{
-            background: 'var(--color-surface-2)',
-            color: '#c7d0e4', border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)', padding: '4px 8px', fontSize: 11, fontWeight: 600,
-            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3,
-          }}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2" />
-            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-          </svg>
-          {tRef.current('panel.paste')}
-        </button>
-        <button
-          onClick={submitCoordGo}
-          disabled={!coordInput.trim() || !deviceConnected}
-          title={t('map.teleport_here')}
-          style={{
-            background: !coordInput.trim() || !deviceConnected ? 'var(--color-accent-dim)' : 'var(--color-accent)',
-            color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)',
-            padding: '4px 10px', fontSize: 11, fontWeight: 600,
-            cursor: !coordInput.trim() || !deviceConnected ? 'not-allowed' : 'pointer',
-          }}
-        >Go</button>
-      </div>
 
       {contextMenu.visible && (
         <div

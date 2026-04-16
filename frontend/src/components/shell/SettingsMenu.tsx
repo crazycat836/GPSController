@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { RotateCcw, FileText, MapPin, Timer, Languages, Info } from 'lucide-react'
+import { RotateCcw, FileText, MapPin, Timer, Languages, Layers, Info } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
@@ -17,12 +17,20 @@ function formatCooldown(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+const LAYER_OPTIONS = [
+  { key: 'osm', label: 'OSM' },
+  { key: 'carto', label: 'Carto' },
+  { key: 'esri', label: 'ESRI' },
+] as const
+
 interface SettingsMenuProps {
   open: boolean
   onClose: () => void
+  layerKey: string
+  onLayerChange: (key: string) => void
 }
 
-export default function SettingsMenu({ open, onClose }: SettingsMenuProps) {
+export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }: SettingsMenuProps) {
   const t = useT()
   const { handleRestore, handleOpenLog, cooldown, cooldownEnabled, handleToggleCooldown } = useSimContext()
   const device = useDeviceContext()
@@ -193,6 +201,27 @@ export default function SettingsMenu({ open, onClose }: SettingsMenuProps) {
               <Languages className={iconClass} />
               <span className="flex-1 text-left">{t('generic.cancel').includes('取消') ? '語言' : 'Language'}</span>
               <LangToggle />
+            </div>
+
+            <div className={[menuRowClass, 'cursor-default hover:bg-transparent'].join(' ')}>
+              <Layers className={iconClass} />
+              <span className="flex-1 text-left">{t('settings.map_layer')}</span>
+              <div className="flex items-center gap-1">
+                {LAYER_OPTIONS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => onLayerChange(key)}
+                    className={[
+                      'px-2.5 py-1 text-[10px] font-semibold rounded-md transition-colors cursor-pointer',
+                      layerKey === key
+                        ? 'bg-[var(--color-accent)] text-white'
+                        : 'bg-white/10 text-[var(--color-text-2)] hover:bg-white/15',
+                    ].join(' ')}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
