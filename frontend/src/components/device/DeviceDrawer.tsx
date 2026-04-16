@@ -1,14 +1,15 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  X, Wifi, Usb, Search, ChevronDown, Loader2, Check, XCircle,
-  CircleSlash, Smartphone, RotateCcw, HelpCircle,
+  Wifi, Usb, Search, ChevronDown, Loader2, Check, XCircle,
+  CircleSlash, Smartphone, RotateCcw,
 } from 'lucide-react'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { wifiTunnelDiscover, wifiRepair } from '../../services/api'
 import { useT } from '../../i18n'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
+import Drawer from '../shell/Drawer'
 
 interface DeviceDrawerProps {
   open: boolean
@@ -26,7 +27,6 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
   const devicesRef = useRef(device.devices)
   devicesRef.current = device.devices
 
-  // WiFi tunnel state
   const [wifiExpanded, setWifiExpanded] = useState(false)
   const [tunnelIp, setTunnelIp] = useState(() => localStorage.getItem(STORAGE_KEYS.tunnelIp) || '')
   const [tunnelPort, setTunnelPort] = useState(() => localStorage.getItem(STORAGE_KEYS.tunnelPort) || '49152')
@@ -35,22 +35,18 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
   const [discovering, setDiscovering] = useState(false)
   const [showIpHelp, setShowIpHelp] = useState(false)
 
-  // Repair state
   const [showRepairConfirm, setShowRepairConfirm] = useState(false)
   const [repairState, setRepairState] = useState<'idle' | 'running' | 'success' | 'failed'>('idle')
   const [repairMessage, setRepairMessage] = useState('')
 
-  useEffect(() => () => {
-    if (scanTimer.current) clearTimeout(scanTimer.current)
-  }, [])
+  useEffect(() => () => { if (scanTimer.current) clearTimeout(scanTimer.current) }, [])
 
   const handleScan = useCallback(async () => {
     if (scanTimer.current) clearTimeout(scanTimer.current)
     setScanning(true)
     setScanResult(null)
-    try {
-      await device.scan()
-    } finally {
+    try { await device.scan() }
+    finally {
       setScanning(false)
       setScanResult(devicesRef.current.length)
       scanTimer.current = setTimeout(() => setScanResult(null), 2000)
@@ -63,17 +59,11 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
     try {
       const res = await wifiTunnelDiscover()
       const first = res?.devices?.[0]
-      if (first) {
-        setTunnelIp(first.ip)
-        setTunnelPort(String(first.port))
-      } else {
-        setTunnelError(t('wifi.device_not_detected'))
-      }
+      if (first) { setTunnelIp(first.ip); setTunnelPort(String(first.port)) }
+      else setTunnelError(t('wifi.device_not_detected'))
     } catch (err: unknown) {
       setTunnelError(err instanceof Error ? err.message : t('wifi.detect_failed'))
-    } finally {
-      setDiscovering(false)
-    }
+    } finally { setDiscovering(false) }
   }, [t])
 
   const handleTunnelConnect = useCallback(async () => {
@@ -87,9 +77,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
       showToast('WiFi tunnel connected')
     } catch (err: unknown) {
       setTunnelError(err instanceof Error ? err.message : 'WiFi tunnel failed')
-    } finally {
-      setTunnelConnecting(false)
-    }
+    } finally { setTunnelConnecting(false) }
   }, [tunnelIp, tunnelPort, device, showToast])
 
   const handleRepair = useCallback(async () => {
@@ -107,56 +95,16 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
 
   const selectedUdid = device.connectedDevice?.udid
 
-  const inputClass = [
-    'flex-1 px-3 py-1.5 rounded-lg text-xs font-mono',
-    'bg-black/30 border border-[var(--color-border)]',
-    'text-[var(--color-text-1)] outline-none',
-    'focus:border-[var(--color-accent)] transition-colors',
-  ].join(' ')
-
-  return createPortal(
+  return (
     <>
-      {/* Backdrop */}
-      {open && (
-        <div
-          className="fixed inset-0 z-[999] bg-black/30 transition-opacity"
-          onClick={onClose}
-        />
-      )}
+      <Drawer open={open} onClose={onClose} title="Devices" icon={<Smartphone className="w-4 h-4" />} side="left">
+        <div className="p-4 flex flex-col gap-3">
 
-      {/* Drawer */}
-      <div
-        className={[
-          'fixed inset-y-0 left-0 w-80 z-[1000]',
-          'bg-[var(--color-glass-heavy)] backdrop-blur-2xl',
-          'border-r border-[var(--color-border)]',
-          'flex flex-col',
-          'transform transition-transform duration-[280ms] ease-[var(--ease-out-expo)]',
-          open ? 'translate-x-0' : '-translate-x-full',
-        ].join(' ')}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
-          <h2 className="text-sm font-semibold text-[var(--color-text-1)]">Devices</h2>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-white/[0.06] transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Scan button */}
-        <div className="px-4 pt-3 pb-2">
+          {/* Scan USB */}
           <button
             onClick={handleScan}
             disabled={scanning}
-            className={[
-              'w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium',
-              'bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/40',
-              'text-[var(--color-accent)] hover:bg-[var(--color-accent)]/25 transition-colors cursor-pointer',
-              scanning ? 'opacity-70' : '',
-            ].join(' ')}
+            className="seg-cta seg-cta-sm seg-cta-accent"
           >
             {scanning ? (
               <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('device.scan_scanning')}</>
@@ -165,149 +113,126 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
             ) : scanResult === 0 ? (
               <><XCircle className="w-3.5 h-3.5 text-red-400" /> <span className="text-red-400">{t('device.scan_none')}</span></>
             ) : (
-              <><Search className="w-3.5 h-3.5" /> USB</>
+              <><Usb className="w-3.5 h-3.5" /> USB</>
             )}
           </button>
-        </div>
 
-        {/* Device list */}
-        <div className="flex-1 overflow-y-auto px-4 pb-2">
-          {device.devices.length === 0 && (
-            <p className="text-xs text-[var(--color-text-3)] text-center py-6 opacity-60">
-              No device
-            </p>
+          {/* Device list */}
+          {device.devices.length === 0 ? (
+            <p className="text-xs text-[var(--color-text-3)] text-center py-6">No device</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {device.devices.map((d) => {
+                const major = parseInt((d.ios_version || '0').split('.')[0], 10) || 0
+                const unsupported = major > 0 && major < 17
+                const isSelected = d.udid === selectedUdid
+
+                return (
+                  <button
+                    key={d.udid}
+                    onClick={() => { if (!unsupported) device.connect(d.udid) }}
+                    disabled={unsupported}
+                    className={[
+                      'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors',
+                      isSelected
+                        ? 'bg-[var(--color-accent-dim)] border border-[rgba(108,140,255,0.2)]'
+                        : 'bg-[var(--color-surface-2)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]',
+                      unsupported ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+                    ].join(' ')}
+                  >
+                    {unsupported
+                      ? <CircleSlash className="w-4 h-4 text-red-400 shrink-0" />
+                      : <Smartphone className="w-4 h-4 text-[var(--color-text-3)] shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-[12px] truncate ${isSelected ? 'font-semibold text-[var(--color-text-1)]' : 'text-[var(--color-text-2)]'}`}>
+                        {d.name}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {unsupported ? (
+                          <span className="text-[10px] text-red-400">{t('device.ios_unsupported_label', { version: d.ios_version })}</span>
+                        ) : (
+                          <span className="text-[10px] text-[var(--color-text-3)]">iOS {d.ios_version}</span>
+                        )}
+                        {d.connection_type && !unsupported && (
+                          <span className={[
+                            'inline-flex items-center gap-1 text-[9px] px-1.5 py-px rounded-md',
+                            d.connection_type === 'Network' ? 'bg-green-500/15 text-green-400' : 'bg-[var(--color-accent-dim)] text-[var(--color-accent)]',
+                          ].join(' ')}>
+                            {d.connection_type === 'Network' ? <Wifi className="w-2.5 h-2.5" /> : <Usb className="w-2.5 h-2.5" />}
+                            {d.connection_type === 'Network' ? 'WiFi' : 'USB'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {isSelected && <Check className="w-3.5 h-3.5 text-green-400 shrink-0" />}
+                  </button>
+                )
+              })}
+            </div>
           )}
 
-          {device.devices.map((d) => {
-            const major = parseInt((d.ios_version || '0').split('.')[0], 10) || 0
-            const unsupported = major > 0 && major < 17
-            const isSelected = d.udid === selectedUdid
-
-            return (
-              <button
-                key={d.udid}
-                onClick={() => { if (!unsupported) device.connect(d.udid) }}
-                disabled={unsupported}
-                className={[
-                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 text-left transition-colors',
-                  isSelected
-                    ? 'bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30'
-                    : 'hover:bg-white/[0.05] border border-transparent',
-                  unsupported ? 'opacity-55 cursor-not-allowed' : 'cursor-pointer',
-                ].join(' ')}
-                title={unsupported ? t('device.ios_unsupported_label', { version: d.ios_version }) : d.name}
-              >
-                {unsupported
-                  ? <CircleSlash className="w-4 h-4 text-red-400 shrink-0" />
-                  : <Smartphone className="w-4 h-4 text-[var(--color-text-3)] shrink-0" />}
-                <div className="flex-1 min-w-0">
-                  <div className={[
-                    'text-xs truncate',
-                    isSelected ? 'font-semibold text-[var(--color-text-1)]' : 'text-[var(--color-text-2)]',
-                  ].join(' ')}>
-                    {d.name}
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {unsupported ? (
-                      <span className="text-[10px] text-red-400">
-                        {t('device.ios_unsupported_label', { version: d.ios_version })}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-[var(--color-text-3)]">iOS {d.ios_version}</span>
-                    )}
-                    {d.connection_type && !unsupported && (
-                      <span className={[
-                        'inline-flex items-center gap-1 text-[9px] px-1.5 py-px rounded',
-                        d.connection_type === 'Network'
-                          ? 'bg-green-500/15 text-green-400'
-                          : 'bg-[var(--color-accent)]/15 text-[var(--color-accent)]',
-                      ].join(' ')}>
-                        {d.connection_type === 'Network'
-                          ? <Wifi className="w-2.5 h-2.5" />
-                          : <Usb className="w-2.5 h-2.5" />}
-                        {d.connection_type === 'Network' ? 'WiFi' : 'USB'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {isSelected && <Check className="w-3.5 h-3.5 text-green-400 shrink-0" />}
-              </button>
-            )
-          })}
-
           {/* WiFi Tunnel section */}
-          <div className="border-t border-[var(--color-border)] mt-2 pt-2">
+          <div className="seg">
             <button
               onClick={() => setWifiExpanded((v) => !v)}
-              className="w-full flex items-center justify-between text-xs text-[var(--color-text-2)] hover:text-[var(--color-text-1)] transition-colors py-1 cursor-pointer"
+              className="seg-row cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors w-full"
             >
-              <div className="flex items-center gap-2">
-                <Wifi className="w-3.5 h-3.5" />
-                <div className="text-left">
-                  <div>{t('wifi.section_title')}</div>
-                  <div className="text-[10px] text-[var(--color-text-3)]">{t('wifi.section_hint')}</div>
-                </div>
-                {device.tunnelStatus.running && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-400 flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                    Active
-                  </span>
-                )}
+              <Wifi className="w-3.5 h-3.5 text-[var(--color-text-3)] shrink-0" />
+              <div className="flex-1 text-left min-w-0">
+                <div className="text-[12px] text-[var(--color-text-2)]">{t('wifi.section_title')}</div>
+                <div className="text-[10px] text-[var(--color-text-3)]">{t('wifi.section_hint')}</div>
               </div>
-              <ChevronDown className={[
-                'w-3.5 h-3.5 transition-transform',
-                wifiExpanded ? 'rotate-180' : '',
-              ].join(' ')} />
+              {device.tunnelStatus.running && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-green-500/15 text-green-400 flex items-center gap-1 shrink-0">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                  Active
+                </span>
+              )}
+              <ChevronDown className={`w-3.5 h-3.5 text-[var(--color-text-3)] transition-transform shrink-0 ${wifiExpanded ? 'rotate-180' : ''}`} />
             </button>
 
             {wifiExpanded && (
-              <div className="mt-2 flex flex-col gap-2">
-                {/* Repair button */}
+              <div className="px-3 pb-3 flex flex-col gap-2">
+                {/* Repair */}
                 <button
                   onClick={() => { setRepairState('idle'); setRepairMessage(''); setShowRepairConfirm(true) }}
-                  className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] rounded-lg border border-amber-400/35 bg-amber-400/8 text-amber-400 hover:bg-amber-400/15 transition-colors cursor-pointer"
+                  className="action-btn warning w-full justify-center text-[11px]"
                 >
                   <RotateCcw className="w-3 h-3" />
                   {t('wifi.repair_button')}
                 </button>
 
-                {/* Help + discover row */}
+                {/* Help + Discover */}
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowIpHelp((v) => !v)}
-                    className="flex-1 py-1 text-[10px] rounded border border-white/15 bg-white/[0.04] text-[var(--color-text-3)] hover:bg-white/[0.08] transition-colors cursor-pointer"
-                  >
+                  <button onClick={() => setShowIpHelp((v) => !v)} className="action-btn flex-1 justify-center text-[10px]">
                     {t('wifi.help_ip')}
                   </button>
                   <button
                     onClick={handleDiscover}
                     disabled={discovering || device.tunnelStatus.running}
-                    className="flex-1 py-1 text-[10px] rounded border border-[var(--color-accent)]/50 bg-[var(--color-accent)]/12 text-[var(--color-accent)] flex items-center justify-center gap-1 hover:bg-[var(--color-accent)]/20 transition-colors cursor-pointer"
+                    className="action-btn primary flex-1 justify-center text-[10px]"
                   >
-                    <Search className={['w-2.5 h-2.5', discovering ? 'animate-spin' : ''].join(' ')} />
+                    <Search className={`w-2.5 h-2.5 ${discovering ? 'animate-spin' : ''}`} />
                     {discovering ? t('wifi.detect_scanning') : t('wifi.detect')}
                   </button>
                 </div>
 
                 {showIpHelp && (
-                  <div className="text-[11px] p-2.5 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/8 leading-relaxed">
+                  <div className="text-[11px] p-2.5 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-dim)] leading-relaxed">
                     <div className="font-semibold mb-1 text-[var(--color-accent)]">{t('wifi.help_title')}</div>
-                    <div className="text-[var(--color-text-2)] opacity-85">{t('wifi.help_steps')}</div>
-                    <div className="text-[10px] opacity-60 mt-1.5">{t('wifi.help_hint')}</div>
+                    <div className="text-[var(--color-text-2)]">{t('wifi.help_steps')}</div>
+                    <div className="text-[10px] text-[var(--color-text-3)] mt-1.5">{t('wifi.help_hint')}</div>
                   </div>
                 )}
 
                 {/* Tunnel connect / status */}
                 {device.tunnelStatus.running ? (
-                  <div>
-                    <div className="text-[11px] text-[var(--color-text-3)] p-2 rounded bg-green-500/8 mb-2">
+                  <div className="flex flex-col gap-2">
+                    <div className="text-[11px] text-[var(--color-text-3)] p-2 rounded-lg bg-green-500/8">
                       <div>RSD: {device.tunnelStatus.rsd_address}:{device.tunnelStatus.rsd_port}</div>
-                      <div className="text-[10px] opacity-60 mt-0.5">{t('wifi.tunnel_usb_can_disconnect')}</div>
+                      <div className="text-[10px] text-[var(--color-text-3)] mt-0.5">{t('wifi.tunnel_usb_can_disconnect')}</div>
                     </div>
-                    <button
-                      onClick={() => device.stopTunnel()}
-                      className="w-full py-1.5 text-[11px] rounded-lg border border-red-400/40 text-red-400 hover:bg-red-400/10 transition-colors cursor-pointer"
-                    >
+                    <button onClick={() => device.stopTunnel()} className="action-btn danger w-full justify-center text-[11px]">
                       {t('wifi.tunnel_stop')}
                     </button>
                   </div>
@@ -315,47 +240,18 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                   <div className="flex flex-col gap-1.5">
                     <label className="flex items-center gap-2 text-[11px]">
                       <span className="w-8 text-[var(--color-text-3)]">IP</span>
-                      <input
-                        type="text"
-                        placeholder={t('wifi.ip_placeholder')}
-                        value={tunnelIp}
-                        onChange={(e) => setTunnelIp(e.target.value)}
-                        disabled={tunnelConnecting}
-                        className={inputClass}
-                      />
+                      <input type="text" placeholder={t('wifi.ip_placeholder')} value={tunnelIp} onChange={(e) => setTunnelIp(e.target.value)} disabled={tunnelConnecting} className="seg-input flex-1 text-xs font-mono" />
                     </label>
                     <label className="flex items-center gap-2 text-[11px]">
                       <span className="w-8 text-[var(--color-text-3)]">Port</span>
-                      <input
-                        type="text"
-                        placeholder="49152"
-                        value={tunnelPort}
-                        onChange={(e) => setTunnelPort(e.target.value)}
-                        disabled={tunnelConnecting}
-                        className={inputClass}
-                      />
+                      <input type="text" placeholder="49152" value={tunnelPort} onChange={(e) => setTunnelPort(e.target.value)} disabled={tunnelConnecting} className="seg-input flex-1 text-xs font-mono" />
                     </label>
-                    <button
-                      onClick={handleTunnelConnect}
-                      disabled={tunnelConnecting || !tunnelIp.trim()}
-                      className={[
-                        'w-full py-2 text-xs font-medium rounded-lg transition-colors cursor-pointer',
-                        'bg-[var(--color-accent)] text-white hover:opacity-90',
-                        (tunnelConnecting || !tunnelIp.trim()) ? 'opacity-60' : '',
-                      ].join(' ')}
-                    >
+                    <button onClick={handleTunnelConnect} disabled={tunnelConnecting || !tunnelIp.trim()} className="seg-cta seg-cta-sm seg-cta-accent mt-1">
                       {tunnelConnecting ? (
-                        <span className="flex items-center justify-center gap-1.5">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          {t('wifi.tunnel_establishing')}
-                        </span>
+                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('wifi.tunnel_establishing')}</>
                       ) : t('wifi.tunnel_start')}
                     </button>
-                    {tunnelError && (
-                      <p className="text-[11px] text-red-400 p-2 rounded bg-red-400/10 border border-red-400/30">
-                        {tunnelError}
-                      </p>
-                    )}
+                    {tunnelError && <p className="text-[11px] text-red-400 p-2 rounded-lg bg-red-400/10 border border-red-400/30">{tunnelError}</p>}
                     <p className="text-[10px] text-[var(--color-text-3)] opacity-40">{t('wifi.tunnel_admin_hint')}</p>
                   </div>
                 )}
@@ -363,25 +259,14 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
             )}
           </div>
         </div>
-      </div>
+      </Drawer>
 
       {/* Repair confirm modal */}
       {showRepairConfirm && createPortal(
-        <div
-          onClick={() => { if (repairState !== 'running') setShowRepairConfirm(false) }}
-          className="fixed inset-0 z-[2000] bg-black/55 backdrop-blur-sm flex items-center justify-center"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className={[
-              'w-[420px] p-6 rounded-xl',
-              'bg-[var(--color-bg-elevated)] border border-[var(--color-border)]',
-              'shadow-[0_20px_60px_rgba(12,18,40,0.65)]',
-              'text-[var(--color-text-1)]',
-            ].join(' ')}
-          >
+        <div onClick={() => { if (repairState !== 'running') setShowRepairConfirm(false) }} className="fixed inset-0 z-[2000] bg-black/55 backdrop-blur-sm flex items-center justify-center">
+          <div onClick={(e) => e.stopPropagation()} className="w-[420px] p-6 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] shadow-[var(--shadow-lg)] text-[var(--color-text-1)]">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 rounded-full bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/50 flex items-center justify-center text-[var(--color-accent)]">
+              <div className="w-8 h-8 rounded-full bg-[var(--color-accent-dim)] border border-[rgba(108,140,255,0.3)] flex items-center justify-center text-[var(--color-accent)]">
                 <RotateCcw className="w-4 h-4" />
               </div>
               <h3 className="text-[15px] font-semibold">{t('wifi.repair_confirm_title')}</h3>
@@ -389,69 +274,35 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
 
             {repairState === 'idle' && (
               <>
-                <p className="text-[13px] leading-relaxed whitespace-pre-line opacity-90 mb-5">
-                  {t('wifi.repair_confirm_body')}
-                </p>
+                <p className="text-[13px] leading-relaxed whitespace-pre-line opacity-90 mb-5">{t('wifi.repair_confirm_body')}</p>
                 <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => setShowRepairConfirm(false)}
-                    className="px-4 py-1.5 text-xs rounded-lg border border-[var(--color-border)] text-[var(--color-text-3)] hover:bg-white/5 transition-colors cursor-pointer"
-                  >
-                    {t('wifi.repair_cancel')}
-                  </button>
-                  <button
-                    onClick={handleRepair}
-                    className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity cursor-pointer"
-                  >
-                    {t('wifi.repair_ok')}
-                  </button>
+                  <button onClick={() => setShowRepairConfirm(false)} className="action-btn">{t('wifi.repair_cancel')}</button>
+                  <button onClick={handleRepair} className="action-btn primary">{t('wifi.repair_ok')}</button>
                 </div>
               </>
             )}
-
             {repairState === 'running' && (
               <div className="text-center py-6">
                 <Loader2 className="w-8 h-8 mx-auto mb-3 text-[var(--color-accent)] animate-spin" />
                 <p className="text-amber-400 text-sm">{t('wifi.repair_running')}</p>
               </div>
             )}
-
             {repairState === 'success' && (
               <>
                 <p className="text-green-400 text-[13px] leading-relaxed">{t('wifi.repair_success')}</p>
                 {repairMessage && <p className="text-xs text-[var(--color-text-3)] mt-2">{repairMessage}</p>}
                 <div className="flex justify-end mt-5">
-                  <button
-                    onClick={() => setShowRepairConfirm(false)}
-                    className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity cursor-pointer"
-                  >
-                    {t('wifi.warning_ok')}
-                  </button>
+                  <button onClick={() => setShowRepairConfirm(false)} className="action-btn primary">{t('wifi.warning_ok')}</button>
                 </div>
               </>
             )}
-
             {repairState === 'failed' && (
               <>
                 <p className="text-red-400 text-[13px] leading-relaxed">{t('wifi.repair_failed')}</p>
-                {repairMessage && (
-                  <p className="text-xs text-[var(--color-text-2)] mt-2 p-2 rounded bg-red-400/8 border border-red-400/30 whitespace-pre-wrap break-words">
-                    {repairMessage}
-                  </p>
-                )}
+                {repairMessage && <p className="text-xs text-[var(--color-text-2)] mt-2 p-2 rounded-lg bg-red-400/8 border border-red-400/30 whitespace-pre-wrap break-words">{repairMessage}</p>}
                 <div className="flex justify-end gap-2 mt-5">
-                  <button
-                    onClick={() => setShowRepairConfirm(false)}
-                    className="px-4 py-1.5 text-xs rounded-lg border border-[var(--color-border)] text-[var(--color-text-3)] hover:bg-white/5 transition-colors cursor-pointer"
-                  >
-                    {t('wifi.repair_cancel')}
-                  </button>
-                  <button
-                    onClick={handleRepair}
-                    className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity cursor-pointer"
-                  >
-                    {t('wifi.repair_ok')}
-                  </button>
+                  <button onClick={() => setShowRepairConfirm(false)} className="action-btn">{t('wifi.repair_cancel')}</button>
+                  <button onClick={handleRepair} className="action-btn primary">{t('wifi.repair_ok')}</button>
                 </div>
               </>
             )}
@@ -459,7 +310,6 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
         </div>,
         document.body,
       )}
-    </>,
-    document.body,
+    </>
   )
 }
