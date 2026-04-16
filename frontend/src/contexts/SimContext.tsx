@@ -382,21 +382,26 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
 
   // --- Effects ---
 
-  // Poll cooldown — only after the user has a simulated position
-  const hasPosition = sim.currentPosition != null
+  // Listen for cooldown updates via WebSocket (replaces polling).
+  // One initial GET on mount to sync state, then all updates come via WS.
   useEffect(() => {
-    if (!subscribe || !hasPosition) return
-    const id = setInterval(() => {
-      api.getCooldownStatus().then((s: any) => {
-        const next = s.remaining_seconds ?? 0
-        setCooldown((prev) => Math.round(prev) === Math.round(next) ? prev : next)
-        if (typeof s.enabled === 'boolean') {
-          setCooldownEnabled((prev) => prev === s.enabled ? prev : s.enabled)
-        }
-      }).catch(() => {})
-    }, 2000)
-    return () => clearInterval(id)
-  }, [subscribe, hasPosition])
+    // Initial sync
+    api.getCooldownStatus().then((s: any) => {
+      setCooldown(s.remaining_seconds ?? 0)
+      if (typeof s.enabled === 'boolean') setCooldownEnabled(s.enabled)
+    }).catch(() => {})
+
+    if (!subscribe) return
+    return subscribe((msg) => {
+      if (msg.type !== 'cooldown_update') return
+      const d = msg.data
+      const next = d.remaining_seconds ?? 0
+      setCooldown((prev) => Math.round(prev) === Math.round(next) ? prev : next)
+      if (typeof d.enabled === 'boolean') {
+        setCooldownEnabled((prev) => prev === d.enabled ? prev : d.enabled)
+      }
+    })
+  }, [subscribe])
 
   // --- Derived values ---
 

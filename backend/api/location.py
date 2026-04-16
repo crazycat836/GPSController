@@ -415,6 +415,7 @@ async def cooldown_settings(req: CooldownSettings):
     cd.enabled = req.enabled
     if not req.enabled:
         await cd.dismiss()
+    await cd._emit()
     return {"enabled": cd.enabled}
 
 
@@ -422,6 +423,7 @@ async def cooldown_settings(req: CooldownSettings):
 async def cooldown_dismiss():
     cd = _cooldown()
     await cd.dismiss()
+    await cd._emit()
     return {"status": "dismissed"}
 
 
