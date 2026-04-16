@@ -151,8 +151,6 @@ const MapView: React.FC<MapViewProps> = ({
       // would collide with the overlay).
       zoomControl: false,
     });
-    const zoomCtrl = L.control.zoom({ position: 'bottomright' });
-    zoomCtrl.addTo(map);
     // Nudge the whole topleft control cluster down below the FloatingPanel
     // (panel sits at top ~56px, ~320px tall max). Position below panel area.
     const topLeftEl = (map as any)._controlCorners?.topleft as HTMLElement | undefined;
@@ -707,37 +705,54 @@ const MapView: React.FC<MapViewProps> = ({
     <div className="map-container" style={{ position: 'relative', flex: 1 }}>
       <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* Recenter on user position — left side, below the zoom control. */}
-      <button
-        onClick={recenter}
-        disabled={!currentPosition}
-        title={t('map.recenter')}
+      {/* Map controls — recenter + zoom in/out */}
+      <div
         className="surface-control"
         style={{
-          position: 'absolute',
-          left: 10,
-          top: 132,
-          zIndex: 1001,
-          width: 34,
-          height: 34,
-          borderRadius: 'var(--radius-md)',
-          color: currentPosition ? '#6c8cff' : 'var(--color-text-3)',
-          cursor: currentPosition ? 'pointer' : 'not-allowed',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 0,
-          opacity: currentPosition ? 1 : 0.4,
+          position: 'absolute', bottom: 40, right: 12, zIndex: 1000,
+          display: 'flex', flexDirection: 'column',
+          borderRadius: 'var(--radius-md)', overflow: 'hidden',
+          width: 36,
         }}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="3" />
-          <line x1="12" y1="2" x2="12" y2="5" />
-          <line x1="12" y1="19" x2="12" y2="22" />
-          <line x1="2" y1="12" x2="5" y2="12" />
-          <line x1="19" y1="12" x2="22" y2="12" />
-        </svg>
-      </button>
+        <button
+          onClick={recenter}
+          disabled={!currentPosition}
+          title={t('map.recenter')}
+          className="flex items-center justify-center cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors disabled:cursor-not-allowed"
+          style={{
+            width: 36, height: 36, border: 'none', background: 'transparent',
+            color: currentPosition ? 'var(--color-accent)' : 'var(--color-text-3)',
+            opacity: currentPosition ? 1 : 0.4,
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <line x1="12" y1="2" x2="12" y2="5" />
+            <line x1="12" y1="19" x2="12" y2="22" />
+            <line x1="2" y1="12" x2="5" y2="12" />
+            <line x1="19" y1="12" x2="22" y2="12" />
+          </svg>
+        </button>
+        <div style={{ height: 1, background: 'var(--color-border)' }} />
+        <button
+          onClick={() => mapRef.current?.zoomIn()}
+          title="Zoom in"
+          className="flex items-center justify-center cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors"
+          style={{ width: 36, height: 36, border: 'none', background: 'transparent', color: 'var(--color-text-1)', fontSize: 18, fontWeight: 300 }}
+        >
+          +
+        </button>
+        <div style={{ height: 1, background: 'var(--color-border)' }} />
+        <button
+          onClick={() => mapRef.current?.zoomOut()}
+          title="Zoom out"
+          className="flex items-center justify-center cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors"
+          style={{ width: 36, height: 36, border: 'none', background: 'transparent', color: 'var(--color-text-1)', fontSize: 18, fontWeight: 300 }}
+        >
+          −
+        </button>
+      </div>
 
       {contextMenu.visible && (
         <div
