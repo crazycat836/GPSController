@@ -107,9 +107,9 @@
 - **評估：** 這是安全疏失，但不是惡意行為。這是 GPS 工具在設計上的便利性選擇，實際上沒有在向外竊取資料。
 - **建議修復：** 將 `config.py` 的 `API_HOST` 改為 `127.0.0.1`
 
-#### HIGH — `LocWarp.bat` 硬編碼了開發者的 Python 路徑
+#### HIGH — `GPSController.bat` 硬編碼了開發者的 Python 路徑
 
-- **檔案：** `LocWarp.bat` 第 18 行
+- **檔案：** `GPSController.bat` 第 18 行
 - **說明：** `"C:\Users\USER\AppData\Local\Programs\Python\Python312\python.exe" start.py` — 這個路徑是開發者自己電腦的 Python 安裝路徑（`USER` 顯然是未替換的佔位名稱），在你的電腦上不存在這個路徑時，此批次腳本會無聲失敗或報錯。
 - **評估：** 開發上的疏忽，不是惡意程式碼，但在不同使用者電腦上可靠性差。
 
@@ -125,10 +125,10 @@
 - **說明：** 連接 iOS 17+ 裝置時，若未掛載 DDI，程式會透過 `pymobiledevice3` 的 `auto_mount_personalized` 函式從 GitHub 下載約 20MB 的 Personalized Developer Disk Image。
 - **評估：** 這是 `pymobiledevice3` 函式庫的合法功能，等同於 Xcode 在連接裝置時自動安裝 DevTools 的行為。
 
-#### MEDIUM — `wifi_tunnel.py` 將通道資訊寫入 `~/.locwarp/`
+#### MEDIUM — `wifi_tunnel.py` 將通道資訊寫入 `~/.gpscontroller/`
 
 - **檔案：** `wifi_tunnel.py` 第 73-78 行
-- **說明：** JSON 檔案包含 `rsd_address` 和 `rsd_port`，寫入使用者主目錄的 `~/.locwarp/` 資料夾。
+- **說明：** JSON 檔案包含 `rsd_address` 和 `rsd_port`，寫入使用者主目錄的 `~/.gpscontroller/` 資料夾。
 - **評估：** 正常的 IPC（進程間通訊）機制，後端讀取這個檔案以自動完成 Wi-Fi 連接，不是資料滲漏。
 
 #### LOW — 後端 API 無驗證機制
@@ -140,18 +140,18 @@
 #### LOW — `UpdateChecker.tsx` 對 GitHub API 發出請求
 
 - **檔案：** `frontend/src/components/UpdateChecker.tsx` 第 9 行
-- **說明：** 前端啟動時向 `https://api.github.com/repos/keezxc1223/locwarp/releases/latest` 發出 GET 請求檢查版本。
+- **說明：** 前端啟動時向 `https://api.github.com/repos/keezxc1223/gpscontroller/releases/latest` 發出 GET 請求檢查版本。
 - **評估：** 完全正常的更新檢查行為，不執行任何從網路取回的程式碼。
 
 #### LOW — Electron 的 User-Agent 欺騙
 
 - **檔案：** `frontend/electron/main.js` 第 85-87 行
-- **說明：** 當 Electron 向 OpenStreetMap tile 伺服器發出請求時，替換 User-Agent 為 `LocWarp/0.1.49`。
+- **說明：** 當 Electron 向 OpenStreetMap tile 伺服器發出請求時，替換 User-Agent 為 `GPSController/0.1.49`。
 - **評估：** 符合 OSM 使用政策的合規做法，不是惡意行為。
 
 #### LOW — 管理員權限申請
 
-- **檔案：** `LocWarp.bat` 第 8-13 行、`wifi-tunnel.spec` 第 36 行
+- **檔案：** `GPSController.bat` 第 8-13 行、`wifi-tunnel.spec` 第 36 行
 - **說明：** 批次腳本透過 VBScript 請求 UAC 提升為管理員，這是 iOS 17+ Wi-Fi Tunnel 建立 TUN 介面所必需的。
 - **評估：** 合理的需求，不是惡意提權。
 
@@ -169,7 +169,7 @@
 
 ### 硬編碼密鑰/憑證掃描
 
-全域搜尋結果：未發現任何硬編碼的 API 金鑰、密碼、Token 或私鑰。`~/.locwarp/` 目錄只儲存用戶設定（書籤、路線、位置設定）和日誌，不儲存憑證。
+全域搜尋結果：未發現任何硬編碼的 API 金鑰、密碼、Token 或私鑰。`~/.gpscontroller/` 目錄只儲存用戶設定（書籤、路線、位置設定）和日誌，不儲存憑證。
 
 ### 供應鏈風險
 
@@ -186,7 +186,7 @@
 | `nominatim.openstreetmap.org` | 地址搜尋/反向地理編碼 | 使用者搜尋地址時 |
 | `router.project-osrm.org` | 路線規劃 | 使用導航功能時 |
 | `*.tile.openstreetmap.org` / `*.tile.openstreetmap.fr` | 地圖圖磚 | 顯示地圖時 |
-| `api.github.com/repos/keezxc1223/locwarp` | 版本更新檢查 | 應用啟動時一次 |
+| `api.github.com/repos/keezxc1223/gpscontroller` | 版本更新檢查 | 應用啟動時一次 |
 
 ---
 

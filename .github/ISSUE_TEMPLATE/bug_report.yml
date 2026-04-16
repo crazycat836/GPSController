@@ -4,9 +4,9 @@ title: "[Bug] "
 labels: ["bug"]
 body:
   - type: input
-    id: locwarp-version
+    id: gpscontroller-version
     attributes:
-      label: LocWarp 版本
+      label: GPSController 版本
       placeholder: 例如 v0.1.16
     validations:
       required: true

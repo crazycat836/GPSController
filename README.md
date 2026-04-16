@@ -1,4 +1,4 @@
-# LocWarp
+# GPSController
 
 **iOS 虛擬定位模擬器**, 在 Windows 上控制 iPhone 的 GPS 定位,支援直接跳點、導航、路線循環、多點停留、隨機漫步、搖桿操作等模擬模式,可經由 USB 或 WiFi 連線。
 
@@ -9,16 +9,16 @@
 
 > ### 專案性質聲明
 >
-> LocWarp 為個人獨立維護之開源專案(hobby project),非商業產品,亦無專職團隊。開發者將盡力於合理時間內新增功能、回應 Issue、修復 Bug 並隨 iOS / pymobiledevice3 版本演進持續更新,然:
+> GPSController 為個人獨立維護之開源專案(hobby project),非商業產品,亦無專職團隊。開發者將盡力於合理時間內新增功能、回應 Issue、修復 Bug 並隨 iOS / pymobiledevice3 版本演進持續更新,然:
 >
 > - 本專案僅保證**於開發者本人測試環境**(目前為 iPhone 16 Pro Max / iOS 26.4.1 + Windows 11 專業版)下運作正常;
 > - **不保證於其他裝置、iOS 修補版本、網路環境、系統配置下皆能穩定使用**;
-> - 若遇到問題,歡迎至 [Issues](https://github.com/keezxc1223/locwarp/issues) 提交完整環境資訊與日誌,以協助定位與改善;
+> - 若遇到問題,歡迎至 [Issues](https://github.com/keezxc1223/gpscontroller/issues) 提交完整環境資訊與日誌,以協助定位與改善;
 > - 本專案不保證永續維護,亦不承擔因使用本工具所生之任何責任。
 
 > ### 系統需求
 >
-> **LocWarp 自 v0.1.49 起僅支援 iOS / iPadOS 17 以上的裝置。**
+> **GPSController 自 v0.1.49 起僅支援 iOS / iPadOS 17 以上的裝置。**
 >
 > iOS 17+ 為主要支援版本(開發者日常測試);**iOS 16.x 自 v0.2.5 起由 @bitifyChen (#9) 社群維護**,走 LegacyLocationService 路徑,最低門檻為 iOS 16.0。iOS 15 以下不受支援。
 
@@ -35,28 +35,28 @@
 > | **18.5**(iPadOS) | 社群使用者回報 | ![Reported](https://img.shields.io/badge/回報可用-6c8cff?style=flat-square) |
 > | **18.1.1** | 社群使用者回報 | ![Reported](https://img.shields.io/badge/回報可用-6c8cff?style=flat-square) |
 > | **17.6.1** | 社群使用者回報 | ![Reported](https://img.shields.io/badge/回報可用-6c8cff?style=flat-square) |
-> | **16.7.12**(社群維護) | @bitifyChen · [#9](https://github.com/keezxc1223/locwarp/pull/9) | ![Community](https://img.shields.io/badge/社群維護-ffa726?style=flat-square) |
+> | **16.7.12**(社群維護) | @bitifyChen · [#9](https://github.com/keezxc1223/gpscontroller/pull/9) | ![Community](https://img.shields.io/badge/社群維護-ffa726?style=flat-square) |
 > | **15.x 及以下** | n/a | ![Unsupported](https://img.shields.io/badge/不支援-f44336?style=flat-square) |
 >
 > **說明**:上表僅彙整開發者實測與少數社群回饋的結果,**並不保證於所有相同版本的裝置、網路環境或系統組合下皆能正常運作**。iOS 虛擬定位的穩定性高度依賴 iOS 修補版本、pymobiledevice3 對該版本的支援程度、Developer Disk Image 是否成功掛載,以及 Windows 端的驅動、VPN、防火牆、AV 配置。因此「回報可用」僅代表**至少一位使用者在其特定環境下成功運作**,不等同於通用相容性聲明。
 >
-> 未列於上表的 iOS 17+ 版本並非確定不相容,僅表示尚未收到回報。使用前請自行評估風險,若遇到問題、發現 Bug 或確認某版本可用,歡迎至 [Issues](https://github.com/keezxc1223/locwarp/issues) 提出以協助累積相容性資料。
+> 未列於上表的 iOS 17+ 版本並非確定不相容,僅表示尚未收到回報。使用前請自行評估風險,若遇到問題、發現 Bug 或確認某版本可用,歡迎至 [Issues](https://github.com/keezxc1223/gpscontroller/issues) 提出以協助累積相容性資料。
 
 <p align="center">
-  <img src="frontend/build/icon.png" width="128" alt="LocWarp">
+  <img src="frontend/build/icon.png" width="128" alt="GPSController">
 </p>
 
 <p align="center">
   <a href="#使用者端需求">
     <img alt="使用者端說明" src="https://img.shields.io/badge/使用者端說明-2d3748?style=for-the-badge&logo=readthedocs&logoColor=white">
   </a>
-  <a href="https://github.com/keezxc1223/locwarp/releases">
+  <a href="https://github.com/keezxc1223/gpscontroller/releases">
     <img alt="下載安裝檔" src="https://img.shields.io/badge/下載安裝檔-4285f4?style=for-the-badge&logo=github&logoColor=white">
   </a>
 </p>
 
 <p align="center">
-  <img src="docs/demo-v2.gif" width="720" alt="LocWarp demo">
+  <img src="docs/demo-v2.gif" width="720" alt="GPSController demo">
 </p>
 
 ---
@@ -134,10 +134,10 @@
 
 - 啟動時 backend race condition 自動重試(最多 ~20 秒緩衝),無需手動重開
 - WebSocket 即時推播位置、進度、ETA、剩餘距離、裝置連線狀態、DDI 掛載進度
-- **Log 資料夾**按鈕(狀態列):一鍵開啟 `~/.locwarp/logs/` 資料夾,方便將 backend.log 附到 Issue
+- **Log 資料夾**按鈕(狀態列):一鍵開啟 `~/.gpscontroller/logs/` 資料夾,方便將 backend.log 附到 Issue
 - 右下角顯示**目前 App 版本**
 - 介面語言:繁體中文 / English 即時切換
-- 所有狀態(座標收藏、設定、tunnel 資訊)寫在 `~/.locwarp/`
+- 所有狀態(座標收藏、設定、tunnel 資訊)寫在 `~/.gpscontroller/`
 
 ---
 
@@ -220,7 +220,7 @@
 - **WebSocket 位置推播**:backend 每 tick(`update_interval` 由速度 profile 決定)發 `position_update` 事件,前端即時更新地圖游標 + ETA bar
 - **速度解析**:`config.resolve_speed_profile(mode, speed_kmh, speed_min_kmh, speed_max_kmh)` 統一處理「模式預設 / 固定自訂 / 隨機範圍」三種輸入,優先序 `range > 固定 > 預設`
 - **In-process WiFi tunnel**:backend 自 v0.2.3 起直接在主 event loop 內執行 `start_tcp_tunnel()`,不再 spawn 獨立 helper exe
-- **Runtime 狀態目錄**:一律寫入 `~/.locwarp/`(bookmarks / settings / tunnel info),避免 PyInstaller 的 `_MEIPASS` 臨時目錄問題
+- **Runtime 狀態目錄**:一律寫入 `~/.gpscontroller/`(bookmarks / settings / tunnel info),避免 PyInstaller 的 `_MEIPASS` 臨時目錄問題
 - **Tile referer / OSM 替換**:OSM 的 tile 服務封鎖散佈型應用,已改用 CartoDB(OSM 資料源、CARTO 代管 CDN、免 referer)
 
 ---
@@ -248,7 +248,7 @@ npm install
 
 ### 啟動(開發模式)
 
-雙擊 `LocWarp.bat`, 會自動提權並呼叫 `start.py`,同時啟動:
+雙擊 `GPSController.bat`, 會自動提權並呼叫 `start.py`,同時啟動:
 - backend(`:8777`)
 - Vite dev server(`:5173`)
 - Electron(載入 dev server)
@@ -281,9 +281,9 @@ build-installer.bat
 ```
 
 依序執行:
-1. **PyInstaller(3.13)** 編譯 backend(含 WiFi tunnel)→ `dist-py/locwarp-backend/`
+1. **PyInstaller(3.13)** 編譯 backend(含 WiFi tunnel)→ `dist-py/gpscontroller-backend/`
 2. **Vite** 建置前端 → `frontend/dist/`
-3. **electron-builder** 產出 NSIS 安裝檔 → `frontend/release/LocWarp Setup X.Y.Z.exe`(~110 MB)
+3. **electron-builder** 產出 NSIS 安裝檔 → `frontend/release/GPSController Setup X.Y.Z.exe`(~110 MB)
 
 產物為單一 exe,使用者無需安裝 Python / Node / 任何套件。
 
@@ -291,7 +291,7 @@ build-installer.bat
 
 ## 使用者端需求
 
-**[下載安裝檔](https://github.com/keezxc1223/locwarp/releases)**
+**[下載安裝檔](https://github.com/keezxc1223/gpscontroller/releases)**
 
 使用安裝檔的使用者需要以下四項前置:
 
@@ -301,11 +301,11 @@ Windows 需要 Apple 的 USB driver 才能與 iPhone 溝通。
 
 - **下載(必裝)**:[iTunes for Windows (64-bit)](https://secure-appldnld.apple.com/itunes12/047-76416-20260302-fefe4356-211d-4da1-8bc4-058eb36ea803/iTunes64Setup.exe)
 
-> **注意:** 請勿使用 Microsoft Store 的「Apple Devices」, 該版本**不相容**,LocWarp 會抓不到裝置。必須裝上面連結的傳統版 iTunes。
+> **注意:** 請勿使用 Microsoft Store 的「Apple Devices」, 該版本**不相容**,GPSController 會抓不到裝置。必須裝上面連結的傳統版 iTunes。
 
 ### 2. USB 連接並信任此電腦
 
-首次使用前,用 USB 線接上 iPhone,iPhone 會跳「要信任這部電腦嗎?」,點 **信任** 並輸入密碼。這會產生 pair record,後續 LocWarp 才能與裝置通訊。
+首次使用前,用 USB 線接上 iPhone,iPhone 會跳「要信任這部電腦嗎?」,點 **信任** 並輸入密碼。這會產生 pair record,後續 GPSController 才能與裝置通訊。
 
 ### 3. 開啟開發人員模式(iOS 16+)
 
@@ -318,7 +318,7 @@ iPhone 上:**設定 → 隱私權與安全性 → 開發者模式 → 開啟**
 若要拔掉 USB 改走無線連線:
 - iPhone 與電腦必須在**同一個 WiFi 網段**
 - 第一次仍需要先用 USB 配對過(步驟 2)
-- LocWarp 內按 **Start WiFi Tunnel** 會建立 RSD tunnel,之後 USB 可拔除
+- GPSController 內按 **Start WiFi Tunnel** 會建立 RSD tunnel,之後 USB 可拔除
 
 #### 連線模式差異
 
@@ -331,21 +331,21 @@ iPhone 上:**設定 → 隱私權與安全性 → 開發者模式 → 開啟**
 >
 > 建議執行以下任一設定以避免連線中斷:
 > - **關閉自動鎖定**:設定 → 顯示與亮度 → 自動鎖定 → **永不**
-> - **保持 LocWarp 相關畫面於前景執行**(避免系統進入低功耗模式)
+> - **保持 GPSController 相關畫面於前景執行**(避免系統進入低功耗模式)
 > - **連接充電線並維持螢幕常亮**
 >
 > 若僅透過 USB 連線使用,則無此限制,iPhone 可正常鎖屏不影響定位模擬。
 
 ---
 
-安裝後桌面/開始選單出現 **LocWarp** 捷徑。開啟時會要求管理員權限(WiFi tunnel 建 TUN 介面必需)。
+安裝後桌面/開始選單出現 **GPSController** 捷徑。開啟時會要求管理員權限(WiFi tunnel 建 TUN 介面必需)。
 
 ---
 
 ## 專案結構
 
 ```
-locwarp/
+gpscontroller/
 ├── backend/                 # FastAPI + pymobiledevice3
 │   ├── api/                 # HTTP endpoints
 │   ├── core/                # Simulation engine + handlers
@@ -360,7 +360,7 @@ locwarp/
 │   ├── models/schemas.py    # Pydantic models
 │   ├── config.py            # Speed profiles, cooldown table
 │   ├── main.py              # Entrypoint
-│   └── locwarp-backend.spec # PyInstaller spec
+│   └── gpscontroller-backend.spec # PyInstaller spec
 │
 ├── frontend/                # Electron + React
 │   ├── electron/main.js     # Electron entry, spawns backend in packaged mode
@@ -372,9 +372,9 @@ locwarp/
 │   ├── build/icon.ico       # App icon
 │   └── package.json         # electron-builder config
 │
-├── start.py                 # Dev launcher (used by LocWarp.bat)
+├── start.py                 # Dev launcher (used by GPSController.bat)
 ├── stop.py
-├── LocWarp.bat              # Dev entry (auto-elevates)
+├── GPSController.bat              # Dev entry (auto-elevates)
 └── build-installer.bat      # Build installer (one-shot)
 ```
 
@@ -385,7 +385,7 @@ locwarp/
 | 症狀 | 可能原因 / 解法 |
 | --- | --- |
 | Tunnel 啟動後 backend 連不上 | 確認以系統管理員身份啟動 |
-| `No such service: com.apple.instruments.dtservicehub` (iOS 17+/26) | LocWarp 會自動嘗試掛載 Developer Disk Image;若仍失敗,請:(1) 設定 → 隱私權與安全性 → **開發者模式** 關閉,重開機,再次開啟;(2) 確認可連線至 github.com(DDI 由此下載,約 20MB);(3) 拔除重插裝置再試。v0.1.34 起會自動回退到 legacy `com.apple.dt.simulatelocation` 服務。 |
+| `No such service: com.apple.instruments.dtservicehub` (iOS 17+/26) | GPSController 會自動嘗試掛載 Developer Disk Image;若仍失敗,請:(1) 設定 → 隱私權與安全性 → **開發者模式** 關閉,重開機,再次開啟;(2) 確認可連線至 github.com(DDI 由此下載,約 20MB);(3) 拔除重插裝置再試。v0.1.34 起會自動回退到 legacy `com.apple.dt.simulatelocation` 服務。 |
 | DDI 下載卡住 / 逾時 | 檢查網路是否可到達 github.com;公司或校園網路可能封鎖 raw.githubusercontent.com。 |
 | **開發者模式未顯示**(iOS 16+) | 需先讓裝置被任一自簽 IPA 部署過,設定中方會出現該選項。請見下方 [附錄:iPhone 開啟開發者模式(Windows 流程)](#附錄iphone-開啟開發者模式windows-流程)。 |
 
@@ -403,7 +403,7 @@ iOS 16+ 的「設定 → 隱私權與安全性 → 開發者模式」預設**不
 6. iPhone 上 設定 → 隱私權與安全性 → 滑至底部 → 會出現「**開發者模式**」。開啟該開關。
 7. 系統提示重新啟動,重啟後再次確認開發者模式為開啟狀態。
 
-完成後即可回到 LocWarp 建立連線。首次連線時,LocWarp 會視需要自動下載並掛載 Developer Disk Image。
+完成後即可回到 GPSController 建立連線。首次連線時,GPSController 會視需要自動下載並掛載 Developer Disk Image。
 
 > 本流程參考自社群使用者回饋,感謝分享。
 
@@ -435,7 +435,7 @@ iOS 16+ 的「設定 → 隱私權與安全性 → 開發者模式」預設**不
 - 程式非正常結束時殘留的 TUN 介面需重新啟動系統始能清除
 - 連線中斷時需手動重試或重啟應用程式
 
-使用者應自行評估上述風險並承擔因此所產生之任何後果。本專案僅操作本身所建立之臨時網路介面與自身設定檔(位於 `~/.locwarp/`),**不會修改 iOS 裝置內任何使用者資料,亦不會變更作業系統核心檔案或既有裝置配對記錄**。
+使用者應自行評估上述風險並承擔因此所產生之任何後果。本專案僅操作本身所建立之臨時網路介面與自身設定檔(位於 `~/.gpscontroller/`),**不會修改 iOS 裝置內任何使用者資料,亦不會變更作業系統核心檔案或既有裝置配對記錄**。
 
 ### 4. 地圖資料準確性
 

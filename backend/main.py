@@ -16,9 +16,18 @@ from services.bookmarks import BookmarkManager
 from services.coord_format import CoordinateFormatter
 from services.reconnect import ReconnectManager
 
-# Configure logging — console + rotating file in ~/.locwarp/logs/
+# Migrate legacy ~/.locwarp → ~/.gpscontroller if needed
+_old_data_dir = Path.home() / ".locwarp"
+_new_data_dir = Path.home() / ".gpscontroller"
+if _old_data_dir.exists() and not _new_data_dir.exists():
+    try:
+        _old_data_dir.rename(_new_data_dir)
+    except OSError:
+        pass  # cross-device or permission issue — ignore, will create fresh
+
+# Configure logging — console + rotating file in ~/.gpscontroller/logs/
 _log_fmt = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"
-_log_dir = Path.home() / ".locwarp" / "logs"
+_log_dir = _new_data_dir / "logs"
 try:
     _log_dir.mkdir(parents=True, exist_ok=True)
     _file_handler = RotatingFileHandler(
@@ -33,7 +42,7 @@ try:
 except Exception:
     _handlers = [logging.StreamHandler()]
 logging.basicConfig(level=logging.INFO, format=_log_fmt, handlers=_handlers, force=True)
-logger = logging.getLogger("locwarp")
+logger = logging.getLogger("gpscontroller")
 
 
 class AppState:
@@ -307,7 +316,7 @@ async def _usbmux_presence_watchdog():
 async def lifespan(application: FastAPI):
     import asyncio
     # ── Startup ──
-    logger.info("LocWarp starting — scanning for devices…")
+    logger.info("GPSController starting — scanning for devices…")
     try:
         devices = await app_state.device_manager.discover_devices()
         if devices:
@@ -334,12 +343,12 @@ async def lifespan(application: FastAPI):
 
     app_state.save_settings()
     await app_state.device_manager.disconnect_all()
-    logger.info("LocWarp shut down")
+    logger.info("GPSController shut down")
 
 
 # ── FastAPI app ───────────────────────────────────────────
 
-app = FastAPI(title="LocWarp", version="0.1.0", description="iOS Virtual Location Simulator", lifespan=lifespan)
+app = FastAPI(title="GPSController", version="0.2.19", description="iOS Virtual Location Simulator", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -370,7 +379,7 @@ app.include_router(ws_router)
 @app.get("/")
 async def root():
     return {
-        "name": "LocWarp",
+        "name": "GPSController",
         "version": "0.1.0",
         "status": "running",
         "initial_position": app_state.get_initial_position(),

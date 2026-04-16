@@ -1,7 +1,7 @@
 # GPSController 功能分析報告
 
 **分析日期：** 2026-04-15
-**範圍：** MAC 版、Windows 版（LocWarp）
+**範圍：** MAC 版、Windows 版（GPSController）
 
 ---
 
@@ -79,7 +79,7 @@
 
 ---
 
-## Windows 版（LocWarp）
+## Windows 版（GPSController）
 
 **架構：** Python (FastAPI/uvicorn) 後端 `0.0.0.0:8777` + Electron/React/TypeScript 前端
 **主要檔案：** `backend/` 目錄（~30 個 Python 檔案）+ `frontend/` 目錄（React 組件）
@@ -192,7 +192,7 @@
 | UpdateChecker | 版本更新提示 |
 | LangToggle | 語言切換 |
 
-### 存儲位置（`~/.locwarp/`）
+### 存儲位置（`~/.gpscontroller/`）
 
 | 檔案 | 內容 |
 |------|------|
@@ -206,7 +206,7 @@
 
 ## 兩版對比總結
 
-| 面向 | MAC 版 | Windows 版（LocWarp） |
+| 面向 | MAC 版 | Windows 版（GPSController） |
 |------|--------|----------------------|
 | **架構** | Python aiohttp + 純 HTML/JS | Python FastAPI + Electron/React/TS |
 | **位置模式** | 單點設定 + 巡航（前端插值） | 瞬移 / 導航 / 循環 / 多站點 / 隨機漫步 / 搖桿（6 種） |

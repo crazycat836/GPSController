@@ -1,4 +1,4 @@
-"""LocWarp core simulation modules."""
+"""GPSController core simulation modules."""
 
 from core.simulation_engine import SimulationEngine, EtaTracker
 from core.teleport import TeleportHandler

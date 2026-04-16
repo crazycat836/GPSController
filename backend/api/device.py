@@ -75,7 +75,7 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
             detail={
                 "code": "ios_unsupported",
                 "message": (
-                    f"偵測到 iOS {e.version},LocWarp 自 v0.1.49 起僅支援 "
+                    f"偵測到 iOS {e.version},GPSController 自 v0.1.49 起僅支援 "
                     f"iOS {UnsupportedIosVersionError.MIN_VERSION} 以上。"
                     f"請將裝置升級至 iOS {UnsupportedIosVersionError.MIN_VERSION} 或更新版本後再連線。"
                 ),
@@ -664,7 +664,7 @@ async def connect_device(udid: str):
             detail={
                 "code": "ios_unsupported",
                 "message": (
-                    f"偵測到 iOS {e.version},LocWarp 自 v0.1.49 起僅支援 "
+                    f"偵測到 iOS {e.version},GPSController 自 v0.1.49 起僅支援 "
                     f"iOS {UnsupportedIosVersionError.MIN_VERSION} 以上。"
                     f"請將裝置升級至 iOS {UnsupportedIosVersionError.MIN_VERSION} 或更新版本後再連線。"
                 ),
