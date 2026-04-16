@@ -1,7 +1,10 @@
-import { X, Dices } from 'lucide-react'
+import React, { useState } from 'react'
+import { X, Star, Dices, Locate, MapPin, Flag, ChevronDown } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
+import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT } from '../../i18n'
 import PauseControl from '../PauseControl'
+import RouteCard, { type RoutePoint } from '../RouteCard'
 
 interface WaypointListProps {
   mode: 'loop' | 'multistop'
@@ -20,125 +23,179 @@ export default function WaypointList({ mode }: WaypointListProps) {
     handleClearWaypoints,
     isRunning,
   } = useSimContext()
+  const { handleAddBookmark } = useBookmarkContext()
   const t = useT()
+  const [genOpen, setGenOpen] = useState(false)
 
   const pauseValue = mode === 'loop' ? sim.pauseLoop : sim.pauseMultiStop
   const pauseOnChange = mode === 'loop' ? sim.setPauseLoop : sim.setPauseMultiStop
   const pauseLabelKey = mode === 'loop' ? 'pause.loop' as const : 'pause.multi_stop' as const
 
+  /* ── Build route points from waypoints ── */
+  const seg = sim.waypointProgress?.current
+  const points: RoutePoint[] = sim.waypoints.map((wp: { lat: number; lng: number }, i: number) => {
+    const approaching = seg != null && i === seg + 1
+    const passed = seg != null && i <= seg
+    const isStart = i === 0
+    const isLast = i === sim.waypoints.length - 1
+
+    let label: string
+    let iconColor: string
+    let icon: React.ReactNode
+
+    if (isStart) {
+      label = t('panel.waypoint_start')
+      iconColor = passed ? 'var(--color-text-3)' : 'var(--color-success)'
+      icon = <Locate className="w-3 h-3" style={{ color: iconColor }} />
+    } else if (isLast && mode === 'multistop') {
+      label = `#${i}`
+      iconColor = approaching ? 'var(--color-device-b)' : passed ? 'var(--color-text-3)' : 'var(--color-danger)'
+      icon = <Flag className="w-3 h-3" style={{ color: iconColor }} />
+    } else {
+      label = `#${i}`
+      iconColor = approaching ? 'var(--color-device-b)' : passed ? 'var(--color-text-3)' : 'var(--color-device-b)'
+      icon = <MapPin className="w-3 h-3" style={{ color: iconColor }} />
+    }
+
+    return {
+      id: `wp-${i}`,
+      label,
+      position: wp,
+      icon,
+      labelColor: approaching ? 'var(--color-device-b)' : passed ? 'var(--color-text-3)' : undefined,
+      coordColor: passed ? 'var(--color-text-3)' : undefined,
+      actions: (
+        <div className="flex items-center gap-0.5">
+          <button
+            className="shrink-0 p-1 rounded-md transition-colors hover:opacity-80 cursor-pointer"
+            style={{ color: 'var(--color-warning, #f5a623)' }}
+            onClick={() => handleAddBookmark(wp.lat, wp.lng)}
+            title={t('map.add_bookmark')}
+          >
+            <Star size={12} />
+          </button>
+          <button
+            className="p-1 rounded-md text-[var(--color-text-3)] hover:text-[var(--color-danger)]
+                       hover:bg-[var(--color-danger-dim)] transition-colors cursor-pointer"
+            onClick={() => handleRemoveWaypoint(i)}
+            title={t('panel.waypoints_remove')}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      ),
+    } satisfies RoutePoint
+  })
+
+  /* ── Collapsible generation controls ── */
+  const genHeader = (
+    <>
+      {/* Toggle button */}
+      <button
+        className="seg-row seg-row-compact"
+        style={{
+          width: '100%',
+          cursor: 'pointer',
+          background: 'none',
+          border: 'none',
+          borderTop: '1px solid var(--color-border-subtle)',
+          justifyContent: 'center',
+          gap: 4,
+        }}
+        onClick={() => setGenOpen(prev => !prev)}
+      >
+        <Dices size={11} style={{ color: 'var(--color-text-3)' }} />
+        <span className="seg-unit">{t('panel.waypoints_generate')}</span>
+        <ChevronDown
+          size={12}
+          style={{
+            color: 'var(--color-text-3)',
+            transform: genOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 150ms',
+          }}
+        />
+      </button>
+
+      {genOpen && (
+        <>
+          {/* Radius + Count */}
+          <div className="seg-row" style={{ borderTop: '1px solid var(--color-border-subtle)' }}>
+            <span className="seg-label">{t('panel.waypoints_radius')}</span>
+            <input
+              type="number"
+              min={10}
+              value={wpGenRadius}
+              onChange={(e) => setWpGenRadius(Math.max(1, parseInt(e.target.value) || 0))}
+              className="seg-input w-16 text-right"
+            />
+            <span className="seg-unit">m</span>
+            <span className="mx-1" />
+            <span className="seg-label">{t('panel.waypoints_count')}</span>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={wpGenCount}
+              onChange={(e) => setWpGenCount(Math.max(1, parseInt(e.target.value) || 0))}
+              className="seg-input w-14 text-right"
+            />
+            <span className="seg-unit">{t('panel.points')}</span>
+          </div>
+
+          {/* Generate buttons */}
+          <div className="seg-row seg-row-compact" style={{ justifyContent: 'center', gap: '4px' }}>
+            <button
+              className="seg-text-btn"
+              onClick={handleGenerateRandomWaypoints}
+              title={t('panel.waypoints_gen_tooltip')}
+            >
+              <Dices size={11} />
+              {t('panel.waypoints_generate')}
+            </button>
+            <button
+              className="seg-text-btn"
+              onClick={handleGenerateAllRandom}
+              title={t('panel.waypoints_gen_all_tooltip')}
+            >
+              <Dices size={11} />
+              {t('panel.waypoints_generate_all')}
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  )
+
+  /* ── Footer: empty hint or clear button ── */
+  const listFooter = points.length === 0 ? (
+    <div className="seg-row seg-row-compact" style={{ justifyContent: 'center' }}>
+      <span className="seg-unit">{t('panel.waypoints_empty')}</span>
+    </div>
+  ) : (
+    <div className="seg-row seg-row-compact" style={{ justifyContent: 'center' }}>
+      <button
+        className="seg-text-btn text-[var(--color-text-3)] hover:text-[var(--color-danger)]"
+        onClick={handleClearWaypoints}
+        disabled={isRunning}
+      >
+        {t('generic.clear')}
+      </button>
+    </div>
+  )
+
   return (
     <>
-      {/* ── Waypoints ── */}
-      <div className="seg">
-        {/* Header */}
-        <div className="seg-row">
-          <span className="seg-label">{t('panel.waypoints')} ({sim.waypoints.length})</span>
-          <span className="seg-unit ml-auto">{t('panel.waypoints_hint')}</span>
-        </div>
+      <RouteCard
+        title={`${t('panel.waypoints')} (${sim.waypoints.length})`}
+        titleExtra={<span className="seg-unit ml-auto">{t('panel.waypoints_hint')}</span>}
+        header={genHeader}
+        points={points}
+        maxVisible={5}
+        compact
+        footer={listFooter}
+      />
 
-        {/* Generation: Radius + Count — inline label+input pattern */}
-        <div className="seg-row">
-          <span className="seg-label">{t('panel.waypoints_radius')}</span>
-          <input
-            type="number"
-            min={10}
-            value={wpGenRadius}
-            onChange={(e) => setWpGenRadius(Math.max(1, parseInt(e.target.value) || 0))}
-            className="seg-input w-16 text-right"
-          />
-          <span className="seg-unit">m</span>
-          <span className="mx-1" />
-          <span className="seg-label">{t('panel.waypoints_count')}</span>
-          <input
-            type="number"
-            min={1}
-            max={50}
-            value={wpGenCount}
-            onChange={(e) => setWpGenCount(Math.max(1, parseInt(e.target.value) || 0))}
-            className="seg-input w-14 text-right"
-          />
-          <span className="seg-unit">{t('panel.points')}</span>
-        </div>
-
-        {/* Generate buttons — subtle text buttons */}
-        <div className="seg-row seg-row-compact" style={{ justifyContent: 'center', gap: '4px' }}>
-          <button
-            className="seg-text-btn"
-            onClick={handleGenerateRandomWaypoints}
-            title={t('panel.waypoints_gen_tooltip')}
-          >
-            <Dices size={11} />
-            {t('panel.waypoints_generate')}
-          </button>
-          <button
-            className="seg-text-btn"
-            onClick={handleGenerateAllRandom}
-            title={t('panel.waypoints_gen_all_tooltip')}
-          >
-            <Dices size={11} />
-            {t('panel.waypoints_generate_all')}
-          </button>
-        </div>
-
-        {/* Waypoint list */}
-        {sim.waypoints.length === 0 ? (
-          <div className="seg-row seg-row-compact" style={{ justifyContent: 'center' }}>
-            <span className="seg-unit">{t('panel.waypoints_empty')}</span>
-          </div>
-        ) : (
-          <>
-            {sim.waypoints.map((wp: { lat: number; lng: number }, i: number) => {
-              const seg = sim.waypointProgress?.current
-              const approaching = seg != null && i === seg + 1
-              const passed = seg != null && i <= seg
-              const isStart = i === 0
-
-              return (
-                <div
-                  key={i}
-                  className={[
-                    'seg-row seg-row-compact',
-                    approaching ? 'bg-orange-500/10' : '',
-                    passed ? 'opacity-35' : '',
-                  ].join(' ')}
-                >
-                  <span
-                    className="font-semibold w-6 shrink-0 text-[10px]"
-                    style={{
-                      color: approaching ? 'var(--color-device-b)' : passed ? 'var(--color-text-3)' : isStart ? 'var(--color-success)' : 'var(--color-device-b)',
-                    }}
-                  >
-                    {approaching ? '>' : passed ? 'OK' : isStart ? t('panel.waypoint_start') : `#${i}`}
-                  </span>
-                  <span className="flex-1 text-[var(--color-text-2)] font-mono text-[10px] opacity-80">
-                    {wp.lat.toFixed(5)}, {wp.lng.toFixed(5)}
-                  </span>
-                  <button
-                    className="p-1 rounded-md text-[var(--color-text-3)] hover:text-[var(--color-danger)]
-                               hover:bg-[var(--color-danger-dim)] transition-colors cursor-pointer"
-                    onClick={() => handleRemoveWaypoint(i)}
-                    title={t('panel.waypoints_remove')}
-                  >
-                    <X size={11} />
-                  </button>
-                </div>
-              )
-            })}
-
-            <div className="seg-row seg-row-compact" style={{ justifyContent: 'center' }}>
-              <button
-                className="seg-text-btn text-[var(--color-text-3)] hover:text-[var(--color-danger)]"
-                onClick={handleClearWaypoints}
-                disabled={isRunning}
-              >
-                {t('generic.clear')}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* ── Pause ── */}
+      {/* Pause control */}
       <PauseControl
         labelKey={pauseLabelKey}
         value={pauseValue}

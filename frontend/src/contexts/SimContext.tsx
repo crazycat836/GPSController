@@ -382,9 +382,10 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
 
   // --- Effects ---
 
-  // Poll cooldown — only setState when value actually changes
+  // Poll cooldown — only after the user has a simulated position
+  const hasPosition = sim.currentPosition != null
   useEffect(() => {
-    if (!subscribe) return
+    if (!subscribe || !hasPosition) return
     const id = setInterval(() => {
       api.getCooldownStatus().then((s: any) => {
         const next = s.remaining_seconds ?? 0
@@ -395,7 +396,7 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
       }).catch(() => {})
     }, 2000)
     return () => clearInterval(id)
-  }, [subscribe])
+  }, [subscribe, hasPosition])
 
   // --- Derived values ---
 
