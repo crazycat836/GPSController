@@ -85,6 +85,16 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
   const bm = useBookmarkContext()
   const { sim, joystick, handlePause, handleResume } = simCtx
 
+  // In Teleport mode, right-click / search sets a pending destination
+  // instead of teleporting immediately. Other modes keep instant teleport.
+  const handleTeleportOrStage = useCallback((lat: number, lng: number) => {
+    if (sim.mode === SimMode.Teleport) {
+      simCtx.handleSetTeleportDest(lat, lng)
+    } else {
+      simCtx.handleTeleport(lat, lng)
+    }
+  }, [sim.mode, simCtx])
+
   // UI state
   const [deviceDrawerOpen, setDeviceDrawerOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -194,7 +204,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
             null
           }
           onMapClick={simCtx.handleMapClick}
-          onTeleport={simCtx.handleTeleport}
+          onTeleport={handleTeleportOrStage}
           onNavigate={simCtx.handleNavigate}
           onAddBookmark={bm.handleAddBookmark}
           onAddWaypoint={simCtx.handleAddWaypoint}
@@ -318,7 +328,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         }}
         addDeviceDisabled={device.connectedDevices.length >= 2}
         leftContent={
-          <SearchBar onTeleport={simCtx.handleTeleport} deviceConnected={device.connectedDevice !== null} />
+          <SearchBar onTeleport={handleTeleportOrStage} deviceConnected={device.connectedDevice !== null} />
         }
       />
 

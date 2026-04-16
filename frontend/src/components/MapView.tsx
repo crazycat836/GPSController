@@ -50,16 +50,7 @@ interface MapViewProps {
 // Leaflet requires raw hex — CSS variables don't work in SVG marker innerHTML.
 // Keep in sync with --color-device-a / --color-device-b in index.css @theme.
 import { DEVICE_COLORS_HEX as DEVICE_COLORS, DEVICE_LETTERS } from '../lib/constants';
-
-function haversineM(a: Position, b: Position): number {
-  const R = 6371000;
-  const dLat = (b.lat - a.lat) * Math.PI / 180;
-  const dLng = (b.lng - a.lng) * Math.PI / 180;
-  const la1 = a.lat * Math.PI / 180;
-  const la2 = b.lat * Math.PI / 180;
-  const x = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(x));
-}
+import { haversineM } from '../lib/geo';
 
 const MapView: React.FC<MapViewProps> = ({
   currentPosition,

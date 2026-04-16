@@ -761,6 +761,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
     currentPosition,
     setCurrentPosition,
     destination,
+    setDestination,
     progress,
     eta,
     waypoints,
