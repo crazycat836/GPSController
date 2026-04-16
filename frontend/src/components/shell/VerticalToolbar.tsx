@@ -1,0 +1,87 @@
+import React from 'react'
+
+/* ── Shared container ────────────────────────────────────────────────── */
+
+interface VerticalToolbarProps {
+  children: React.ReactNode
+  /** 'spaced' = padded with gaps (ModeToolbar), 'compact' = flush buttons (MapControls) */
+  variant?: 'spaced' | 'compact'
+  className?: string
+}
+
+export default function VerticalToolbar({ children, variant = 'spaced', className }: VerticalToolbarProps) {
+  return (
+    <div
+      className={[
+        'flex flex-col',
+        variant === 'spaced'
+          ? 'gap-1.5 p-2 surface-panel rounded-2xl'
+          : 'surface-panel rounded-xl overflow-hidden',
+        className,
+      ].filter(Boolean).join(' ')}
+    >
+      {children}
+    </div>
+  )
+}
+
+/* ── Shared button ───────────────────────────────────────────────────── */
+
+interface ToolbarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  icon: React.ReactNode
+  label: string
+  /** Toggle state — only set for mode-style buttons, omit for action buttons */
+  active?: boolean
+  /** 'round' = 44px circle (mode buttons), 'square' = 40px flush (map controls) */
+  variant?: 'round' | 'square'
+  /** Accent text colour regardless of active state (e.g. recenter button) */
+  accent?: boolean
+}
+
+export function ToolbarButton({
+  icon,
+  label,
+  active,
+  variant = 'round',
+  accent,
+  className,
+  ...rest
+}: ToolbarButtonProps) {
+  const isToggle = active !== undefined
+
+  const colorClass = active
+    ? 'bg-[var(--color-accent-dim)] text-[var(--color-accent)] shadow-[0_0_12px_rgba(108,140,255,0.25)]'
+    : accent
+      ? 'text-[var(--color-accent)] hover:bg-[var(--color-surface-hover)]'
+      : variant === 'round'
+        ? 'text-[var(--color-text-2)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-1)]'
+        : 'text-[var(--color-text-1)] hover:bg-[var(--color-surface-hover)]'
+
+  return (
+    <button
+      {...rest}
+      className={[
+        'flex items-center justify-center',
+        'transition-all duration-150 cursor-pointer',
+        'focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none',
+        'disabled:opacity-40 disabled:cursor-not-allowed',
+        variant === 'round' ? 'w-11 h-11 rounded-full' : 'w-10 h-10',
+        colorClass,
+        className,
+      ].filter(Boolean).join(' ')}
+      title={rest.title ?? label}
+      aria-label={label}
+      {...(isToggle ? { 'aria-pressed': active } : {})}
+    >
+      {icon}
+    </button>
+  )
+}
+
+/* ── Shared divider ──────────────────────────────────────────────────── */
+
+export function ToolbarDivider({ variant = 'spaced' }: { variant?: 'spaced' | 'compact' }) {
+  return (
+    <div className={['h-px bg-[var(--color-border)]', variant === 'spaced' ? 'mx-2' : ''].join(' ')} />
+  )
+}
