@@ -115,7 +115,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
 
   return (
     <div
-      className="absolute bottom-2.5 left-2.5 right-2.5 z-[var(--z-bar)] flex items-center flex-wrap gap-x-3 gap-y-1 px-4 py-1.5 text-sm text-[var(--color-text-2)] rounded-[18px] tracking-[var(--tracking-normal)]"
+      className="absolute bottom-2.5 left-2.5 right-2.5 z-[var(--z-bar)] flex items-center flex-wrap gap-x-3 gap-y-1 px-4 py-2 text-sm text-[var(--color-text-2)] rounded-[18px] tracking-[var(--tracking-normal)]"
       style={{
         background: 'rgba(18, 21, 32, 0.72)',
         backdropFilter: 'blur(24px) saturate(160%)',
@@ -138,7 +138,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
         return (
           <div
             key={dev.udid}
-            className="status-badge-ghost flex items-center gap-1.5 font-mono text-[11px]"
+            className="status-badge-ghost flex items-center gap-1.5 font-mono text-xs"
             title={dev.name}
           >
             <span className="font-bold" style={{ color }}>{letter}</span>
@@ -155,7 +155,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
       {/* Current coordinates (single-device mode only) */}
       {!dualDevice && currentPosition && (
         <>
-          <div className="flex items-center gap-1 font-mono text-[11px]">
+          <div className="flex items-center gap-1 font-mono text-xs">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-50">
               <circle cx="12" cy="12" r="10" />
               <line x1="2" y1="12" x2="22" y2="12" />

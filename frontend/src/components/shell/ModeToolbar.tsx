@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react'
 import { SimMode } from '../../hooks/useSimulation'
 import { useT } from '../../i18n'
 import type { StringKey } from '../../i18n'
+import VerticalToolbar, { ToolbarButton, ToolbarDivider } from './VerticalToolbar'
 
 const modes: Array<{ mode: SimMode; icon: LucideIcon; labelKey: StringKey }> = [
   { mode: SimMode.Teleport, icon: Crosshair, labelKey: 'mode.teleport' },
@@ -23,37 +24,20 @@ export default function ModeToolbar({ activeMode, onModeChange }: ModeToolbarPro
   const t = useT()
 
   return (
-    <div
-      className={[
-        'fixed right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 -translate-y-1/2 z-[var(--z-ui)]',
-        'flex flex-col gap-1.5 p-2',
-        'surface-panel rounded-2xl',
-      ].join(' ')}
+    <VerticalToolbar
+      className="fixed right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 -translate-y-1/2 z-[var(--z-ui)]"
     >
-      {modes.map(({ mode, icon: Icon, labelKey }, idx) => {
-        const isActive = activeMode === mode
-        return (
-          <React.Fragment key={mode}>
-            {idx === 3 && <div className="h-px mx-2 bg-[var(--color-border)]" />}
-            <button
-              onClick={() => onModeChange(mode)}
-              className={[
-                'w-11 h-11 rounded-full flex items-center justify-center',
-                'transition-all duration-150 cursor-pointer',
-                'focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none',
-                isActive
-                  ? 'bg-[var(--color-accent-dim)] text-[var(--color-accent)] shadow-[0_0_12px_rgba(108,140,255,0.25)]'
-                  : 'text-[var(--color-text-2)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-1)]',
-              ].join(' ')}
-              title={t(labelKey)}
-              aria-label={t(labelKey)}
-              aria-pressed={isActive}
-            >
-              <Icon className="w-[18px] h-[18px]" />
-            </button>
-          </React.Fragment>
-        )
-      })}
-    </div>
+      {modes.map(({ mode, icon: Icon, labelKey }, idx) => (
+        <React.Fragment key={mode}>
+          {idx === 3 && <ToolbarDivider />}
+          <ToolbarButton
+            icon={<Icon className="w-[18px] h-[18px]" />}
+            label={t(labelKey)}
+            active={activeMode === mode}
+            onClick={() => onModeChange(mode)}
+          />
+        </React.Fragment>
+      ))}
+    </VerticalToolbar>
   )
 }

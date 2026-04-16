@@ -116,8 +116,8 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
       {/* Input */}
       <div
         className={[
-          'flex items-center gap-2 px-3 h-10 rounded-xl surface-control transition-all duration-150',
-          focused ? 'w-80 ring-2 ring-[var(--color-accent)]/40' : 'w-64',
+          'flex items-center gap-2 px-3 h-11 w-[22rem] rounded-xl surface-control transition-all duration-150',
+          focused ? 'ring-2 ring-[var(--color-accent)]/40' : '',
         ].join(' ')}
       >
         <Search className="w-3.5 h-3.5 text-[var(--color-text-3)] shrink-0" />
@@ -145,7 +145,7 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
       {/* Dropdown */}
       {showDropdown && (
         <div
-          className="absolute top-full left-0 mt-2 w-80 surface-popup rounded-xl overflow-hidden anim-fade-slide-up"
+          className="absolute top-full left-0 mt-2 w-full surface-popup rounded-xl overflow-hidden anim-fade-slide-up"
           onMouseDown={(e) => e.preventDefault()}
         >
           {/* Coordinate match */}

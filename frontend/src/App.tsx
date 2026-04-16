@@ -23,6 +23,7 @@ import TopBar from './components/shell/TopBar'
 import SearchBar from './components/shell/SearchBar'
 import ModeToolbar from './components/shell/ModeToolbar'
 import MiniStatusBar from './components/shell/MiniStatusBar'
+import TopBarActions from './components/shell/TopBarActions'
 import SettingsMenu from './components/shell/SettingsMenu'
 import CooldownBadge from './components/shell/CooldownBadge'
 import Toast from './components/shell/Toast'
@@ -316,19 +317,23 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
       {/* Floating overlay components */}
       <TopBar
-        onLibraryClick={() => setLibraryOpen(true)}
-        onSettingsClick={() => setSettingsOpen(prev => !prev)}
-        onAddDevice={() => {
-          if (device.connectedDevices.length >= 2) {
-            toast.showToast(t('device.max_reached'))
-            return
-          }
-          device.scan()
-          setDeviceDrawerOpen(true)
-        }}
-        addDeviceDisabled={device.connectedDevices.length >= 2}
         leftContent={
           <SearchBar onTeleport={handleTeleportOrStage} deviceConnected={device.connectedDevice !== null} />
+        }
+        rightContent={
+          <TopBarActions
+            onAddDevice={() => {
+              if (device.connectedDevices.length >= 2) {
+                toast.showToast(t('device.max_reached'))
+                return
+              }
+              device.scan()
+              setDeviceDrawerOpen(true)
+            }}
+            addDeviceDisabled={device.connectedDevices.length >= 2}
+            onLibraryClick={() => setLibraryOpen(true)}
+            onSettingsClick={() => setSettingsOpen(prev => !prev)}
+          />
         }
       />
 

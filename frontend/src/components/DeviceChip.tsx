@@ -69,11 +69,11 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
         }}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
-          height: 28, padding: '0 10px',
+          height: 32, padding: '0 10px',
           borderRadius: 'var(--radius-full)',
           background: 'var(--color-surface-2)',
           border: '1px solid var(--color-border)',
-          fontSize: 11,
+          fontSize: 12,
           color: 'rgba(255,255,255,0.9)',
           cursor: 'context-menu',
           maxWidth: 160,

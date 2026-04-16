@@ -26,7 +26,7 @@ export default function FloatingPanel({ mode, children }: FloatingPanelProps) {
   return (
     <div
       className={[
-        'fixed top-14 left-3 w-[22rem] z-[var(--z-ui)]',
+        'fixed top-[4.25rem] left-3 w-[22rem] z-[var(--z-ui)]',
         'bg-[var(--color-surface-1)] border border-[var(--color-border)]',
         'rounded-2xl overflow-hidden flex flex-col p-3_5 gap-3',
         'shadow-[var(--shadow-lg)]',
@@ -40,8 +40,8 @@ export default function FloatingPanel({ mode, children }: FloatingPanelProps) {
         style={{ background: 'linear-gradient(135deg, rgba(108,140,255,0.1) 0%, rgba(108,140,255,0.03) 100%)' }}
         onClick={() => setCollapsed(prev => !prev)}
       >
-        <Icon className="w-5 h-5 text-[var(--color-accent)]" />
-        <h2 className="text-[15px] font-bold text-[var(--color-text-1)] flex-1 tracking-tight">
+        <Icon className="w-4 h-4 text-[var(--color-accent)]" />
+        <h2 className="text-[13px] font-semibold text-[var(--color-text-1)] flex-1 tracking-tight">
           {t(MODE_LABEL_KEYS[mode])}
         </h2>
         <button

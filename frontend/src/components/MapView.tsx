@@ -52,6 +52,7 @@ interface MapViewProps {
 // Keep in sync with --color-device-a / --color-device-b in index.css @theme.
 import { DEVICE_COLORS_HEX as DEVICE_COLORS, DEVICE_LETTERS } from '../lib/constants';
 import { haversineM } from '../lib/geo';
+import MapControls from './shell/MapControls';
 
 const MapView: React.FC<MapViewProps> = ({
   currentPosition,
@@ -696,54 +697,13 @@ const MapView: React.FC<MapViewProps> = ({
     <div className="map-container" style={{ position: 'relative', flex: 1 }}>
       <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* Map controls — recenter + zoom in/out */}
-      <div
-        className="surface-control"
-        style={{
-          position: 'absolute', bottom: 40, right: 12, zIndex: 'var(--z-map-ui)',
-          display: 'flex', flexDirection: 'column',
-          borderRadius: 'var(--radius-md)', overflow: 'hidden',
-          width: 36,
-        }}
-      >
-        <button
-          onClick={recenter}
-          disabled={!currentPosition}
-          title={t('map.recenter')}
-          className="flex items-center justify-center cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors disabled:cursor-not-allowed"
-          style={{
-            width: 36, height: 36, border: 'none', background: 'transparent',
-            color: currentPosition ? 'var(--color-accent)' : 'var(--color-text-3)',
-            opacity: currentPosition ? 1 : 0.4,
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <line x1="12" y1="2" x2="12" y2="5" />
-            <line x1="12" y1="19" x2="12" y2="22" />
-            <line x1="2" y1="12" x2="5" y2="12" />
-            <line x1="19" y1="12" x2="22" y2="12" />
-          </svg>
-        </button>
-        <div style={{ height: 1, background: 'var(--color-border)' }} />
-        <button
-          onClick={() => mapRef.current?.zoomIn()}
-          title="Zoom in"
-          className="flex items-center justify-center cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors"
-          style={{ width: 36, height: 36, border: 'none', background: 'transparent', color: 'var(--color-text-1)', fontSize: 18, fontWeight: 300 }}
-        >
-          +
-        </button>
-        <div style={{ height: 1, background: 'var(--color-border)' }} />
-        <button
-          onClick={() => mapRef.current?.zoomOut()}
-          title="Zoom out"
-          className="flex items-center justify-center cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors"
-          style={{ width: 36, height: 36, border: 'none', background: 'transparent', color: 'var(--color-text-1)', fontSize: 18, fontWeight: 300 }}
-        >
-          −
-        </button>
-      </div>
+      <MapControls
+        onRecenter={recenter}
+        onZoomIn={() => mapRef.current?.zoomIn()}
+        onZoomOut={() => mapRef.current?.zoomOut()}
+        canRecenter={!!currentPosition}
+        className="absolute bottom-10 right-3 z-[var(--z-map-ui)]"
+      />
 
       {contextMenu.visible && (
         <div
