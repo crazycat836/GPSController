@@ -30,26 +30,28 @@ export default function ModeToolbar({ activeMode, onModeChange }: ModeToolbarPro
         'surface-panel rounded-2xl',
       ].join(' ')}
     >
-      {modes.map(({ mode, icon: Icon, labelKey }) => {
+      {modes.map(({ mode, icon: Icon, labelKey }, idx) => {
         const isActive = activeMode === mode
         return (
-          <button
-            key={mode}
-            onClick={() => onModeChange(mode)}
-            className={[
-              'w-11 h-11 rounded-full flex items-center justify-center',
-              'transition-all duration-150 cursor-pointer',
-              'focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none',
-              isActive
-                ? 'bg-[var(--color-accent-dim)] text-[var(--color-accent)] shadow-[0_0_12px_rgba(108,140,255,0.25)]'
-                : 'text-[var(--color-text-2)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-1)]',
-            ].join(' ')}
-            title={t(labelKey)}
-            aria-label={t(labelKey)}
-            aria-pressed={isActive}
-          >
-            <Icon className="w-[18px] h-[18px]" />
-          </button>
+          <React.Fragment key={mode}>
+            {idx === 3 && <div className="h-px mx-2 bg-[var(--color-border)]" />}
+            <button
+              onClick={() => onModeChange(mode)}
+              className={[
+                'w-11 h-11 rounded-full flex items-center justify-center',
+                'transition-all duration-150 cursor-pointer',
+                'focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none',
+                isActive
+                  ? 'bg-[var(--color-accent-dim)] text-[var(--color-accent)] shadow-[0_0_12px_rgba(108,140,255,0.25)]'
+                  : 'text-[var(--color-text-2)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-1)]',
+              ].join(' ')}
+              title={t(labelKey)}
+              aria-label={t(labelKey)}
+              aria-pressed={isActive}
+            >
+              <Icon className="w-[18px] h-[18px]" />
+            </button>
+          </React.Fragment>
         )
       })}
     </div>

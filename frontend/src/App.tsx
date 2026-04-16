@@ -16,8 +16,6 @@ import MapView from './components/MapView'
 import JoystickPad from './components/JoystickPad'
 import EtaBar from './components/EtaBar'
 import UpdateChecker from './components/UpdateChecker'
-import { DeviceChipRow } from './components/DeviceChipRow'
-
 // Shell components
 import FloatingPanel from './components/shell/FloatingPanel'
 import TopBar from './components/shell/TopBar'
@@ -272,6 +270,19 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
           <ErrorBanner message={sim.error} onDismiss={sim.clearError} />
         )}
 
+        {/* Device chip — bottom-left */}
+        <button
+          onClick={() => setDeviceDrawerOpen(true)}
+          className="absolute bottom-3 left-3 z-[1001] surface-control rounded-full px-3 py-1.5 flex items-center gap-2 text-xs cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors"
+        >
+          <div className={`w-2 h-2 rounded-full ${device.connectedDevices.length > 0 ? 'bg-green-400' : 'bg-red-400'}`} />
+          <span className="text-[var(--color-text-1)] font-medium">
+            {device.connectedDevices.length > 0
+              ? device.connectedDevices.map(d => d.name).join(', ')
+              : t('status.disconnected')}
+          </span>
+        </button>
+
         <MiniStatusBar />
         <CooldownBadge />
         <UpdateChecker />
@@ -295,27 +306,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         }}
         addDeviceDisabled={device.connectedDevices.length >= 2}
         leftContent={
-          <>
-            {device.connectedDevices.length > 0 && (
-              <div onClick={() => setDeviceDrawerOpen(true)} className="cursor-pointer hover:opacity-80 transition-opacity">
-                <DeviceChipRow
-                  devices={device.connectedDevices}
-                  runtimes={sim.runtimes}
-                  onDisconnect={(udid) => device.disconnect(udid)}
-                  onRestoreOne={async (udid) => {
-                    try {
-                      const { restoreSim } = await import('./services/api')
-                      await restoreSim(udid)
-                      toast.showToast(t('status.restore_success'))
-                    } catch (e: unknown) {
-                      toast.showToast(e instanceof Error ? e.message : 'restore failed')
-                    }
-                  }}
-                />
-              </div>
-            )}
-            <SearchBar onTeleport={simCtx.handleTeleport} deviceConnected={device.connectedDevice !== null} />
-          </>
+          <SearchBar onTeleport={simCtx.handleTeleport} deviceConnected={device.connectedDevice !== null} />
         }
       />
 

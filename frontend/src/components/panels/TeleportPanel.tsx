@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { MapPin, Search } from 'lucide-react'
+import { MapPin } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
 
@@ -58,11 +58,6 @@ export default function TeleportPanel() {
         {t('generic.go')}
       </button>
 
-      <div className="seg-hint">
-        <Search className="w-3.5 h-3.5 shrink-0" />
-        <span className="flex-1">{t('panel.search_hint')}</span>
-        <kbd className="px-1.5 py-0.5 rounded-md bg-white/[0.06] text-[10px] font-mono text-[var(--color-text-3)] border border-[var(--color-border)]">⌘K</kbd>
-      </div>
     </div>
   )
 }
