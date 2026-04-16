@@ -78,8 +78,6 @@ interface SimContextValue {
   handleSetTeleportDest: (lat: number, lng: number) => void
   handleClearTeleportDest: () => void
   handleMapClick: (lat: number, lng: number) => void
-  clickToAddWaypoint: boolean
-  setClickToAddWaypoint: (v: boolean) => void
   // Derived
   displaySpeed: number | string
   isRunning: boolean
@@ -107,7 +105,6 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
   const [cooldown, setCooldown] = useState(0)
   const [cooldownEnabled, setCooldownEnabled] = useState(false)
   const [randomWalkRadius, setRandomWalkRadius] = useState(DEFAULT_RANDOM_WALK_RADIUS)
-  const [clickToAddWaypoint, setClickToAddWaypoint] = useState(false)
   const [wpGenRadius, setWpGenRadius] = useState(DEFAULT_WP_GEN_RADIUS)
   const [wpGenCount, setWpGenCount] = useState(5)
 
@@ -197,20 +194,29 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
   }, [])
 
   const handleMapClick = useCallback((lat: number, lng: number) => {
-    if (!clickToAddWaypoint) return
-    if (sim.mode !== SimMode.Loop && sim.mode !== SimMode.MultiStop) return
     const nlat = clampLat(lat)
     const nlng = normalizeLng(lng)
-    sim.setWaypoints((prev: any[]) => {
-      if (prev.length === 0 && sim.currentPosition) {
-        return [
-          { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng },
-          { lat: nlat, lng: nlng },
-        ]
-      }
-      return [...prev, { lat: nlat, lng: nlng }]
-    })
-  }, [clickToAddWaypoint, sim])
+
+    switch (sim.mode) {
+      case SimMode.Teleport:
+      case SimMode.Navigate:
+        sim.setDestination({ lat: nlat, lng: nlng })
+        break
+      case SimMode.Loop:
+      case SimMode.MultiStop:
+        sim.setWaypoints((prev: any[]) => {
+          if (prev.length === 0 && sim.currentPosition) {
+            return [
+              { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng },
+              { lat: nlat, lng: nlng },
+            ]
+          }
+          return [...prev, { lat: nlat, lng: nlng }]
+        })
+        break
+      // RandomWalk / Joystick: no map-click action
+    }
+  }, [sim])
 
   const handleSetTeleportDest = useCallback((latIn: number, lngIn: number) => {
     const lat = clampLat(latIn)
@@ -458,8 +464,6 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
     handleGenerateAllRandom,
     handleOpenLog,
     handleMapClick,
-    clickToAddWaypoint,
-    setClickToAddWaypoint,
     displaySpeed,
     isRunning,
     isPaused,

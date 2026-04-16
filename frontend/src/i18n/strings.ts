@@ -106,7 +106,7 @@ export const STRINGS = {
   'panel.waypoints_count': { zh: '數量', en: 'Count' },
   'panel.waypoints_generate': { zh: '隨機產生', en: 'Random' },
   'panel.waypoints_generate_all': { zh: '全隨機', en: 'All random' },
-  'panel.waypoints_empty': { zh: '在地圖上右鍵點擊 → 「添加路徑點」,或使用上方隨機產生', en: 'Right-click the map to add waypoints, or use random generate above' },
+  'panel.waypoints_empty': { zh: '在地圖上點擊添加路徑點，或使用上方隨機產生', en: 'Click the map to add waypoints, or use random generate above' },
   'panel.waypoints_start_loop': { zh: '開始巡迴', en: 'Start Loop' },
   'panel.waypoints_start_multi': { zh: '開始多點導航', en: 'Start Multi-stop' },
   'panel.waypoints_start_navigate': { zh: '開始導航', en: 'Start Navigate' },
@@ -285,7 +285,7 @@ export const STRINGS = {
 
   // ── Toasts extra ─────────────────────────────
   'toast.no_position_random': { zh: '尚未取得目前位置,無法產生隨機路徑點', en: 'No current position, cannot generate random waypoints' },
-  'toast.no_waypoints': { zh: '尚未設定路徑點,請在地圖上右鍵添加或使用隨機產生', en: 'No waypoints set, right-click the map to add, or use Random generate' },
+  'toast.no_waypoints': { zh: '尚未設定路徑點，請在地圖上點擊添加或使用隨機產生', en: 'No waypoints set, click the map to add, or use random generate' },
   'toast.pause_countdown': { zh: '到點暫停中 · 剩餘 {n}s', en: 'Paused at waypoint · {n}s left' },
 
   // ── Bookmarks ────────────────────────────────
