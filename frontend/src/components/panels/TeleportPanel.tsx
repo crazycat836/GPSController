@@ -5,6 +5,7 @@ import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT } from '../../i18n'
 import { haversineM } from '../../lib/geo'
 import { predictCooldown, formatCooldown } from '../../lib/cooldown'
+import RouteCard, { type RoutePoint } from '../RouteCard'
 
 export default function TeleportPanel() {
   const {
@@ -30,93 +31,69 @@ export default function TeleportPanel() {
     return `${(m / 1000).toFixed(2)} km`
   }
 
+  /* ── Build route points ── */
+  const bookmarkBtn = (pos: { lat: number; lng: number }) => (
+    <button
+      onClick={() => handleAddBookmark(pos.lat, pos.lng)}
+      className="shrink-0 p-1 rounded-md transition-colors hover:opacity-80"
+      style={{ color: 'var(--color-warning, #f5a623)' }}
+      title={t('map.add_bookmark')}
+    >
+      <Star className="w-4 h-4" />
+    </button>
+  )
+
+  const points: RoutePoint[] = [
+    {
+      id: 'origin',
+      label: t('teleport.my_location'),
+      position: currentPos,
+      placeholder: t('teleport.no_position'),
+      icon: (
+        <Locate
+          className="w-4 h-4"
+          style={{ color: 'var(--color-accent)' }}
+        />
+      ),
+      actions: currentPos ? bookmarkBtn(currentPos) : undefined,
+    },
+  ]
+
+  if (destPos) {
+    points.push({
+      id: 'dest',
+      label: t('teleport.destination'),
+      position: destPos,
+      icon: (
+        <MapPin
+          className="w-4 h-4"
+          style={{ color: 'var(--color-danger, #e53935)' }}
+        />
+      ),
+      actions: bookmarkBtn(destPos),
+    })
+  } else {
+    points.push({
+      id: 'dest-placeholder',
+      label: t('teleport.add_destination'),
+      position: null,
+      icon: (
+        <MapPin
+          className="w-4 h-4"
+          style={{ color: 'var(--color-text-3)' }}
+        />
+      ),
+      labelColor: 'var(--color-text-3)',
+    })
+  }
+
   return (
     <div className="seg-stack">
       {/* Route card */}
-      <div className="seg">
-        <div className="seg-row seg-row-header">
-          <span className="seg-label">{t('teleport.route')}</span>
-        </div>
-
-        {/* My location */}
-        <div className="seg-row" style={{ alignItems: 'flex-start', gap: 10, paddingTop: 4, paddingBottom: 4 }}>
-          <Locate
-            className="w-4 h-4 shrink-0 mt-0.5"
-            style={{ color: 'var(--color-accent)' }}
-          />
-          <div className="flex-1 min-w-0">
-            <div
-              className="text-xs font-semibold"
-              style={{ color: 'var(--color-text-1)' }}
-            >
-              {t('teleport.my_location')}
-            </div>
-            <div
-              className="font-mono text-[11px] mt-0.5 truncate"
-              style={{ color: 'var(--color-accent)' }}
-            >
-              {currentPos
-                ? `${currentPos.lat.toFixed(6)}, ${currentPos.lng.toFixed(6)}`
-                : t('teleport.no_position')}
-            </div>
-          </div>
-          {currentPos && (
-            <button
-              onClick={() => handleAddBookmark(currentPos.lat, currentPos.lng)}
-              className="shrink-0 p-1 rounded-md transition-colors hover:opacity-80"
-              style={{ color: 'var(--color-warning, #f5a623)' }}
-              title={t('map.add_bookmark')}
-            >
-              <Star className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Separator */}
-        <div style={{ height: 1, background: 'var(--color-border)', margin: '2px 0' }} />
-
-        {/* Destination */}
-        {destPos ? (
-          <div className="seg-row" style={{ alignItems: 'flex-start', gap: 10, paddingTop: 4, paddingBottom: 4 }}>
-            <MapPin
-              className="w-4 h-4 shrink-0 mt-0.5"
-              style={{ color: 'var(--color-danger, #e53935)' }}
-            />
-            <div className="flex-1 min-w-0">
-              <div
-                className="text-xs font-semibold"
-                style={{ color: 'var(--color-text-1)' }}
-              >
-                {t('teleport.destination')}
-              </div>
-              <div
-                className="font-mono text-[11px] mt-0.5 truncate"
-                style={{ color: 'var(--color-accent)' }}
-              >
-                {`${destPos.lat.toFixed(6)}, ${destPos.lng.toFixed(6)}`}
-              </div>
-            </div>
-            <button
-              onClick={() => handleAddBookmark(destPos.lat, destPos.lng)}
-              className="shrink-0 p-1 rounded-md transition-colors hover:opacity-80"
-              style={{ color: 'var(--color-warning, #f5a623)' }}
-              title={t('map.add_bookmark')}
-            >
-              <Star className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
-          <div className="seg-row" style={{ gap: 10, paddingTop: 6, paddingBottom: 6 }}>
-            <MapPin
-              className="w-4 h-4 shrink-0"
-              style={{ color: 'var(--color-text-3)' }}
-            />
-            <span className="text-xs" style={{ color: 'var(--color-text-3)' }}>
-              {t('teleport.add_destination')}
-            </span>
-          </div>
-        )}
-      </div>
+      <RouteCard
+        title={t('teleport.route')}
+        points={points}
+      />
 
       {/* Distance + Cooldown */}
       <div className="seg">

@@ -386,6 +386,62 @@
 }
 .seg-text-btn:hover { color: var(--color-text-2); background: rgba(255, 255, 255, 0.04); }
 
+/* ── Route Card ── */
+.route-card-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+.route-card-list::-webkit-scrollbar { width: 4px; }
+.route-card-list::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: var(--radius-full);
+}
+
+.route-card-point {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  position: relative;
+}
+
+.route-card-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+.route-card-connector {
+  position: absolute;
+  left: 24px;             /* 14px padding + 22px icon/2 - 1px */
+  top: 32px;              /* below 22px icon + 10px padding */
+  bottom: 0;
+  width: 2px;
+  background: var(--color-border-strong);
+  z-index: 0;
+}
+
+/* compact variant */
+.route-card-point-compact {
+  padding: 7px 14px;
+}
+.route-card-point-compact .route-card-icon {
+  width: 20px;
+  height: 20px;
+}
+.route-card-point-compact > .route-card-connector {
+  left: 23px;
+  top: 27px;
+}
+
 .seg-cta {
   display: flex;
   align-items: center;

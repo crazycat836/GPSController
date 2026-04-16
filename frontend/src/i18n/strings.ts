@@ -243,6 +243,10 @@ export const STRINGS = {
   'teleport.add_destination': { zh: '在地圖上設定目的地', en: 'Add destination on the map' },
   'teleport.no_position': { zh: '尚無目前位置', en: 'No current position' },
 
+  // ── Route card (shared) ────────────────────
+  'route.add_point': { zh: '在地圖上添加路徑點', en: 'Add waypoint on the map' },
+  'route.waypoint_n': { zh: '路徑點 {n}', en: 'Waypoint {n}' },
+
   // ── Panel extras ────────────────────────────
   'panel.mode': { zh: '模式', en: 'Mode' },
   'panel.straight_line': { zh: '使用直線路徑', en: 'Use straight-line path' },

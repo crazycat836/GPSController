@@ -158,6 +158,8 @@ class AppState:
         try:
             await loc_service.set(init["lat"], init["lng"])
             logger.info("Initial position set on device: (%.6f, %.6f)", init["lat"], init["lng"])
+            # Notify frontend so it shows the restored position immediately.
+            await event_callback("position_update", {"lat": init["lat"], "lng": init["lng"]})
         except Exception as exc:
             # Don't leave a half-constructed engine behind — the location
             # service channel is broken; drop the engine so _engine() will
@@ -286,6 +288,11 @@ async def _usbmux_presence_watchdog():
                 logger.info("usbmux watchdog: new USB device %s detected, auto-connecting", udid)
                 try:
                     await dm.connect(udid)
+                    # Skip engine creation if one already exists (e.g. lifespan already built it)
+                    if udid in app_state.simulation_engines:
+                        logger.debug("watchdog: engine already exists for %s, skipping", udid)
+                        last_reconnect_attempt.pop(udid, None)
+                        continue
                     await app_state.create_engine_for_device(udid)
                     # Broadcast device_connected so the frontend chip row updates.
                     try:
@@ -325,6 +332,15 @@ async def lifespan(application: FastAPI):
             await app_state.device_manager.connect(target.udid)
             await app_state.create_engine_for_device(target.udid)
             logger.info("Auto-connected to %s", target.udid)
+            try:
+                await broadcast("device_connected", {
+                    "udid": target.udid,
+                    "name": target.name,
+                    "ios_version": target.ios_version,
+                    "connection_type": target.connection_type,
+                })
+            except Exception:
+                logger.exception("Startup broadcast device_connected failed")
         else:
             logger.info("No iOS devices found on startup")
     except Exception:
