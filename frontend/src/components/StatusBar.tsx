@@ -4,11 +4,9 @@ import { SimMode, stateToMode } from '../hooks/useSimulation';
 import type { RuntimesMap } from '../hooks/useSimulation';
 import type { DeviceInfo } from '../hooks/useDevice';
 import { useT } from '../i18n';
+import { DEVICE_COLORS, DEVICE_LETTERS } from '../lib/constants';
 import LangToggle from './LangToggle';
 import pkg from '../../package.json';
-
-const DEVICE_COLORS = ['#4285f4', '#ff9800'];
-const DEVICE_LETTERS = ['A', 'B'];
 
 const APP_VERSION = (pkg as { version: string }).version;
 
@@ -24,13 +22,11 @@ interface StatusBarProps {
   currentPosition: Position | null;
   speed: number | string;
   mode: SimMode;
-  cooldown: number; // seconds remaining, 0 if inactive
+  cooldown: number;
   cooldownEnabled: boolean;
   onToggleCooldown: (enabled: boolean) => void;
   onRestore?: () => void;
   onOpenLog?: () => void;
-  // Group mode: when two devices are connected, cooldown toggle is force-off
-  // and displays a different tooltip. Does not modify the saved setting.
   dualDevice?: boolean;
   runtimes?: RuntimesMap;
   devices?: DeviceInfo[];
@@ -71,8 +67,6 @@ const StatusBar: React.FC<StatusBarProps> = ({
   const t = useT();
   const [cooldownDisplay, setCooldownDisplay] = useState(cooldown);
   const [copied, setCopied] = useState(false);
-  // Initial-position dialog state (React modal replaces unavailable
-  // native window.prompt which Electron does not support).
   const [initialDialogOpen, setInitialDialogOpen] = useState(false);
   const [initialDialogValue, setInitialDialogValue] = useState('');
   const [initialDialogError, setInitialDialogError] = useState<string | null>(null);
@@ -131,35 +125,15 @@ const StatusBar: React.FC<StatusBarProps> = ({
 
   return (
     <div
-      className="status-bar"
+      className="absolute bottom-2.5 left-2.5 right-2.5 z-[var(--z-bar)] flex items-center flex-wrap gap-x-3 gap-y-1 px-4 py-1.5 text-sm text-[var(--color-text-2)] rounded-[18px] tracking-[var(--tracking-normal)]"
       style={{
-        position: 'absolute',
-        bottom: 10,
-        left: 10,
-        right: 10,
-        zIndex: 850,
-        display: 'flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        rowGap: 4,
-        columnGap: 12,
-        padding: '6px 16px',
-        fontSize: 12,
-        color: '#c7cbd9',
         background: 'rgba(18, 21, 32, 0.72)',
         backdropFilter: 'blur(24px) saturate(160%)',
         WebkitBackdropFilter: 'blur(24px) saturate(160%)',
         border: '1px solid rgba(108, 140, 255, 0.18)',
-        borderRadius: 18,
-        boxShadow:
-          '0 14px 36px rgba(12, 18, 40, 0.48), 0 2px 8px rgba(12, 18, 40, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
-        letterSpacing: '-0.005em',
+        boxShadow: '0 14px 36px rgba(12, 18, 40, 0.48), 0 2px 8px rgba(12, 18, 40, 0.3), var(--shadow-inset)',
       }}
     >
-      {/* Connection / device name / iOS version removed from the bottom bar —
-          the left-side DeviceStatus panel already shows all of this, so
-          repeating it here only ate horizontal space. */}
-
       {/* Dual-device pills */}
       {dualDevice && devices && runtimes && devices.slice(0, 2).map((dev, i) => {
         const rt = runtimes[dev.udid];
@@ -174,31 +148,25 @@ const StatusBar: React.FC<StatusBarProps> = ({
         return (
           <div
             key={dev.udid}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '2px 8px',
-              borderRadius: 4,
-              background: 'rgba(255,255,255,0.04)',
-              fontFamily: 'monospace', fontSize: 11,
-            }}
+            className="status-badge-ghost flex items-center gap-1.5 font-mono text-[11px]"
             title={dev.name}
           >
-            <span style={{ color, fontWeight: 700 }}>{letter}</span>
+            <span className="font-bold" style={{ color }}>{letter}</span>
             <span>{coord}</span>
-            <span style={{ opacity: 0.4 }}>·</span>
+            <span className="opacity-40">&middot;</span>
             <span>{spd}km/h</span>
-            <span style={{ opacity: 0.4 }}>·</span>
-            <span style={{ opacity: 0.75 }}>{modeLabel}</span>
+            <span className="opacity-40">&middot;</span>
+            <span className="opacity-75">{modeLabel}</span>
           </div>
         );
       })}
-      {dualDevice && <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.12)' }} />}
+      {dualDevice && <div className="separator-v" />}
 
       {/* Current coordinates (single-device mode only) */}
       {!dualDevice && currentPosition && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'monospace', fontSize: 11 }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.5 }}>
+          <div className="flex items-center gap-1 font-mono text-[11px]">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-50">
               <circle cx="12" cy="12" r="10" />
               <line x1="2" y1="12" x2="22" y2="12" />
               <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
@@ -214,11 +182,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
                 setTimeout(() => setCopied(false), 1500);
               }}
               title={t('status.copy_coord')}
-              style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                padding: '0 4px', color: copied ? '#4caf50' : 'rgba(255,255,255,0.6)',
-                display: 'inline-flex', alignItems: 'center',
-              }}
+              className={`bg-transparent border-none cursor-pointer px-1 inline-flex items-center transition-colors ${copied ? 'text-[var(--color-success)]' : 'text-[rgba(255,255,255,0.6)]'}`}
             >
               {copied ? (
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
@@ -232,60 +196,49 @@ const StatusBar: React.FC<StatusBarProps> = ({
               )}
             </button>
           </div>
-          <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.12)' }} />
+          <div className="separator-v" />
         </>
       )}
 
       {/* Speed + Mode (single-device mode only) */}
-      {!dualDevice && <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.5 }}>
-          <path d="M12 2L2 7l10 5 10-5-10-5z" />
-          <path d="M2 17l10 5 10-5" />
-          <path d="M2 12l10 5 10-5" />
-        </svg>
-        <span>{speed} km/h</span>
-        <span style={{ opacity: 0.4 }}>|</span>
-        <span style={{ opacity: 0.7 }}>{t(modeLabelKeys[mode])}</span>
-      </div>}
+      {!dualDevice && (
+        <div className="flex items-center gap-1">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-50">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5" />
+            <path d="M2 12l10 5 10-5" />
+          </svg>
+          <span>{speed} km/h</span>
+          <span className="opacity-40">|</span>
+          <span className="opacity-70">{t(modeLabelKeys[mode])}</span>
+        </div>
+      )}
 
-      {/* Force wrap to a second row here */}
-      <div style={{ flexBasis: '100%', height: 0 }} />
+      {/* Force wrap to second row */}
+      <div className="basis-full h-0" />
 
       {/* Cooldown enable toggle */}
       <label
         title={dualDevice ? t('status.cooldown_dual_disabled') : t('status.cooldown_tooltip')}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: dualDevice ? 'not-allowed' : 'pointer', userSelect: 'none', opacity: dualDevice ? 0.55 : 1 }}
+        className={`flex items-center gap-1.5 select-none ${dualDevice ? 'cursor-not-allowed opacity-55' : 'cursor-pointer'}`}
       >
         <input
           type="checkbox"
           checked={dualDevice ? false : cooldownEnabled}
           disabled={dualDevice}
           onChange={(e) => { if (!dualDevice) onToggleCooldown(e.target.checked) }}
-          style={{ cursor: dualDevice ? 'not-allowed' : 'pointer', margin: 0 }}
+          className={`m-0 ${dualDevice ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         />
-        <span style={{ opacity: (dualDevice || !cooldownEnabled) ? 0.5 : 1 }}>{(dualDevice || !cooldownEnabled) ? t('status.cooldown_disabled') : t('status.cooldown_enabled')}</span>
+        <span className={`${(dualDevice || !cooldownEnabled) ? 'opacity-50' : ''}`}>
+          {(dualDevice || !cooldownEnabled) ? t('status.cooldown_disabled') : t('status.cooldown_enabled')}
+        </span>
       </label>
 
       {/* Restore button */}
       {onRestore && (
         <>
-          <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.12)' }} />
-          <button
-            onClick={onRestore}
-            title={t('status.restore_tooltip')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '2px 8px',
-              fontSize: 12,
-              background: 'rgba(108, 140, 255, 0.15)',
-              border: '1px solid rgba(108, 140, 255, 0.4)',
-              color: '#6c8cff',
-              borderRadius: 4,
-              cursor: 'pointer',
-            }}
-          >
+          <div className="separator-v" />
+          <button onClick={onRestore} title={t('status.restore_tooltip')} className="status-badge status-badge-accent cursor-pointer">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 12a9 9 0 109-9" />
               <polyline points="3,3 3,9 9,9" />
@@ -293,22 +246,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
             {dualDevice ? t('status.restore_all') : t('status.restore')}
           </button>
           {onOpenLog && (
-            <button
-              onClick={onOpenLog}
-              title={t('status.open_log_tooltip')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '2px 8px',
-                fontSize: 12,
-                background: 'rgba(255, 193, 7, 0.12)',
-                border: '1px solid rgba(255, 193, 7, 0.4)',
-                color: '#ffc107',
-                borderRadius: 4,
-                cursor: 'pointer',
-              }}
-            >
+            <button onClick={onOpenLog} title={t('status.open_log_tooltip')} className="status-badge status-badge-warning cursor-pointer">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
@@ -318,7 +256,6 @@ const StatusBar: React.FC<StatusBarProps> = ({
               {t('status.open_log')}
             </button>
           )}
-          {/* Set initial map position (persisted in backend settings.json) */}
           <button
             onClick={async () => {
               const { getInitialPosition } = await import('../services/api');
@@ -330,18 +267,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
               setInitialDialogOpen(true);
             }}
             title={t('status.set_initial_tooltip')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '2px 8px',
-              fontSize: 12,
-              background: 'rgba(78, 205, 196, 0.12)',
-              border: '1px solid rgba(78, 205, 196, 0.4)',
-              color: '#4ecdc4',
-              borderRadius: 4,
-              cursor: 'pointer',
-            }}
+            className="status-badge status-badge-success cursor-pointer"
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
@@ -355,17 +281,9 @@ const StatusBar: React.FC<StatusBarProps> = ({
       {/* Cooldown timer */}
       {cooldownDisplay > 0 && (
         <>
-          <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.12)' }} />
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              color: '#ff9800',
-              fontWeight: 600,
-            }}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2">
+          <div className="separator-v" />
+          <div className="flex items-center gap-1 font-semibold text-[var(--color-device-b)]">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--color-device-b)" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
               <polyline points="12,6 12,12 16,14" />
             </svg>
@@ -374,18 +292,18 @@ const StatusBar: React.FC<StatusBarProps> = ({
         </>
       )}
 
-      {/* Spacer to push right-aligned items */}
-      <div style={{ flex: 1 }} />
+      {/* Spacer */}
+      <div className="flex-1" />
 
-      {/* Right cluster: lang toggle · time · version, all inline. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      {/* Right cluster */}
+      <div className="flex items-center gap-1.5">
         <LangToggle />
-        <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.12)' }} />
-        <span style={{ opacity: 0.4, fontSize: 10 }}>
+        <div className="separator-v h-3" />
+        <span className="opacity-40 text-[10px]">
           {new Date().toLocaleTimeString(undefined, { hour12: false })}
         </span>
-        <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.12)' }} />
-        <span style={{ fontSize: 10, opacity: 0.45, fontFamily: 'monospace' }}>
+        <div className="separator-v h-3" />
+        <span className="text-[10px] opacity-45 font-mono">
           v{APP_VERSION}
         </span>
       </div>
@@ -393,28 +311,11 @@ const StatusBar: React.FC<StatusBarProps> = ({
       {initialDialogOpen && createPortal((
         <div
           onClick={() => { if (!initialDialogBusy) setInitialDialogOpen(false); }}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 2000,
-            background: 'rgba(8, 10, 20, 0.55)', backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
+          className="modal-overlay"
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 360, background: 'rgba(26, 29, 39, 0.96)',
-              border: '1px solid rgba(108, 140, 255, 0.25)', borderRadius: 12,
-              padding: 22, color: '#e8eaf0',
-              boxShadow: '0 20px 60px rgba(12, 18, 40, 0.65)',
-              fontSize: 13,
-            }}
-          >
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>
-              {t('status.set_initial')}
-            </div>
-            <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 12, lineHeight: 1.5 }}>
-              {t('status.set_initial_prompt')}
-            </div>
+          <div onClick={(e) => e.stopPropagation()} className="modal-dialog">
+            <div className="modal-title">{t('status.set_initial')}</div>
+            <div className="modal-body">{t('status.set_initial_prompt')}</div>
             <input
               type="text"
               value={initialDialogValue}
@@ -425,37 +326,22 @@ const StatusBar: React.FC<StatusBarProps> = ({
               }}
               autoFocus
               placeholder="25.033, 121.564"
-              style={{
-                width: '100%', boxSizing: 'border-box',
-                background: 'rgba(10, 12, 18, 0.7)',
-                border: '1px solid rgba(108, 140, 255, 0.3)',
-                borderRadius: 6, color: '#e8eaf0',
-                padding: '8px 10px', fontFamily: 'monospace', fontSize: 13,
-                outline: 'none',
-              }}
+              className="seg-input w-full font-mono"
             />
             {initialDialogError && (
-              <div style={{ color: '#ff4757', fontSize: 11, marginTop: 8 }}>{initialDialogError}</div>
+              <div className="text-[var(--color-danger)] text-[11px] mt-2">{initialDialogError}</div>
             )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+            <div className="modal-actions">
               <button
                 onClick={() => setInitialDialogOpen(false)}
                 disabled={initialDialogBusy}
-                style={{
-                  padding: '6px 14px', fontSize: 12, cursor: 'pointer',
-                  background: 'transparent', color: '#9499ac',
-                  border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6,
-                }}
+                className="action-btn"
               >{t('generic.cancel')}</button>
               <button
                 onClick={handleInitialDialogSave}
                 disabled={initialDialogBusy}
-                style={{
-                  padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  background: '#6c8cff', color: '#fff',
-                  border: 'none', borderRadius: 6,
-                  opacity: initialDialogBusy ? 0.6 : 1,
-                }}
+                className="action-btn primary"
+                style={{ opacity: initialDialogBusy ? 0.6 : 1 }}
               >{t('generic.save')}</button>
             </div>
           </div>

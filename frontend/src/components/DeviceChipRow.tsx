@@ -1,4 +1,5 @@
 import { DeviceChip } from './DeviceChip'
+import { DEVICE_LETTERS } from '../lib/constants'
 import type { DeviceInfo } from '../hooks/useDevice'
 import type { RuntimesMap } from '../hooks/useSimulation'
 
@@ -18,7 +19,7 @@ export function DeviceChipRow({ devices, runtimes, onDisconnect, onRestoreOne, o
       flexWrap: 'wrap',
     }}>
       {devices.slice(0, 2).map((d, i) => {
-        const letter = (i === 0 ? 'A' : 'B') as 'A' | 'B'
+        const letter = DEVICE_LETTERS[i]
         return (
           <DeviceChip
             key={d.udid}

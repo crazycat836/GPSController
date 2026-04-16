@@ -1,16 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useT } from '../i18n'
+import { DEVICE_COLORS } from '../lib/constants'
+import type { DeviceLetter } from '../lib/constants'
 import type { DeviceInfo } from '../hooks/useDevice'
 import type { DeviceRuntime } from '../hooks/useSimulation'
 
-export const DEVICE_COLORS: Record<'A' | 'B', string> = {
-  A: '#4285f4',
-  B: '#ff9800',
-}
-
 interface Props {
-  letter: 'A' | 'B'
+  letter: DeviceLetter
   device: DeviceInfo
   runtime?: DeviceRuntime
   onDisconnect: () => void
@@ -44,11 +41,11 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
   }, [menu])
 
   const dotColor = {
-    idle: '#4ecdc4',
-    running: '#6c8cff',
-    paused: '#ffb627',
-    error: '#ff6b6b',
-    disconnected: '#ff6b6b',
+    idle: 'var(--color-device-idle)',
+    running: 'var(--color-accent)',
+    paused: 'var(--color-device-paused)',
+    error: 'var(--color-device-error)',
+    disconnected: 'var(--color-device-error)',
   }[kind]
 
   const label = {
@@ -59,7 +56,7 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
     disconnected: t('device.chip_state_disconnected'),
   }[kind]
 
-  const accent = DEVICE_COLORS[letter]
+  const accent = DEVICE_COLORS[letter === 'A' ? 0 : 1]
   const shortName = (device.name || 'iPhone').slice(0, 14)
 
   return (
@@ -106,7 +103,7 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
           style={{
             position: 'fixed', left: menu.x, top: menu.y,
             borderRadius: 'var(--radius-md)', padding: 4, minWidth: 160,
-            zIndex: 1002, fontSize: 12, color: '#eaeaea',
+            zIndex: 'var(--z-dropdown)', fontSize: 12, color: 'var(--color-text-1)',
           }}
         >
           <MenuItem onClick={() => { setMenu(null); onRestoreOne() }}>{t('device.chip_restore')}</MenuItem>

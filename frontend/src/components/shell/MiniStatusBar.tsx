@@ -4,6 +4,7 @@ import { SimMode, stateToMode } from '../../hooks/useSimulation'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useT } from '../../i18n'
+import { DEVICE_COLORS, DEVICE_LETTERS } from '../../lib/constants'
 import type { StringKey } from '../../i18n'
 
 const modeLabelKeys: Record<SimMode, StringKey> = {
@@ -14,9 +15,6 @@ const modeLabelKeys: Record<SimMode, StringKey> = {
   [SimMode.RandomWalk]: 'mode.random_walk',
   [SimMode.Joystick]: 'mode.joystick',
 }
-
-const DEVICE_COLORS = ['#4285f4', '#ff9800', '#4ecdc4', '#e040fb'] as const
-const DEVICE_LETTERS = ['A', 'B', 'C', 'D'] as const
 
 export default function MiniStatusBar() {
   const t = useT()

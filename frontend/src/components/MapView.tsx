@@ -47,8 +47,9 @@ interface MapViewProps {
   devices?: DeviceInfo[];
 }
 
-const DEVICE_COLORS = ['#4285f4', '#ff9800'];
-const DEVICE_LETTERS = ['A', 'B'];
+// Leaflet requires raw hex — CSS variables don't work in SVG marker innerHTML.
+// Keep in sync with --color-device-a / --color-device-b in index.css @theme.
+import { DEVICE_COLORS_HEX as DEVICE_COLORS, DEVICE_LETTERS } from '../lib/constants';
 
 function haversineM(a: Position, b: Position): number {
   const R = 6371000;
