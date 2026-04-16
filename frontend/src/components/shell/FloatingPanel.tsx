@@ -2,8 +2,7 @@ import React, { useState } from 'react'
 import { ChevronDown, ChevronUp, Crosshair, Navigation, Repeat, Route, Shuffle, Gamepad2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useT } from '../../i18n'
-import { SimMode } from '../../hooks/useSimulation'
-import { MODE_LABEL_KEYS } from '../../lib/constants'
+import { SimMode, MODE_LABEL_KEYS } from '../../hooks/useSimulation'
 
 const modeIcons: Record<SimMode, LucideIcon> = {
   [SimMode.Teleport]: Crosshair,

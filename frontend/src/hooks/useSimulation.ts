@@ -18,6 +18,16 @@ export enum MoveMode {
   Driving = 'driving',
 }
 
+/** SimMode → i18n label key mapping. */
+export const MODE_LABEL_KEYS = {
+  [SimMode.Teleport]: 'mode.teleport',
+  [SimMode.Navigate]: 'mode.navigate',
+  [SimMode.Loop]: 'mode.loop',
+  [SimMode.MultiStop]: 'mode.multi_stop',
+  [SimMode.RandomWalk]: 'mode.random_walk',
+  [SimMode.Joystick]: 'mode.joystick',
+} as const
+
 /** Map backend state strings to SimMode. */
 export function stateToMode(state: string): SimMode | null {
   switch (state) {

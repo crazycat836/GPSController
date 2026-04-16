@@ -1,10 +1,10 @@
 import React, { useState, useCallback } from 'react'
 import { Copy, Check } from 'lucide-react'
-import { SimMode, stateToMode } from '../../hooks/useSimulation'
+import { SimMode, stateToMode, MODE_LABEL_KEYS } from '../../hooks/useSimulation'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useT } from '../../i18n'
-import { DEVICE_COLORS, DEVICE_LETTERS, MODE_LABEL_KEYS } from '../../lib/constants'
+import { DEVICE_COLORS, DEVICE_LETTERS } from '../../lib/constants'
 
 export default function MiniStatusBar() {
   const t = useT()

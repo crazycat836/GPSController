@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { SimMode, stateToMode } from '../hooks/useSimulation';
+import { SimMode, stateToMode, MODE_LABEL_KEYS } from '../hooks/useSimulation';
 import type { RuntimesMap } from '../hooks/useSimulation';
 import type { DeviceInfo } from '../hooks/useDevice';
 import { useT } from '../i18n';
-import { DEVICE_COLORS, DEVICE_LETTERS, MODE_LABEL_KEYS } from '../lib/constants';
+import { DEVICE_COLORS, DEVICE_LETTERS } from '../lib/constants';
 import LangToggle from './LangToggle';
 import pkg from '../../package.json';
 
