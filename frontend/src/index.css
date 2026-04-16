@@ -144,7 +144,7 @@
   /* ── Z-Index Scale ──────────────────────────────────────────
      Structured elevation layers. Never use ad-hoc z values. */
   --z-base: 0;
-  --z-map-ui: 100;
+  --z-map-ui: 1000;
   --z-bar: 200;
   --z-ui: 400;
   --z-float: 500;
