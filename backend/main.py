@@ -25,9 +25,33 @@ if _old_data_dir.exists() and not _new_data_dir.exists():
     except OSError:
         pass  # cross-device or permission issue — ignore, will create fresh
 
-# Configure logging — console + rotating file in ~/.gpscontroller/logs/
+# Configure logging — colored console + rotating file in ~/.gpscontroller/logs/
 _log_fmt = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"
+_log_datefmt = "%Y-%m-%d %H:%M:%S"
 _log_dir = _new_data_dir / "logs"
+
+
+class _ColorFormatter(logging.Formatter):
+    """Adds ANSI color to the level name for terminal output."""
+
+    _COLORS = {
+        logging.DEBUG: "\033[36m",     # cyan
+        logging.INFO: "\033[32m",      # green
+        logging.WARNING: "\033[33m",   # yellow
+        logging.ERROR: "\033[31m",     # red
+        logging.CRITICAL: "\033[1;31m",  # bold red
+    }
+    _RESET = "\033[0m"
+
+    def format(self, record: logging.LogRecord) -> str:
+        color = self._COLORS.get(record.levelno, "")
+        record.levelname = f"{color}{record.levelname}{self._RESET}"
+        return super().format(record)
+
+
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(_ColorFormatter(_log_fmt, datefmt=_log_datefmt))
+
 try:
     _log_dir.mkdir(parents=True, exist_ok=True)
     _file_handler = RotatingFileHandler(
@@ -36,13 +60,21 @@ try:
         backupCount=3,
         encoding="utf-8",
     )
-    _file_handler.setFormatter(logging.Formatter(_log_fmt))
+    _file_handler.setFormatter(logging.Formatter(_log_fmt, datefmt=_log_datefmt))
     _file_handler.setLevel(logging.INFO)
-    _handlers = [logging.StreamHandler(), _file_handler]
+    _handlers: list[logging.Handler] = [_console_handler, _file_handler]
 except Exception:
-    _handlers = [logging.StreamHandler()]
-logging.basicConfig(level=logging.INFO, format=_log_fmt, handlers=_handlers, force=True)
+    _handlers: list[logging.Handler] = [_console_handler]
+logging.basicConfig(level=logging.INFO, handlers=_handlers, force=True)
 logger = logging.getLogger("gpscontroller")
+
+# ── Filter out noisy OPTIONS preflight requests from access log ──
+class _OptionsFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return '"OPTIONS ' not in msg
+
+logging.getLogger("uvicorn.access").addFilter(_OptionsFilter())
 
 
 class AppState:
@@ -56,7 +88,8 @@ class AppState:
         # been refactored.
         self.simulation_engines: dict = {}
         self._primary_udid: str | None = None
-        self.cooldown_timer = CooldownTimer()
+        from api.websocket import broadcast
+        self.cooldown_timer = CooldownTimer(broadcast=broadcast)
         self.bookmark_manager = BookmarkManager()
         self.coord_formatter = CoordinateFormatter()
         self.reconnect_manager = None
@@ -322,6 +355,7 @@ async def _usbmux_presence_watchdog():
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     import asyncio
+    from api.websocket import broadcast
     # ── Startup ──
     logger.info("GPSController starting — scanning for devices…")
     try:
@@ -404,4 +438,46 @@ async def root():
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host=API_HOST, port=API_PORT, reload=False)
+    # Custom log config: keep Uvicorn's colored output but unify the format
+    _uvicorn_log_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "()": "uvicorn.logging.DefaultFormatter",
+                "fmt": "%(asctime)s [uvicorn] %(levelprefix)s %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+                "use_colors": True,
+            },
+            "access": {
+                "()": "uvicorn.logging.AccessFormatter",
+                "fmt": "%(asctime)s [uvicorn.access] %(levelprefix)s %(client_addr)s - \"%(request_line)s\" %(status_code)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+                "use_colors": True,
+            },
+        },
+        "handlers": {
+            "default": {
+                "formatter": "default",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stderr",
+            },
+            "access": {
+                "formatter": "access",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stdout",
+            },
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+            "uvicorn.error": {"level": "INFO"},
+            "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+        },
+    }
+    uvicorn.run(
+        "main:app",
+        host=API_HOST,
+        port=API_PORT,
+        reload=False,
+        log_config=_uvicorn_log_config,
+    )

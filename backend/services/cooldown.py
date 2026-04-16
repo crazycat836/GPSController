@@ -5,11 +5,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from typing import Awaitable, Callable
 
 from config import COOLDOWN_TABLE
 from services.interpolator import RouteInterpolator
 
 logger = logging.getLogger(__name__)
+
+# Type alias for the broadcast callback.
+BroadcastFn = Callable[[str, dict], Awaitable[None]]
 
 
 class CooldownTimer:
@@ -19,7 +23,7 @@ class CooldownTimer:
     great-circle distance between the old and new positions.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, broadcast: BroadcastFn | None = None) -> None:
         self.enabled: bool = False
         self.is_active: bool = False
         self.remaining: float = 0.0
@@ -27,6 +31,7 @@ class CooldownTimer:
         self.distance_km: float = 0.0
         self._task: asyncio.Task[None] | None = None
         self._start_time: float = 0.0
+        self._broadcast = broadcast
 
     # ------------------------------------------------------------------
     # Cooldown lookup
@@ -78,6 +83,7 @@ class CooldownTimer:
             cooldown_sec,
         )
 
+        await self._emit()
         self._task = asyncio.create_task(self._countdown())
 
     async def _countdown(self) -> None:
@@ -87,6 +93,7 @@ class CooldownTimer:
                 await asyncio.sleep(1.0)
                 elapsed = time.monotonic() - self._start_time
                 self.remaining = max(0.0, self.total - elapsed)
+                await self._emit()
 
             logger.info("Cooldown finished")
         except asyncio.CancelledError:
@@ -94,6 +101,7 @@ class CooldownTimer:
         finally:
             self.is_active = False
             self.remaining = 0.0
+            await self._emit()
 
     async def dismiss(self) -> None:
         """Cancel an active cooldown immediately."""
@@ -107,6 +115,19 @@ class CooldownTimer:
 
         self.is_active = False
         self.remaining = 0.0
+
+    # ------------------------------------------------------------------
+    # WebSocket broadcast
+    # ------------------------------------------------------------------
+
+    async def _emit(self) -> None:
+        """Push cooldown state to all connected clients via WebSocket."""
+        if self._broadcast is None:
+            return
+        try:
+            await self._broadcast("cooldown_update", self.get_status())
+        except Exception:
+            logger.debug("cooldown broadcast failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Status

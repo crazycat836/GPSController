@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useT } from '../i18n';
+import { getInitialPosition } from '../services/api';
 import L from 'leaflet';
 
 interface Position {
@@ -220,13 +221,11 @@ const MapView: React.FC<MapViewProps> = ({
 
     // Fetch the user-saved initial position from the backend (once, on mount).
     // If set, pan the map to it. Brief Taipei flash is acceptable.
-    import('../services/api').then(({ getInitialPosition }) => {
-      getInitialPosition().then(({ position }) => {
-        if (!position || !mapRef.current) return;
-        if (prevPositionRef.current) return; // a real device position already arrived
-        mapRef.current.setView([position.lat, position.lng], mapRef.current.getZoom());
-      }).catch(() => { /* default center stays */ });
-    });
+    getInitialPosition().then(({ position }) => {
+      if (!position || !mapRef.current) return;
+      if (prevPositionRef.current) return; // a real device position already arrived
+      mapRef.current.setView([position.lat, position.lng], mapRef.current.getZoom());
+    }).catch(() => { /* default center stays */ });
 
     return () => {
       ro.disconnect();

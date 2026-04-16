@@ -26,11 +26,33 @@ async def broadcast(event_type: str, data: dict):
         _connections.remove(ws)
 
 
+async def _send_initial_state(ws: WebSocket) -> None:
+    """Push current position and cooldown to a newly connected client."""
+    from main import app_state
+    # Current position from any active engine
+    for engine in app_state.simulation_engines.values():
+        pos = engine.current_position
+        if pos:
+            await ws.send_text(json.dumps({
+                "type": "position_update",
+                "data": {"lat": pos.lat, "lng": pos.lng},
+            }))
+            break
+    # Cooldown state
+    cd = app_state.cooldown_timer.get_status()
+    await ws.send_text(json.dumps({"type": "cooldown_update", "data": cd}))
+
+
 @router.websocket("/ws/status")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     _connections.append(ws)
     logger.info("WebSocket client connected (%d total)", len(_connections))
+
+    try:
+        await _send_initial_state(ws)
+    except Exception:
+        logger.debug("Failed to send initial state to new WS client", exc_info=True)
 
     try:
         while True:
