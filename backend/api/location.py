@@ -262,6 +262,11 @@ def _spawn(coro):
 @router.post("/navigate")
 async def navigate(req: NavigateRequest):
     engine = await _engine(getattr(req, "udid", None) if 'req' in dir() else None)
+    if engine.current_position is None:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "no_position", "message": "尚未取得目前位置,請先跳點到一個座標"},
+        )
     _spawn(engine.navigate(
         Coordinate(lat=req.lat, lng=req.lng), req.mode,
         speed_kmh=req.speed_kmh,
