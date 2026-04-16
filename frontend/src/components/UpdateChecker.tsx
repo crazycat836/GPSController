@@ -2,14 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import pkg from '../../package.json';
 import { useT } from '../i18n';
+import { STORAGE_KEYS } from '../lib/storage-keys';
 
 const CURRENT = (pkg as { version: string }).version;
-const REPO = 'keezxc1223/gpscontroller';
+const REPO = 'keezxc1223/locwarp';
 const RELEASES_URL = `https://github.com/${REPO}/releases`;
 const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
-// Don't nag more than once per 6 h per unique newer version.
 const COOLDOWN_MS = 6 * 60 * 60 * 1000;
-const DISMISS_KEY = 'gpscontroller.update_check.dismissed';
+const DISMISS_KEY = STORAGE_KEYS.updateDismissed;
 
 function parseVer(s: string): number[] {
   return s.replace(/^v/i, '').split('.').map((p) => parseInt(p, 10) || 0);

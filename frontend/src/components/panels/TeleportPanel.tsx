@@ -21,7 +21,7 @@ export default function TeleportPanel() {
     <div className="seg-stack">
       <div className="seg">
         <div className="seg-row seg-row-header">
-          <span className="seg-label">{t('panel.coordinates' as any)}</span>
+          <span className="seg-label">{t('panel.coordinates')}</span>
         </div>
         <div className="seg-row seg-row-flush">
           <div className="flex gap-2 w-full">
@@ -55,12 +55,12 @@ export default function TeleportPanel() {
         className="seg-cta seg-cta-accent"
       >
         <MapPin className="w-3.5 h-3.5" />
-        {t('generic.go' as any)}
+        {t('generic.go')}
       </button>
 
       <div className="seg-hint">
         <Search className="w-3.5 h-3.5 shrink-0" />
-        <span className="flex-1">{t('panel.search_hint' as any)}</span>
+        <span className="flex-1">{t('panel.search_hint')}</span>
         <kbd className="px-1.5 py-0.5 rounded-md bg-white/[0.06] text-[10px] font-mono text-[var(--color-text-3)] border border-[var(--color-border)]">⌘K</kbd>
       </div>
     </div>

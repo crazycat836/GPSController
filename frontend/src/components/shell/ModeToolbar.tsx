@@ -3,8 +3,9 @@ import { Crosshair, Navigation, Repeat, Route, Shuffle, Gamepad2 } from 'lucide-
 import type { LucideIcon } from 'lucide-react'
 import { SimMode } from '../../hooks/useSimulation'
 import { useT } from '../../i18n'
+import type { StringKey } from '../../i18n'
 
-const modes: Array<{ mode: SimMode; icon: LucideIcon; labelKey: string }> = [
+const modes: Array<{ mode: SimMode; icon: LucideIcon; labelKey: StringKey }> = [
   { mode: SimMode.Teleport, icon: Crosshair, labelKey: 'mode.teleport' },
   { mode: SimMode.Navigate, icon: Navigation, labelKey: 'mode.navigate' },
   { mode: SimMode.Loop, icon: Repeat, labelKey: 'mode.loop' },
@@ -43,8 +44,8 @@ export default function ModeToolbar({ activeMode, onModeChange }: ModeToolbarPro
                 ? 'bg-[var(--color-accent-dim)] text-[var(--color-accent)] shadow-[0_0_12px_rgba(108,140,255,0.25)]'
                 : 'text-[var(--color-text-2)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-1)]',
             ].join(' ')}
-            title={t(labelKey as any)}
-            aria-label={t(labelKey as any)}
+            title={t(labelKey)}
+            aria-label={t(labelKey)}
             aria-pressed={isActive}
           >
             <Icon className="w-[18px] h-[18px]" />

@@ -9,7 +9,9 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-const STORAGE_KEY = 'locwarp.lang';
+import { STORAGE_KEYS } from '../lib/storage-keys';
+
+const STORAGE_KEY = STORAGE_KEYS.lang;
 
 function detectInitialLang(): Lang {
   try {

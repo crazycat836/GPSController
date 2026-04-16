@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import {
   listDevices, connectDevice, disconnectDevice,
   wifiConnect, wifiScan,
@@ -232,7 +232,7 @@ export function useDevice(subscribe?: WsSubscribe) {
   // because scan() preserves backend list order). Existing single-device
   // call sites can keep reading `connectedDevice`; new call sites should
   // prefer `connectedDevices` / `primaryDevice`.
-  const connectedDevices: DeviceInfo[] = devices.filter((d) => d.is_connected)
+  const connectedDevices = useMemo(() => devices.filter((d) => d.is_connected), [devices])
   const primaryDevice: DeviceInfo | null = connectedDevices[0] ?? connectedDevice ?? null
 
   return {

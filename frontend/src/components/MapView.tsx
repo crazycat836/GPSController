@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useT } from '../i18n';
+import { STORAGE_KEYS } from '../lib/storage-keys';
 import L from 'leaflet';
 
 interface Position {
@@ -108,7 +109,7 @@ const MapView: React.FC<MapViewProps> = ({
   const radiusCircleRef = useRef<L.Circle | null>(null);
 
   const [layerKey, setLayerKey] = useState(() => {
-    try { return localStorage.getItem('locwarp.tile_layer') || 'osm'; }
+    try { return localStorage.getItem(STORAGE_KEYS.tileLayer) || 'osm'; }
     catch { return 'osm'; }
   });
   const [layerOpen, setLayerOpen] = useState(false);
@@ -131,7 +132,7 @@ const MapView: React.FC<MapViewProps> = ({
     if (layers[key]) layers[key].addTo(map);
     setLayerKey(key);
     setLayerOpen(false);
-    try { localStorage.setItem('locwarp.tile_layer', key); } catch {}
+    try { localStorage.setItem(STORAGE_KEYS.tileLayer, key); } catch {}
   }, []);
 
   const closeContextMenu = useCallback(() => {
@@ -197,7 +198,7 @@ const MapView: React.FC<MapViewProps> = ({
 
     const layers: Record<string, L.TileLayer> = { osm: osmLayer, carto: cartoLayer, esri: esriLayer };
     layerMapRef.current = layers;
-    const savedLayer = localStorage.getItem('locwarp.tile_layer') || 'osm';
+    const savedLayer = localStorage.getItem(STORAGE_KEYS.tileLayer) || 'osm';
     const activeLayer = layers[savedLayer] || osmLayer;
     activeLayer.addTo(map);
 

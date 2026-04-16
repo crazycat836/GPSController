@@ -8,6 +8,7 @@ import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { wifiTunnelDiscover, wifiRepair } from '../../services/api'
 import { useT } from '../../i18n'
+import { STORAGE_KEYS } from '../../lib/storage-keys'
 
 interface DeviceDrawerProps {
   open: boolean
@@ -27,8 +28,8 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
 
   // WiFi tunnel state
   const [wifiExpanded, setWifiExpanded] = useState(false)
-  const [tunnelIp, setTunnelIp] = useState(() => localStorage.getItem('locwarp.tunnel.ip') || '')
-  const [tunnelPort, setTunnelPort] = useState(() => localStorage.getItem('locwarp.tunnel.port') || '49152')
+  const [tunnelIp, setTunnelIp] = useState(() => localStorage.getItem(STORAGE_KEYS.tunnelIp) || '')
+  const [tunnelPort, setTunnelPort] = useState(() => localStorage.getItem(STORAGE_KEYS.tunnelPort) || '49152')
   const [tunnelConnecting, setTunnelConnecting] = useState(false)
   const [tunnelError, setTunnelError] = useState<string | null>(null)
   const [discovering, setDiscovering] = useState(false)
@@ -81,8 +82,8 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
     setTunnelError(null)
     try {
       await device.startWifiTunnel(tunnelIp.trim(), parseInt(tunnelPort) || 49152)
-      localStorage.setItem('locwarp.tunnel.ip', tunnelIp.trim())
-      localStorage.setItem('locwarp.tunnel.port', tunnelPort || '49152')
+      localStorage.setItem(STORAGE_KEYS.tunnelIp, tunnelIp.trim())
+      localStorage.setItem(STORAGE_KEYS.tunnelPort, tunnelPort || '49152')
       showToast('WiFi tunnel connected')
     } catch (err: unknown) {
       setTunnelError(err instanceof Error ? err.message : 'WiFi tunnel failed')

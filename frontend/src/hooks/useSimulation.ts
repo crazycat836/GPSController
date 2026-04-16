@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import * as api from '../services/api'
+import { STORAGE_KEYS } from '../lib/storage-keys'
 import type { WsMessage } from './useWebSocket'
 
 export enum SimMode {
@@ -15,6 +16,18 @@ export enum MoveMode {
   Walking = 'walking',
   Running = 'running',
   Driving = 'driving',
+}
+
+/** Map backend state strings to SimMode. */
+export function stateToMode(state: string): SimMode | null {
+  switch (state) {
+    case 'navigating': return SimMode.Navigate
+    case 'looping': return SimMode.Loop
+    case 'multi_stop': return SimMode.MultiStop
+    case 'random_walk': return SimMode.RandomWalk
+    case 'joystick': return SimMode.Joystick
+    default: return null
+  }
 }
 
 export interface LatLng {
@@ -113,11 +126,11 @@ export function useSimulation(subscribe?: WsSubscribe) {
   // Global "straight-line path" toggle. When on, all nav modes bypass OSRM
   // and move along densified straight segments between waypoints.
   const [straightLine, setStraightLineRaw] = useState<boolean>(() => {
-    try { return localStorage.getItem('locwarp.straight_line') === '1' } catch { return false }
+    try { return localStorage.getItem(STORAGE_KEYS.straightLine) === '1' } catch { return false }
   })
   const setStraightLine = (v: boolean) => {
     setStraightLineRaw(v)
-    try { localStorage.setItem('locwarp.straight_line', v ? '1' : '0') } catch { /* ignore */ }
+    try { localStorage.setItem(STORAGE_KEYS.straightLine, v ? '1' : '0') } catch { /* ignore */ }
   }
 
   // Per-mode pause settings, persisted in localStorage.
@@ -140,12 +153,12 @@ export function useSimulation(subscribe?: WsSubscribe) {
   const savePause = (key: string, v: PauseSetting) => {
     try { localStorage.setItem(key, JSON.stringify(v)) } catch { /* ignore */ }
   }
-  const [pauseMultiStop, setPauseMultiStopRaw] = useState<PauseSetting>(() => loadPause('locwarp.pause.multi_stop'))
-  const [pauseLoop, setPauseLoopRaw] = useState<PauseSetting>(() => loadPause('locwarp.pause.loop'))
-  const [pauseRandomWalk, setPauseRandomWalkRaw] = useState<PauseSetting>(() => loadPause('locwarp.pause.random_walk'))
-  const setPauseMultiStop = (v: PauseSetting) => { setPauseMultiStopRaw(v); savePause('locwarp.pause.multi_stop', v) }
-  const setPauseLoop = (v: PauseSetting) => { setPauseLoopRaw(v); savePause('locwarp.pause.loop', v) }
-  const setPauseRandomWalk = (v: PauseSetting) => { setPauseRandomWalkRaw(v); savePause('locwarp.pause.random_walk', v) }
+  const [pauseMultiStop, setPauseMultiStopRaw] = useState<PauseSetting>(() => loadPause(STORAGE_KEYS.pauseMultiStop))
+  const [pauseLoop, setPauseLoopRaw] = useState<PauseSetting>(() => loadPause(STORAGE_KEYS.pauseLoop))
+  const [pauseRandomWalk, setPauseRandomWalkRaw] = useState<PauseSetting>(() => loadPause(STORAGE_KEYS.pauseRandomWalk))
+  const setPauseMultiStop = (v: PauseSetting) => { setPauseMultiStopRaw(v); savePause(STORAGE_KEYS.pauseMultiStop, v) }
+  const setPauseLoop = (v: PauseSetting) => { setPauseLoopRaw(v); savePause(STORAGE_KEYS.pauseLoop, v) }
+  const setPauseRandomWalk = (v: PauseSetting) => { setPauseRandomWalkRaw(v); savePause(STORAGE_KEYS.pauseRandomWalk, v) }
   const [error, setError] = useState<string | null>(null)
   // Random-walk pause countdown (unix epoch seconds of when pause ends)
   const [pauseEndAt, setPauseEndAt] = useState<number | null>(null)
@@ -180,7 +193,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
       if (rem <= 0) setPauseEndAt(null)
     }
     tick()
-    const id = setInterval(tick, 250)
+    const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [pauseEndAt])
 
@@ -311,13 +324,13 @@ export function useSimulation(subscribe?: WsSubscribe) {
       }
       case 'tunnel_lost': {
         // Uses localStorage to get current language (hooks don't have i18n context easily here)
-        setError((typeof localStorage !== 'undefined' && localStorage.getItem('locwarp.lang') === 'en')
+        setError((typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEYS.lang) === 'en')
           ? 'Wi-Fi tunnel dropped, please reconnect'
           : 'WiFi Tunnel 連線中斷,請重新建立')
         break
       }
       case 'device_disconnected': {
-        const isEn = typeof localStorage !== 'undefined' && localStorage.getItem('locwarp.lang') === 'en'
+        const isEn = typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEYS.lang) === 'en'
         setError(isEn
           ? 'Device disconnected (USB unplugged or tunnel died), please reconnect USB'
           : '裝置連線中斷(USB 拔除或 Tunnel 死亡),請重新插上 USB')

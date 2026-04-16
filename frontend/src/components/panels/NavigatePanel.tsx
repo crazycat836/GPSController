@@ -10,7 +10,7 @@ export default function NavigatePanel() {
     <div className="seg-stack">
       <div className="seg-hint seg-hint-accent">
         <MousePointerClick className="w-3.5 h-3.5 shrink-0" />
-        <span>{t('panel.navigate_hint' as any)}</span>
+        <span>{t('panel.navigate_hint')}</span>
       </div>
       <SpeedControls />
       <ActionButtons />

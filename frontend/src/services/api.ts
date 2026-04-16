@@ -1,3 +1,5 @@
+import { STORAGE_KEYS } from '../lib/storage-keys'
+
 const API = 'http://127.0.0.1:8777'
 
 // Connection-refused means backend isn't up yet, retry with backoff.
@@ -31,21 +33,21 @@ const ERROR_I18N: Record<string, { zh: string; en: string }> = {
   repair_needs_usb: { zh: '重新配對需要 USB, 請先用線連接 iPhone', en: 'Re-pair needs USB, please connect the iPhone first' },
   usbmux_unavailable: { zh: '無法列出 USB 裝置,請確認驅動與 Apple Mobile Device Service 是否正常', en: 'Cannot list USB devices, check iTunes/Apple Mobile Device Service' },
   trust_failed: { zh: 'USB 信任失敗, 請在 iPhone 上點「信任」後再試', en: 'USB trust failed, tap Trust on the iPhone and retry' },
-  remote_pair_failed: { zh: 'RemotePairing 記錄重建失敗, 請以系統管理員身分重啟 LocWarp', en: 'RemotePairing record rebuild failed, restart LocWarp as Administrator' },
+  remote_pair_failed: { zh: 'RemotePairing 記錄重建失敗, 請以系統管理員身分重啟 GPSController', en: 'RemotePairing record rebuild failed, restart GPSController as Administrator' },
   device_lost: { zh: '裝置連線中斷(USB 拔除或 Tunnel 死亡),請重新插上 USB 後再操作', en: 'Device connection lost (USB unplugged or tunnel died), please reconnect USB and try again' },
   max_devices_reached: {
     zh: '已連接最多 2 台裝置',
     en: 'Maximum 2 devices connected',
   },
   ios_unsupported: {
-    zh: '裝置 iOS 版本過舊,LocWarp 僅支援 iOS 16 以上。請升級 iOS 後再試。',
-    en: 'This device runs an unsupported iOS version. LocWarp requires iOS 16 or later. Please update and try again.',
+    zh: '裝置 iOS 版本過舊,GPSController 僅支援 iOS 16 以上。請升級 iOS 後再試。',
+    en: 'This device runs an unsupported iOS version. GPSController requires iOS 16 or later. Please update and try again.',
   },
 }
 
 function currentLang(): 'zh' | 'en' {
   try {
-    const v = localStorage.getItem('locwarp.lang')
+    const v = localStorage.getItem(STORAGE_KEYS.lang)
     if (v === 'en' || v === 'zh') return v
   } catch { /* ignore */ }
   return (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('zh')) ? 'zh' : 'en'

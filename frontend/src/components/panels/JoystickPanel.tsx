@@ -12,7 +12,7 @@ export default function JoystickPanel() {
       <ActionButtons />
       <div className="seg-hint">
         <Gamepad2 className="w-3.5 h-3.5 shrink-0" />
-        <span>{t('panel.joystick_hint' as any)}</span>
+        <span>{t('panel.joystick_hint')}</span>
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { useSimulation, SimMode, MoveMode } from '../hooks/useSimulation'
 import type { WsSubscribe, FanoutOutcome } from '../hooks/useSimulation'
 import { useJoystick } from '../hooks/useJoystick'
@@ -9,6 +9,13 @@ import { useT } from '../i18n'
 
 // Re-export for consumers
 export { SimMode, MoveMode }
+
+// Pure coordinate helpers — module-level so they're allocated once.
+const normalizeLng = (lng: number): number => {
+  const n = ((lng + 180) % 360 + 360) % 360 - 180
+  return lng === 180 ? 180 : n
+}
+const clampLat = (lat: number): number => Math.max(-90, Math.min(90, lat))
 
 // Summarise a group fan-out result into a single toast string.
 export function toastForFanout<T>(
@@ -189,18 +196,22 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
   const handleMapClick = useCallback((lat: number, lng: number) => {
     if (!clickToAddWaypoint) return
     if (sim.mode !== SimMode.Loop && sim.mode !== SimMode.MultiStop) return
+    const nlat = clampLat(lat)
+    const nlng = normalizeLng(lng)
     sim.setWaypoints((prev: any[]) => {
       if (prev.length === 0 && sim.currentPosition) {
         return [
           { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng },
-          { lat, lng },
+          { lat: nlat, lng: nlng },
         ]
       }
-      return [...prev, { lat, lng }]
+      return [...prev, { lat: nlat, lng: nlng }]
     })
   }, [clickToAddWaypoint, sim])
 
-  const handleTeleport = useCallback(async (lat: number, lng: number) => {
+  const handleTeleport = useCallback(async (latIn: number, lngIn: number) => {
+    const lat = clampLat(latIn)
+    const lng = normalizeLng(lngIn)
     const udids = device.connectedDevices.map((d) => d.udid)
     if (udids.length >= 2) {
       sim.setCurrentPosition({ lat, lng })
@@ -211,7 +222,9 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
     }
   }, [sim, device, t, showToast])
 
-  const handleNavigate = useCallback(async (lat: number, lng: number) => {
+  const handleNavigate = useCallback(async (latIn: number, lngIn: number) => {
+    const lat = clampLat(latIn)
+    const lng = normalizeLng(lngIn)
     const udids = device.connectedDevices.map((d) => d.udid)
     if (udids.length >= 2) {
       const outcome = await sim.navigateAll(udids, lat, lng)
@@ -222,14 +235,16 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
   }, [sim, device, t, showToast])
 
   const handleAddWaypoint = useCallback((lat: number, lng: number) => {
+    const nlat = clampLat(lat)
+    const nlng = normalizeLng(lng)
     sim.setWaypoints((prev: any[]) => {
       if (prev.length === 0 && sim.currentPosition) {
         return [
           { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng },
-          { lat, lng },
+          { lat: nlat, lng: nlng },
         ]
       }
-      return [...prev, { lat, lng }]
+      return [...prev, { lat: nlat, lng: nlng }]
     })
   }, [sim])
 
@@ -350,13 +365,16 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
 
   // --- Effects ---
 
-  // Poll cooldown
+  // Poll cooldown — only setState when value actually changes
   useEffect(() => {
     if (!subscribe) return
     const id = setInterval(() => {
       api.getCooldownStatus().then((s: any) => {
-        setCooldown(s.remaining_seconds ?? 0)
-        if (typeof s.enabled === 'boolean') setCooldownEnabled(s.enabled)
+        const next = s.remaining_seconds ?? 0
+        setCooldown((prev) => Math.round(prev) === Math.round(next) ? prev : next)
+        if (typeof s.enabled === 'boolean') {
+          setCooldownEnabled((prev) => prev === s.enabled ? prev : s.enabled)
+        }
       }).catch(() => {})
     }, 2000)
     return () => clearInterval(id)
@@ -364,13 +382,15 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
 
   // --- Derived values ---
 
-  const currentPos = sim.currentPosition
-    ? { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng }
-    : null
+  const currentPos = useMemo(
+    () => sim.currentPosition ? { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng } : null,
+    [sim.currentPosition?.lat, sim.currentPosition?.lng],
+  )
 
-  const destPos = sim.destination
-    ? { lat: sim.destination.lat, lng: sim.destination.lng }
-    : null
+  const destPos = useMemo(
+    () => sim.destination ? { lat: sim.destination.lat, lng: sim.destination.lng } : null,
+    [sim.destination?.lat, sim.destination?.lng],
+  )
 
   const speed = SPEED_MAP[sim.moveMode] || 5
 

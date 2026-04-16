@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react'
 import { Copy, Check } from 'lucide-react'
-import { SimMode } from '../../hooks/useSimulation'
+import { SimMode, stateToMode } from '../../hooks/useSimulation'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useT } from '../../i18n'
@@ -17,17 +17,6 @@ const modeLabelKeys: Record<SimMode, StringKey> = {
 
 const DEVICE_COLORS = ['#4285f4', '#ff9800', '#4ecdc4', '#e040fb'] as const
 const DEVICE_LETTERS = ['A', 'B', 'C', 'D'] as const
-
-function stateToMode(state: string): SimMode | null {
-  switch (state) {
-    case 'navigating': return SimMode.Navigate
-    case 'looping': return SimMode.Loop
-    case 'multi_stop': return SimMode.MultiStop
-    case 'random_walk': return SimMode.RandomWalk
-    case 'joystick': return SimMode.Joystick
-    default: return null
-  }
-}
 
 export default function MiniStatusBar() {
   const t = useT()

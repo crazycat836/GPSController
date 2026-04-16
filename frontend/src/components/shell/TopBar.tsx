@@ -21,9 +21,9 @@ export default function TopBar({ leftContent, onSearchClick, onLibraryClick, onS
 
       {/* Right: tool buttons */}
       <div className="pointer-events-auto flex items-center gap-1.5">
-        <ToolButton icon={Search} label={t('panel.address_search' as any)} shortcut="⌘K" onClick={onSearchClick} />
-        <ToolButton icon={Bookmark} label={t('panel.library' as any)} shortcut="⌘B" onClick={onLibraryClick} />
-        <ToolButton icon={Settings} label={t('settings.title' as any)} onClick={onSettingsClick} data-settings-trigger />
+        <ToolButton icon={Search} label={t('panel.address_search')} shortcut="⌘K" onClick={onSearchClick} />
+        <ToolButton icon={Bookmark} label={t('panel.library')} shortcut="⌘B" onClick={onLibraryClick} />
+        <ToolButton icon={Settings} label={t('settings.title')} onClick={onSettingsClick} data-settings-trigger />
       </div>
     </div>
   )

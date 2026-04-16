@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { SimMode } from '../hooks/useSimulation';
+import { SimMode, stateToMode } from '../hooks/useSimulation';
 import type { RuntimesMap } from '../hooks/useSimulation';
 import type { DeviceInfo } from '../hooks/useDevice';
 import { useT } from '../i18n';
@@ -34,19 +34,6 @@ interface StatusBarProps {
   dualDevice?: boolean;
   runtimes?: RuntimesMap;
   devices?: DeviceInfo[];
-}
-
-function stateToMode(state: string): SimMode | null {
-  switch (state) {
-    case 'navigating': return SimMode.Navigate;
-    case 'looping': return SimMode.Loop;
-    case 'multi_stop': return SimMode.MultiStop;
-    case 'random_walk': return SimMode.RandomWalk;
-    case 'joystick': return SimMode.Joystick;
-    case 'teleport':
-    case 'idle':
-    default: return null;
-  }
 }
 
 import type { StringKey } from '../i18n';

@@ -49,7 +49,7 @@ export default function SpeedControls() {
       {/* Card 1: Speed presets */}
       <div className="seg">
         <div className="seg-row seg-row-header">
-          <span className="seg-label">{t('panel.speed' as any)}</span>
+          <span className="seg-label">{t('panel.speed')}</span>
         </div>
         <div className="seg-row seg-row-flush">
           <div className="flex gap-1 w-full">

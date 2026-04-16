@@ -14,7 +14,7 @@ export default function RandomWalkPanel() {
       {/* Range */}
       <div className="seg">
         <div className="seg-row">
-          <span className="seg-label">{t('panel.random_walk_range' as any)}</span>
+          <span className="seg-label">{t('panel.random_walk_range')}</span>
           <span className="text-[var(--text-sm)] font-semibold text-[var(--color-text-1)] ml-auto font-mono">
             {randomWalkRadius >= 1000 ? `${randomWalkRadius / 1000}km` : `${randomWalkRadius}m`}
           </span>
