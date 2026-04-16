@@ -1,5 +1,5 @@
 @echo off
-REM LocWarp, one-shot build: backend exe + electron installer.
+REM GPSController, one-shot build: backend exe + electron installer.
 REM Prereqs (install once):
 REM   - Python 3.13  + pip install -r backend/requirements.txt pyinstaller
 REM   - Node.js 18+  + cd frontend && npm install && npm install -D electron-builder
@@ -13,7 +13,7 @@ echo ============================================================
 echo  [1/3] Build backend (Python 3.13) with PyInstaller
 echo ============================================================
 cd /d "%ROOT%\backend"
-py -3.13 -m PyInstaller locwarp-backend.spec --noconfirm --distpath "%ROOT%\dist-py" --workpath "%ROOT%\build-py\backend"
+py -3.13 -m PyInstaller gpscontroller-backend.spec --noconfirm --distpath "%ROOT%\dist-py" --workpath "%ROOT%\build-py\backend"
 if errorlevel 1 (echo backend build failed & exit /b 1)
 
 echo.

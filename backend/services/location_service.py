@@ -1,5 +1,5 @@
 """
-LocWarp Location Service
+GPSController Location Service
 
 Provides a unified interface for iOS location simulation across different
 iOS versions, wrapping pymobiledevice3's location simulation capabilities.
@@ -151,10 +151,12 @@ class DvtLocationService(LocationService):
             raise
 
     async def clear(self) -> None:
-        """Clear the simulated location via the DVT instrument channel."""
-        if not self._active:
-            logger.debug("DVT clear called but no simulation is active")
-            return
+        """Clear the simulated location via the DVT instrument channel.
+
+        Always sends clear to the device even when _active is False —
+        the device may hold a stale simulated location from a prior
+        session or backend restart.
+        """
         try:
             sim = await self._ensure_instrument()
             await sim.clear()
@@ -234,10 +236,12 @@ class LegacyLocationService(LocationService):
             raise
 
     async def clear(self) -> None:
-        """Clear the simulated location using the legacy service."""
-        if not self._active:
-            logger.debug("Legacy clear called but no simulation is active")
-            return
+        """Clear the simulated location using the legacy service.
+
+        Always sends clear to the device even when _active is False —
+        the device may hold a stale simulated location from a prior
+        session or backend restart.
+        """
         try:
             svc = self._ensure_service()
             await self._maybe_await(svc.clear())

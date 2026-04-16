@@ -21,7 +21,7 @@ body:
     id: proposal
     attributes:
       label: 建議方案
-      description: 期望 LocWarp 如何處理或新增什麼功能?
+      description: 期望 GPSController 如何處理或新增什麼功能?
     validations:
       required: true
 

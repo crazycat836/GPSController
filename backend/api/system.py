@@ -47,7 +47,7 @@ async def open_log():
     """Open backend.log in the OS default text editor (Notepad on Windows)
     so the user can copy it for bug reports. Falls back to opening the
     log folder if the file is missing."""
-    log_dir = Path.home() / ".locwarp" / "logs"
+    log_dir = Path.home() / ".gpscontroller" / "logs"
     log_file = log_dir / "backend.log"
     target = log_file if log_file.exists() else log_dir
     if not target.exists():
@@ -64,8 +64,8 @@ async def open_log():
 
 @router.post("/open-log-folder")
 async def open_log_folder():
-    """Open the ~/.locwarp/logs folder in the file manager."""
-    log_dir = Path.home() / ".locwarp" / "logs"
+    """Open the ~/.gpscontroller/logs folder in the file manager."""
+    log_dir = Path.home() / ".gpscontroller" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     try:
         _open_native(log_dir)

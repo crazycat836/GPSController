@@ -1,5 +1,5 @@
 """
-LocWarp Device Manager
+GPSController Device Manager
 
 Handles iOS device detection, connection lifecycle, tunnel establishment,
 and location service creation.  Wraps pymobiledevice3 internals so the
@@ -41,7 +41,7 @@ from services.location_service import (
 
 class UnsupportedIosVersionError(RuntimeError):
     """Raised when a connecting device's iOS version is below the minimum
-    supported by LocWarp (currently 16.0). Surfaces a structured error to
+    supported by GPSController (currently 16.0). Surfaces a structured error to
     the API layer so the frontend can show an actionable message rather
     than a stack trace."""
 
@@ -257,7 +257,7 @@ class DeviceManager:
             )
             raise RuntimeError(
                 f"無法建立裝置通道 (iOS {ios_version})。"
-                f"請以系統管理員身份執行 LocWarp。"
+                f"請以系統管理員身份執行 GPSController。"
             )
 
     # iOS < 17 path removed in v0.1.49 — see UnsupportedIosVersionError.

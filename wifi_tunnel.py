@@ -1,9 +1,9 @@
 """
-LocWarp WiFi Tunnel
+GPSController WiFi Tunnel
 
 Establishes a persistent WiFi tunnel to an iOS device using
 pymobiledevice3's RemotePairing protocol.  Once the tunnel is running,
-USB can be disconnected and LocWarp can control the device's GPS
+USB can be disconnected and GPSController can control the device's GPS
 location over WiFi.
 
 Prerequisites:
@@ -16,7 +16,7 @@ Prerequisites:
 Usage:
   py -3.13 wifi_tunnel.py [--ip IP] [--port PORT]
 
-The script prints the RSD address and port, which LocWarp uses to
+The script prints the RSD address and port, which GPSController uses to
 connect to the device's developer services.
 """
 
@@ -67,10 +67,16 @@ async def run_tunnel(udid: str, ip: str, port: int) -> None:
             tunnel.interface,
         )
 
-        # Write tunnel info to a file so LocWarp can read it.
-        # Use ~/.locwarp so packaged (PyInstaller) builds don't write to a
-        # volatile _MEIPASS temp dir.
-        info_dir = Path.home() / ".locwarp"
+        # Write tunnel info to a file so GPSController can read it.
+        # Use ~/.gpscontroller so packaged (PyInstaller) builds don't write to a
+        # volatile _MEIPASS temp dir. Migrate from legacy ~/.locwarp if needed.
+        info_dir = Path.home() / ".gpscontroller"
+        old_dir = Path.home() / ".locwarp"
+        if old_dir.exists() and not info_dir.exists():
+            try:
+                old_dir.rename(info_dir)
+            except OSError:
+                pass
         info_dir.mkdir(exist_ok=True)
         info_path = info_dir / "wifi_tunnel_info.json"
         with open(info_path, "w") as f:
@@ -110,7 +116,7 @@ async def run_tunnel(udid: str, ip: str, port: int) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="LocWarp WiFi Tunnel")
+    parser = argparse.ArgumentParser(description="GPSController WiFi Tunnel")
     parser.add_argument("--udid", default=DEFAULT_UDID, help="Device UDID (auto-detected when omitted)")
     parser.add_argument("--ip", default=DEFAULT_IP, help="Device WiFi IP address (required)")
     parser.add_argument(
