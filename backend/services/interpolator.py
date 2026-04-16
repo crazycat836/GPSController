@@ -157,8 +157,8 @@ class RouteInterpolator:
         angle = random.uniform(0, 2 * math.pi)
         dist = random.uniform(0, jitter_meters)
 
-        dlat = (dist * math.cos(angle)) / _R
-        dlng = (dist * math.sin(angle)) / (_R * math.cos(math.radians(lat)))
+        dlat = (dist * math.cos(angle)) / EARTH_RADIUS_M
+        dlng = (dist * math.sin(angle)) / (EARTH_RADIUS_M * math.cos(math.radians(lat)))
 
         return lat + math.degrees(dlat), lng + math.degrees(dlng)
 
@@ -176,7 +176,7 @@ class RouteInterpolator:
         brng = math.radians(bearing_deg)
         rlat = math.radians(lat)
         rlng = math.radians(lng)
-        d_over_r = distance_m / _R
+        d_over_r = distance_m / EARTH_RADIUS_M
 
         new_lat = math.asin(
             math.sin(rlat) * math.cos(d_over_r)

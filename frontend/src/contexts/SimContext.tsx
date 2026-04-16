@@ -239,11 +239,15 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
     const lat = clampLat(latIn)
     const lng = normalizeLng(lngIn)
     const udids = device.connectedDevices.map((d) => d.udid)
-    if (udids.length >= 2) {
-      const outcome = await sim.navigateAll(udids, lat, lng)
-      showToast(toastForFanout(t, t('mode.navigate'), outcome, device.connectedDevices))
-    } else {
-      sim.navigate(lat, lng)
+    try {
+      if (udids.length >= 2) {
+        const outcome = await sim.navigateAll(udids, lat, lng)
+        showToast(toastForFanout(t, t('mode.navigate'), outcome, device.connectedDevices))
+      } else {
+        await sim.navigate(lat, lng)
+      }
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : t('err.no_position'))
     }
   }, [sim, device, t, showToast])
 
