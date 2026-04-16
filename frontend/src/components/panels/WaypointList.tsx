@@ -187,7 +187,6 @@ export default function WaypointList({ mode }: WaypointListProps) {
     <>
       <RouteCard
         title={`${t('panel.waypoints')} (${sim.waypoints.length})`}
-        titleExtra={<span className="seg-unit ml-auto">{t('panel.waypoints_hint')}</span>}
         header={genHeader}
         points={points}
         maxVisible={5}

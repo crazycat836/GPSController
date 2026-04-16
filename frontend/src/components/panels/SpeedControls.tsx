@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Footprints, Rabbit, Car, Check } from 'lucide-react'
+import { Footprints, Rabbit, Car, Check, Gauge } from 'lucide-react'
 import { useSimContext, MoveMode } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
 
@@ -9,14 +9,141 @@ const SPEED_PRESETS = [
   { labelKey: 'move.driving' as const, value: 40, mode: 'driving' as MoveMode, Icon: Car },
 ] as const
 
+export default function SpeedControls() {
+  const { sim, handleApplySpeed, isRunning } = useSimContext()
+  const t = useT()
+
+  const isPresetActive = (mode: MoveMode) =>
+    sim.moveMode === mode &&
+    sim.customSpeedKmh == null &&
+    sim.speedMinKmh == null &&
+    sim.speedMaxKmh == null
+
+  const hasCustom = sim.customSpeedKmh != null
+  const hasRange = sim.speedMinKmh != null && sim.speedMaxKmh != null
+
+  return (
+    <div className="seg">
+      {/* Header */}
+      <div className="seg-row seg-row-header">
+        <Gauge size={13} className="text-[var(--color-accent)]" />
+        <span className="seg-label">{t('panel.speed')}</span>
+      </div>
+
+      {/* Preset chips */}
+      <div className="seg-row seg-row-flush">
+        <div className="flex gap-1 w-full">
+          {SPEED_PRESETS.map((opt) => {
+            const active = isPresetActive(opt.mode)
+            return (
+              <button
+                key={opt.mode}
+                className={`seg-chip ${active ? 'seg-chip-on' : 'seg-chip-off'}`}
+                onClick={() => {
+                  sim.setMoveMode(opt.mode)
+                  sim.setCustomSpeedKmh(null)
+                }}
+              >
+                <opt.Icon size={14} />
+                <span>{t(opt.labelKey)}</span>
+                <span className="text-[9px] opacity-50">{opt.value} km/h</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="seg-row seg-row-flush" style={{ padding: 0 }}>
+        <div className="h-px w-full bg-[var(--color-border)] opacity-50" />
+      </div>
+
+      {/* Custom speed */}
+      <div className="seg-row">
+        <span className="seg-label flex-1">{t('panel.custom_speed')}</span>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="number"
+            className={[
+              'seg-input w-20 text-right',
+              hasCustom ? 'border-[var(--color-accent)]/40' : '',
+            ].join(' ')}
+            placeholder="Ex: 15"
+            value={sim.customSpeedKmh ?? ''}
+            onChange={(e) => {
+              const v = e.target.value
+              if (v === '') { sim.setCustomSpeedKmh(null) }
+              else {
+                const n = parseFloat(v)
+                if (!isNaN(n) && n > 0) sim.setCustomSpeedKmh(n)
+              }
+            }}
+            min="0.1"
+            step="0.5"
+          />
+          <span className="seg-unit">km/h</span>
+        </div>
+      </div>
+
+      {/* Random speed range */}
+      <div className="seg-row">
+        <span className="seg-label flex-1">{t('panel.speed_range')}</span>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="number"
+            className="seg-input w-16 text-center"
+            placeholder={t('panel.speed_range_min')}
+            value={sim.speedMinKmh ?? ''}
+            onChange={(e) => {
+              const v = e.target.value
+              if (v === '') return sim.setSpeedMinKmh(null)
+              const n = parseFloat(v)
+              if (!isNaN(n) && n > 0) sim.setSpeedMinKmh(n)
+            }}
+            min="0.1"
+            step="1"
+          />
+          <span className="seg-unit">~</span>
+          <input
+            type="number"
+            className="seg-input w-16 text-center"
+            placeholder={t('panel.speed_range_max')}
+            value={sim.speedMaxKmh ?? ''}
+            onChange={(e) => {
+              const v = e.target.value
+              if (v === '') return sim.setSpeedMaxKmh(null)
+              const n = parseFloat(v)
+              if (!isNaN(n) && n > 0) sim.setSpeedMaxKmh(n)
+            }}
+            min="0.1"
+            step="1"
+          />
+        </div>
+      </div>
+
+      {/* Range active hint */}
+      {hasRange && (
+        <div className="seg-row seg-row-compact">
+          <p className="text-[10px] text-amber-400/80">
+            {t('panel.speed_range_active')}: {Math.min(sim.speedMinKmh!, sim.speedMaxKmh!)}~{Math.max(sim.speedMinKmh!, sim.speedMaxKmh!)} km/h ({t('panel.speed_range_hint')})
+          </p>
+        </div>
+      )}
+
+      {/* Apply button — inline when running */}
+      {isRunning && <ApplySpeedButton onApply={handleApplySpeed} />}
+    </div>
+  )
+}
+
 function ApplySpeedButton({ onApply }: { onApply: () => Promise<void> | void }) {
   const t = useT()
   const [busy, setBusy] = useState(false)
 
   return (
-    <div className="seg">
+    <div className="seg-row seg-row-flush" style={{ padding: 0 }}>
       <button
-        className="seg-cta seg-cta-accent seg-cta-sm"
+        className="seg-cta seg-cta-accent seg-cta-sm w-full"
         disabled={busy}
         onClick={async () => {
           if (busy) return
@@ -31,117 +158,5 @@ function ApplySpeedButton({ onApply }: { onApply: () => Promise<void> | void }) 
         {t('panel.apply_speed')}
       </button>
     </div>
-  )
-}
-
-export default function SpeedControls() {
-  const { sim, handleApplySpeed, isRunning } = useSimContext()
-  const t = useT()
-
-  const isPresetActive = (mode: MoveMode) =>
-    sim.moveMode === mode &&
-    sim.customSpeedKmh == null &&
-    sim.speedMinKmh == null &&
-    sim.speedMaxKmh == null
-
-  return (
-    <>
-      {/* Card 1: Speed presets */}
-      <div className="seg">
-        <div className="seg-row seg-row-header">
-          <span className="seg-label">{t('panel.speed')}</span>
-        </div>
-        <div className="seg-row seg-row-flush">
-          <div className="flex gap-1 w-full">
-            {SPEED_PRESETS.map((opt) => {
-              const active = isPresetActive(opt.mode)
-              return (
-                <button
-                  key={opt.mode}
-                  className={`seg-chip ${active ? 'seg-chip-on' : 'seg-chip-off'}`}
-                  onClick={() => {
-                    sim.setMoveMode(opt.mode)
-                    sim.setCustomSpeedKmh(null)
-                  }}
-                >
-                  <opt.Icon size={14} />
-                  <span>{t(opt.labelKey)}</span>
-                  <span className="text-[9px] opacity-50">{opt.value} km/h</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Card 2: Custom speed settings */}
-      <div className="seg">
-        <div className="seg-row">
-          <span className="seg-label flex-1">{t('panel.custom_speed')}</span>
-          <div className="flex items-center gap-1.5">
-            <input
-              type="number"
-              className="seg-input w-20 text-right"
-              placeholder="Ex: 15"
-              value={sim.customSpeedKmh ?? ''}
-              onChange={(e) => {
-                const v = e.target.value
-                if (v === '') { sim.setCustomSpeedKmh(null) }
-                else {
-                  const n = parseFloat(v)
-                  if (!isNaN(n) && n > 0) sim.setCustomSpeedKmh(n)
-                }
-              }}
-              min="0.1"
-              step="0.5"
-            />
-            <span className="seg-unit">km/h</span>
-          </div>
-        </div>
-        <div className="seg-row">
-          <span className="seg-label flex-1">{t('panel.speed_range')}</span>
-          <div className="flex items-center gap-1.5">
-            <input
-              type="number"
-              className="seg-input w-16 text-center"
-              placeholder={t('panel.speed_range_min')}
-              value={sim.speedMinKmh ?? ''}
-              onChange={(e) => {
-                const v = e.target.value
-                if (v === '') return sim.setSpeedMinKmh(null)
-                const n = parseFloat(v)
-                if (!isNaN(n) && n > 0) sim.setSpeedMinKmh(n)
-              }}
-              min="0.1"
-              step="1"
-            />
-            <span className="seg-unit">~</span>
-            <input
-              type="number"
-              className="seg-input w-16 text-center"
-              placeholder={t('panel.speed_range_max')}
-              value={sim.speedMaxKmh ?? ''}
-              onChange={(e) => {
-                const v = e.target.value
-                if (v === '') return sim.setSpeedMaxKmh(null)
-                const n = parseFloat(v)
-                if (!isNaN(n) && n > 0) sim.setSpeedMaxKmh(n)
-              }}
-              min="0.1"
-              step="1"
-            />
-          </div>
-        </div>
-        {sim.speedMinKmh != null && sim.speedMaxKmh != null && (
-          <div className="seg-row seg-row-compact">
-            <p className="text-[10px] text-amber-400/80">
-              {t('panel.speed_range_active')}: {Math.min(sim.speedMinKmh, sim.speedMaxKmh)}~{Math.max(sim.speedMinKmh, sim.speedMaxKmh)} km/h ({t('panel.speed_range_hint')})
-            </p>
-          </div>
-        )}
-      </div>
-
-      {isRunning && <ApplySpeedButton onApply={handleApplySpeed} />}
-    </>
   )
 }
