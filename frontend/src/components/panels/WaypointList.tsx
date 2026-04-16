@@ -105,7 +105,7 @@ export default function WaypointList({ mode }: WaypointListProps) {
                   <span
                     className="font-semibold w-6 shrink-0 text-[10px]"
                     style={{
-                      color: approaching ? '#ff9800' : passed ? '#555' : isStart ? 'var(--color-success)' : '#ff9800',
+                      color: approaching ? 'var(--color-device-b)' : passed ? 'var(--color-text-3)' : isStart ? 'var(--color-success)' : 'var(--color-device-b)',
                     }}
                   >
                     {approaching ? '>' : passed ? 'OK' : isStart ? t('panel.waypoint_start') : `#${i}`}

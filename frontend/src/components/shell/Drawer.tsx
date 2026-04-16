@@ -20,7 +20,7 @@ export default function Drawer({ open, onClose, title, icon, side = 'right', wid
       {/* Backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-[999] bg-black/30 transition-opacity"
+          className="fixed inset-0 z-[var(--z-drawer)] bg-black/30 transition-opacity"
           onClick={onClose}
         />
       )}
@@ -28,7 +28,7 @@ export default function Drawer({ open, onClose, title, icon, side = 'right', wid
       {/* Panel */}
       <div
         className={[
-          'fixed inset-y-0 z-[1000]',
+          'fixed inset-y-0 z-[var(--z-drawer)]',
           isLeft ? 'left-0 border-r' : 'right-0 border-l',
           width,
           'bg-[var(--color-surface-1)]',

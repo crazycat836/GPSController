@@ -36,7 +36,7 @@ export default function FloatingPanel({ mode, children }: FloatingPanelProps) {
   return (
     <div
       className={[
-        'fixed top-14 left-3 w-[22rem] z-[1001]',
+        'fixed top-14 left-3 w-[22rem] z-[var(--z-ui)]',
         'bg-[var(--color-surface-1)] border border-[var(--color-border)]',
         'rounded-2xl overflow-hidden flex flex-col p-3_5 gap-3',
         'shadow-[var(--shadow-lg)]',

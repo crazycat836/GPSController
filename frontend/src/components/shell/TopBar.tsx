@@ -14,7 +14,7 @@ export default function TopBar({ leftContent, onAddDevice, addDeviceDisabled, on
   const t = useT()
 
   return (
-    <div className="fixed top-3 left-3 right-3 z-[1001] flex items-center justify-between pointer-events-none">
+    <div className="fixed top-3 left-3 right-3 z-[var(--z-ui)] flex items-center justify-between pointer-events-none">
       {/* Left: device chips + search */}
       <div className="pointer-events-auto flex items-center gap-2">
         {leftContent}

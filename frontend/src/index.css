@@ -29,8 +29,28 @@
   --color-success-dim: rgba(78, 205, 196, 0.15);
   --color-danger: #ff4757;
   --color-danger-dim: rgba(255, 71, 87, 0.15);
+  --color-danger-text: #ff6b6b;
   --color-warning: #ffd93d;
   --color-warning-dim: rgba(255, 217, 61, 0.15);
+  --color-warning-text: #ffc107;
+
+  /* ── Device ─────────────────────────────────────────────────
+     Per-device identification colors for multi-device mode.
+     Also used on map markers, ETA bar, status indicators. */
+  --color-device-a: #4285f4;
+  --color-device-b: #ff9800;
+  --color-device-c: #4ecdc4;
+  --color-device-d: #e040fb;
+
+  /* Device status dot colors */
+  --color-device-idle: #4ecdc4;
+  --color-device-paused: #ffb627;
+  --color-device-error: #ff6b6b;
+
+  /* Category colors (bookmarks) */
+  --color-cat-default: #4285f4;
+  --color-cat-home: #4caf50;
+  --color-cat-work: #ff9800;
 
   /* ── Text ───────────────────────────────────────────────────
      Three tiers: primary → secondary → muted.
@@ -46,15 +66,23 @@
   --color-border-strong: rgba(255, 255, 255, 0.12);
   --color-border-focus: rgba(108, 140, 255, 0.4);
 
+  /* ── Overlay ────────────────────────────────────────────────
+     Modal backdrops and scrim layers. */
+  --color-overlay: rgba(8, 10, 20, 0.55);
+  --color-overlay-heavy: rgba(20, 22, 32, 0.85);
+
   /* ── Shadows ────────────────────────────────────────────────
      Cool-tinted shadows that feel native to the dark UI. */
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --shadow-xl: 0 20px 60px rgba(12, 18, 40, 0.65);
   --shadow-glow: 0 0 20px rgba(108, 140, 255, 0.2);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
   /* ── Radius ─────────────────────────────────────────────────
      Consistent rounding scale. */
+  --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -91,12 +119,48 @@
   --text-md: 14px;
   --text-lg: 16px;
   --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+
+  /* ── Line Heights ───────────────────────────────────────────
+     Named line-height values for typographic control. */
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* ── Letter Spacing ─────────────────────────────────────────
+     Tracking adjustments — tighter at display sizes. */
+  --tracking-tight: -0.02em;
+  --tracking-normal: -0.005em;
+  --tracking-wide: 0.08em;
 
   /* ── Control Heights ────────────────────────────────────────
      sm = compact, md = default, lg = primary CTA. */
   --control-sm: 32px;
   --control-md: 38px;
   --control-lg: 44px;
+
+  /* ── Z-Index Scale ──────────────────────────────────────────
+     Structured elevation layers. Never use ad-hoc z values. */
+  --z-base: 0;
+  --z-map-ui: 100;
+  --z-bar: 200;
+  --z-ui: 400;
+  --z-float: 500;
+  --z-dropdown: 600;
+  --z-drawer: 700;
+  --z-overlay: 800;
+  --z-modal: 900;
+  --z-toast: 950;
+
+  /* ── Duration ───────────────────────────────────────────────
+     Named durations for consistent motion timing. */
+  --duration-fast: 80ms;
+  --duration-normal: 140ms;
+  --duration-slow: 200ms;
+  --duration-enter: 200ms;
+  --duration-exit: 150ms;
 
   /* ── Easing ─────────────────────────────────────────────────
      Named curves for consistent motion. */
@@ -491,7 +555,7 @@
   box-shadow: var(--shadow-lg);
   padding: 4px 0;
   min-width: 180px;
-  z-index: 10000;
+  z-index: var(--z-dropdown);
 }
 .context-menu-item {
   display: flex;
@@ -605,7 +669,7 @@
 .eta-bar {
   position: absolute;
   top: 0; left: 0; right: 0;
-  z-index: 900;
+  z-index: var(--z-bar);
   background: rgba(26, 29, 39, 0.92);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -622,7 +686,7 @@
 .joystick-overlay {
   position: absolute;
   bottom: 60px; right: 20px;
-  z-index: 1000;
+  z-index: var(--z-float);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -662,7 +726,7 @@
   row-gap: 4px;
   font-size: 11px;
   color: var(--color-text-3);
-  z-index: 10;
+  z-index: var(--z-bar);
   flex-shrink: 0;
 }
 
@@ -689,7 +753,7 @@
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 1002;
+  z-index: var(--z-toast);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -719,6 +783,137 @@
 /* ── Utility classes ────────────────────────────────────────── */
 .flex-1 { flex: 1; }
 .font-mono { font-family: var(--font-mono); }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Modal / Dialog
+   Reusable overlay + dialog surface for all modals.
+   ═══════════════════════════════════════════════════════════════ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--color-overlay);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-dialog {
+  width: 360px;
+  background: rgba(26, 29, 39, 0.96);
+  border: 1px solid rgba(108, 140, 255, 0.25);
+  border-radius: var(--radius-md);
+  padding: 22px;
+  color: var(--color-text-1);
+  box-shadow: var(--shadow-xl);
+  font-size: var(--text-base);
+  animation: scale-in var(--duration-enter) var(--ease-out-expo) both;
+}
+
+.modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.modal-body {
+  font-size: var(--text-sm);
+  opacity: 0.75;
+  margin-bottom: 12px;
+  line-height: var(--leading-normal);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Status Badge
+   Compact inline badges for device/status indicators.
+   ═══════════════════════════════════════════════════════════════ */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+}
+.status-badge-accent {
+  background: var(--color-accent-dim);
+  border: 1px solid rgba(108, 140, 255, 0.4);
+  color: var(--color-accent);
+}
+.status-badge-warning {
+  background: var(--color-warning-dim);
+  border: 1px solid rgba(255, 193, 7, 0.4);
+  color: var(--color-warning-text);
+}
+.status-badge-success {
+  background: var(--color-success-dim);
+  border: 1px solid rgba(78, 205, 196, 0.4);
+  color: var(--color-success);
+}
+.status-badge-danger {
+  background: var(--color-danger-dim);
+  border: 1px solid rgba(255, 71, 87, 0.4);
+  color: var(--color-danger);
+}
+.status-badge-ghost {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-2);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Separator
+   Vertical / horizontal dividers between items.
+   ═══════════════════════════════════════════════════════════════ */
+
+.separator-v {
+  width: 1px;
+  height: 14px;
+  background: var(--color-border-strong);
+  flex-shrink: 0;
+}
+.separator-h {
+  height: 1px;
+  background: var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Skeleton / Loading placeholder
+   ═══════════════════════════════════════════════════════════════ */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-2) 25%,
+    var(--color-surface-3) 50%,
+    var(--color-surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-xs);
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 
 /* ═══════════════════════════════════════════════════════════════
@@ -837,11 +1032,38 @@
   50% { opacity: 0.65; transform: scale(1.15); }
 }
 
-.anim-fade-in { animation: fade-in 180ms var(--ease-out-expo) both; }
-.anim-fade-slide-up { animation: fade-slide-up 200ms var(--ease-out-expo) both; }
-.anim-fade-slide-down { animation: fade-slide-down 200ms var(--ease-out-expo) both; }
-.anim-scale-in { animation: scale-in 200ms var(--ease-out-expo) both; }
+/* Exit keyframes */
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes fade-slide-up-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-6px); }
+}
+@keyframes scale-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.96); }
+}
+
+/* Enter animations */
+.anim-fade-in { animation: fade-in var(--duration-enter) var(--ease-out-expo) both; }
+.anim-fade-slide-up { animation: fade-slide-up var(--duration-enter) var(--ease-out-expo) both; }
+.anim-fade-slide-down { animation: fade-slide-down var(--duration-enter) var(--ease-out-expo) both; }
+.anim-scale-in { animation: scale-in var(--duration-enter) var(--ease-out-expo) both; }
 .anim-scale-in-tl { animation: scale-in-tl 160ms var(--ease-out-expo) both; }
+
+/* Exit animations */
+.anim-fade-out { animation: fade-out var(--duration-exit) var(--ease-out-expo) both; }
+.anim-fade-slide-up-out { animation: fade-slide-up-out var(--duration-exit) var(--ease-out-expo) both; }
+.anim-scale-out { animation: scale-out var(--duration-exit) var(--ease-out-expo) both; }
+
+/* Stagger delays — apply to children for sequential entrance */
+.stagger-1 { animation-delay: 30ms; }
+.stagger-2 { animation-delay: 60ms; }
+.stagger-3 { animation-delay: 90ms; }
+.stagger-4 { animation-delay: 120ms; }
+.stagger-5 { animation-delay: 150ms; }
 
 
 /* ═══════════════════════════════════════════════════════════════

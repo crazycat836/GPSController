@@ -146,7 +146,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
         {/* DDI mounting overlay */}
         {sim.ddiMounting && (
-          <div className="absolute inset-0 z-[1100] bg-[rgba(20,22,32,0.85)] backdrop-blur-[3px] flex items-center justify-center">
+          <div className="absolute inset-0 z-[var(--z-overlay)] bg-[rgba(20,22,32,0.85)] backdrop-blur-[3px] flex items-center justify-center">
             <div className="surface-popup rounded-2xl px-7 py-5 max-w-[420px] text-center">
               <svg
                 width="32" height="32" viewBox="0 0 24 24" fill="none"
@@ -220,7 +220,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
             className="anim-scale-in surface-popup"
             style={{
               position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)',
-              zIndex: 1002, borderRadius: 'var(--radius-lg)', padding: 16, width: 300,
+              zIndex: 'var(--z-float)', borderRadius: 'var(--radius-lg)', padding: 16, width: 300,
             }}
           >
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{t('bm.add')}</div>
@@ -245,7 +245,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
               onChange={(e) => bm.setAddBmDialog({ ...bm.addBmDialog!, category: e.target.value })}
               style={{
                 width: '100%', marginBottom: 10, padding: '6px 8px',
-                background: '#1e1e22', color: '#e0e0e0', border: '1px solid #444',
+                background: 'var(--color-surface-2)', color: 'var(--color-text-1)', border: '1px solid var(--color-border)',
                 borderRadius: 4, fontSize: 12,
               }}
             >
@@ -273,7 +273,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         {/* Device chip — bottom-left */}
         <button
           onClick={() => setDeviceDrawerOpen(true)}
-          className="absolute bottom-3 left-3 z-[1001] surface-control rounded-full px-3 py-1.5 flex items-center gap-2 text-xs cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors"
+          className="absolute bottom-3 left-3 z-[var(--z-ui)] surface-control rounded-full px-3 py-1.5 flex items-center gap-2 text-xs cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors"
         >
           <div className={`w-2 h-2 rounded-full ${device.connectedDevices.length > 0 ? 'bg-green-400' : 'bg-red-400'}`} />
           <span className="text-[var(--color-text-1)] font-medium">

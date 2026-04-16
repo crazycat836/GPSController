@@ -193,7 +193,7 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
         position: 'absolute',
         bottom: 60,
         right: 20,
-        zIndex: 1000,
+        zIndex: 'var(--z-float)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',

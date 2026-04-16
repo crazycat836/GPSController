@@ -710,7 +710,7 @@ const MapView: React.FC<MapViewProps> = ({
       <div
         className="surface-control"
         style={{
-          position: 'absolute', bottom: 40, right: 12, zIndex: 1000,
+          position: 'absolute', bottom: 40, right: 12, zIndex: 'var(--z-map-ui)',
           display: 'flex', flexDirection: 'column',
           borderRadius: 'var(--radius-md)', overflow: 'hidden',
           width: 36,
@@ -762,7 +762,7 @@ const MapView: React.FC<MapViewProps> = ({
             position: 'fixed',
             left: contextMenu.x,
             top: contextMenu.y,
-            zIndex: 1002,
+            zIndex: 'var(--z-dropdown)',
             background: 'var(--color-surface-1)',
             border: '1px solid var(--color-border)',
             borderRadius: 'var(--radius-lg)',

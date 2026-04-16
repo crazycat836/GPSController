@@ -132,7 +132,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
         <div
           ref={popoverRef}
           className={[
-            'fixed top-14 right-3 w-[272px] z-[1001]',
+            'fixed top-14 right-3 w-[272px] z-[var(--z-ui)]',
             'surface-popup rounded-2xl',
             'p-2.5 flex flex-col',
           ].join(' ')}
@@ -241,7 +241,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
       {initialOpen && createPortal(
         <div
           onClick={() => { if (!initialBusy) setInitialOpen(false) }}
-          className="fixed inset-0 z-[2000] bg-black/55 backdrop-blur-sm flex items-center justify-center"
+          className="fixed inset-0 z-[var(--z-modal)] bg-black/55 backdrop-blur-sm flex items-center justify-center"
         >
           <div
             onClick={(e) => e.stopPropagation()}

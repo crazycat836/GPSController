@@ -140,7 +140,7 @@ const AddressSearch: React.FC<AddressSearchProps> = ({ onSelect }) => {
             marginTop: 4,
             maxHeight: 240,
             overflowY: 'auto',
-            zIndex: 200,
+            zIndex: 'var(--z-dropdown)',
             boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
           }}
         >
@@ -207,7 +207,7 @@ const AddressSearch: React.FC<AddressSearchProps> = ({ onSelect }) => {
             fontSize: 12,
             opacity: 0.6,
             textAlign: 'center',
-            zIndex: 200,
+            zIndex: 'var(--z-dropdown)',
           }}
         >
           {t('search.no_results')}

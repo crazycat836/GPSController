@@ -263,7 +263,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
 
       {/* Repair confirm modal */}
       {showRepairConfirm && createPortal(
-        <div onClick={() => { if (repairState !== 'running') setShowRepairConfirm(false) }} className="fixed inset-0 z-[2000] bg-black/55 backdrop-blur-sm flex items-center justify-center">
+        <div onClick={() => { if (repairState !== 'running') setShowRepairConfirm(false) }} className="fixed inset-0 z-[var(--z-modal)] bg-black/55 backdrop-blur-sm flex items-center justify-center">
           <div onClick={(e) => e.stopPropagation()} className="w-[420px] p-6 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] shadow-[var(--shadow-lg)] text-[var(--color-text-1)]">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-8 h-8 rounded-full bg-[var(--color-accent-dim)] border border-[rgba(108,140,255,0.3)] flex items-center justify-center text-[var(--color-accent)]">

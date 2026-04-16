@@ -25,7 +25,7 @@ export default function ModeToolbar({ activeMode, onModeChange }: ModeToolbarPro
   return (
     <div
       className={[
-        'fixed right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 -translate-y-1/2 z-[1001]',
+        'fixed right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 -translate-y-1/2 z-[var(--z-ui)]',
         'flex flex-col gap-1.5 p-2',
         'surface-panel rounded-2xl',
       ].join(' ')}

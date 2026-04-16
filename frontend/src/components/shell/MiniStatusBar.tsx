@@ -39,7 +39,7 @@ export default function MiniStatusBar() {
   return (
     <div
       className={[
-        'absolute bottom-3 left-1/2 -translate-x-1/2 z-[1001]',
+        'absolute bottom-3 left-1/2 -translate-x-1/2 z-[var(--z-ui)]',
         'flex items-center gap-2 px-4 py-1.5',
         'surface-panel rounded-full',
         'text-xs text-[var(--color-text-2)]',

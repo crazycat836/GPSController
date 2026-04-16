@@ -4,10 +4,10 @@ import type { RuntimesMap } from '../hooks/useSimulation';
 
 interface EtaBarProps {
   state: string;
-  progress: number; // 0 to 1
-  remainingDistance: number; // meters
-  traveledDistance: number; // meters
-  eta: number; // seconds remaining
+  progress: number;
+  remainingDistance: number;
+  traveledDistance: number;
+  eta: number;
   runtimes?: RuntimesMap;
 }
 
@@ -40,8 +40,6 @@ const EtaBar: React.FC<EtaBarProps> = ({
 }) => {
   const t = useT();
 
-  // Group-mode aggregation: if 2+ device runtimes report an active state, use
-  // the fleet's average progress / max ETA instead of the single-device props.
   const activeRuntimes = runtimes
     ? Object.values(runtimes).filter((r) => ACTIVE_STATES.includes(r.state))
     : [];
@@ -66,83 +64,50 @@ const EtaBar: React.FC<EtaBarProps> = ({
   const percent = Math.min(Math.max(aggProgress * 100, 0), 100);
 
   return (
-    <div
-      className="eta-bar surface-panel"
-      style={{
-        position: 'absolute',
-        top: 10,
-        left: 10,
-        right: 10,
-        zIndex: 1001,
-        borderRadius: 'var(--radius-lg)',
-        padding: '7px 18px',
-        display: 'flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        rowGap: 6,
-        gap: 16,
-        fontSize: 12,
-        color: '#e8eaf0',
-        letterSpacing: '-0.005em',
-      }}
-    >
+    <div className="absolute top-2.5 left-2.5 right-2.5 z-[var(--z-ui)] surface-panel rounded-[var(--radius-lg)] px-[18px] py-[7px] flex items-center flex-wrap gap-x-4 gap-y-1.5 text-sm text-[var(--color-text-1)] tracking-[var(--tracking-normal)]">
       {/* Progress bar */}
-      <div
-        style={{
-          flex: 1,
-          height: 4,
-          borderRadius: 2,
-          background: 'var(--color-surface-2)',
-          overflow: 'hidden',
-          minWidth: 80,
-        }}
-      >
+      <div className="flex-1 h-1 rounded-sm bg-[var(--color-surface-2)] overflow-hidden min-w-[80px]">
         <div
+          className="h-full rounded-sm transition-[width] duration-500 ease-out"
           style={{
-            height: '100%',
             width: `${percent}%`,
-            borderRadius: 2,
-            background: 'linear-gradient(90deg, #4285f4, #34a853)',
-            transition: 'width 0.5s ease-out',
+            background: 'linear-gradient(90deg, var(--color-device-a), #34a853)',
           }}
         />
       </div>
 
       {/* Percentage */}
-      <span style={{ fontWeight: 600, minWidth: 38, textAlign: 'right' }}>
+      <span className="font-semibold min-w-[38px] text-right">
         {percent.toFixed(0)}%
       </span>
 
-      {/* Separator */}
-      <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.15)' }} />
+      <div className="separator-v" />
 
       {/* Remaining distance */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.6 }}>
+      <div className="flex items-center gap-1">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-60">
           <circle cx="12" cy="12" r="10" />
           <polyline points="12,6 12,12 16,14" />
         </svg>
         <span>{t('eta.remaining')} {formatDistance(aggRemaining)}</span>
       </div>
 
-      {/* Separator */}
-      <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.15)' }} />
+      <div className="separator-v" />
 
       {/* ETA */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.6 }}>
+      <div className="flex items-center gap-1">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-60">
           <path d="M5 12h14" />
           <path d="M12 5l7 7-7 7" />
         </svg>
         <span>{t('eta.eta')} {formatTime(aggEta)}</span>
       </div>
 
-      {/* Separator */}
-      <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.15)' }} />
+      <div className="separator-v" />
 
       {/* Traveled distance */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: 0.7 }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.6 }}>
+      <div className="flex items-center gap-1 opacity-70">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-60">
           <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" />
         </svg>
         <span>{t('eta.traveled')} {formatDistance(aggTraveled)}</span>
@@ -150,11 +115,11 @@ const EtaBar: React.FC<EtaBarProps> = ({
 
       {isGroup && (
         <>
-          <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.15)' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, opacity: 0.85 }}>
-            <span style={{ opacity: 0.6 }}>{t('eta.group_progress')}</span>
+          <div className="separator-v" />
+          <div className="flex items-center gap-1.5 text-[11px] opacity-85">
+            <span className="opacity-60">{t('eta.group_progress')}</span>
             {activeRuntimes.slice(0, 2).map((r, i) => (
-              <span key={r.udid} style={{ color: i === 0 ? '#4285f4' : '#ff9800', fontWeight: 600 }}>
+              <span key={r.udid} className="font-semibold" style={{ color: i === 0 ? 'var(--color-device-a)' : 'var(--color-device-b)' }}>
                 {i === 0 ? 'A' : 'B'} {formatTime(r.eta || 0)}
               </span>
             ))}

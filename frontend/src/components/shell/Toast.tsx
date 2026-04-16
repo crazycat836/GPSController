@@ -1,4 +1,5 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 
 type ToastVariant = 'dark' | 'warning'
 
@@ -13,7 +14,7 @@ interface ToastProps {
 export default function Toast({ visible, variant = 'dark', icon, children, top = 'top-16' }: ToastProps) {
   if (!visible) return null
 
-  return (
+  return createPortal(
     <div
       className={`toast-pill toast-pill-${variant} ${top}`}
       role="status"
@@ -21,6 +22,7 @@ export default function Toast({ visible, variant = 'dark', icon, children, top =
     >
       {icon}
       <span>{children}</span>
-    </div>
+    </div>,
+    document.body,
   )
 }

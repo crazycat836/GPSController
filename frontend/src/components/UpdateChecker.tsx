@@ -103,7 +103,7 @@ const UpdateChecker: React.FC = () => {
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
         background: 'rgba(8, 10, 20, 0.55)',
         backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-        zIndex: 2000,
+        zIndex: 'var(--z-modal)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
@@ -122,7 +122,7 @@ const UpdateChecker: React.FC = () => {
           <div
             style={{
               width: 32, height: 32, borderRadius: 8,
-              background: 'linear-gradient(135deg, #6c8cff, #4285f4)',
+              background: 'linear-gradient(135deg, var(--color-accent), var(--color-device-a))',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
             }}

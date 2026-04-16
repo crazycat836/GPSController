@@ -31,9 +31,9 @@ interface BookmarkListProps {
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Default: '#4285f4',
-  Home: '#4caf50',
-  Work: '#ff9800',
+  Default: 'var(--color-cat-default)',
+  Home: 'var(--color-cat-home)',
+  Work: 'var(--color-cat-work)',
   Favorites: '#e91e63',
   Custom: '#9c27b0',
 };
@@ -336,7 +336,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
             </button>
           </div>
           {!currentPosition && (
-            <div style={{ fontSize: 11, color: '#f44336', marginTop: 6 }}>
+            <div style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 6 }}>
               {t('bm.no_position')}
             </div>
           )}
@@ -423,7 +423,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: '#f44336',
+                    color: 'var(--color-danger)',
                     cursor: 'pointer',
                     padding: '2px 4px',
                     fontSize: 11,
@@ -656,7 +656,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
               // Clamp to viewport so the menu never falls off-screen.
               left: Math.min(contextMenu.x, window.innerWidth - 160),
               top: Math.min(contextMenu.y, window.innerHeight - 200),
-              zIndex: 9999,
+              zIndex: 'var(--z-dropdown)',
               background: '#2a2a2e',
               border: '1px solid #444',
               borderRadius: 6,
@@ -719,11 +719,11 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                 setContextMenu(null);
               }}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="2" style={{ marginRight: 6 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-danger)" strokeWidth="2" style={{ marginRight: 6 }}>
                 <polyline points="3,6 5,6 21,6" />
                 <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               </svg>
-              <span style={{ color: '#f44336' }}>{t('generic.delete')}</span>
+              <span style={{ color: 'var(--color-danger)' }}>{t('generic.delete')}</span>
             </div>
             {categories.length > 1 && (
               <>
@@ -772,7 +772,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
             background: 'rgba(8, 10, 20, 0.55)',
             backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-            zIndex: 1000,
+            zIndex: 'var(--z-float)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
@@ -870,7 +870,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
             background: 'rgba(8, 10, 20, 0.55)',
             backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-            zIndex: 1000,
+            zIndex: 'var(--z-float)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
