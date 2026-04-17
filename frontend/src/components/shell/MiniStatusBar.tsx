@@ -1,15 +1,18 @@
 import React, { useState, useCallback } from 'react'
 import { Copy, Check } from 'lucide-react'
-import { SimMode, stateToMode, MODE_LABEL_KEYS } from '../../hooks/useSimulation'
+import { stateToMode, MODE_LABEL_KEYS } from '../../hooks/useSimulation'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
-import { useT } from '../../i18n'
+import { useI18n, useT } from '../../i18n'
+import { useReverseGeocode } from '../../hooks/useReverseGeocode'
 import { DEVICE_COLORS, DEVICE_LETTERS } from '../../lib/constants'
 
 export default function MiniStatusBar() {
   const t = useT()
+  const { lang } = useI18n()
   const { currentPos, displaySpeed, sim } = useSimContext()
   const device = useDeviceContext()
+  const { countryCode, country } = useReverseGeocode(currentPos, lang)
   const [copied, setCopied] = useState(false)
 
   const isDual = device.connectedDevices.length >= 2
@@ -60,6 +63,20 @@ export default function MiniStatusBar() {
         })
       ) : (
         <>
+          {countryCode && (
+            <>
+              <img
+                src={`https://flagcdn.com/w40/${countryCode}.png`}
+                alt={countryCode.toUpperCase()}
+                width={18}
+                height={12}
+                className="rounded-sm shadow-[0_0_0_1px_rgba(255,255,255,0.15)]"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+              />
+              {country && <span className="text-[11px]">{country}</span>}
+              <div className="w-px h-3.5 bg-[var(--color-border)]" />
+            </>
+          )}
           {currentPos && (
             <>
               <span className="font-mono text-[11px]">
@@ -67,11 +84,12 @@ export default function MiniStatusBar() {
               </span>
               <button
                 onClick={handleCopy}
-                className="p-0.5 text-[var(--color-text-3)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
+                className="min-h-[32px] min-w-[32px] inline-flex items-center justify-center text-[var(--color-text-3)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
+                aria-label={t('status.copy_coord')}
                 title={t('status.copy_coord')}
               >
                 {copied
-                  ? <Check className="w-3 h-3 text-green-400" />
+                  ? <Check className="w-3 h-3 text-[var(--color-success-text)]" />
                   : <Copy className="w-3 h-3" />}
               </button>
               <div className="w-px h-3.5 bg-[var(--color-border)]" />

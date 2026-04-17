@@ -26,7 +26,7 @@ function stateKind(state?: string): 'idle' | 'running' | 'paused' | 'error' | 'd
 export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne, onEnableDev }: Props) {
   const t = useT()
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
-  const ref = useRef<HTMLDivElement | null>(null)
+  const ref = useRef<HTMLButtonElement | null>(null)
   const kind = stateKind(runtime?.state)
 
   useEffect(() => {
@@ -58,44 +58,34 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
 
   const accent = DEVICE_COLORS[letter === 'A' ? 0 : 1]
   const shortName = (device.name || 'iPhone').slice(0, 14)
+  const ariaLabel = `Device ${letter}: ${shortName}, ${label}`
 
   return (
     <>
-      <div
+      <button
         ref={ref}
+        type="button"
+        aria-haspopup="menu"
+        aria-label={ariaLabel}
+        title={`${letter} · ${device.name}`}
+        className="h-8 px-2.5 inline-flex items-center gap-1.5 bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-full text-xs text-[var(--color-text-1)] cursor-context-menu max-w-[160px] whitespace-nowrap overflow-hidden focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] focus-visible:outline-offset-2"
         onContextMenu={(e) => {
           e.preventDefault()
           setMenu({ x: e.clientX, y: e.clientY })
         }}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          height: 32, padding: '0 10px',
-          borderRadius: 'var(--radius-full)',
-          background: 'var(--color-surface-2)',
-          border: '1px solid var(--color-border)',
-          fontSize: 12,
-          color: 'rgba(255,255,255,0.9)',
-          cursor: 'context-menu',
-          maxWidth: 160,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-        title={`${letter} · ${device.name}`}
       >
         <span
+          className="w-2 h-2 rounded-full shrink-0"
           style={{
-            width: 8, height: 8, borderRadius: '50%',
             background: dotColor,
             boxShadow: kind === 'running' ? `0 0 6px ${dotColor}` : 'none',
             animation: kind === 'running' ? 'chip-pulse 1.6s ease-in-out infinite' : undefined,
-            flexShrink: 0,
           }}
         />
-        <span style={{ fontWeight: 600, color: accent }}>{letter}</span>
-        <span style={{ opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis' }}>· {shortName}</span>
-        <span style={{ opacity: 0.6, marginLeft: 2 }}>· {label}</span>
-      </div>
+        <span className="font-semibold" style={{ color: accent }}>{letter}</span>
+        <span className="opacity-85 overflow-hidden text-ellipsis">· {shortName}</span>
+        <span className="opacity-60 ml-0.5">· {label}</span>
+      </button>
       {menu && createPortal(
         <div
           onClick={(e) => e.stopPropagation()}
@@ -117,20 +107,14 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
 }
 
 function MenuItem({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
-  const [hover, setHover] = useState(false)
   return (
-    <div
+    <button
+      type="button"
+      role="menuitem"
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        padding: '6px 10px',
-        borderRadius: 6,
-        cursor: 'pointer',
-        background: hover ? 'var(--color-surface-hover)' : 'transparent',
-      }}
+      className="context-menu-item w-full text-left"
     >
       {children}
-    </div>
+    </button>
   )
 }

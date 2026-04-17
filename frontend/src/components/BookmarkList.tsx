@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 
@@ -98,6 +98,8 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
   const [customCategory, setCustomCategory] = useState(categories[0] || 'Default');
   const [search, setSearch] = useState('');
 
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
   // Close the context menu on ESC, or on any click / right-click that
   // isn't on the menu itself. Uses pointerdown so it fires before React
   // click handlers inside the menu.
@@ -117,6 +119,9 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
       document.addEventListener('pointerdown', onOutside);
       document.addEventListener('contextmenu', onOutside);
       document.addEventListener('keydown', onEsc);
+      // Move focus into the menu for keyboard navigation
+      const firstItem = contextMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');
+      firstItem?.focus();
     }, 0);
     return () => {
       clearTimeout(id);
@@ -125,6 +130,25 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
       document.removeEventListener('keydown', onEsc);
     };
   }, [contextMenu]);
+
+  const handleContextMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(
+      contextMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+    );
+    if (items.length === 0) return;
+    const focused = document.activeElement as HTMLButtonElement | null;
+    const idx = focused ? items.indexOf(focused) : -1;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      items[(idx + 1) % items.length]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      items[(idx - 1 + items.length) % items.length]?.focus();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setContextMenu(null);
+    }
+  };
 
   const toggleCategory = (cat: string) => {
     setCollapsed((prev) => ({ ...prev, [cat]: !prev[cat] }));
@@ -268,6 +292,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
         <input
           type="text"
           className="search-input"
+          aria-label={t('bm.search_placeholder')}
           placeholder={t('bm.search_placeholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -279,7 +304,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
             title={t('bm.search_clear')}
             style={{
               position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
-              background: 'none', border: 'none', color: '#bbb',
+              background: 'none', border: 'none', color: 'var(--color-text-2)',
               cursor: 'pointer', padding: '2px 6px', fontSize: 14, lineHeight: 1,
             }}
           >×</button>
@@ -290,8 +315,8 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
       {showAddDialog && (
         <div
           style={{
-            background: '#2a2a2e',
-            border: '1px solid #444',
+            background: 'var(--color-surface-2)',
+            border: '1px solid var(--color-border-strong)',
             borderRadius: 6,
             padding: 12,
             marginBottom: 8,
@@ -314,9 +339,9 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
               width: '100%',
               marginBottom: 8,
               padding: '6px 8px',
-              background: '#1e1e22',
-              color: '#e0e0e0',
-              border: '1px solid #444',
+              background: 'var(--color-surface-1)',
+              color: 'var(--color-text-1)',
+              border: '1px solid var(--color-border-strong)',
               borderRadius: 4,
               fontSize: 12,
             }}
@@ -347,8 +372,8 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
       {showCategoryMgr && (
         <div
           style={{
-            background: '#2a2a2e',
-            border: '1px solid #444',
+            background: 'var(--color-surface-2)',
+            border: '1px solid var(--color-border-strong)',
             borderRadius: 6,
             padding: 12,
             marginBottom: 8,
@@ -405,7 +430,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: 'var(--fg-muted, #888)',
+                    color: 'var(--color-text-3)',
                     cursor: 'pointer',
                     padding: '2px 4px',
                     fontSize: 11,
@@ -487,25 +512,31 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
         return (
           <div style={{ paddingLeft: 4 }}>
             {matches.map((bm) => (
-              <div
+              <button
                 key={bm.id ?? `${bm.lat}-${bm.lng}`}
+                type="button"
                 className="bookmark-item"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '5px 6px', cursor: 'pointer',
-                  borderRadius: 4, fontSize: 12, transition: 'background 0.15s',
-                }}
+                style={{ fontSize: 12 }}
                 onClick={() => onBookmarkClick(bm)}
                 onContextMenu={(e) => handleContextMenu(e, bm)}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#3a3a3e'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                onKeyDown={(e) => {
+                  if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+                    e.preventDefault();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    handleContextMenu(
+                      { ...e, preventDefault: () => {}, stopPropagation: () => {}, clientX: rect.left, clientY: rect.bottom } as unknown as React.MouseEvent,
+                      bm,
+                    );
+                  }
+                }}
+                aria-label={bm.name}
               >
                 <div
                   style={{
                     width: 8, height: 8, borderRadius: '50%',
                     background: getCategoryColor(bm.category), flexShrink: 0,
                   }}
-                  title={displayCat(bm.category)}
+                  aria-hidden="true"
                 />
                 <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -515,7 +546,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                     {displayCat(bm.category)} · {bm.lat.toFixed(5)}, {bm.lng.toFixed(5)}
                   </span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         );
@@ -524,7 +555,9 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
       {/* Bookmark groups — only when NOT searching */}
       {search.trim() === '' && Object.entries(bookmarksByCategory).map(([cat, bms]) => (
         <div key={cat} className="bookmark-group" style={{ marginBottom: 4 }}>
-          <div
+          <button
+            type="button"
+            aria-expanded={!collapsed[cat]}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -534,6 +567,12 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
               fontSize: 12,
               fontWeight: 600,
               opacity: 0.8,
+              background: 'none',
+              border: 'none',
+              width: '100%',
+              textAlign: 'left',
+              color: 'inherit',
+              borderRadius: 4,
             }}
             onClick={() => toggleCategory(cat)}
           >
@@ -544,6 +583,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
+              aria-hidden="true"
               style={{
                 transform: collapsed[cat] ? 'rotate(0deg)' : 'rotate(90deg)',
                 transition: 'transform 0.2s',
@@ -552,6 +592,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
               <polyline points="9,18 15,12 9,6" />
             </svg>
             <div
+              aria-hidden="true"
               style={{
                 width: 8,
                 height: 8,
@@ -564,7 +605,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
             <span style={{ marginLeft: 'auto', opacity: 0.4, fontWeight: 400, fontSize: 10 }}>
               {bms.length}
             </span>
-          </div>
+          </button>
 
           {!collapsed[cat] && (
             <div style={{ paddingLeft: 20 }}>
@@ -572,27 +613,24 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                 <div style={{ fontSize: 11, opacity: 0.4, padding: '4px 0' }}>{t('bm.blank')}</div>
               )}
               {bms.map((bm) => (
-                <div
+                <button
                   key={bm.id ?? `${bm.lat}-${bm.lng}`}
+                  type="button"
                   className="bookmark-item"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '5px 6px',
-                    cursor: 'pointer',
-                    borderRadius: 4,
-                    fontSize: 12,
-                    transition: 'background 0.15s',
-                  }}
+                  style={{ fontSize: 12 }}
                   onClick={() => onBookmarkClick(bm)}
                   onContextMenu={(e) => handleContextMenu(e, bm)}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLDivElement).style.background = '#3a3a3e';
+                  onKeyDown={(e) => {
+                    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+                      e.preventDefault();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      handleContextMenu(
+                        { ...e, preventDefault: () => {}, stopPropagation: () => {}, clientX: rect.left, clientY: rect.bottom } as unknown as React.MouseEvent,
+                        bm,
+                      );
+                    }
                   }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                  }}
+                  aria-label={bm.name}
                 >
                   <svg
                     width="12"
@@ -601,7 +639,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
-                    style={{ opacity: 0.5, flexShrink: 0 }}
+                    aria-hidden="true"
                   >
                     <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
                   </svg>
@@ -633,7 +671,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                       </span>
                     </div>
                   )}
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -650,25 +688,29 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
       {contextMenu && createPortal(
         <>
           <div
+            ref={contextMenuRef}
             data-bookmark-context-menu
+            role="menu"
+            aria-label={t('bm.bookmark_actions')}
+            onKeyDown={handleContextMenuKeyDown}
             style={{
               position: 'fixed',
               // Clamp to viewport so the menu never falls off-screen.
               left: Math.min(contextMenu.x, window.innerWidth - 160),
               top: Math.min(contextMenu.y, window.innerHeight - 200),
               zIndex: 'var(--z-dropdown)',
-              background: '#2a2a2e',
-              border: '1px solid #444',
+              background: 'var(--color-surface-2)',
+              border: '1px solid var(--color-border-strong)',
               borderRadius: 6,
               padding: '4px 0',
               boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
               minWidth: 140,
             }}
           >
-            <div
-              style={ctxItemStyle}
-              onMouseEnter={ctxHighlight}
-              onMouseLeave={ctxUnhighlight}
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu-item"
               onClick={() => {
                 const bm = contextMenu.bm;
                 setEditDialog(bm);
@@ -678,16 +720,16 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                 setContextMenu(null);
               }}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
                 <path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
               {t('bm.edit')}
-            </div>
-            <div
-              style={ctxItemStyle}
-              onMouseEnter={ctxHighlight}
-              onMouseLeave={ctxUnhighlight}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu-item"
               onClick={async () => {
                 const text = `${contextMenu.bm.name} ${contextMenu.bm.lat.toFixed(6)}, ${contextMenu.bm.lng.toFixed(6)}`;
                 try {
@@ -704,39 +746,40 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                 setContextMenu(null);
               }}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                 <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
               </svg>
               {t('bm.copy')}
-            </div>
-            <div
-              style={ctxItemStyle}
-              onMouseEnter={ctxHighlight}
-              onMouseLeave={ctxUnhighlight}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu-item"
+              style={{ color: 'var(--color-danger)' }}
               onClick={() => {
                 if (contextMenu.bm.id) onBookmarkDelete(contextMenu.bm.id);
                 setContextMenu(null);
               }}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-danger)" strokeWidth="2" style={{ marginRight: 6 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-danger)" strokeWidth="2" aria-hidden="true">
                 <polyline points="3,6 5,6 21,6" />
                 <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               </svg>
-              <span style={{ color: 'var(--color-danger)' }}>{t('generic.delete')}</span>
-            </div>
+              {t('generic.delete')}
+            </button>
             {categories.length > 1 && (
               <>
-                <div style={{ height: 1, background: '#444', margin: '4px 0' }} />
-                <div style={{ padding: '4px 12px', fontSize: 10, opacity: 0.5 }}>{t('bm.move_to')}</div>
+                <div style={{ height: 1, background: 'var(--color-border-strong)', margin: '4px 0' }} aria-hidden="true" />
+                <div style={{ padding: '4px 12px', fontSize: 10, opacity: 0.5 }} aria-hidden="true">{t('bm.move_to')}</div>
                 {categories
                   .filter((c) => c !== contextMenu.bm.category)
                   .map((cat) => (
-                    <div
+                    <button
                       key={cat}
-                      style={ctxItemStyle}
-                      onMouseEnter={ctxHighlight}
-                      onMouseLeave={ctxUnhighlight}
+                      type="button"
+                      role="menuitem"
+                      className="context-menu-item"
                       onClick={() => {
                         if (contextMenu.bm.id) {
                           onBookmarkEdit(contextMenu.bm.id, { category: cat });
@@ -745,16 +788,16 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
                       }}
                     >
                       <div
+                        aria-hidden="true"
                         style={{
                           width: 6,
                           height: 6,
                           borderRadius: '50%',
                           background: getCategoryColor(cat),
-                          marginRight: 6,
                         }}
                       />
                       {displayCat(cat)}
-                    </div>
+                    </button>
                   ))}
               </>
             )}
@@ -784,7 +827,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
               background: 'rgba(26, 29, 39, 0.96)',
               backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
               border: '1px solid rgba(108, 140, 255, 0.2)',
-              borderRadius: 12, padding: 18, width: 320, color: '#e0e0e0',
+              borderRadius: 12, padding: 18, width: 320, color: 'var(--color-text-1)',
               boxShadow: '0 20px 60px rgba(12, 18, 40, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
             }}
           >
@@ -881,7 +924,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
               background: 'rgba(26, 29, 39, 0.96)',
               backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
               border: '1px solid rgba(108, 140, 255, 0.2)',
-              borderRadius: 12, padding: 18, width: 320, color: '#e0e0e0',
+              borderRadius: 12, padding: 18, width: 320, color: 'var(--color-text-1)',
               boxShadow: '0 20px 60px rgba(12, 18, 40, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
             }}
           >
@@ -931,7 +974,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
               onChange={(e) => setCustomCategory(e.target.value)}
               style={{
                 width: '100%', marginBottom: 12, padding: '6px 8px',
-                background: '#1e1e22', color: '#e0e0e0', border: '1px solid #444',
+                background: 'var(--color-surface-1)', color: 'var(--color-text-1)', border: '1px solid var(--color-border-strong)',
                 borderRadius: 4, fontSize: 12,
               }}
             >
@@ -961,22 +1004,5 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
     </div>
   );
 };
-
-const ctxItemStyle: React.CSSProperties = {
-  padding: '6px 12px',
-  cursor: 'pointer',
-  fontSize: 12,
-  display: 'flex',
-  alignItems: 'center',
-  color: '#e0e0e0',
-  transition: 'background 0.15s',
-};
-
-function ctxHighlight(e: React.MouseEvent<HTMLDivElement>) {
-  (e.currentTarget as HTMLDivElement).style.background = '#3a3a3e';
-}
-function ctxUnhighlight(e: React.MouseEvent<HTMLDivElement>) {
-  (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-}
 
 export default BookmarkList;

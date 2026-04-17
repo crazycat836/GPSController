@@ -173,11 +173,15 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
               </span>
               <div className="flex items-center gap-2">
                 {cooldown > 0 && (
-                  <span className="text-[10px] font-semibold text-amber-300 bg-amber-400/15 px-1.5 py-0.5 rounded-full">
+                  <span className="text-[10px] font-semibold text-[var(--color-amber-text)] bg-[var(--color-amber-dim)] px-1.5 py-0.5 rounded-full">
                     {formatCooldown(cooldown)}
                   </span>
                 )}
                 <div
+                  role="switch"
+                  aria-checked={cooldownEnabled && !dualDevice}
+                  tabIndex={0}
+                  aria-label="Toggle GPS cooldown"
                   className={[
                     'relative w-9 h-5 rounded-full transition-colors',
                     (cooldownEnabled && !dualDevice) ? 'bg-[var(--color-accent)]' : 'bg-white/15',
@@ -185,6 +189,13 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
                   onClick={(e) => {
                     if (dualDevice) { e.preventDefault(); return }
                     handleToggleCooldown(!cooldownEnabled)
+                  }}
+                  onKeyDown={(e) => {
+                    if (dualDevice) return
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleToggleCooldown(!cooldownEnabled)
+                    }
                   }}
                 >
                   <div
@@ -211,6 +222,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
                   <button
                     key={key}
                     onClick={() => onLayerChange(key)}
+                    aria-pressed={layerKey === key}
                     className={[
                       'px-2.5 py-1 text-[10px] font-semibold rounded-md transition-colors cursor-pointer',
                       layerKey === key
@@ -244,6 +256,9 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
           className="fixed inset-0 z-[var(--z-modal)] bg-black/55 backdrop-blur-sm flex items-center justify-center"
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="set-initial-position-title"
             onClick={(e) => e.stopPropagation()}
             className={[
               'w-[360px] p-6 rounded-2xl',
@@ -251,7 +266,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
               'text-[var(--color-text-1)]',
             ].join(' ')}
           >
-            <h3 className="text-[15px] font-semibold mb-2">{t('status.set_initial')}</h3>
+            <h3 id="set-initial-position-title" className="text-[15px] font-semibold mb-2">{t('status.set_initial')}</h3>
             <p className="text-xs text-[var(--color-text-3)] mb-4 leading-relaxed">
               {t('status.set_initial_prompt')}
             </p>
@@ -291,7 +306,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
               />
             </div>
             {initialError && (
-              <p className="text-red-400 text-[11px] mt-1 mb-2">{initialError}</p>
+              <p className="text-[var(--color-error-text)] text-[11px] mt-1 mb-2">{initialError}</p>
             )}
             <div className="flex justify-end gap-2 mt-4">
               <button
