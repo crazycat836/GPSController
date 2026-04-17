@@ -144,21 +144,21 @@ function RoutePointRow({ point, isFirst, isLast, showConnector, compact }: Route
         /* Compact: single-line label + coords inline */
         <div className="flex-1 min-w-0 flex items-center gap-2">
           <span
-            className="text-[11px] font-semibold shrink-0"
-            style={{ color: labelColor ?? 'var(--color-text-1)', minWidth: 28 }}
+            className="text-[13px] font-semibold shrink-0"
+            style={{ color: labelColor ?? 'var(--color-text-1)', minWidth: 32 }}
           >
             {label}
           </span>
           {position && (
             <span
-              className="font-mono text-[11px] truncate"
+              className="font-mono text-[13px] truncate"
               style={{ color: coordColor ?? 'var(--color-text-2)' }}
             >
               {position.lat.toFixed(5)}, {position.lng.toFixed(5)}
             </span>
           )}
           {!position && placeholder && (
-            <span className="text-[11px]" style={{ color: 'var(--color-text-3)' }}>
+            <span className="text-[13px]" style={{ color: 'var(--color-text-3)' }}>
               {placeholder}
             </span>
           )}
@@ -167,21 +167,21 @@ function RoutePointRow({ point, isFirst, isLast, showConnector, compact }: Route
         /* Normal: two-line label + coords stacked */
         <div className="flex-1 min-w-0">
           <div
-            className="text-xs font-semibold"
+            className="text-[13px] font-semibold"
             style={{ color: labelColor ?? 'var(--color-text-1)' }}
           >
             {label}
           </div>
           {position ? (
             <div
-              className="font-mono text-[11px] mt-0.5 truncate"
+              className="font-mono text-[13px] mt-0.5 truncate"
               style={{ color: coordColor ?? 'var(--color-accent)' }}
             >
               {position.lat.toFixed(6)}, {position.lng.toFixed(6)}
             </div>
           ) : placeholder ? (
             <div
-              className="text-[11px] mt-0.5"
+              className="text-[13px] mt-0.5"
               style={{ color: 'var(--color-accent)' }}
             >
               {placeholder}

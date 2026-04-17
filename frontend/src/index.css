@@ -272,6 +272,35 @@
   box-shadow: var(--shadow-lg);
 }
 
+/* ─────────────────────────────────────────────────────────────
+   StatusPill — shared shell for MiniStatusBar, DeviceChip, and
+   future status-bar family members. Keeps height/padding/radius/
+   typography/surface treatment in one place so two pills on the
+   same screen never drift out of sync.
+   ───────────────────────────────────────────────────────────── */
+.status-pill {
+  height: 36px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+  color: var(--color-text-1);
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.status-pill-interactive {
+  cursor: context-menu;
+}
+.status-pill-interactive:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 
 /* ═══════════════════════════════════════════════════════════════
    Segment System  (iOS-style stacked groups)
@@ -1154,6 +1183,31 @@
   border: none !important;
 }
 .pos-icon { position: relative; z-index: 2; }
+/* Avatar container for the current-position marker — centered on the pulse
+   rings with a subtle chromed rim that reads on both light and dark tiles. */
+.pos-avatar-wrap {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #5e8cff, #2b58c8);
+  border: 2px solid rgba(255,255,255,0.92);
+  box-shadow: 0 2px 8px rgba(0, 30, 90, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  overflow: hidden;
+  z-index: 2;
+}
+.pos-avatar-wrap .pos-avatar-icon { display: inline-flex; }
+.pos-avatar-wrap svg { width: 22px; height: 22px; }
+.pos-avatar-img {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+}
 .pos-pulse-ring {
   position: absolute;
   top: 50%; left: 50%;
@@ -1168,6 +1222,71 @@
 .pos-pulse-ring-2 { animation-delay: 1.25s; }
 .dest-marker svg { animation: marker-drop 0.42s var(--ease-spring); transform-origin: 50% 90%; }
 .waypoint-marker svg { animation: marker-pop 0.28s var(--ease-spring); transform-origin: 50% 90%; }
+
+/* Subway-station waypoint pins: keep the pop-in, just skip the tail from
+   the drop since the shape has its own built-in tail. */
+.waypoint-marker-subway svg { animation: marker-pop 0.32s var(--ease-spring); }
+
+/* Flowing arrow overlay on the route polyline. Uses stroke-dashoffset for
+   GPU-friendly motion; runs on every connected device without taxing the
+   CPU because Leaflet's SVG layer is already compositor-promoted. */
+.route-line-flow {
+  animation: route-flow 1.2s linear infinite;
+}
+@keyframes route-flow {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -26; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .route-line-flow { animation: none; }
+}
+
+/* Search bar focused / "input mode" highlight.
+   Tuned to read against busy map tiles: solid (not tinted) accent border,
+   a thick semi-opaque accent halo, and a wider glow extending into the
+   map. Together these give the bar a clear "active surface" silhouette
+   that doesn't depend on contrast against any single underlying color. */
+.search-bar-focused {
+  border-color: var(--color-accent) !important;
+  box-shadow:
+    0 0 0 1px var(--color-accent),
+    0 0 0 4px color-mix(in srgb, var(--color-accent) 45%, transparent),
+    0 0 28px -2px color-mix(in srgb, var(--color-accent) 60%, transparent),
+    0 6px 18px -4px rgba(0, 0, 0, 0.55);
+}
+
+/* Subtle idle motion for weather-chip glyphs. All animations stay on
+   transform/opacity so they run on the compositor and honour reduced-motion. */
+.weather-anim-spin { animation: weather-spin 24s linear infinite; }
+.weather-anim-spin-slow { animation: weather-spin 60s linear infinite; }
+.weather-anim-drift { animation: weather-drift 4s ease-in-out infinite; }
+.weather-anim-bob { animation: weather-bob 1.8s ease-in-out infinite; }
+.weather-anim-flash { animation: weather-flash 2.4s ease-in-out infinite; }
+
+@keyframes weather-spin {
+  from { transform: rotate(0); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes weather-drift {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(1.5px); }
+}
+@keyframes weather-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(1.5px); }
+}
+@keyframes weather-flash {
+  0%, 60%, 100% { opacity: 1; }
+  30%, 70%      { opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weather-anim-spin,
+  .weather-anim-spin-slow,
+  .weather-anim-drift,
+  .weather-anim-bob,
+  .weather-anim-flash { animation: none; }
+}
 
 /* Leaflet dark theme */
 .leaflet-tile-pane { filter: brightness(0.96) saturate(0.95); }

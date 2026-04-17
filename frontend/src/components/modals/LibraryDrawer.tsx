@@ -91,6 +91,8 @@ const LibraryDrawer: React.FC<LibraryDrawerProps> = ({ open, onClose }) => {
             bookmarks={bm.bookmarks.map((b) => ({
               id: b.id, name: b.name, lat: b.lat, lng: b.lng,
               category: bm.categories.find((c) => c.id === b.category_id)?.name || 'Default',
+              countryCode: b.country_code,
+              country: b.country,
             }))}
             categories={bookmarkCategories}
             currentPosition={currentPosition}
@@ -100,6 +102,7 @@ const LibraryDrawer: React.FC<LibraryDrawerProps> = ({ open, onClose }) => {
               bm.createBookmark({ name: b.name, lat: b.lat, lng: b.lng, category_id: cat?.id || 'default' })
             }}
             onBookmarkDelete={(id) => bm.deleteBookmark(id)}
+            onBookmarksBatchDelete={async (ids) => { await bm.deleteBookmarksBatch(ids) }}
             onBookmarkEdit={(id, data) => bm.updateBookmark(id, data)}
             onCategoryAdd={(name) => bm.createCategory({ name })}
             onCategoryDelete={(name) => {

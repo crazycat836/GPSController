@@ -5,6 +5,7 @@ import { DEVICE_COLORS } from '../lib/constants'
 import type { DeviceLetter } from '../lib/constants'
 import type { DeviceInfo } from '../hooks/useDevice'
 import type { DeviceRuntime } from '../hooks/useSimulation'
+import StatusPill from './shell/StatusPill'
 
 interface Props {
   letter: DeviceLetter
@@ -62,14 +63,15 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
 
   return (
     <>
-      <button
+      <StatusPill
+        as="button"
         ref={ref}
         type="button"
         aria-haspopup="menu"
         aria-label={ariaLabel}
         title={`${letter} · ${device.name}`}
-        className="h-8 px-2.5 inline-flex items-center gap-1.5 bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-full text-xs text-[var(--color-text-1)] cursor-context-menu max-w-[160px] whitespace-nowrap overflow-hidden focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] focus-visible:outline-offset-2"
-        onContextMenu={(e) => {
+        className="max-w-[220px] overflow-hidden"
+        onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => {
           e.preventDefault()
           setMenu({ x: e.clientX, y: e.clientY })
         }}
@@ -85,7 +87,7 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
         <span className="font-semibold" style={{ color: accent }}>{letter}</span>
         <span className="opacity-85 overflow-hidden text-ellipsis">· {shortName}</span>
         <span className="opacity-60 ml-0.5">· {label}</span>
-      </button>
+      </StatusPill>
       {menu && createPortal(
         <div
           onClick={(e) => e.stopPropagation()}
