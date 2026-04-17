@@ -11,6 +11,12 @@ interface JoystickPadProps {
 const PAD_RADIUS = 70;
 const HANDLE_RADIUS = 22;
 const MAX_DISTANCE = PAD_RADIUS - HANDLE_RADIUS;
+// Exponential-smoothing time constant for the visual handle. 40 ms gives a
+// noticeably-smooth glide on keyboard/diagonal input without feeling sluggish
+// under mouse drag (where the target updates per pointermove and so the
+// visual tracks 1:1 anyway).
+const SMOOTH_TAU_MS = 40;
+const SETTLE_EPS = 0.05; // px — stop animating when both axes are within this
 
 const JoystickPad: React.FC<JoystickPadProps> = ({
   direction,
@@ -21,7 +27,48 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
   const t = useT();
   const padRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [handlePos, setHandlePos] = useState({ x: 0, y: 0 });
+  // Target is updated synchronously by pointer/keyboard input; the visual
+  // handle position exponentially follows it inside a requestAnimationFrame
+  // loop. Using a ref for the target avoids re-rendering on every input
+  // event and lets the RAF loop always read the latest target.
+  const targetPosRef = useRef({ x: 0, y: 0 });
+  const [visualPos, setVisualPos] = useState({ x: 0, y: 0 });
+  const rafRef = useRef<number | null>(null);
+  const lastTickRef = useRef<number>(0);
+
+  // Kick the RAF loop whenever we set a new target. The loop self-terminates
+  // once the visual settles onto the target to avoid burning cycles while idle.
+  const ensureAnimating = useCallback(() => {
+    if (rafRef.current !== null) return;
+    lastTickRef.current = 0;
+    const tick = (now: number) => {
+      const dt = lastTickRef.current ? Math.min(now - lastTickRef.current, 100) : 16;
+      lastTickRef.current = now;
+      const alpha = 1 - Math.exp(-dt / SMOOTH_TAU_MS);
+      setVisualPos((prev) => {
+        const tx = targetPosRef.current.x;
+        const ty = targetPosRef.current.y;
+        const nx = prev.x + (tx - prev.x) * alpha;
+        const ny = prev.y + (ty - prev.y) * alpha;
+        if (Math.abs(tx - nx) < SETTLE_EPS && Math.abs(ty - ny) < SETTLE_EPS) {
+          rafRef.current = null;
+          return { x: tx, y: ty };
+        }
+        rafRef.current = requestAnimationFrame(tick);
+        return { x: nx, y: ny };
+      });
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, []);
 
   const getDirectionLabel = (deg: number): string => {
     // deg is compass degrees: 0=N, 90=E, 180=S, 270=W
@@ -56,21 +103,29 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
       let compassDeg = (radians * 180) / Math.PI;
       if (compassDeg < 0) compassDeg += 360;
 
-      // Clamp handle position visually
+      // Clamp visual position to pad bounds so the handle sticks to the edge
+      // when the cursor is dragged outside. Combined with pointer capture on
+      // currentTarget (the pad itself, not just the handle), this keeps the
+      // direction responsive even when the cursor leaves the pad area.
       const scale = distance > 0 ? clampedDist / distance : 0;
-      const visualX = dx * scale;
-      const visualY = -(dy * scale); // Back to screen coords
-
-      setHandlePos({ x: visualX, y: visualY });
+      targetPosRef.current = {
+        x: dx * scale,
+        y: -(dy * scale),
+      };
+      ensureAnimating();
       onMove(Math.round(compassDeg), normIntensity);
     },
-    [onMove]
+    [onMove, ensureAnimating]
   );
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       setDragging(true);
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      // Capture on currentTarget (the pad), NOT e.target. When the cursor
+      // drifts onto the handle's inner <div> and then back out, capturing on
+      // e.target can lose subsequent pointermove events. currentTarget is the
+      // element the handler is bound to and is guaranteed to receive them.
+      e.currentTarget.setPointerCapture(e.pointerId);
       calcFromEvent(e.clientX, e.clientY);
     },
     [calcFromEvent]
@@ -86,9 +141,10 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
 
   const handlePointerUp = useCallback(() => {
     setDragging(false);
-    setHandlePos({ x: 0, y: 0 });
+    targetPosRef.current = { x: 0, y: 0 };
+    ensureAnimating();
     onRelease();
-  }, [onRelease]);
+  }, [onRelease, ensureAnimating]);
 
   // ── WASD / arrow keyboard control ───────────────────
   useEffect(() => {
@@ -125,19 +181,22 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
       const r = compute();
       if (!r) {
         setDragging(false);
-        setHandlePos({ x: 0, y: 0 });
+        targetPosRef.current = { x: 0, y: 0 };
+        ensureAnimating();
         onRelease();
         return;
       }
-      const intensity = 1;
       setDragging(true);
-      onMove(r.deg, intensity);
-      // Move handle visually to reflect keyboard input
+      onMove(r.deg, 1);
+      // Update the *target*; the RAF loop glides the visual handle from
+      // its current position to the combined direction. Diagonal keypresses
+      // (e.g. W+D) glide straight to NE instead of visibly stopping at N first.
       const len = Math.sqrt(r.dx * r.dx + r.dy * r.dy);
-      setHandlePos({
+      targetPosRef.current = {
         x: (r.dx / len) * MAX_DISTANCE,
         y: -(r.dy / len) * MAX_DISTANCE,
-      });
+      };
+      ensureAnimating();
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -163,7 +222,8 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
       if (pressed.size > 0) {
         pressed.clear();
         setDragging(false);
-        setHandlePos({ x: 0, y: 0 });
+        targetPosRef.current = { x: 0, y: 0 };
+        ensureAnimating();
         onRelease();
       }
     };
@@ -176,7 +236,7 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [onMove, onRelease]);
+  }, [onMove, onRelease, ensureAnimating]);
 
   // Direction arrows around the pad
   const arrows = [
@@ -240,7 +300,7 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
             background: 'rgba(30, 30, 40, 0.75)',
             border: '2px solid rgba(255,255,255,0.15)',
             position: 'relative',
-            cursor: 'grab',
+            cursor: dragging ? 'grabbing' : 'grab',
             backdropFilter: 'blur(8px)',
           }}
           onPointerDown={handlePointerDown}
@@ -261,7 +321,7 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
             <circle cx={PAD_RADIUS} cy={PAD_RADIUS} r={MAX_DISTANCE / 2} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="4 4" />
           </svg>
 
-          {/* Handle */}
+          {/* Handle — positioned by the RAF smoothing loop, no CSS transition. */}
           <div
             className="joystick-handle"
             style={{
@@ -273,9 +333,8 @@ const JoystickPad: React.FC<JoystickPadProps> = ({
                 : 'radial-gradient(circle, #888 0%, #555 100%)',
               border: '2px solid rgba(255,255,255,0.3)',
               position: 'absolute',
-              left: PAD_RADIUS - HANDLE_RADIUS + handlePos.x,
-              top: PAD_RADIUS - HANDLE_RADIUS + handlePos.y,
-              transition: dragging ? 'none' : 'left 0.2s ease-out, top 0.2s ease-out',
+              left: PAD_RADIUS - HANDLE_RADIUS + visualPos.x,
+              top: PAD_RADIUS - HANDLE_RADIUS + visualPos.y,
               pointerEvents: 'none',
               boxShadow: dragging ? '0 0 12px rgba(74,108,247,0.5)' : '0 2px 6px rgba(0,0,0,0.3)',
             }}

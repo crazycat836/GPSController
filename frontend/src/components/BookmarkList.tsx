@@ -8,6 +8,9 @@ interface Bookmark {
   lat: number;
   lng: number;
   category: string;
+  /** Lowercase ISO 3166-1 alpha-2. Empty until backend reverse-geocode runs. */
+  countryCode?: string;
+  country?: string;
 }
 
 interface Position {
@@ -22,6 +25,7 @@ interface BookmarkListProps {
   onBookmarkClick: (bm: Bookmark) => void;
   onBookmarkAdd: (bm: Bookmark) => void;
   onBookmarkDelete: (id: string) => void;
+  onBookmarksBatchDelete?: (ids: string[]) => Promise<void> | void;
   onBookmarkEdit: (id: string, bm: Partial<Bookmark>) => void;
   onCategoryAdd: (name: string) => void;
   onCategoryDelete: (name: string) => void;
@@ -56,6 +60,7 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
   onBookmarkClick,
   onBookmarkAdd,
   onBookmarkDelete,
+  onBookmarksBatchDelete,
   onBookmarkEdit,
   onCategoryAdd,
   onCategoryDelete,
@@ -97,6 +102,36 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
   const [customLng, setCustomLng] = useState('');
   const [customCategory, setCustomCategory] = useState(categories[0] || 'Default');
   const [search, setSearch] = useState('');
+  // Multi-select mode. Only rendered when onBookmarksBatchDelete is wired up.
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const canBatchDelete = typeof onBookmarksBatchDelete === 'function';
+
+  const toggleSelected = (id: string | undefined) => {
+    if (!id) return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    clearSelection();
+  };
+
+  const handleBatchDelete = async () => {
+    if (!canBatchDelete || selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    if (!window.confirm(t('bm.confirm_batch_delete', { n: ids.length }))) return;
+    await Promise.resolve(onBookmarksBatchDelete!(ids));
+    exitSelectionMode();
+  };
 
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
@@ -266,10 +301,37 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
             />
           </label>
         )}
+        {canBatchDelete && (
+          <button
+            className="action-btn"
+            onClick={() => {
+              if (selectionMode) {
+                exitSelectionMode();
+              } else {
+                setSelectionMode(true);
+                clearSelection();
+              }
+            }}
+            style={{
+              padding: '3px 8px',
+              fontSize: 12,
+              marginLeft: (exportUrl || onImport) ? 0 : 'auto',
+              color: selectionMode ? 'var(--color-accent)' : undefined,
+            }}
+            title={t('bm.select_mode')}
+            aria-pressed={selectionMode}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              {selectionMode && <polyline points="9 12 11 14 15 10" />}
+            </svg>
+            {selectionMode ? t('bm.select_cancel') : t('bm.select')}
+          </button>
+        )}
         <button
           className="action-btn"
           onClick={() => setShowCategoryMgr(!showCategoryMgr)}
-          style={{ padding: '3px 8px', fontSize: 12, marginLeft: (exportUrl || onImport) ? 0 : 'auto' }}
+          style={{ padding: '3px 8px', fontSize: 12, marginLeft: (exportUrl || onImport || canBatchDelete) ? 0 : 'auto' }}
           title={t('bm.manage_categories')}
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -278,6 +340,49 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
           </svg>
         </button>
       </div>
+
+      {/* Selection toolbar — only visible in multi-select mode */}
+      {selectionMode && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 10px',
+            marginBottom: 8,
+            background: 'var(--color-accent-dim)',
+            border: '1px solid var(--color-border-strong)',
+            borderRadius: 6,
+            fontSize: 12,
+          }}
+          role="toolbar"
+          aria-label={t('bm.selection_toolbar')}
+        >
+          <span style={{ flex: 1, fontWeight: 600 }}>
+            {t('bm.selected_count', { n: selectedIds.size })}
+          </span>
+          <button
+            className="action-btn"
+            style={{ fontSize: 11, padding: '3px 8px' }}
+            onClick={clearSelection}
+            disabled={selectedIds.size === 0}
+          >
+            {t('bm.clear_selection')}
+          </button>
+          <button
+            className="action-btn"
+            style={{ fontSize: 11, padding: '3px 8px', color: 'var(--color-danger)' }}
+            onClick={handleBatchDelete}
+            disabled={selectedIds.size === 0}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <polyline points="3,6 5,6 21,6" />
+              <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+            </svg>
+            {t('generic.delete')}
+          </button>
+        </div>
+      )}
 
       {/* Search box — filters by name / coords across all categories */}
       <div style={{ position: 'relative', marginBottom: 8 }}>
@@ -511,43 +616,71 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
         }
         return (
           <div style={{ paddingLeft: 4 }}>
-            {matches.map((bm) => (
-              <button
-                key={bm.id ?? `${bm.lat}-${bm.lng}`}
-                type="button"
-                className="bookmark-item"
-                style={{ fontSize: 12 }}
-                onClick={() => onBookmarkClick(bm)}
-                onContextMenu={(e) => handleContextMenu(e, bm)}
-                onKeyDown={(e) => {
-                  if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
-                    e.preventDefault();
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    handleContextMenu(
-                      { ...e, preventDefault: () => {}, stopPropagation: () => {}, clientX: rect.left, clientY: rect.bottom } as unknown as React.MouseEvent,
-                      bm,
-                    );
-                  }
-                }}
-                aria-label={bm.name}
-              >
-                <div
-                  style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: getCategoryColor(bm.category), flexShrink: 0,
+            {matches.map((bm) => {
+              const checked = !!bm.id && selectedIds.has(bm.id);
+              return (
+                <button
+                  key={bm.id ?? `${bm.lat}-${bm.lng}`}
+                  type="button"
+                  className="bookmark-item"
+                  style={{ fontSize: 12, background: checked ? 'var(--color-accent-dim)' : undefined }}
+                  onClick={() => {
+                    if (selectionMode) toggleSelected(bm.id);
+                    else onBookmarkClick(bm);
                   }}
-                  aria-hidden="true"
-                />
-                <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {bm.name}
-                  </span>
-                  <span style={{ fontSize: 10, opacity: 0.55, fontFamily: 'monospace' }}>
-                    {displayCat(bm.category)} · {bm.lat.toFixed(5)}, {bm.lng.toFixed(5)}
-                  </span>
-                </div>
-              </button>
-            ))}
+                  onContextMenu={(e) => handleContextMenu(e, bm)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+                      e.preventDefault();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      handleContextMenu(
+                        { ...e, preventDefault: () => {}, stopPropagation: () => {}, clientX: rect.left, clientY: rect.bottom } as unknown as React.MouseEvent,
+                        bm,
+                      );
+                    }
+                  }}
+                  aria-label={bm.name}
+                  aria-pressed={selectionMode ? checked : undefined}
+                >
+                  {selectionMode && (
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      readOnly
+                      aria-hidden="true"
+                      tabIndex={-1}
+                      style={{ flexShrink: 0, pointerEvents: 'none' }}
+                    />
+                  )}
+                  <div
+                    style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: getCategoryColor(bm.category), flexShrink: 0,
+                    }}
+                    aria-hidden="true"
+                  />
+                  {bm.countryCode && (
+                    <img
+                      src={`https://flagcdn.com/w40/${bm.countryCode}.png`}
+                      alt={bm.countryCode.toUpperCase()}
+                      width={14}
+                      height={10}
+                      className="rounded-[2px]"
+                      style={{ flexShrink: 0, boxShadow: '0 0 0 1px rgba(255,255,255,0.08)' }}
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                    />
+                  )}
+                  <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {bm.name}
+                    </span>
+                    <span style={{ fontSize: 10, opacity: 0.55, fontFamily: 'monospace' }}>
+                      {displayCat(bm.category)} · {bm.lat.toFixed(5)}, {bm.lng.toFixed(5)}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         );
       })()}
@@ -612,67 +745,95 @@ const BookmarkList: React.FC<BookmarkListProps> = ({
               {bms.length === 0 && (
                 <div style={{ fontSize: 11, opacity: 0.4, padding: '4px 0' }}>{t('bm.blank')}</div>
               )}
-              {bms.map((bm) => (
-                <button
-                  key={bm.id ?? `${bm.lat}-${bm.lng}`}
-                  type="button"
-                  className="bookmark-item"
-                  style={{ fontSize: 12 }}
-                  onClick={() => onBookmarkClick(bm)}
-                  onContextMenu={(e) => handleContextMenu(e, bm)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
-                      e.preventDefault();
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      handleContextMenu(
-                        { ...e, preventDefault: () => {}, stopPropagation: () => {}, clientX: rect.left, clientY: rect.bottom } as unknown as React.MouseEvent,
-                        bm,
-                      );
-                    }
-                  }}
-                  aria-label={bm.name}
-                >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    aria-hidden="true"
+              {bms.map((bm) => {
+                const checked = !!bm.id && selectedIds.has(bm.id);
+                return (
+                  <button
+                    key={bm.id ?? `${bm.lat}-${bm.lng}`}
+                    type="button"
+                    className="bookmark-item"
+                    style={{ fontSize: 12, background: checked ? 'var(--color-accent-dim)' : undefined }}
+                    onClick={() => {
+                      if (selectionMode) toggleSelected(bm.id);
+                      else onBookmarkClick(bm);
+                    }}
+                    onContextMenu={(e) => handleContextMenu(e, bm)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+                        e.preventDefault();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        handleContextMenu(
+                          { ...e, preventDefault: () => {}, stopPropagation: () => {}, clientX: rect.left, clientY: rect.bottom } as unknown as React.MouseEvent,
+                          bm,
+                        );
+                      }
+                    }}
+                    aria-label={bm.name}
+                    aria-pressed={selectionMode ? checked : undefined}
                   >
-                    <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-                  </svg>
-                  {editingId === bm.id ? (
-                    <input
-                      type="text"
-                      className="search-input"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && bm.id) {
-                          onBookmarkEdit(bm.id, { name: editName });
-                          setEditingId(null);
-                        }
-                        if (e.key === 'Escape') setEditingId(null);
-                      }}
-                      onBlur={() => setEditingId(null)}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ flex: 1, padding: '2px 4px', fontSize: 11 }}
-                      autoFocus
-                    />
-                  ) : (
-                    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {bm.name}
-                      </span>
-                      <span style={{ fontSize: 10, opacity: 0.55, fontFamily: 'monospace' }}>
-                        {bm.lat.toFixed(5)}, {bm.lng.toFixed(5)}
-                      </span>
-                    </div>
-                  )}
-                </button>
-              ))}
+                    {selectionMode && (
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        readOnly
+                        aria-hidden="true"
+                        tabIndex={-1}
+                        style={{ flexShrink: 0, pointerEvents: 'none' }}
+                      />
+                    )}
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      aria-hidden="true"
+                    >
+                      <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+                    </svg>
+                    {bm.countryCode && (
+                      <img
+                        src={`https://flagcdn.com/w40/${bm.countryCode}.png`}
+                        alt={bm.countryCode.toUpperCase()}
+                        width={14}
+                        height={10}
+                        className="rounded-[2px]"
+                        style={{ flexShrink: 0, boxShadow: '0 0 0 1px rgba(255,255,255,0.08)' }}
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                      />
+                    )}
+                    {editingId === bm.id ? (
+                      <input
+                        type="text"
+                        className="search-input"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && bm.id) {
+                            onBookmarkEdit(bm.id, { name: editName });
+                            setEditingId(null);
+                          }
+                          if (e.key === 'Escape') setEditingId(null);
+                        }}
+                        onBlur={() => setEditingId(null)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ flex: 1, padding: '2px 4px', fontSize: 11 }}
+                        autoFocus
+                      />
+                    ) : (
+                      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {bm.name}
+                        </span>
+                        <span style={{ fontSize: 10, opacity: 0.55, fontFamily: 'monospace' }}>
+                          {bm.lat.toFixed(5)}, {bm.lng.toFixed(5)}
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

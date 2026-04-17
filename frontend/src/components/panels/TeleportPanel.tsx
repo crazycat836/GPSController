@@ -99,10 +99,10 @@ export default function TeleportPanel() {
       <div className="seg">
         <div className="seg-row" style={{ gap: 8 }}>
           <Locate className="w-4 h-4 shrink-0" style={{ color: 'var(--color-accent)' }} />
-          <span className="text-xs font-semibold" style={{ color: 'var(--color-text-1)' }}>
+          <span className="text-[13px] font-semibold" style={{ color: 'var(--color-text-1)' }}>
             {t('teleport.distance')}:
           </span>
-          <span className="text-xs" style={{ color: 'var(--color-text-2)' }}>
+          <span className="text-[13px]" style={{ color: 'var(--color-text-2)' }}>
             {fmtDistance(distanceM)}
           </span>
         </div>
@@ -111,10 +111,10 @@ export default function TeleportPanel() {
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
           </svg>
-          <span className="text-xs font-semibold" style={{ color: 'var(--color-text-1)' }}>
+          <span className="text-[13px] font-semibold" style={{ color: 'var(--color-text-1)' }}>
             {t('teleport.cooldown_time')}:
           </span>
-          <span className="text-xs" style={{ color: 'var(--color-text-2)' }}>
+          <span className="text-[13px]" style={{ color: 'var(--color-text-2)' }}>
             {formatCooldown(cooldownSec)}
           </span>
         </div>

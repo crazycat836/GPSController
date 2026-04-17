@@ -1,6 +1,6 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import { useT } from '../i18n';
-import { getInitialPosition } from '../services/api';
+import { getInitialPosition, reverseGeocode } from '../services/api';
 import L from 'leaflet';
 
 interface Position {
@@ -21,6 +21,15 @@ interface ContextMenuState {
   lat: number;
   lng: number;
 }
+
+interface WhatsHereState {
+  loading: boolean;
+  label: string;
+  address: string;
+  error: boolean;
+}
+
+const WHATS_HERE_IDLE: WhatsHereState = { loading: false, label: '', address: '', error: false };
 
 import type { DeviceRuntime, RuntimesMap } from '../hooks/useSimulation';
 import type { DeviceInfo } from '../hooks/useDevice';
@@ -53,6 +62,8 @@ interface MapViewProps {
 import { DEVICE_COLORS_HEX as DEVICE_COLORS, DEVICE_LETTERS } from '../lib/constants';
 import { haversineM } from '../lib/geo';
 import MapControls from './shell/MapControls';
+import { useAvatarContext } from '../contexts/AvatarContext';
+import { getPresetSvg } from '../lib/avatars';
 
 const MapView: React.FC<MapViewProps> = ({
   currentPosition,
@@ -106,6 +117,17 @@ const MapView: React.FC<MapViewProps> = ({
   const radiusCircleRef = useRef<L.Circle | null>(null);
 
   const layerMapRef = useRef<Record<string, L.TileLayer>>({});
+  const avatar = useAvatarContext();
+  // Cached inner HTML for the position marker; rebuilt whenever avatar
+  // selection changes. Storing the literal HTML here keeps the marker
+  // update path dead-simple — just `setIcon()` with the new divIcon.
+  const avatarHtml = React.useMemo(() => {
+    if (avatar.current.kind === 'custom' && avatar.customDataUrl) {
+      return `<img src="${avatar.customDataUrl}" alt="" class="pos-avatar-img" width="28" height="28" />`;
+    }
+    const key = avatar.current.kind === 'preset' ? avatar.current.key : 'boy';
+    return `<span class="pos-avatar-icon">${getPresetSvg(key)}</span>`;
+  }, [avatar.current, avatar.customDataUrl]);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
@@ -114,9 +136,17 @@ const MapView: React.FC<MapViewProps> = ({
     lat: 0,
     lng: 0,
   });
+  // Measured-and-clamped menu position. Null while the menu is hidden or
+  // before useLayoutEffect has run once; the menu is rendered invisibly on
+  // first frame to measure, then re-rendered at the clamped position.
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+  const [whatsHere, setWhatsHere] = useState<WhatsHereState>(WHATS_HERE_IDLE);
 
   const closeContextMenu = useCallback(() => {
     setContextMenu((prev) => ({ ...prev, visible: false }));
+    setMenuPos(null);
+    setWhatsHere(WHATS_HERE_IDLE);
   }, []);
 
   // React to layerKey prop changes from SettingsMenu
@@ -282,6 +312,15 @@ const MapView: React.FC<MapViewProps> = ({
 
     const latlng: L.LatLngExpression = [currentPosition.lat, currentPosition.lng];
 
+    const makeIcon = () => L.divIcon({
+      className: 'current-pos-marker',
+      html: `<div class="pos-pulse-ring"></div>
+        <div class="pos-pulse-ring pos-pulse-ring-2"></div>
+        <div class="pos-avatar-wrap">${avatarHtml}</div>`,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+    });
+
     if (currentMarkerRef.current) {
       // Just move the existing marker — no flicker
       (currentMarkerRef.current as any).setLatLng(latlng);
@@ -289,34 +328,8 @@ const MapView: React.FC<MapViewProps> = ({
         `${currentPosition.lat.toFixed(6)}, ${currentPosition.lng.toFixed(6)}`
       );
     } else {
-      // First time: create the marker
-      const personIcon = L.divIcon({
-        className: 'current-pos-marker',
-        html: `<div class="pos-pulse-ring"></div>
-          <div class="pos-pulse-ring pos-pulse-ring-2"></div>
-          <svg width="44" height="44" viewBox="0 0 44 44" class="pos-icon">
-            <defs>
-              <radialGradient id="posGlow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="#4285f4" stop-opacity="0.3"/>
-                <stop offset="100%" stop-color="#4285f4" stop-opacity="0"/>
-              </radialGradient>
-              <filter id="posShadow" x="-30%" y="-30%" width="160%" height="160%">
-                <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#4285f4" flood-opacity="0.6"/>
-              </filter>
-            </defs>
-            <circle cx="22" cy="22" r="20" fill="url(#posGlow)"/>
-            <circle cx="22" cy="22" r="11" fill="#4285f4" filter="url(#posShadow)"/>
-            <circle cx="22" cy="22" r="9" fill="#2b6ff2"/>
-            <circle cx="22" cy="18" r="3.5" fill="#ffffff" opacity="0.95"/>
-            <path d="M15.5 28.5c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5" fill="#ffffff" opacity="0.95" stroke="none"/>
-            <circle cx="22" cy="22" r="11" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.8"/>
-          </svg>`,
-        iconSize: [44, 44],
-        iconAnchor: [22, 22],
-      });
-
       const marker = L.marker(latlng, {
-        icon: personIcon,
+        icon: makeIcon(),
         zIndexOffset: 1000,
       }).addTo(map);
 
@@ -341,7 +354,24 @@ const MapView: React.FC<MapViewProps> = ({
       }
     }
     prevPositionRef.current = currentPosition;
-  }, [currentPosition, dualMode]);
+  }, [currentPosition, dualMode, avatarHtml]);
+
+  // Swap the position marker's icon when the user picks a new avatar even
+  // if their coordinate hasn't moved. The dep on avatarHtml in the main
+  // effect handles the *create* path; this one covers the *update* path.
+  useEffect(() => {
+    const marker = currentMarkerRef.current;
+    if (!marker) return;
+    const icon = L.divIcon({
+      className: 'current-pos-marker',
+      html: `<div class="pos-pulse-ring"></div>
+        <div class="pos-pulse-ring pos-pulse-ring-2"></div>
+        <div class="pos-avatar-wrap">${avatarHtml}</div>`,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+    });
+    (marker as any).setIcon(icon);
+  }, [avatarHtml]);
 
   // Update destination marker
   const destSigRef = useRef<string | null>(null);
@@ -419,29 +449,25 @@ const MapView: React.FC<MapViewProps> = ({
       // map matches the side panel ("起點 / Start"), and number the rest 1..N.
       const isStart = wp.index === 0;
       const label = isStart ? 'S' : String(wp.index);
-      const fillTop = isStart ? '#66bb6a' : '#ffb74d';
-      const fillBot = isStart ? '#43a047' : '#ff9800';
-      const textFill = isStart ? '#1b5e20' : '#e65100';
+      // Subway-station vocabulary: thick ring + solid inner + short
+      // downward tail + soft ground shadow. Palette keeps the start/way
+      // contrast but drops the heavy gradient pin body for a flatter,
+      // more modern look.
+      const ringFill = isStart ? '#43a047' : '#fb8c00';
+      const innerFill = isStart ? '#2e7d32' : '#ef6c00';
+      const textFill = '#ffffff';
       const wpIcon = L.divIcon({
-        className: 'waypoint-marker',
-        html: `<svg width="32" height="44" viewBox="0 0 32 44">
-          <defs>
-            <filter id="wpShadow${wp.index}" x="-20%" y="-10%" width="140%" height="130%">
-              <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#000" flood-opacity="0.35"/>
-            </filter>
-            <linearGradient id="wpGrad${wp.index}" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="${fillTop}"/>
-              <stop offset="100%" stop-color="${fillBot}"/>
-            </linearGradient>
-          </defs>
-          <ellipse cx="16" cy="41" rx="5" ry="1.8" fill="#000" opacity="0.15"/>
-          <path d="M16 2C8.8 2 3 7.8 3 15c0 10 13 26 13 26s13-16 13-26C29 7.8 23.2 2 16 2z"
-                fill="url(#wpGrad${wp.index})" filter="url(#wpShadow${wp.index})"/>
-          <circle cx="16" cy="15" r="8" fill="#ffffff" opacity="0.95"/>
-          <text x="16" y="19" text-anchor="middle" fill="${textFill}" font-size="12" font-weight="700" font-family="system-ui">${label}</text>
+        className: 'waypoint-marker waypoint-marker-subway',
+        html: `<svg width="36" height="42" viewBox="0 0 36 42">
+          <ellipse cx="18" cy="39" rx="8" ry="2" fill="#000" opacity="0.18"/>
+          <path d="M18 24 L14 32 L22 32 Z" fill="${ringFill}" opacity="0.95"/>
+          <circle cx="18" cy="16" r="14" fill="#ffffff" opacity="0.96"/>
+          <circle cx="18" cy="16" r="14" fill="none" stroke="${ringFill}" stroke-width="4"/>
+          <circle cx="18" cy="16" r="9" fill="${innerFill}"/>
+          <text x="18" y="20" text-anchor="middle" fill="${textFill}" font-size="12" font-weight="700" font-family="system-ui">${label}</text>
         </svg>`,
-        iconSize: [32, 44],
-        iconAnchor: [16, 41],
+        iconSize: [36, 42],
+        iconAnchor: [18, 39],
       });
 
       const marker = L.marker([wp.lat, wp.lng], { icon: wpIcon }).addTo(map);
@@ -453,7 +479,10 @@ const MapView: React.FC<MapViewProps> = ({
     });
   }, [waypoints]);
 
-  // Update route polyline
+  // Route polyline: base solid line + overlay white dashed line with a CSS
+  // stroke-dashoffset animation, giving the subtle "flowing arrow" look
+  // that locwarp ships in v0.2.48.
+  const polylineOverlayRef = useRef<L.Polyline | null>(null);
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -462,17 +491,31 @@ const MapView: React.FC<MapViewProps> = ({
       polylineRef.current.remove();
       polylineRef.current = null;
     }
+    if (polylineOverlayRef.current) {
+      polylineOverlayRef.current.remove();
+      polylineOverlayRef.current = null;
+    }
 
     if (dualMode) return;
 
     if (routePath.length > 1) {
       const latlngs: L.LatLngExpression[] = routePath.map((p) => [p.lat, p.lng]);
-      const polyline = L.polyline(latlngs, {
+      const base = L.polyline(latlngs, {
         color: '#4285f4',
         weight: 4,
         opacity: 0.85,
       }).addTo(map);
-      polylineRef.current = polyline;
+      polylineRef.current = base;
+      const overlay = L.polyline(latlngs, {
+        color: '#ffffff',
+        weight: 2,
+        opacity: 0.85,
+        dashArray: '10 16',
+        // Animated by route-line.css via className targeting.
+        className: 'route-line-flow',
+        interactive: false,
+      }).addTo(map);
+      polylineOverlayRef.current = overlay;
     }
   }, [routePath, dualMode]);
 
@@ -685,6 +728,46 @@ const MapView: React.FC<MapViewProps> = ({
     return () => document.removeEventListener('click', handler);
   }, [closeContextMenu]);
 
+  // Clamp the context menu to the viewport. Running in useLayoutEffect lets
+  // us measure the real DOM before the browser paints, so the menu doesn't
+  // visibly flash in the clipped position before jumping back in-bounds.
+  useLayoutEffect(() => {
+    if (!contextMenu.visible) return;
+    const el = contextMenuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const pad = 8;
+    const maxLeft = window.innerWidth - rect.width - pad;
+    const maxTop = window.innerHeight - rect.height - pad;
+    const left = Math.max(pad, Math.min(contextMenu.x, maxLeft));
+    const top = Math.max(pad, Math.min(contextMenu.y, maxTop));
+    setMenuPos((prev) => (prev && prev.left === left && prev.top === top ? prev : { left, top }));
+    // Re-measure when the "What's here" panel expands/collapses — its
+    // content changes the menu's height so we need to re-clamp. whatsHere
+    // is referenced so the effect re-runs on every transition.
+  }, [contextMenu.visible, contextMenu.x, contextMenu.y, whatsHere.loading, whatsHere.label, whatsHere.address, whatsHere.error]);
+
+  const handleWhatsHere = useCallback(async () => {
+    const lat = contextMenu.lat;
+    const lng = contextMenu.lng;
+    setWhatsHere({ loading: true, label: '', address: '', error: false });
+    try {
+      const res = await reverseGeocode(lat, lng);
+      if (!res) {
+        setWhatsHere({ loading: false, label: '', address: '', error: true });
+        return;
+      }
+      setWhatsHere({
+        loading: false,
+        label: res.place_name || res.display_name || '',
+        address: res.display_name || '',
+        error: false,
+      });
+    } catch {
+      setWhatsHere({ loading: false, label: '', address: '', error: true });
+    }
+  }, [contextMenu.lat, contextMenu.lng]);
+
   const recenter = useCallback(() => {
     const map = mapRef.current;
     if (!map || !currentPosition) return;
@@ -707,11 +790,17 @@ const MapView: React.FC<MapViewProps> = ({
 
       {contextMenu.visible && (
         <div
+          ref={contextMenuRef}
           className="context-menu anim-scale-in-tl"
           style={{
             position: 'fixed',
-            left: contextMenu.x,
-            top: contextMenu.y,
+            // On first render we haven't measured yet; hide the menu so the
+            // user doesn't see it flash at an out-of-bounds location before
+            // useLayoutEffect clamps it. Once measured, render at clamped
+            // position and make visible.
+            left: menuPos?.left ?? contextMenu.x,
+            top: menuPos?.top ?? contextMenu.y,
+            visibility: menuPos ? 'visible' : 'hidden',
             zIndex: 'var(--z-dropdown)',
             background: 'var(--color-surface-1)',
             border: '1px solid var(--color-border)',
@@ -719,31 +808,58 @@ const MapView: React.FC<MapViewProps> = ({
             padding: '4px 0',
             boxShadow: 'var(--shadow-lg)',
             minWidth: 180,
+            maxWidth: 360,
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* 1. Coordinates label — always visible at the top of the menu.
-                Not clickable; shows the exact lat/lng of the right-click
-                target directly instead of making the user click through. */}
-          <div
+          {/* 1. Coordinates label — clickable. Tapping it reverse-geocodes
+                and expands the human-readable address inline underneath,
+                so the user can sanity-check "where is this?" before
+                choosing teleport / navigate. */}
+          <button
+            type="button"
+            onClick={handleWhatsHere}
+            disabled={whatsHere.loading}
             style={{
+              all: 'unset',
+              boxSizing: 'border-box',
+              width: '100%',
               padding: '8px 16px 6px',
               color: '#9ac0ff',
               fontSize: 12,
               fontFamily: 'monospace',
               display: 'flex',
               alignItems: 'center',
+              gap: 8,
               userSelect: 'text',
-              cursor: 'default',
+              cursor: whatsHere.loading ? 'progress' : 'pointer',
             }}
-            onClick={(e) => e.stopPropagation()}
+            title={tRef.current('map.whats_here')}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8, opacity: 0.7 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.7, flexShrink: 0 }}>
               <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
               <circle cx="12" cy="10" r="3" />
             </svg>
-            {contextMenu.lat.toFixed(6)}, {contextMenu.lng.toFixed(6)}
-          </div>
+            <span>{contextMenu.lat.toFixed(6)}, {contextMenu.lng.toFixed(6)}</span>
+          </button>
+          {whatsHere.loading && (
+            <div style={{ padding: '0 16px 6px', fontSize: 11, opacity: 0.7, fontStyle: 'italic' }}>
+              {tRef.current('map.whats_here_loading')}
+            </div>
+          )}
+          {!whatsHere.loading && whatsHere.error && (
+            <div style={{ padding: '0 16px 6px', fontSize: 11, color: 'var(--color-danger)' }}>
+              {tRef.current('map.whats_here_failed')}
+            </div>
+          )}
+          {!whatsHere.loading && !whatsHere.error && whatsHere.label && (
+            <div style={{ padding: '0 16px 6px', fontSize: 11, color: 'var(--color-text-1)' }}>
+              <div style={{ fontWeight: 600 }}>{whatsHere.label}</div>
+              {whatsHere.address && whatsHere.address !== whatsHere.label && (
+                <div style={{ opacity: 0.7, marginTop: 2, lineHeight: 1.35 }}>{whatsHere.address}</div>
+              )}
+            </div>
+          )}
           <div style={{ height: 1, background: 'var(--color-border)', margin: '2px 0 4px' }} />
 
           {/* 2 + 3. Teleport / Navigate (device-gated). */}

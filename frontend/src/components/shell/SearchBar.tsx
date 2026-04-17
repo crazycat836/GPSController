@@ -82,7 +82,8 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
     }
   }
 
-  // ⌘K to focus
+  // ⌘K to focus. The visual highlight is owned by the CSS focused state
+  // (`.search-bar-focused`), not a one-shot animation.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -116,11 +117,11 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
       {/* Input */}
       <div
         className={[
-          'flex items-center gap-2 px-3 h-11 w-[22rem] rounded-xl surface-control transition-all duration-150',
-          focused ? 'ring-2 ring-[var(--color-accent)]/40' : '',
+          'flex items-center gap-2 px-3 h-11 w-[22rem] rounded-xl surface-control transition-all duration-200',
+          focused ? 'search-bar-focused' : '',
         ].join(' ')}
       >
-        <Search className="w-3.5 h-3.5 text-[var(--color-text-3)] shrink-0" />
+        <Search className="w-4 h-4 text-[var(--color-text-3)] shrink-0" />
         <input
           ref={inputRef}
           type="text"
@@ -133,10 +134,10 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
             if (e.key === 'Escape') { setOpen(false); inputRef.current?.blur() }
           }}
           placeholder={t('search.unified_placeholder')}
-          className="flex-1 bg-transparent border-none outline-none text-[var(--color-text-1)] text-[13px] placeholder:text-[var(--color-text-3)]"
+          className="flex-1 bg-transparent border-none outline-none text-[var(--color-text-1)] text-[14px] placeholder:text-[var(--color-text-3)]"
         />
         {!focused && (
-          <kbd className="text-[10px] font-mono text-[var(--color-text-3)] bg-white/[0.06] px-1.5 py-0.5 rounded border border-[var(--color-border)]">
+          <kbd className="text-[11px] font-mono text-[var(--color-text-3)] bg-white/[0.06] px-1.5 py-0.5 rounded border border-[var(--color-border)]">
             ⌘K
           </kbd>
         )}
@@ -157,10 +158,10 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
             >
               <MapPin className="w-4 h-4 text-[var(--color-accent)] shrink-0" />
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-medium text-[var(--color-text-1)]">
+                <div className="text-[14px] font-medium text-[var(--color-text-1)]">
                   {t('search.coord_detected')}
                 </div>
-                <div className="text-[11px] font-mono text-[var(--color-text-3)]">
+                <div className="text-[12px] font-mono text-[var(--color-text-3)]">
                   {validCoord.lat.toFixed(6)}, {validCoord.lng.toFixed(6)}
                 </div>
               </div>
@@ -169,7 +170,7 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
 
           {/* Loading */}
           {loading && (
-            <div className="px-4 py-3 text-[12px] text-[var(--color-text-3)]">
+            <div className="px-4 py-3 text-[13px] text-[var(--color-text-3)]">
               {t('search.searching')}
             </div>
           )}
@@ -181,13 +182,13 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
               onClick={() => handleSelect(r.lat, r.lng)}
               className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
             >
-              <MapPin className="w-3.5 h-3.5 text-[var(--color-text-3)] shrink-0" />
+              <MapPin className="w-4 h-4 text-[var(--color-text-3)] shrink-0" />
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] text-[var(--color-text-1)] truncate">
+                <div className="text-[14px] text-[var(--color-text-1)] truncate">
                   {r.name}
                 </div>
                 {r.address && (
-                  <div className="text-[10px] text-[var(--color-text-3)] truncate">
+                  <div className="text-[12px] text-[var(--color-text-3)] truncate">
                     {r.address}
                   </div>
                 )}
@@ -197,7 +198,7 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
 
           {/* No results */}
           {!loading && results.length === 0 && !validCoord && query.trim().length >= 2 && (
-            <div className="px-4 py-3 text-[12px] text-[var(--color-text-3)] text-center">
+            <div className="px-4 py-3 text-[13px] text-[var(--color-text-3)] text-center">
               {t('search.no_results')}
             </div>
           )}
