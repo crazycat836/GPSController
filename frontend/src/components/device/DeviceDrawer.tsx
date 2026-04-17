@@ -1,8 +1,7 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Wifi, Usb, Search, ChevronDown, Loader2, Check, XCircle,
-  CircleSlash, Smartphone, RotateCcw,
+  Wifi, Usb, Search, Loader2, Check, XCircle,
+  CircleSlash, Smartphone, RotateCcw, Power, PlugZap,
 } from 'lucide-react'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
@@ -10,35 +9,32 @@ import { wifiTunnelDiscover, wifiRepair } from '../../services/api'
 import { useT } from '../../i18n'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
 import { DEFAULT_TUNNEL_PORT } from '../../lib/constants'
+import { ICON_SIZE } from '../../lib/icons'
 import Drawer from '../shell/Drawer'
+import ListRow from '../ui/ListRow'
+import SectionHeader from '../ui/SectionHeader'
+import EmptyState from '../ui/EmptyState'
+import CollapsibleSection from '../ui/CollapsibleSection'
+import ConfirmDialog from '../ui/ConfirmDialog'
 
 interface DeviceDrawerProps {
   open: boolean
   onClose: () => void
 }
 
+type RepairState = 'idle' | 'running' | 'success' | 'failed'
+
 export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
   const t = useT()
   const device = useDeviceContext()
   const { showToast } = useToastContext()
 
+  // ─── Scan state ─────────────────────────────────────────────
   const [scanning, setScanning] = useState(false)
   const [scanResult, setScanResult] = useState<number | null>(null)
   const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const devicesRef = useRef(device.devices)
   devicesRef.current = device.devices
-
-  const [wifiExpanded, setWifiExpanded] = useState(false)
-  const [tunnelIp, setTunnelIp] = useState(() => localStorage.getItem(STORAGE_KEYS.tunnelIp) || '')
-  const [tunnelPort, setTunnelPort] = useState(() => localStorage.getItem(STORAGE_KEYS.tunnelPort) || String(DEFAULT_TUNNEL_PORT))
-  const [tunnelConnecting, setTunnelConnecting] = useState(false)
-  const [tunnelError, setTunnelError] = useState<string | null>(null)
-  const [discovering, setDiscovering] = useState(false)
-  const [showIpHelp, setShowIpHelp] = useState(false)
-
-  const [showRepairConfirm, setShowRepairConfirm] = useState(false)
-  const [repairState, setRepairState] = useState<'idle' | 'running' | 'success' | 'failed'>('idle')
-  const [repairMessage, setRepairMessage] = useState('')
 
   useEffect(() => () => { if (scanTimer.current) clearTimeout(scanTimer.current) }, [])
 
@@ -53,6 +49,23 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
       scanTimer.current = setTimeout(() => setScanResult(null), 2000)
     }
   }, [device])
+
+  // ─── Wi-Fi Tunnel state ─────────────────────────────────────
+  const [tunnelIp, setTunnelIp] = useState(() => localStorage.getItem(STORAGE_KEYS.tunnelIp) || '')
+  const [tunnelPort, setTunnelPort] = useState(
+    () => localStorage.getItem(STORAGE_KEYS.tunnelPort) || String(DEFAULT_TUNNEL_PORT),
+  )
+  const [tunnelConnecting, setTunnelConnecting] = useState(false)
+  const [tunnelError, setTunnelError] = useState<string | null>(null)
+  const [discovering, setDiscovering] = useState(false)
+  const [showIpHelp, setShowIpHelp] = useState(false)
+
+  const [showRepairConfirm, setShowRepairConfirm] = useState(false)
+  const [repairState, setRepairState] = useState<RepairState>('idle')
+  const [repairMessage, setRepairMessage] = useState('')
+
+  // Auto-expand tunnel section when running or the user has saved an IP.
+  const tunnelShouldStartOpen = device.tunnelStatus.running || !!localStorage.getItem(STORAGE_KEYS.tunnelIp)
 
   const handleDiscover = useCallback(async () => {
     setDiscovering(true)
@@ -75,9 +88,9 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
       await device.startWifiTunnel(tunnelIp.trim(), parseInt(tunnelPort) || DEFAULT_TUNNEL_PORT)
       localStorage.setItem(STORAGE_KEYS.tunnelIp, tunnelIp.trim())
       localStorage.setItem(STORAGE_KEYS.tunnelPort, tunnelPort || String(DEFAULT_TUNNEL_PORT))
-      showToast('WiFi tunnel connected')
+      showToast('Wi-Fi tunnel connected')
     } catch (err: unknown) {
-      setTunnelError(err instanceof Error ? err.message : 'WiFi tunnel failed')
+      setTunnelError(err instanceof Error ? err.message : 'Wi-Fi tunnel failed')
     } finally { setTunnelConnecting(false) }
   }, [tunnelIp, tunnelPort, device, showToast])
 
@@ -94,222 +107,363 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
     }
   }, [])
 
+  const closeRepairDialog = useCallback(() => {
+    if (repairState !== 'running') setShowRepairConfirm(false)
+  }, [repairState])
+
   const selectedUdid = device.connectedDevice?.udid
+
+  // ─── Scan button renderer (right-slot of devices SectionHeader) ─
+  const scanButton = (
+    <button
+      type="button"
+      onClick={handleScan}
+      disabled={scanning}
+      className="action-btn text-[11px]"
+      aria-label={t('device.scan_tooltip')}
+      title={t('device.scan_tooltip')}
+    >
+      {scanning ? (
+        <>
+          <Loader2 width={ICON_SIZE.xs} height={ICON_SIZE.xs} className="animate-spin" />
+          {t('device.scan_scanning')}
+        </>
+      ) : scanResult != null && scanResult > 0 ? (
+        <>
+          <Check width={ICON_SIZE.xs} height={ICON_SIZE.xs} className="text-[var(--color-success-text)]" />
+          <span className="text-[var(--color-success-text)]">
+            {t('device.scan_found', { n: scanResult })}
+          </span>
+        </>
+      ) : scanResult === 0 ? (
+        <>
+          <XCircle width={ICON_SIZE.xs} height={ICON_SIZE.xs} className="text-[var(--color-error-text)]" />
+          <span className="text-[var(--color-error-text)]">{t('device.scan_none')}</span>
+        </>
+      ) : (
+        <>
+          <Usb width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
+          {t('device.scan')}
+        </>
+      )}
+    </button>
+  )
 
   return (
     <>
-      <Drawer open={open} onClose={onClose} title="Devices" icon={<Smartphone className="w-4 h-4" />} side="left">
+      <Drawer
+        open={open}
+        onClose={onClose}
+        title="Devices"
+        icon={<Smartphone className="w-4 h-4" />}
+        side="left"
+        width="w-[min(440px,92vw)]"
+      >
         <div className="p-4 flex flex-col gap-3">
-
-          {/* Scan USB */}
-          <button
-            onClick={handleScan}
-            disabled={scanning}
-            className="seg-cta seg-cta-sm seg-cta-accent"
-          >
-            {scanning ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('device.scan_scanning')}</>
-            ) : scanResult != null && scanResult > 0 ? (
-              <><Check className="w-3.5 h-3.5 text-[var(--color-success-text)]" /> <span className="text-[var(--color-success-text)]">{t('device.scan_found', { n: scanResult })}</span></>
-            ) : scanResult === 0 ? (
-              <><XCircle className="w-3.5 h-3.5 text-[var(--color-error-text)]" /> <span className="text-[var(--color-error-text)]">{t('device.scan_none')}</span></>
-            ) : (
-              <><Usb className="w-3.5 h-3.5" /> USB</>
-            )}
-          </button>
+          <SectionHeader
+            icon={<Smartphone width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
+            title="Devices"
+            count={device.devices.length}
+            right={scanButton}
+          />
 
           {/* Device list */}
           {device.devices.length === 0 ? (
-            <p className="text-xs text-[var(--color-text-3)] text-center py-6">No device</p>
+            <EmptyState
+              icon={<Smartphone width={ICON_SIZE.lg} height={ICON_SIZE.lg} />}
+              title={t('device.no_device')}
+              help={t('wifi.tunnel_admin_hint')}
+            />
           ) : (
             <div className="flex flex-col gap-1.5">
               {device.devices.map((d) => {
                 const major = parseInt((d.ios_version || '0').split('.')[0], 10) || 0
                 const unsupported = major > 0 && major < 16
                 const isSelected = d.udid === selectedUdid
+                const isNetwork = d.connection_type === 'Network'
 
-                return (
-                  <button
-                    key={d.udid}
-                    onClick={() => { if (!unsupported) device.connect(d.udid) }}
-                    disabled={unsupported}
+                const leading = unsupported ? (
+                  <CircleSlash
+                    width={ICON_SIZE.md}
+                    height={ICON_SIZE.md}
+                    className="text-[var(--color-error-text)]"
+                  />
+                ) : (
+                  <Smartphone
+                    width={ICON_SIZE.md}
+                    height={ICON_SIZE.md}
+                    className={isSelected ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-3)]'}
+                  />
+                )
+
+                const meta = unsupported ? undefined : (
+                  <span
                     className={[
-                      'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors',
-                      isSelected
-                        ? 'bg-[var(--color-accent-dim)] border border-[rgba(108,140,255,0.2)]'
-                        : 'bg-[var(--color-surface-2)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]',
-                      unsupported ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+                      'inline-flex items-center gap-1 text-[10px] px-1.5 py-px rounded-md',
+                      isNetwork
+                        ? 'bg-[var(--color-success-dim)] text-[var(--color-success-text)]'
+                        : 'bg-[var(--color-accent-dim)] text-[var(--color-accent-strong)]',
                     ].join(' ')}
                   >
-                    {unsupported
-                      ? <CircleSlash className="w-4 h-4 text-[var(--color-error-text)] shrink-0" />
-                      : <Smartphone className="w-4 h-4 text-[var(--color-text-3)] shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-[12px] truncate ${isSelected ? 'font-semibold text-[var(--color-text-1)]' : 'text-[var(--color-text-2)]'}`}>
-                        {d.name}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        {unsupported ? (
-                          <span className="text-[10px] text-[var(--color-error-text)]">{t('device.ios_unsupported_label', { version: d.ios_version })}</span>
-                        ) : (
-                          <span className="text-[10px] text-[var(--color-text-3)]">iOS {d.ios_version}</span>
-                        )}
-                        {d.connection_type && !unsupported && (
-                          <span className={[
-                            'inline-flex items-center gap-1 text-[9px] px-1.5 py-px rounded-md',
-                            d.connection_type === 'Network' ? 'bg-[var(--color-success-dim)] text-[var(--color-success-text)]' : 'bg-[var(--color-accent-dim)] text-[var(--color-accent)]',
-                          ].join(' ')}>
-                            {d.connection_type === 'Network' ? <Wifi className="w-2.5 h-2.5" /> : <Usb className="w-2.5 h-2.5" />}
-                            {d.connection_type === 'Network' ? 'WiFi' : 'USB'}
+                    {isNetwork
+                      ? <Wifi width={10} height={10} />
+                      : <Usb width={10} height={10} />}
+                    {isNetwork ? 'Wi-Fi' : 'USB'}
+                  </span>
+                )
+
+                const trailing = isSelected ? (
+                  <Check
+                    width={ICON_SIZE.sm}
+                    height={ICON_SIZE.sm}
+                    className="text-[var(--color-success-text)]"
+                  />
+                ) : undefined
+
+                return (
+                  <ListRow
+                    key={d.udid}
+                    as="button"
+                    selected={isSelected}
+                    disabled={unsupported}
+                    onClick={() => { if (!unsupported) device.connect(d.udid) }}
+                    aria-label={d.name}
+                    leading={leading}
+                    title={<span className="truncate">{d.name}</span>}
+                    subtitle={
+                      unsupported
+                        ? (
+                          <span className="text-[var(--color-error-text)]">
+                            {t('device.ios_unsupported_label', { version: d.ios_version })}
                           </span>
-                        )}
-                      </div>
-                    </div>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-[var(--color-success-text)] shrink-0" />}
-                  </button>
+                        )
+                        : <span className="font-mono">iOS {d.ios_version}</span>
+                    }
+                    meta={meta}
+                    trailing={trailing}
+                  />
                 )
               })}
             </div>
           )}
 
-          {/* WiFi Tunnel section */}
-          <div className="seg">
-            <button
-              onClick={() => setWifiExpanded((v) => !v)}
-              className="seg-row cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors w-full"
-            >
-              <Wifi className="w-3.5 h-3.5 text-[var(--color-text-3)] shrink-0" />
-              <div className="flex-1 text-left min-w-0">
-                <div className="text-[12px] text-[var(--color-text-2)]">{t('wifi.section_title')}</div>
-                <div className="text-[10px] text-[var(--color-text-3)]">{t('wifi.section_hint')}</div>
-              </div>
-              {device.tunnelStatus.running && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-[var(--color-success-dim)] text-[var(--color-success-text)] flex items-center gap-1 shrink-0">
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                  Active
-                </span>
-              )}
-              <ChevronDown className={`w-3.5 h-3.5 text-[var(--color-text-3)] transition-transform shrink-0 ${wifiExpanded ? 'rotate-180' : ''}`} />
-            </button>
-
-            {wifiExpanded && (
-              <div className="px-3 pb-3 flex flex-col gap-2">
-                {/* Repair */}
+          {/* Wi-Fi Tunnel section */}
+          <CollapsibleSection
+            title={t('wifi.section_title')}
+            subtitle={t('wifi.section_hint')}
+            icon={<Wifi width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
+            persistKey="wifi-tunnel.open"
+            defaultOpen={tunnelShouldStartOpen}
+            trailing={device.tunnelStatus.running ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--color-success-dim)] text-[var(--color-success-text)] inline-flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)]" />
+                {t('wifi.tunnel_active')}
+              </span>
+            ) : null}
+          >
+            {device.tunnelStatus.running ? (
+              <div className="flex flex-col gap-2">
+                <ListRow
+                  density="compact"
+                  leading={<PlugZap width={ICON_SIZE.sm} height={ICON_SIZE.sm} className="text-[var(--color-success-text)]" />}
+                  title="RSD endpoint"
+                  subtitle={
+                    <span className="font-mono">
+                      {device.tunnelStatus.rsd_address}:{device.tunnelStatus.rsd_port}
+                    </span>
+                  }
+                />
+                <p className="text-[10px] text-[var(--color-text-3)] opacity-80">
+                  {t('wifi.tunnel_usb_can_disconnect')}
+                </p>
                 <button
-                  onClick={() => { setRepairState('idle'); setRepairMessage(''); setShowRepairConfirm(true) }}
-                  className="action-btn warning w-full justify-center text-[11px]"
+                  type="button"
+                  onClick={() => device.stopTunnel()}
+                  className="seg-cta seg-cta-sm seg-cta-danger"
                 >
-                  <RotateCcw className="w-3 h-3" />
-                  {t('wifi.repair_button')}
+                  <Power width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
+                  {t('wifi.tunnel_stop')}
                 </button>
-
-                {/* Help + Discover */}
-                <div className="flex gap-2">
-                  <button onClick={() => setShowIpHelp((v) => !v)} className="action-btn flex-1 justify-center text-[10px]">
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowIpHelp((v) => !v)}
+                    className="action-btn flex-1 justify-center text-[11px]"
+                    aria-expanded={showIpHelp}
+                  >
                     {t('wifi.help_ip')}
                   </button>
                   <button
+                    type="button"
                     onClick={handleDiscover}
-                    disabled={discovering || device.tunnelStatus.running}
-                    className="action-btn primary flex-1 justify-center text-[10px]"
+                    disabled={discovering}
+                    className="action-btn primary flex-1 justify-center text-[11px]"
                   >
-                    <Search className={`w-2.5 h-2.5 ${discovering ? 'animate-spin' : ''}`} />
+                    <Search
+                      width={ICON_SIZE.xs}
+                      height={ICON_SIZE.xs}
+                      className={discovering ? 'animate-spin' : ''}
+                    />
                     {discovering ? t('wifi.detect_scanning') : t('wifi.detect')}
                   </button>
                 </div>
 
                 {showIpHelp && (
                   <div className="text-[11px] p-2.5 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-dim)] leading-relaxed">
-                    <div className="font-semibold mb-1 text-[var(--color-accent)]">{t('wifi.help_title')}</div>
+                    <div className="font-semibold mb-1 text-[var(--color-accent-strong)]">
+                      {t('wifi.help_title')}
+                    </div>
                     <div className="text-[var(--color-text-2)]">{t('wifi.help_steps')}</div>
-                    <div className="text-[10px] text-[var(--color-text-3)] mt-1.5">{t('wifi.help_hint')}</div>
+                    <div className="text-[10px] text-[var(--color-text-3)] mt-1.5">
+                      {t('wifi.help_hint')}
+                    </div>
                   </div>
                 )}
 
-                {/* Tunnel connect / status */}
-                {device.tunnelStatus.running ? (
-                  <div className="flex flex-col gap-2">
-                    <div className="text-[11px] text-[var(--color-text-3)] p-2 rounded-lg bg-[var(--color-success-dim)]">
-                      <div>RSD: {device.tunnelStatus.rsd_address}:{device.tunnelStatus.rsd_port}</div>
-                      <div className="text-[10px] text-[var(--color-text-3)] mt-0.5">{t('wifi.tunnel_usb_can_disconnect')}</div>
-                    </div>
-                    <button onClick={() => device.stopTunnel()} className="action-btn danger w-full justify-center text-[11px]">
-                      {t('wifi.tunnel_stop')}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-1.5">
-                    <label className="flex items-center gap-2 text-[11px]">
-                      <span className="w-8 text-[var(--color-text-3)]">IP</span>
-                      <input type="text" placeholder={t('wifi.ip_placeholder')} value={tunnelIp} onChange={(e) => setTunnelIp(e.target.value)} disabled={tunnelConnecting} className="seg-input flex-1 text-xs font-mono" />
-                    </label>
-                    <label className="flex items-center gap-2 text-[11px]">
-                      <span className="w-8 text-[var(--color-text-3)]">Port</span>
-                      <input type="text" placeholder="49152" value={tunnelPort} onChange={(e) => setTunnelPort(e.target.value)} disabled={tunnelConnecting} className="seg-input flex-1 text-xs font-mono" />
-                    </label>
-                    <button onClick={handleTunnelConnect} disabled={tunnelConnecting || !tunnelIp.trim()} className="seg-cta seg-cta-sm seg-cta-accent mt-1">
-                      {tunnelConnecting ? (
-                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('wifi.tunnel_establishing')}</>
-                      ) : t('wifi.tunnel_start')}
-                    </button>
-                    {tunnelError && <p className="text-[11px] text-[var(--color-error-text)] p-2 rounded-lg bg-red-400/10 border border-red-400/30">{tunnelError}</p>}
-                    <p className="text-[10px] text-[var(--color-text-3)] opacity-40">{t('wifi.tunnel_admin_hint')}</p>
-                  </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="flex items-center gap-2 text-[11px]">
+                    <span className="w-10 text-[var(--color-text-3)]">{t('wifi.ip')}</span>
+                    <input
+                      type="text"
+                      placeholder={t('wifi.ip_placeholder')}
+                      value={tunnelIp}
+                      onChange={(e) => setTunnelIp(e.target.value)}
+                      disabled={tunnelConnecting}
+                      className="seg-input flex-1 text-xs font-mono"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-[11px]">
+                    <span className="w-10 text-[var(--color-text-3)]">{t('wifi.port')}</span>
+                    <input
+                      type="text"
+                      placeholder="49152"
+                      value={tunnelPort}
+                      onChange={(e) => setTunnelPort(e.target.value)}
+                      disabled={tunnelConnecting}
+                      className="seg-input flex-1 text-xs font-mono"
+                    />
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleTunnelConnect}
+                  disabled={tunnelConnecting || !tunnelIp.trim()}
+                  className="seg-cta seg-cta-sm seg-cta-accent"
+                >
+                  {tunnelConnecting ? (
+                    <>
+                      <Loader2 width={ICON_SIZE.sm} height={ICON_SIZE.sm} className="animate-spin" />
+                      {t('wifi.tunnel_establishing')}
+                    </>
+                  ) : (
+                    <>
+                      <PlugZap width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
+                      {t('wifi.tunnel_start')}
+                    </>
+                  )}
+                </button>
+
+                {tunnelError && (
+                  <p className="text-[11px] text-[var(--color-error-text)] p-2 rounded-lg bg-[var(--color-danger-dim)] border border-[rgba(255,71,87,0.3)]">
+                    {tunnelError}
+                  </p>
                 )}
+
+                <p className="text-[10px] text-[var(--color-text-3)] opacity-70">
+                  {t('wifi.tunnel_admin_hint')}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => { setRepairState('idle'); setRepairMessage(''); setShowRepairConfirm(true) }}
+                  className="action-btn warning w-full justify-center text-[11px] mt-1"
+                  title={t('wifi.repair_tooltip')}
+                >
+                  <RotateCcw width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
+                  {t('wifi.repair_button')}
+                </button>
               </div>
             )}
-          </div>
+          </CollapsibleSection>
         </div>
       </Drawer>
 
-      {/* Repair confirm modal */}
-      {showRepairConfirm && createPortal(
-        <div onClick={() => { if (repairState !== 'running') setShowRepairConfirm(false) }} className="fixed inset-0 z-[var(--z-modal)] bg-black/55 backdrop-blur-sm flex items-center justify-center">
-          <div onClick={(e) => e.stopPropagation()} className="w-[420px] p-6 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] shadow-[var(--shadow-lg)] text-[var(--color-text-1)]">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 rounded-full bg-[var(--color-accent-dim)] border border-[rgba(108,140,255,0.3)] flex items-center justify-center text-[var(--color-accent)]">
-                <RotateCcw className="w-4 h-4" />
+      {/* Repair confirmation / progress dialog */}
+      {showRepairConfirm && (
+        repairState === 'idle' ? (
+          <ConfirmDialog
+            open
+            title={t('wifi.repair_confirm_title')}
+            description={<span className="whitespace-pre-line">{t('wifi.repair_confirm_body')}</span>}
+            confirmLabel={t('wifi.repair_ok')}
+            cancelLabel={t('wifi.repair_cancel')}
+            onConfirm={handleRepair}
+            onCancel={closeRepairDialog}
+          />
+        ) : repairState === 'running' ? (
+          <ConfirmDialog
+            open
+            busy
+            title={t('wifi.repair_confirm_title')}
+            description={
+              <div className="flex flex-col items-center gap-2 py-3">
+                <Loader2 width={28} height={28} className="text-[var(--color-accent)] animate-spin" />
+                <p className="text-[var(--color-amber-text)] text-sm text-center">
+                  {t('wifi.repair_running')}
+                </p>
               </div>
-              <h3 className="text-[15px] font-semibold">{t('wifi.repair_confirm_title')}</h3>
-            </div>
-
-            {repairState === 'idle' && (
+            }
+            confirmLabel={t('generic.loading')}
+            cancelLabel={t('wifi.repair_cancel')}
+            onConfirm={() => {}}
+            onCancel={closeRepairDialog}
+          />
+        ) : repairState === 'success' ? (
+          <ConfirmDialog
+            open
+            title={t('wifi.repair_confirm_title')}
+            description={
               <>
-                <p className="text-[13px] leading-relaxed whitespace-pre-line opacity-90 mb-5">{t('wifi.repair_confirm_body')}</p>
-                <div className="flex justify-end gap-2">
-                  <button onClick={() => setShowRepairConfirm(false)} className="action-btn">{t('wifi.repair_cancel')}</button>
-                  <button onClick={handleRepair} className="action-btn primary">{t('wifi.repair_ok')}</button>
-                </div>
+                <p className="text-[var(--color-success-text)] text-[13px] leading-relaxed">
+                  {t('wifi.repair_success')}
+                </p>
+                {repairMessage && (
+                  <p className="text-xs text-[var(--color-text-3)] mt-2">{repairMessage}</p>
+                )}
               </>
-            )}
-            {repairState === 'running' && (
-              <div className="text-center py-6">
-                <Loader2 className="w-8 h-8 mx-auto mb-3 text-[var(--color-accent)] animate-spin" />
-                <p className="text-[var(--color-amber-text)] text-sm">{t('wifi.repair_running')}</p>
-              </div>
-            )}
-            {repairState === 'success' && (
+            }
+            confirmLabel={t('wifi.warning_ok')}
+            cancelLabel={t('wifi.repair_cancel')}
+            onConfirm={closeRepairDialog}
+            onCancel={closeRepairDialog}
+          />
+        ) : (
+          <ConfirmDialog
+            open
+            title={t('wifi.repair_failed')}
+            tone="danger"
+            description={
               <>
-                <p className="text-[var(--color-success-text)] text-[13px] leading-relaxed">{t('wifi.repair_success')}</p>
-                {repairMessage && <p className="text-xs text-[var(--color-text-3)] mt-2">{repairMessage}</p>}
-                <div className="flex justify-end mt-5">
-                  <button onClick={() => setShowRepairConfirm(false)} className="action-btn primary">{t('wifi.warning_ok')}</button>
-                </div>
+                <p className="text-[var(--color-error-text)] text-[13px] leading-relaxed">
+                  {t('wifi.repair_failed')}
+                </p>
+                {repairMessage && (
+                  <p className="text-xs text-[var(--color-text-2)] mt-2 p-2 rounded-lg bg-[var(--color-danger-dim)] border border-[rgba(255,71,87,0.3)] whitespace-pre-wrap break-words">
+                    {repairMessage}
+                  </p>
+                )}
               </>
-            )}
-            {repairState === 'failed' && (
-              <>
-                <p className="text-[var(--color-error-text)] text-[13px] leading-relaxed">{t('wifi.repair_failed')}</p>
-                {repairMessage && <p className="text-xs text-[var(--color-text-2)] mt-2 p-2 rounded-lg bg-red-400/8 border border-red-400/30 whitespace-pre-wrap break-words">{repairMessage}</p>}
-                <div className="flex justify-end gap-2 mt-5">
-                  <button onClick={() => setShowRepairConfirm(false)} className="action-btn">{t('wifi.repair_cancel')}</button>
-                  <button onClick={handleRepair} className="action-btn primary">{t('wifi.repair_ok')}</button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>,
-        document.body,
+            }
+            confirmLabel={t('wifi.repair_ok')}
+            cancelLabel={t('wifi.repair_cancel')}
+            onConfirm={handleRepair}
+            onCancel={closeRepairDialog}
+          />
+        )
       )}
     </>
   )
