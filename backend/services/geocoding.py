@@ -124,7 +124,57 @@ class GeocodingService:
                 importance=float(data.get("importance", 0)),
                 country_code=(addr.get("country_code") or "").lower(),
                 country=addr.get("country") or "",
+                place_name=_pick_place_name(data, addr),
             )
         except (KeyError, ValueError) as exc:
             logger.warning("Failed to parse reverse result: %s", exc)
             return None
+
+
+# POI > road > administrative order for label extraction. Picking the first
+# non-empty field keeps bookmark names meaningful ("Taipei 101", "Xinyi Rd")
+# instead of degenerate house numbers like "6號".
+_PLACE_PRIORITY: tuple[str, ...] = (
+    "amenity",
+    "tourism",
+    "shop",
+    "historic",
+    "leisure",
+    "building",
+    "attraction",
+    "office",
+    "neighbourhood",
+    "suburb",
+    "road",
+    "pedestrian",
+    "city_district",
+    "city",
+    "town",
+    "village",
+    "county",
+    "state_district",
+    "state",
+)
+
+
+def _pick_place_name(data: dict, addr: dict) -> str:
+    """Extract the most specific non-trivial place label from a Nominatim
+    reverse payload. Returns an empty string if no usable label exists."""
+    # Nominatim's top-level `name` field (when present) is the canonical label
+    # for POIs — prefer it over anything in the address tree.
+    top_name = data.get("name")
+    if isinstance(top_name, str) and top_name.strip():
+        return top_name.strip()
+    for key in _PLACE_PRIORITY:
+        v = addr.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    # Last-resort fallback: a bare house number is more useful than nothing
+    # but less useful than any hierarchy tier — included for completeness.
+    hn = addr.get("house_number")
+    if isinstance(hn, str) and hn.strip():
+        road = addr.get("road")
+        if isinstance(road, str) and road.strip():
+            return f"{road.strip()} {hn.strip()}"
+        return hn.strip()
+    return ""
