@@ -532,7 +532,7 @@ async def lifespan(application: FastAPI):
 
 # ── FastAPI app ───────────────────────────────────────────
 
-app = FastAPI(title="GPSController", version="0.6.0", description="iOS Virtual Location Simulator", lifespan=lifespan)
+app = FastAPI(title="GPSController", version="0.6.1", description="iOS Virtual Location Simulator", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
