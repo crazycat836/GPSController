@@ -125,7 +125,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
             <div className="flex flex-col gap-1.5">
               {device.devices.map((d) => {
                 const major = parseInt((d.ios_version || '0').split('.')[0], 10) || 0
-                const unsupported = major > 0 && major < 17
+                const unsupported = major > 0 && major < 16
                 const isSelected = d.udid === selectedUdid
 
                 return (
