@@ -112,7 +112,7 @@
 | Frontend | Electron 41, React 18.3, TypeScript 5.5, Vite 8, Tailwind CSS 4.2, Leaflet 1.9 |
 | Backend | Python 3.13, FastAPI, uvicorn, websockets, pymobiledevice3 9.9+, pydantic 2, httpx, gpxpy |
 | 外部服務 | OSRM(`router.project-osrm.org`), Nominatim, CartoDB Voyager tiles(皆免費、無需 API key) |
-| 打包 | PyInstaller + electron-builder + NSIS |
+| 打包 | PyInstaller + electron-builder(Windows NSIS / macOS DMG) |
 
 ---
 
@@ -122,29 +122,33 @@
 gpscontroller/
 ├── backend/          # FastAPI + pymobiledevice3 (api/, core/, services/)
 ├── frontend/         # Electron + React (electron/, src/)
-├── GPSController.bat # Dev entry (auto-elevates)
-└── build-installer.bat
+├── start.py          # Dev launcher (Windows + macOS)
+└── build.py          # Installer builder (Windows + macOS)
 ```
 
 ---
 
 ## 開發環境
 
-**先決條件**: Windows 10/11、Python 3.13、Node.js 18+、iPhone 已透過 iTunes for Windows 配對過(iOS 16+ 需開啟開發者模式)。
+**先決條件**: Windows 10/11 或 macOS(Apple Silicon)、Python 3.13、Node.js 18+、iPhone 已配對過(iOS 16+ 需開啟開發者模式)。
 
 ```bash
 # 安裝依賴
-py -3.13 -m pip install -r backend/requirements.txt
-cd frontend && npm install
+python -m pip install -r backend/requirements.txt pyinstaller  # Windows 用 py -3.13
+cd frontend && npm install && cd ..
 
-# 啟動(dev):雙擊 GPSController.bat,或手動:
-cd backend && py -3.13 main.py       # 終端 1
-cd frontend && npm run start          # 終端 2
+# 啟動 dev(兩平台共用);iOS 17+ 的 tunnel 需 admin / sudo
+python start.py
+# macOS: sudo python3 start.py
+# Windows: 以系統管理員身份開啟 CMD / PowerShell 後執行
 
-# 建置安裝檔 → frontend/release/GPSController Setup X.Y.Z.exe
-py -3.13 -m pip install pyinstaller && cd frontend && npm install -D electron-builder
-build-installer.bat
+# 建置安裝檔(自動偵測平台,Win → NSIS、Mac → DMG)
+python build.py
 ```
+
+產物位置:
+- Windows → `frontend/release/GPSController Setup X.Y.Z.exe`
+- macOS → `frontend/release/GPSController-X.Y.Z-arm64.dmg`
 
 ---
 

@@ -52,7 +52,7 @@ def _box_border(left: str, fill: str, right: str, inner_width: int = BOX_WIDTH) 
 def print_banner():
     print()
     print(_box_border("╔", "═", "╗"))
-    print(_box_line("   GPSController — iOS 虛擬定位模擬器 v0.1"))
+    print(_box_line("   GPSController — iOS 虛擬定位模擬器 v0.6.0"))
     print(_box_border("╚", "═", "╝"))
     print()
 
@@ -220,7 +220,7 @@ def main():
         print("  [!] 未以系統管理員身份執行")
         print("      iOS 17+ 裝置需要管理員權限才能建立通道")
         if os.name == "nt":
-            print("      請右鍵 GPSController.bat → 以系統管理員身份執行")
+            print("      請以系統管理員身份開啟 CMD / PowerShell 後執行 python start.py")
         else:
             print("      請使用 sudo python3 start.py 執行")
         print()

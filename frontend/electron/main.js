@@ -11,24 +11,30 @@ let mainWindow
 let backendProc = null
 
 function resolveBackendExe() {
-  // In a packaged build, extraResources places files under process.resourcesPath
-  // (e.g.  .../resources/backend/gpscontroller-backend.exe).  In dev, we don't spawn;
-  // the developer runs `python main.py` manually.
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'backend', 'gpscontroller-backend.exe')
-  }
-  return null
+  // In a packaged build, extraResources places files under
+  // process.resourcesPath (e.g. .../resources/backend/<binary>). PyInstaller
+  // names the binary `.exe` on Windows and leaves it unsuffixed on macOS,
+  // so we branch on process.platform. In dev we don't spawn; the developer
+  // runs `python start.py` (or similar) manually.
+  if (!app.isPackaged) return null
+  const binName = process.platform === 'win32'
+    ? 'gpscontroller-backend.exe'
+    : 'gpscontroller-backend'
+  return path.join(process.resourcesPath, 'backend', binName)
 }
 
 function startBackend() {
   const exe = resolveBackendExe()
   if (!exe) return
   console.log('[electron] spawning backend:', exe)
-  backendProc = spawn(exe, [], {
+  const spawnOpts = {
     cwd: path.dirname(exe),
     stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-  })
+  }
+  if (process.platform === 'win32') {
+    spawnOpts.windowsHide = true
+  }
+  backendProc = spawn(exe, [], spawnOpts)
   backendProc.stdout.on('data', (d) => process.stdout.write(`[backend] ${d}`))
   backendProc.stderr.on('data', (d) => process.stderr.write(`[backend] ${d}`))
   backendProc.on('exit', (code) => {

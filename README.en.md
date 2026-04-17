@@ -107,24 +107,33 @@ iPhone and PC must be on the same Wi-Fi subnet. USB pairing (step 2) must be don
 
 ## Development
 
-**Prerequisites:** Windows 10/11, Python 3.13, Node.js 18+
+**Prerequisites:** Windows 10/11 or macOS (Apple Silicon), Python 3.13, Node.js 18+.
 
 ```bash
-py -3.13 -m pip install -r backend/requirements.txt
-cd frontend && npm install
+python -m pip install -r backend/requirements.txt pyinstaller  # Windows: py -3.13
+cd frontend && npm install && cd ..
 ```
 
-Double-click `GPSController.bat` to launch in dev mode (backend `:8777`, Vite `:5173`, Electron).
+Launch dev mode (same command on both OSes; iOS 17+ tunnel needs admin / sudo):
+
+```bash
+python start.py
+# macOS: sudo python3 start.py
+# Windows: run from an elevated CMD / PowerShell
+```
+
+Runs backend `:8777`, Vite `:5173`, and opens your default browser.
 
 ### Build Installer
 
 ```bash
-py -3.13 -m pip install pyinstaller
-cd frontend && npm install -D electron-builder
-build-installer.bat
+python build.py
 ```
 
-Produces a self-contained NSIS installer at `frontend/release/GPSController Setup X.Y.Z.exe` (~110 MB).
+Auto-detects the host OS and produces:
+
+- Windows → `frontend/release/GPSController Setup X.Y.Z.exe` (NSIS, ~110 MB)
+- macOS → `frontend/release/GPSController-X.Y.Z-arm64.dmg` + `-arm64-mac.zip`
 
 ---
 
