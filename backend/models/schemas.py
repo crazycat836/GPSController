@@ -205,3 +205,5 @@ class GeocodingResult(BaseModel):
     lng: float
     type: str = ""
     importance: float = 0.0
+    country_code: str = ""
+    country: str = ""

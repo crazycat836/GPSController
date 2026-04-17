@@ -3,12 +3,16 @@ import { useT } from '../i18n';
 import type { RuntimesMap } from '../hooks/useSimulation';
 
 interface EtaBarProps {
+  // Live simulation state
   state: string;
   progress: number;
   remainingDistance: number;
   traveledDistance: number;
   eta: number;
   runtimes?: RuntimesMap;
+  // Static preview (shown before starting)
+  plannedDistanceM?: number;
+  plannedEtaSeconds?: number;
 }
 
 const ACTIVE_STATES = ['navigating', 'looping', 'multi_stop', 'random_walk'];
@@ -30,6 +34,12 @@ function formatTime(seconds: number): string {
   return `${s}s`;
 }
 
+const BAR_CLASS =
+  'absolute bottom-12 left-1/2 -translate-x-1/2 z-[var(--z-ui)] surface-panel ' +
+  'rounded-[var(--radius-lg)] px-[18px] py-[7px] flex items-center flex-wrap ' +
+  'gap-x-4 gap-y-1.5 text-sm text-[var(--color-text-1)] ' +
+  'tracking-[var(--tracking-normal)] max-w-[90vw] w-auto';
+
 const EtaBar: React.FC<EtaBarProps> = ({
   state,
   progress,
@@ -37,6 +47,8 @@ const EtaBar: React.FC<EtaBarProps> = ({
   traveledDistance,
   eta,
   runtimes,
+  plannedDistanceM,
+  plannedEtaSeconds,
 }) => {
   const t = useT();
 
@@ -44,10 +56,37 @@ const EtaBar: React.FC<EtaBarProps> = ({
     ? Object.values(runtimes).filter((r) => ACTIVE_STATES.includes(r.state))
     : [];
   const isGroup = activeRuntimes.length >= 2;
+  const isLive = isGroup || ACTIVE_STATES.includes(state);
+  const hasPreview = !isLive && plannedDistanceM != null && plannedDistanceM > 0;
 
-  if (!isGroup && !ACTIVE_STATES.includes(state)) return null;
-  if (isGroup && activeRuntimes.length === 0) return null;
+  if (!isLive && !hasPreview) return null;
 
+  /* ── Preview mode (not yet running) ──────────────────────────── */
+  if (hasPreview) {
+    return (
+      <div className={BAR_CLASS}>
+        <div className="flex items-center gap-1">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-60">
+            <path d="M12 2C7 2 3 6 3 11c0 5 9 11 9 11s9-6 9-11c0-5-4-9-9-9z" />
+            <circle cx="12" cy="11" r="3" />
+          </svg>
+          <span>{t('eta.planned_distance')} {formatDistance(plannedDistanceM!)}</span>
+        </div>
+
+        <div className="separator-v" />
+
+        <div className="flex items-center gap-1">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-60">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12,6 12,12 16,14" />
+          </svg>
+          <span>{t('eta.planned_time')} {formatTime(plannedEtaSeconds ?? 0)}</span>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Live mode (running) ──────────────────────────────────────── */
   const aggProgress = isGroup
     ? activeRuntimes.reduce((s, r) => s + (r.progress || 0), 0) / activeRuntimes.length
     : progress;
@@ -64,14 +103,14 @@ const EtaBar: React.FC<EtaBarProps> = ({
   const percent = Math.min(Math.max(aggProgress * 100, 0), 100);
 
   return (
-    <div className="absolute top-2.5 left-2.5 right-2.5 z-[var(--z-ui)] surface-panel rounded-[var(--radius-lg)] px-[18px] py-[7px] flex items-center flex-wrap gap-x-4 gap-y-1.5 text-sm text-[var(--color-text-1)] tracking-[var(--tracking-normal)]">
+    <div className={BAR_CLASS}>
       {/* Progress bar */}
       <div className="flex-1 h-1 rounded-sm bg-[var(--color-surface-2)] overflow-hidden min-w-[80px]">
         <div
           className="h-full rounded-sm transition-[width] duration-500 ease-out"
           style={{
             width: `${percent}%`,
-            background: 'linear-gradient(90deg, var(--color-device-a), #34a853)',
+            background: 'linear-gradient(90deg, var(--color-device-a), var(--color-success))',
           }}
         />
       </div>

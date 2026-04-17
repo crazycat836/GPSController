@@ -14,5 +14,5 @@ async def search_address(q: str, limit: int = 5):
 
 
 @router.get("/reverse", response_model=GeocodingResult | None)
-async def reverse_geocode(lat: float, lng: float):
-    return await geocoding_service.reverse(lat, lng)
+async def reverse_geocode(lat: float, lng: float, lang: str | None = None):
+    return await geocoding_service.reverse(lat, lng, lang)

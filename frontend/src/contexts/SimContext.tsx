@@ -323,6 +323,18 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
       } else {
         sim.randomWalk(sim.currentPosition, randomWalkRadius)
       }
+    } else if (sim.mode === SimMode.Navigate) {
+      const dest = sim.destination
+      if (!dest) {
+        showToast(t('toast.no_destination'))
+        return
+      }
+      if (udids.length >= 2) {
+        const outcome = await sim.navigateAll(udids, dest.lat, dest.lng)
+        showToast(toastForFanout(t, t('mode.navigate'), outcome, device.connectedDevices))
+      } else {
+        await sim.navigate(dest.lat, dest.lng)
+      }
     } else if (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) {
       handleStartWaypointRoute()
     }

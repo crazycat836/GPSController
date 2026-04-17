@@ -141,9 +141,22 @@ export const setCoordFormat = (format: string) =>
   request<any>('PUT', '/api/location/settings/coord-format', { format })
 
 // Geocoding
+export interface ReverseGeocodeResult {
+  display_name: string
+  lat: number
+  lng: number
+  type: string
+  importance: number
+  country_code: string  // ISO 3166-1 alpha-2 lowercase, '' if unknown
+  country: string       // localized country name
+}
+
 export const searchAddress = (q: string) => request<any[]>('GET', `/api/geocode/search?q=${encodeURIComponent(q)}`)
-export const reverseGeocode = (lat: number, lng: number) =>
-  request<any>('GET', `/api/geocode/reverse?lat=${lat}&lng=${lng}`)
+export const reverseGeocode = (lat: number, lng: number, lang?: string) =>
+  request<ReverseGeocodeResult | null>(
+    'GET',
+    `/api/geocode/reverse?lat=${lat}&lng=${lng}${lang ? `&lang=${encodeURIComponent(lang)}` : ''}`,
+  )
 
 // Bookmarks
 export const getBookmarks = () => request<any>('GET', '/api/bookmarks')

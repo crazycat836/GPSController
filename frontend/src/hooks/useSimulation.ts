@@ -179,7 +179,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
   // starts or when applySpeed succeeds. Used by the status bar so the user
   // doesn't see the typed-but-unapplied speed before pressing Apply.
   const [effectiveSpeed, setEffectiveSpeed] = useState<
-    { kmh: number | null; min: number | null; max: number | null } | null
+    { mode: MoveMode; kmh: number | null; min: number | null; max: number | null } | null
   >(null)
 
   // Per-device runtime map (group mode). Populated from WS events tagged with udid.
@@ -438,7 +438,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         setProgress(0)
         const res = await api.navigate(lat, lng, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, undefined, straightLine)
         setStatus((prev) => ({ ...prev, running: true, paused: false }))
-        setEffectiveSpeed({ kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err: any) {
         setError(err.message)
@@ -460,7 +460,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         setProgress(0)
         const res = await api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, undefined, straightLine)
         setStatus((prev) => ({ ...prev, running: true, paused: false }))
-        setEffectiveSpeed({ kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err: any) {
         setError(err.message)
@@ -479,7 +479,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         setProgress(0)
         const res = await api.multiStop(wps, moveMode, stopDuration, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, undefined, straightLine)
         setStatus((prev) => ({ ...prev, running: true, paused: false }))
-        setEffectiveSpeed({ kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err: any) {
         setError(err.message)
@@ -497,7 +497,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         setProgress(0)
         const res = await api.randomWalk(center, radiusM, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseRandomWalk.enabled, pause_min: pauseRandomWalk.min, pause_max: pauseRandomWalk.max }, undefined, undefined, straightLine)
         setStatus((prev) => ({ ...prev, running: true, paused: false }))
-        setEffectiveSpeed({ kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err: any) {
         setError(err.message)
@@ -608,7 +608,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
       })
       // Status bar should now reflect the just-applied values, not the
       // ones the route originally started with.
-      setEffectiveSpeed({ kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+      setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
       return res
     } catch (err: any) {
       setError(err.message)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { Footprints, Rabbit, Car, Check, Gauge } from 'lucide-react'
 import { useSimContext, MoveMode } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
@@ -8,6 +8,29 @@ const SPEED_PRESETS = [
   { labelKey: 'move.running' as const, value: 10, mode: 'running' as MoveMode, Icon: Rabbit },
   { labelKey: 'move.driving' as const, value: 40, mode: 'driving' as MoveMode, Icon: Car },
 ] as const
+
+// Logarithmic slider mapping for 0.36 – 120 km/h.
+// Low speeds (walking) need more resolution than high speeds (driving).
+const SPEED_MIN = 0.36
+const SPEED_MAX = 120
+const LOG_MIN = Math.log(SPEED_MIN)
+const LOG_MAX = Math.log(SPEED_MAX)
+
+const sliderToSpeed = (pct: number): number => {
+  const raw = Math.exp(LOG_MIN + pct * (LOG_MAX - LOG_MIN))
+  // Round to sensible precision
+  if (raw < 1) return Math.round(raw * 100) / 100   // 0.36, 0.50, ...
+  if (raw < 10) return Math.round(raw * 10) / 10     // 1.0, 2.5, ...
+  return Math.round(raw)                              // 10, 40, 120
+}
+
+const speedToSlider = (kmh: number): number => {
+  const clamped = Math.max(SPEED_MIN, Math.min(SPEED_MAX, kmh))
+  return (Math.log(clamped) - LOG_MIN) / (LOG_MAX - LOG_MIN)
+}
+
+const fmtSpeed = (v: number): string =>
+  v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : String(Math.round(v))
 
 export default function SpeedControls() {
   const { sim, handleApplySpeed, isRunning } = useSimContext()
@@ -21,6 +44,15 @@ export default function SpeedControls() {
 
   const hasCustom = sim.customSpeedKmh != null
   const hasRange = sim.speedMinKmh != null && sim.speedMaxKmh != null
+
+  // Compare current UI speed settings against what's actually running
+  const eff = sim.effectiveSpeed
+  const speedDirty = eff != null && (
+    sim.moveMode !== eff.mode ||
+    sim.customSpeedKmh !== eff.kmh ||
+    sim.speedMinKmh !== eff.min ||
+    sim.speedMaxKmh !== eff.max
+  )
 
   return (
     <div className="seg">
@@ -53,37 +85,12 @@ export default function SpeedControls() {
         </div>
       </div>
 
-      {/* Divider */}
-      <div className="seg-row seg-row-flush" style={{ padding: 0 }}>
-        <div className="h-px w-full bg-[var(--color-border)] opacity-50" />
-      </div>
-
-      {/* Custom speed */}
-      <div className="seg-row">
-        <span className="seg-label flex-1">{t('panel.custom_speed')}</span>
-        <div className="flex items-center gap-1.5">
-          <input
-            type="number"
-            className={[
-              'seg-input w-20 text-right',
-              hasCustom ? 'border-[var(--color-accent)]/40' : '',
-            ].join(' ')}
-            placeholder="Ex: 15"
-            value={sim.customSpeedKmh ?? ''}
-            onChange={(e) => {
-              const v = e.target.value
-              if (v === '') { sim.setCustomSpeedKmh(null) }
-              else {
-                const n = parseFloat(v)
-                if (!isNaN(n) && n > 0) sim.setCustomSpeedKmh(n)
-              }
-            }}
-            min="0.1"
-            step="0.5"
-          />
-          <span className="seg-unit">km/h</span>
-        </div>
-      </div>
+      {/* Custom speed slider */}
+      <CustomSpeedSlider
+        value={sim.customSpeedKmh}
+        onChange={sim.setCustomSpeedKmh}
+        active={hasCustom}
+      />
 
       {/* Random speed range */}
       <div className="seg-row">
@@ -124,14 +131,75 @@ export default function SpeedControls() {
       {/* Range active hint */}
       {hasRange && (
         <div className="seg-row seg-row-compact">
-          <p className="text-[10px] text-amber-400/80">
+          <p className="text-[10px] text-[var(--color-amber-text)] opacity-80">
             {t('panel.speed_range_active')}: {Math.min(sim.speedMinKmh!, sim.speedMaxKmh!)}~{Math.max(sim.speedMinKmh!, sim.speedMaxKmh!)} km/h ({t('panel.speed_range_hint')})
           </p>
         </div>
       )}
 
-      {/* Apply button — inline when running */}
-      {isRunning && <ApplySpeedButton onApply={handleApplySpeed} />}
+      {/* Apply button — only when running AND speed changed */}
+      {isRunning && speedDirty && <ApplySpeedButton onApply={handleApplySpeed} />}
+    </div>
+  )
+}
+
+function CustomSpeedSlider({
+  value,
+  onChange,
+  active,
+}: {
+  value: number | null
+  onChange: (v: number | null) => void
+  active: boolean
+}) {
+  const t = useT()
+  const sliderPct = value != null ? speedToSlider(value) : 0
+
+  const handleSlider = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const pct = parseFloat(e.target.value)
+    onChange(sliderToSpeed(pct))
+  }, [onChange])
+
+  const handleReset = useCallback(() => {
+    onChange(null)
+  }, [onChange])
+
+  return (
+    <div className="seg-row flex-col !items-stretch gap-2">
+      <div className="flex items-center justify-between">
+        <span className="seg-label">{t('panel.custom_speed')}</span>
+        {active ? (
+          <button
+            onClick={handleReset}
+            className="text-[10px] text-[var(--color-text-3)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
+          >
+            {t('generic.clear')}
+          </button>
+        ) : (
+          <span className="text-[10px] text-[var(--color-text-3)]">
+            {SPEED_MIN}–{SPEED_MAX} km/h
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-3">
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.001}
+          value={active ? sliderPct : 0}
+          onChange={handleSlider}
+          className="speed-slider flex-1"
+        />
+        <span
+          className={[
+            'text-xs font-mono w-[4.5rem] text-right shrink-0 tabular-nums',
+            active ? 'text-[var(--color-accent)] font-semibold' : 'text-[var(--color-text-3)]',
+          ].join(' ')}
+        >
+          {active ? `${fmtSpeed(value!)} km/h` : '— km/h'}
+        </span>
+      </div>
     </div>
   )
 }

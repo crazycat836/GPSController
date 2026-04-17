@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Smartphone, Wifi, Usb } from 'lucide-react'
 import { useT } from './i18n'
 import { useWebSocket } from './hooks/useWebSocket'
 import { SimMode } from './hooks/useSimulation'
 import { STORAGE_KEYS } from './lib/storage-keys'
+import { haversineM, polylineDistanceM } from './lib/geo'
 
 // Context providers
 import { ToastProvider, useToastContext } from './contexts/ToastContext'
 import { DeviceProvider, useDeviceContext } from './contexts/DeviceContext'
-import { SimProvider, useSimContext } from './contexts/SimContext'
+import { SimProvider, useSimContext, SPEED_MAP } from './contexts/SimContext'
 import { BookmarkProvider, useBookmarkContext } from './contexts/BookmarkContext'
 
 // Components
@@ -77,6 +78,19 @@ function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () =>
   )
 }
 
+// Resolve the effective km/h used for preview ETA. Matches the precedence
+// the backend applies: custom speed > random range midpoint > mode preset.
+function resolveSpeedKmh(
+  customKmh: number | null,
+  minKmh: number | null,
+  maxKmh: number | null,
+  moveMode: string,
+): number {
+  if (customKmh != null) return customKmh
+  if (minKmh != null && maxKmh != null) return (minKmh + maxKmh) / 2
+  return SPEED_MAP[moveMode as keyof typeof SPEED_MAP] ?? 5
+}
+
 // Inner shell — consumes all contexts
 function AppShell({ wsConnected }: { wsConnected: boolean }) {
   const t = useT()
@@ -85,6 +99,32 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
   const simCtx = useSimContext()
   const bm = useBookmarkContext()
   const { sim, joystick, handlePause, handleResume } = simCtx
+
+  // Static preview for the ETA bar before simulation starts.
+  // Only makes sense for routed modes (Navigate / Loop / MultiStop).
+  const plannedDistanceM = useMemo(() => {
+    const { mode, waypoints } = sim
+    if (mode === SimMode.Navigate) {
+      return simCtx.currentPos && simCtx.destPos
+        ? haversineM(simCtx.currentPos, simCtx.destPos)
+        : 0
+    }
+    if (mode === SimMode.Loop) {
+      if (waypoints.length < 2) return 0
+      return polylineDistanceM(waypoints) + haversineM(waypoints[waypoints.length - 1], waypoints[0])
+    }
+    if (mode === SimMode.MultiStop) {
+      return waypoints.length < 2 ? 0 : polylineDistanceM(waypoints)
+    }
+    return 0
+  }, [sim.mode, sim.waypoints, simCtx.currentPos, simCtx.destPos])
+
+  const plannedEtaSeconds = useMemo(() => {
+    if (plannedDistanceM <= 0) return 0
+    const kmh = resolveSpeedKmh(sim.customSpeedKmh, sim.speedMinKmh, sim.speedMaxKmh, sim.moveMode)
+    const ms = kmh * 1000 / 3600
+    return ms > 0 ? plannedDistanceM / ms : 0
+  }, [plannedDistanceM, sim.customSpeedKmh, sim.speedMinKmh, sim.speedMaxKmh, sim.moveMode])
 
   // In Teleport mode, right-click / search sets a pending destination
   // instead of teleporting immediately. Other modes keep instant teleport.
@@ -143,18 +183,16 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
+      <a
+        href="#map-canvas"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[var(--z-toast)] focus:bg-[var(--color-accent)] focus:text-white focus:rounded-md focus:no-underline focus:font-semibold focus:px-3 focus:py-1.5"
+      >
+        Skip to map
+      </a>
       <div className="noise-overlay" aria-hidden />
 
       {/* Full-screen map layer */}
-      <div className="absolute inset-0">
-        <EtaBar
-          runtimes={sim.runtimes}
-          state={sim.status?.state ?? 'idle'}
-          progress={sim.progress}
-          remainingDistance={sim.status?.distance_remaining ?? 0}
-          traveledDistance={sim.status?.distance_traveled ?? 0}
-          eta={sim.eta ?? 0}
-        />
+      <div id="map-canvas" className="absolute inset-0">
 
         {/* DDI mounting overlay */}
         {sim.ddiMounting && (
@@ -306,6 +344,16 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
           )}
         </button>
 
+        <EtaBar
+          runtimes={sim.runtimes}
+          state={sim.status?.state ?? 'idle'}
+          progress={sim.progress}
+          remainingDistance={sim.status?.distance_remaining ?? 0}
+          traveledDistance={sim.status?.distance_traveled ?? 0}
+          eta={sim.eta ?? 0}
+          plannedDistanceM={plannedDistanceM}
+          plannedEtaSeconds={plannedEtaSeconds}
+        />
         <MiniStatusBar />
         <CooldownBadge />
         <UpdateChecker />
