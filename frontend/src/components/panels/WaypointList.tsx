@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { X, Star, Dices, Locate, MapPin, Flag, ChevronDown } from 'lucide-react'
+import React, { useState, useRef, useEffect } from 'react'
+import { X, Star, Dices, Locate, MapPin, Flag, ChevronDown, Save, FolderOpen, Check } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT } from '../../i18n'
@@ -23,9 +23,38 @@ export default function WaypointList({ mode }: WaypointListProps) {
     handleClearWaypoints,
     isRunning,
   } = useSimContext()
-  const { handleAddBookmark } = useBookmarkContext()
+  const { handleAddBookmark, savedRoutes, handleRouteSave, handleRouteLoad } = useBookmarkContext()
   const t = useT()
   const [genOpen, setGenOpen] = useState(false)
+  const [savingMode, setSavingMode] = useState(false)
+  const [routeName, setRouteName] = useState('')
+  const [loadOpen, setLoadOpen] = useState(false)
+  const loadRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!loadOpen) return
+    const handler = (e: MouseEvent) => {
+      if (loadRef.current && !loadRef.current.contains(e.target as Node)) setLoadOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [loadOpen])
+
+  const typedRoutes = savedRoutes as { id: string; name: string; waypoints: { lat: number; lng: number }[] }[]
+
+  const doSaveRoute = () => {
+    const name = routeName.trim()
+    if (!name || sim.waypoints.length === 0) return
+    handleRouteSave(name, sim.waypoints, sim.moveMode)
+    setRouteName('')
+    setSavingMode(false)
+  }
+
+  const doLoadRoute = (id: string) => {
+    const waypoints = handleRouteLoad(id)
+    if (waypoints) sim.setWaypoints(waypoints)
+    setLoadOpen(false)
+  }
 
   const pauseValue = mode === 'loop' ? sim.pauseLoop : sim.pauseMultiStop
   const pauseOnChange = mode === 'loop' ? sim.setPauseLoop : sim.setPauseMultiStop
@@ -67,7 +96,7 @@ export default function WaypointList({ mode }: WaypointListProps) {
       actions: (
         <div className="flex items-center gap-0.5">
           <button
-            className="shrink-0 p-1 rounded-md transition-colors hover:opacity-80 cursor-pointer"
+            className="shrink-0 p-2.5 rounded-md transition-colors hover:opacity-80 cursor-pointer"
             style={{ color: 'var(--color-warning, #f5a623)' }}
             onClick={() => handleAddBookmark(wp.lat, wp.lng)}
             title={t('map.add_bookmark')}
@@ -75,7 +104,7 @@ export default function WaypointList({ mode }: WaypointListProps) {
             <Star size={12} />
           </button>
           <button
-            className="p-1 rounded-md text-[var(--color-text-3)] hover:text-[var(--color-danger)]
+            className="p-2.5 rounded-md text-[var(--color-text-3)] hover:text-[var(--color-danger)]
                        hover:bg-[var(--color-danger-dim)] transition-colors cursor-pointer"
             onClick={() => handleRemoveWaypoint(i)}
             title={t('panel.waypoints_remove')}
@@ -92,16 +121,8 @@ export default function WaypointList({ mode }: WaypointListProps) {
     <>
       {/* Toggle button */}
       <button
-        className="seg-row seg-row-compact"
-        style={{
-          width: '100%',
-          cursor: 'pointer',
-          background: 'none',
-          border: 'none',
-          borderTop: '1px solid var(--color-border-subtle)',
-          justifyContent: 'center',
-          gap: 4,
-        }}
+        className="seg-row seg-row-compact w-full justify-center gap-1 cursor-pointer bg-transparent"
+        style={{ border: 'none', borderTop: '1px solid var(--color-border-subtle)' }}
         onClick={() => setGenOpen(prev => !prev)}
       >
         <Dices size={11} style={{ color: 'var(--color-text-3)' }} />
@@ -119,7 +140,7 @@ export default function WaypointList({ mode }: WaypointListProps) {
       {genOpen && (
         <>
           {/* Radius + Count */}
-          <div className="seg-row" style={{ borderTop: '1px solid var(--color-border-subtle)' }}>
+          <div className="seg-row border-t border-[var(--color-border-subtle)]">
             <span className="seg-label">{t('panel.waypoints_radius')}</span>
             <input
               type="number"
@@ -166,6 +187,68 @@ export default function WaypointList({ mode }: WaypointListProps) {
     </>
   )
 
+  /* ── Header extra: save / load icon buttons ── */
+  const titleExtra = (
+    <div className="flex items-center gap-0.5 ml-auto">
+      {savingMode ? (
+        <>
+          <input
+            className="seg-input text-xs w-24"
+            placeholder={t('panel.route_name')}
+            value={routeName}
+            onChange={(e) => setRouteName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') doSaveRoute(); if (e.key === 'Escape') { setSavingMode(false); setRouteName('') } }}
+            autoFocus
+          />
+          <button
+            className="p-2.5 rounded-md text-[var(--color-success)] hover:bg-[var(--color-success-dim)] transition-colors cursor-pointer"
+            onClick={doSaveRoute}
+            disabled={!routeName.trim()}
+          >
+            <Check size={12} />
+          </button>
+          <button
+            className="p-2.5 rounded-md text-[var(--color-text-3)] hover:text-[var(--color-text-1)] transition-colors cursor-pointer"
+            onClick={() => { setSavingMode(false); setRouteName('') }}
+          >
+            <X size={12} />
+          </button>
+        </>
+      ) : (
+        <>
+          <button
+            className="p-2.5 rounded-md text-[var(--color-text-3)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-dim)] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            onClick={() => setSavingMode(true)}
+            disabled={points.length === 0}
+            title={t('route.quick_save')}
+          >
+            <Save size={12} />
+          </button>
+          <div ref={loadRef} style={{ position: 'relative' }}>
+            <button
+              className="p-2.5 rounded-md text-[var(--color-text-3)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-dim)] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              onClick={() => setLoadOpen((prev) => !prev)}
+              disabled={typedRoutes.length === 0}
+              title={t('route.quick_load')}
+            >
+              <FolderOpen size={12} />
+            </button>
+            {loadOpen && (
+              <div className="route-quick-load-dropdown">
+                {typedRoutes.map((r) => (
+                  <button key={r.id} className="route-quick-load-item" onClick={() => doLoadRoute(r.id)}>
+                    <span className="truncate">{r.name}</span>
+                    <span className="seg-unit shrink-0">{r.waypoints.length} pts</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+
   /* ── Footer: empty hint or clear button ── */
   const listFooter = points.length === 0 ? (
     <div className="seg-row seg-row-compact" style={{ justifyContent: 'center' }}>
@@ -187,6 +270,7 @@ export default function WaypointList({ mode }: WaypointListProps) {
     <>
       <RouteCard
         title={`${t('panel.waypoints')} (${sim.waypoints.length})`}
+        titleExtra={titleExtra}
         header={genHeader}
         points={points}
         maxVisible={5}

@@ -110,6 +110,8 @@ export const STRINGS = {
   'panel.waypoints_start_loop': { zh: '開始巡迴', en: 'Start Loop' },
   'panel.waypoints_start_multi': { zh: '開始多點導航', en: 'Start Multi-stop' },
   'panel.waypoints_start_navigate': { zh: '開始導航', en: 'Start Navigate' },
+  'route.quick_save': { zh: '儲存路線', en: 'Save Route' },
+  'route.quick_load': { zh: '載入路線', en: 'Load Route' },
   'panel.route_name': { zh: '路線名稱', en: 'Route name' },
   'panel.route_save_hint': { zh: '目前路徑點: {n} 個,輸入名稱後按儲存即可保存', en: 'Current waypoints: {n}, enter a name and click Save' },
   'panel.route_empty': { zh: '尚無儲存的路線', en: 'No saved routes' },
@@ -198,6 +200,8 @@ export const STRINGS = {
   'eta.remaining': { zh: '剩餘', en: 'Remaining' },
   'eta.eta': { zh: '預計到達', en: 'ETA' },
   'eta.traveled': { zh: '已行', en: 'Traveled' },
+  'eta.planned_distance': { zh: '距離', en: 'Distance' },
+  'eta.planned_time': { zh: '預估時間', en: 'Est. time' },
   'eta.pause_countdown': { zh: '到點暫停中 · 剩餘 {n}s', en: 'Paused at waypoint · {n}s left' },
 
   // ── Joystick ─────────────────────────────────
@@ -285,6 +289,7 @@ export const STRINGS = {
 
   // ── Toasts extra ─────────────────────────────
   'toast.no_position_random': { zh: '尚未取得目前位置,無法產生隨機路徑點', en: 'No current position, cannot generate random waypoints' },
+  'toast.no_destination': { zh: '請先在地圖上點擊設定目的地', en: 'Click the map to set a destination first' },
   'toast.no_waypoints': { zh: '尚未設定路徑點，請在地圖上點擊添加或使用隨機產生', en: 'No waypoints set, click the map to add, or use random generate' },
   'toast.pause_countdown': { zh: '到點暫停中 · 剩餘 {n}s', en: 'Paused at waypoint · {n}s left' },
 
@@ -323,6 +328,7 @@ export const STRINGS = {
   'update.later': { zh: '稍後提醒', en: 'Later' },
   'bm.edit': { zh: '編輯', en: 'Edit' },
   'bm.move_to': { zh: '移動到:', en: 'Move to:' },
+  'bm.bookmark_actions': { zh: '書籤操作', en: 'Bookmark actions' },
 
   // ── Address search ───────────────────────────
   'search.placeholder': { zh: '搜尋地址...', en: 'Search address...' },

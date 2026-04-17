@@ -13,3 +13,12 @@ export function haversineM(a: LatLng, b: LatLng): number {
   const x = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2
   return 2 * R * Math.asin(Math.sqrt(x))
 }
+
+/** Total distance of a polyline in metres (sum of haversine segments). */
+export function polylineDistanceM(points: LatLng[]): number {
+  let total = 0
+  for (let i = 1; i < points.length; i++) {
+    total += haversineM(points[i - 1], points[i])
+  }
+  return total
+}

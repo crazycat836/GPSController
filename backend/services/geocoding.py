@@ -79,16 +79,25 @@ class GeocodingService:
     # Reverse geocoding
     # ------------------------------------------------------------------
 
-    async def reverse(self, lat: float, lng: float) -> GeocodingResult | None:
+    async def reverse(
+        self, lat: float, lng: float, lang: str | None = None
+    ) -> GeocodingResult | None:
         """Reverse geocode: coordinates -> address.
+
+        Passing ``lang`` forwards an ``accept-language`` hint to Nominatim so
+        ``address.country`` is returned in the requested language.
 
         Returns ``None`` when no result is found.
         """
-        params = {
+        params: dict[str, object] = {
             "lat": lat,
             "lon": lng,
             "format": "json",
+            "addressdetails": 1,
         }
+        headers = self._headers()
+        if lang:
+            headers["Accept-Language"] = lang
 
         logger.debug("Nominatim reverse: %.6f, %.6f", lat, lng)
 
@@ -96,7 +105,7 @@ class GeocodingService:
             resp = await client.get(
                 f"{NOMINATIM_BASE_URL}/reverse",
                 params=params,
-                headers=self._headers(),
+                headers=headers,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -106,12 +115,15 @@ class GeocodingService:
             return None
 
         try:
+            addr = data.get("address") or {}
             return GeocodingResult(
                 display_name=data.get("display_name", ""),
                 lat=float(data["lat"]),
                 lng=float(data["lon"]),
                 type=data.get("type", ""),
                 importance=float(data.get("importance", 0)),
+                country_code=(addr.get("country_code") or "").lower(),
+                country=addr.get("country") or "",
             )
         except (KeyError, ValueError) as exc:
             logger.warning("Failed to parse reverse result: %s", exc)
