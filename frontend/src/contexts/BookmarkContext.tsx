@@ -18,6 +18,7 @@ interface BookmarkContextValue {
   createBookmark: (bm: Omit<Bookmark, 'id'>) => Promise<Bookmark>
   updateBookmark: (id: string, data: Partial<Bookmark>) => Promise<Bookmark>
   deleteBookmark: (id: string) => Promise<void>
+  deleteBookmarksBatch: (ids: string[]) => Promise<number>
   createCategory: (cat: Omit<BookmarkCategory, 'id'>) => Promise<BookmarkCategory>
   deleteCategory: (id: string) => Promise<void>
   refresh: () => Promise<void>
@@ -189,6 +190,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     createBookmark: bm.createBookmark,
     updateBookmark: bm.updateBookmark,
     deleteBookmark: bm.deleteBookmark,
+    deleteBookmarksBatch: bm.deleteBookmarksBatch,
     createCategory: bm.createCategory,
     deleteCategory: bm.deleteCategory,
     refresh: bm.refresh,

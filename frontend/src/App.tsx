@@ -12,6 +12,7 @@ import { ToastProvider, useToastContext } from './contexts/ToastContext'
 import { DeviceProvider, useDeviceContext } from './contexts/DeviceContext'
 import { SimProvider, useSimContext, SPEED_MAP } from './contexts/SimContext'
 import { BookmarkProvider, useBookmarkContext } from './contexts/BookmarkContext'
+import { AvatarProvider } from './contexts/AvatarContext'
 
 // Components
 import MapView from './components/MapView'
@@ -49,7 +50,9 @@ const App: React.FC = () => {
       <DeviceProvider subscribe={ws.subscribe}>
         <SimProvider subscribe={ws.subscribe} sendMessage={ws.sendMessage}>
           <BookmarkProvider>
-            <AppShell wsConnected={ws.connected} />
+            <AvatarProvider>
+              <AppShell wsConnected={ws.connected} />
+            </AvatarProvider>
           </BookmarkProvider>
         </SimProvider>
       </DeviceProvider>

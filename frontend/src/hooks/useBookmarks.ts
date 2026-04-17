@@ -9,6 +9,10 @@ export interface Bookmark {
   category_id?: string
   note?: string
   created_at?: string
+  // Auto-filled by the backend on create/update via reverse geocoding.
+  // Empty string for legacy rows until /backfill-flags runs.
+  country_code?: string
+  country?: string
 }
 
 export interface BookmarkCategory {
@@ -41,7 +45,11 @@ export function useBookmarks() {
     }
   }, [])
 
-  // Load on mount
+  const backfilledRef = useRef(false)
+
+  // Load on mount. After the first fetch, lazily enrich legacy rows that
+  // were created before country_code/country existed — runs at most once
+  // per session so we don't hammer Nominatim.
   useEffect(() => {
     mountedRef.current = true
     refresh()
@@ -49,6 +57,23 @@ export function useBookmarks() {
       mountedRef.current = false
     }
   }, [refresh])
+
+  useEffect(() => {
+    if (backfilledRef.current) return
+    if (loading) return
+    if (bookmarks.length === 0) return
+    const hasMissingFlag = bookmarks.some((b) => !b.country_code)
+    if (!hasMissingFlag) return
+    backfilledRef.current = true
+    api.backfillBookmarkFlags()
+      .then((res) => {
+        if (!mountedRef.current) return
+        if (res?.filled && res.filled > 0) refresh()
+      })
+      .catch(() => {
+        // Swallow — backfill is best-effort and not user-facing.
+      })
+  }, [bookmarks, loading, refresh])
 
   const createBookmark = useCallback(
     async (bm: Omit<Bookmark, 'id'>) => {
@@ -66,6 +91,29 @@ export function useBookmarks() {
     },
     [],
   )
+
+  const deleteBookmarksBatch = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return 0
+      const res = await api.deleteBookmarksBatch(ids)
+      const doomed = new Set(ids)
+      setBookmarks((prev) => prev.filter((b) => !doomed.has(b.id)))
+      return res?.deleted ?? ids.length
+    },
+    [],
+  )
+
+  const backfillFlags = useCallback(async () => {
+    try {
+      const res = await api.backfillBookmarkFlags()
+      if (res?.filled && res.filled > 0) {
+        await refresh()
+      }
+      return res?.filled ?? 0
+    } catch {
+      return 0
+    }
+  }, [refresh])
 
   const updateBookmark = useCallback(
     async (id: string, data: Partial<Bookmark>) => {
@@ -117,6 +165,8 @@ export function useBookmarks() {
     createBookmark,
     updateBookmark,
     deleteBookmark,
+    deleteBookmarksBatch,
+    backfillFlags,
     moveBookmarks,
     createCategory,
     deleteCategory,
