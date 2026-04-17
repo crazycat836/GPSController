@@ -31,31 +31,40 @@ The color system is almost entirely achromatic — dark backgrounds with white/g
 | `--color-surface-hover` | `#282a31` | Hover state for interactive surfaces |
 
 ### Text
-| Token | Value | Role |
-|-------|-------|------|
-| `--color-text-1` | `#e8eaf0` | Primary text — headings, labels, button text. Not pure white. |
-| `--color-text-2` | `#8b8fa3` | Secondary text — descriptions, section titles, muted labels |
-| `--color-text-3` | `#555869` | Tertiary text — placeholders, timestamps, disabled content |
+| Token | Value | Role | Min contrast on `surface-0` |
+|-------|-------|------|-----------------------------|
+| `--color-text-1` | `#e8eaf0` | Primary text — headings, labels, button text. Not pure white. | 14.8:1 (AAA) |
+| `--color-text-2` | `#8b8fa3` | Secondary text — descriptions, section titles, muted labels | 4.7:1 (AA) |
+| `--color-text-3` | `#7a7e94` | Tertiary text — placeholders, timestamps, disabled content | 5.1:1 (AA) |
+
+> Raised `--color-text-3` from `#555869` → `#7a7e94` to clear WCAG AA (4.5:1) on `surface-0`/`surface-1`. The previous value (2.56:1) failed for any visible text.
 
 ### Accent
 | Token | Value | Role |
 |-------|-------|------|
 | `--color-accent` | `#6c8cff` | Primary blue — CTAs, focus rings, active states, toggle on |
 | `--color-accent-hover` | `#8aa3ff` | Hover variant for accent elements |
+| `--color-accent-strong` | `#a8bdff` | High-contrast accent text for use on `accent-dim` backgrounds (chip-on / pill-on labels) |
 | `--color-accent-dim` | `rgba(108,140,255,0.12)` | Tinted background for active chips, selected items |
 | `--color-accent-glow` | `rgba(108,140,255,0.25)` | Box-shadow glow on primary buttons |
+
+> `--color-accent` (`#6c8cff`) is brand-correct on `surface-0`/`surface-1` (5.28 / 4.35) but falls below AA on `accent-dim` over `surface-2/3`. Use `--color-accent-strong` for any accent-colored text rendered over an accent-tinted background.
 
 ### Semantic / Status
 | Token | Value | Role |
 |-------|-------|------|
-| `--color-success` | `#4ecdc4` | Active/connected states, speed mode active |
+| `--color-success` | `#4ecdc4` | Active/connected states, speed mode active (icons / borders) |
 | `--color-success-dim` | `rgba(78,205,196,0.15)` | Tinted background for success states |
-| `--color-danger` | `#ff4757` | Error, disconnect, delete actions |
+| `--color-success-text` | `#34d399` | High-contrast success text for inline copy (replaces `text-green-400`) |
+| `--color-danger` | `#ff4757` | Error, disconnect, delete actions (icons / borders) |
 | `--color-danger-dim` | `rgba(255,71,87,0.15)` | Tinted background for danger states |
-| `--color-danger-text` | `#ff6b6b` | Lighter danger for inline text/icons |
+| `--color-danger-text` | `#ff8585` | Lighter danger for inline text. Raised from `#ff6b6b` to clear AA on `surface-0` |
+| `--color-error-text` | `#f87171` | Inline error text alias (replaces `text-red-400`) |
 | `--color-warning` | `#ffd93d` | Warning states, caution indicators |
 | `--color-warning-dim` | `rgba(255,217,61,0.15)` | Tinted background for warning states |
 | `--color-warning-text` | `#ffc107` | Lighter warning for inline text/icons |
+| `--color-amber-text` | `#fbbf24` | Inline amber/orange text (replaces `text-amber-300/400`) |
+| `--color-amber-dim` | `rgba(251,191,36,0.15)` | Tinted background (replaces `bg-amber-400/15`) |
 
 ### Device
 | Token | Value | Role |
@@ -242,14 +251,20 @@ Reusable overlay + dialog surface:
 |-------|-------|
 | `--spacing-0_5` | 2px |
 | `--spacing-1` | 4px |
+| `--spacing-1_5` | 6px |
 | `--spacing-2` | 8px |
+| `--spacing-2_5` | 10px |
 | `--spacing-3` | 12px |
+| `--spacing-3_5` | 14px |
 | `--spacing-4` | 16px |
 | `--spacing-5` | 20px |
 | `--spacing-6` | 24px |
+| `--spacing-7` | 28px |
 | `--spacing-8` | 32px |
+| `--spacing-9` | 36px |
 | `--spacing-10` | 40px |
 | `--spacing-12` | 48px |
+| `--spacing-14` | 56px |
 | `--spacing-16` | 64px |
 
 ### Border Radius Scale
@@ -265,9 +280,16 @@ Reusable overlay + dialog surface:
 ### Control Heights
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--control-sm` | 32px | Compact controls |
+| `--control-sm` | 32px | Compact, non-primary controls — pair with a 36–44px hit area when interactive |
 | `--control-md` | 38px | Default control height |
-| `--control-lg` | 44px | Primary CTA buttons |
+| `--control-lg` | 44px | Primary CTA buttons (matches WCAG 2.5.5 / iOS HIG minimum) |
+
+### Target Size Tiers (WCAG 2.5.5 / iOS HIG)
+| Tier | Min size | Usage |
+|------|----------|-------|
+| Recommended | 44×44px | Primary actions, mode toggles, top-bar icons, drawer close, joystick — first choice for any standalone tap target. |
+| Acceptable | 36×36px | Inline list actions, segmented chips/pills, secondary buttons inside dense panels. Backed by `min-height: 36px` on `.action-btn`, `.context-menu-item`, `.seg-cta-sm`, `.seg-chip`, `.seg-pill`, `.bookmark-item`. |
+| Minimum | 24×24px | Inline icons inside text rows where the surrounding row provides ≥36px hit area. Avoid for standalone controls. |
 
 ### App Layout Structure
 ```
@@ -309,7 +331,7 @@ All z-index values are defined as CSS custom properties for consistency:
 | Token | Value | Usage |
 |-------|-------|-------|
 | `--z-base` | 0 | Map canvas, noise overlay, base elements |
-| `--z-map-ui` | 100 | Map controls (zoom, layer picker) |
+| `--z-map-ui` | 1000 | Map controls (zoom, layer picker) — sits above Leaflet's internal panes |
 | `--z-bar` | 200 | Status bar, ETA bar |
 | `--z-ui` | 400 | TopBar, ModeToolbar, FloatingPanel, SettingsMenu |
 | `--z-float` | 500 | Toasts, joystick, bookmark popups, bookmark add dialog |
@@ -396,6 +418,42 @@ All z-index values are defined as CSS custom properties for consistency:
 }
 ```
 
+## 8a. Accessibility Standards (WCAG AA + iOS HIG)
+
+This section captures how the design system maps to **WCAG 2.2 AA** and the **iOS Human Interface Guidelines**, and the deliberate desktop deviations.
+
+### Color Contrast (WCAG 1.4.3 / 1.4.11)
+- All body text on `surface-0`/`surface-1` clears 4.5:1.
+- Use `*-text` semantic tokens (`--color-success-text`, `--color-danger-text`, `--color-error-text`, `--color-amber-text`) for inline status copy. Reserve the base color (`--color-success`, `--color-danger`, `--color-warning`) for icons, borders, and large display chrome where the 3:1 non-text rule applies.
+- Never render `--color-accent` text on an `accent-dim` background — use `--color-accent-strong` instead.
+
+### Touch Target Sizing (WCAG 2.5.5 / 2.5.8)
+- Standalone interactive controls target **44×44px** (recommended) or **36×36px** (acceptable for dense in-panel buttons).
+- The CSS classes `.action-btn`, `.context-menu-item`, `.seg-cta-sm`, `.seg-chip`, `.seg-pill`, `.bookmark-item` enforce `min-height: 36px`.
+- `.seg-cta` enforces `min-height: 44px` because it is always a primary action.
+
+### Focus Management (WCAG 2.4.7)
+- Every interactive class has a `:focus-visible` outline (`2px solid var(--color-accent)`, 2px offset).
+- The base `:focus-visible` rule in `@layer base` is the fallback; semantic classes (chips, pills, CTAs, action-btn, bookmark-item, context-menu-item, toggle-switch) override with surface-aware styling.
+
+### Motion (WCAG 2.3.3)
+- `prefers-reduced-motion` collapses all animation/transition durations to 0.01ms.
+- Default durations (80–200ms) align with iOS HIG — fast, purposeful, never decorative.
+
+### Semantic HTML & ARIA
+- Interactive elements MUST be real `<button>` or `<a>` elements — never `<div onClick>`.
+- Modals/drawers use `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, and trap focus while open.
+- Toggles use `role="switch"` + `aria-checked`; multi-select chips use `aria-pressed`.
+- The skip-link in `App.tsx` jumps focus to the map container — exposed only on `:focus-visible`.
+
+### iOS HIG Desktop Adaptations (deliberate deviations)
+| HIG Default | Our value | Why |
+|-------------|-----------|-----|
+| Body 17pt | 13px base | Information-dense desktop tool UI; rendered for mouse/keyboard, not touch. |
+| 44pt single tap target | 36px acceptable tier | Mouse-first input reduces minimum need; primary actions still 44px. |
+| SF Pro family | Inter | Cross-platform consistency in an Electron app. |
+| System dark/light | Dark only | Mapping/satellite tool — light mode would compete with map tile contrast. |
+
 ## 9. Tailwind CSS Integration
 
 GPSController uses **Tailwind CSS v4** via the Vite plugin (`@tailwindcss/vite`). There is no `tailwind.config.js` — Tailwind v4 reads tokens directly from the `@theme` block in `index.css`.
@@ -441,6 +499,9 @@ GPSController uses **Tailwind CSS v4** via the Vite plugin (`@tailwindcss/vite`)
 - Don't mix approaches in a single component (Tailwind for layout but inline for colors)
 - Don't introduce warm or saturated colors into UI chrome — cool gray with blue accent only
 - Don't use pure `#ffffff` as primary text — always use `--color-text-1` (`#e8eaf0`)
+- Don't use Tailwind's semantic color utilities (`text-green-400`, `text-red-400`, `bg-amber-400/15`) — use the `--color-*-text` / `--color-*-dim` tokens instead
+- Don't render interactive `<div onClick>` elements — they're invisible to keyboard and assistive tech. Use `<button>` (or wire up `role`, `tabIndex`, and a keyboard handler if a `div` is unavoidable)
+- Don't use `--color-accent` for text on an `accent-dim` background — use `--color-accent-strong`
 
 ## 11. Remaining Gaps
 

@@ -97,61 +97,43 @@ const UpdateChecker: React.FC = () => {
 
   return createPortal(
     <div
-      className="anim-fade-in"
+      className="modal-overlay anim-fade-in"
       onClick={dismiss}
-      style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        background: 'rgba(8, 10, 20, 0.55)',
-        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-        zIndex: 'var(--z-modal)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="anim-scale-in"
-        style={{
-          background: 'rgba(26, 29, 39, 0.96)',
-          backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
-          border: '1px solid rgba(108, 140, 255, 0.25)',
-          borderRadius: 12, padding: 22, width: 360, color: '#e0e0e0',
-          boxShadow: '0 20px 60px rgba(12, 18, 40, 0.65), 0 0 0 1px rgba(255,255,255,0.05) inset',
-        }}
+        className="modal-dialog anim-scale-in"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="update-checker-title"
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <div className="flex items-center gap-2.5 mb-3.5">
           <div
-            style={{
-              width: 32, height: 32, borderRadius: 8,
-              background: 'linear-gradient(135deg, var(--color-accent), var(--color-device-a))',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: 'linear-gradient(135deg, var(--color-accent), var(--color-device-a))' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
               <path d="M12 2v13M5 9l7-7 7 7" />
               <path d="M5 21h14" />
             </svg>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 600, flex: 1 }}>
+          <h2 id="update-checker-title" className="modal-title">
             {t('update.title')}
-          </div>
+          </h2>
         </div>
 
-        <div style={{ fontSize: 12.5, lineHeight: 1.7, marginBottom: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ opacity: 0.65 }}>{t('update.current')}</span>
-            <span style={{ fontFamily: 'monospace' }}>v{CURRENT}</span>
+        <div className="modal-body">
+          <div className="flex justify-between">
+            <span className="opacity-65">{t('update.current')}</span>
+            <span className="font-mono">v{CURRENT}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ opacity: 0.65 }}>{t('update.latest')}</span>
+          <div className="flex justify-between items-center">
+            <span className="opacity-65">{t('update.latest')}</span>
             <a
               href={RELEASES_URL}
               target="_blank"
               rel="noreferrer"
-              style={{
-                fontFamily: 'monospace', color: '#6c8cff',
-                textDecoration: 'none', fontWeight: 600,
-              }}
+              className="font-mono text-[var(--color-accent)] font-semibold no-underline"
               onClick={(e) => {
                 // Electron webview: intercept and open externally if possible.
                 try {
@@ -168,20 +150,16 @@ const UpdateChecker: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 16, lineHeight: 1.6 }}>
+        <p className="text-xs text-[var(--color-text-1)] opacity-75 mb-4 leading-relaxed">
           {t('update.go_to_github')}
-        </div>
+        </p>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="modal-actions">
           <a
             href={RELEASES_URL}
             target="_blank"
             rel="noreferrer"
-            className="action-btn primary"
-            style={{
-              flex: 1, textAlign: 'center', textDecoration: 'none',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            }}
+            className="action-btn primary flex-1 text-center no-underline inline-flex items-center justify-center gap-1.5"
             onClick={(e) => {
               try {
                 const anyWin: any = window;
@@ -194,7 +172,7 @@ const UpdateChecker: React.FC = () => {
           >
             {t('update.download')}
           </a>
-          <button className="action-btn" onClick={dismiss}>
+          <button type="button" className="action-btn" onClick={dismiss}>
             {t('update.later')}
           </button>
         </div>

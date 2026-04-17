@@ -17,22 +17,32 @@
   --color-surface-hover: #282a31;
 
   /* ── Accent ─────────────────────────────────────────────────
-     Primary blue. Used for active states, focus rings, CTAs. */
+     Primary blue. Used for active states, focus rings, CTAs.
+     `--color-accent-strong` is the lighter variant required for
+     legible text on accent-dim backgrounds (WCAG AA at small sizes). */
   --color-accent: #6c8cff;
   --color-accent-hover: #8aa3ff;
+  --color-accent-strong: #a8bdff;
   --color-accent-dim: rgba(108, 140, 255, 0.12);
   --color-accent-glow: rgba(108, 140, 255, 0.25);
 
   /* ── Semantic ───────────────────────────────────────────────
-     Signal colors for status, feedback, alerts. */
+     Signal colors for status, feedback, alerts.
+     `*-text` variants are tuned for >=4.5:1 contrast on dark surfaces.
+     Use `--color-*-text` when rendering inline status text;
+     reserve the base color for icons, borders, and large display chrome. */
   --color-success: #4ecdc4;
   --color-success-dim: rgba(78, 205, 196, 0.15);
+  --color-success-text: #34d399;
   --color-danger: #ff4757;
   --color-danger-dim: rgba(255, 71, 87, 0.15);
-  --color-danger-text: #ff6b6b;
+  --color-danger-text: #ff8585;
+  --color-error-text: #f87171;
   --color-warning: #ffd93d;
   --color-warning-dim: rgba(255, 217, 61, 0.15);
   --color-warning-text: #ffc107;
+  --color-amber-text: #fbbf24;
+  --color-amber-dim: rgba(251, 191, 36, 0.15);
 
   /* ── Device ─────────────────────────────────────────────────
      Per-device identification colors for multi-device mode.
@@ -54,10 +64,12 @@
 
   /* ── Text ───────────────────────────────────────────────────
      Three tiers: primary → secondary → muted.
-     Never use raw white — always pick a tier. */
+     Never use raw white — always pick a tier.
+     `text-3` raised from #555869 → #7a7e94 to clear WCAG AA (4.5:1)
+     on `surface-0`/`surface-1`. Acceptable for placeholders/disabled. */
   --color-text-1: #e8eaf0;
   --color-text-2: #8b8fa3;
-  --color-text-3: #555869;
+  --color-text-3: #7a7e94;
 
   /* ── Border ─────────────────────────────────────────────────
      White-alpha borders for dark surfaces. */
@@ -327,8 +339,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
   padding: 8px 4px;
+  min-height: 36px;
   border-radius: 8px;
   border: 1px solid transparent;
   cursor: pointer;
@@ -336,18 +350,61 @@
   font-weight: 500;
   transition: all 120ms;
 }
+.seg-chip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 .seg-chip-off { background: var(--color-surface-1); color: var(--color-text-3); }
 .seg-chip-off:hover { background: var(--color-surface-hover); color: var(--color-text-2); }
 .seg-chip-on {
   background: var(--color-accent-dim);
-  color: var(--color-accent);
+  color: var(--color-accent-strong);
   font-weight: 600;
   border-color: rgba(108, 140, 255, 0.2);
 }
 
+/* ── Speed slider ── */
+.speed-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-surface-2);
+  outline: none;
+  cursor: pointer;
+}
+.speed-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid var(--color-surface-1);
+  box-shadow: 0 0 6px rgba(108, 140, 255, 0.35);
+  cursor: grab;
+  transition: transform 100ms;
+}
+.speed-slider::-webkit-slider-thumb:active { transform: scale(1.2); cursor: grabbing; }
+.speed-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid var(--color-surface-1);
+  box-shadow: 0 0 6px rgba(108, 140, 255, 0.35);
+  cursor: grab;
+}
+.speed-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-surface-2);
+}
+
 .seg-pill {
   flex: 1;
-  padding: 6px 8px;
+  padding: 8px;
+  min-height: 36px;
   border-radius: 6px;
   border: 1px solid transparent;
   cursor: pointer;
@@ -356,11 +413,15 @@
   text-align: center;
   transition: all 120ms;
 }
+.seg-pill:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 .seg-pill-off { background: var(--color-surface-1); color: var(--color-text-3); }
 .seg-pill-off:hover { color: var(--color-text-2); }
 .seg-pill-on {
   background: var(--color-accent-dim);
-  color: var(--color-accent);
+  color: var(--color-accent-strong);
   font-weight: 600;
   border-color: rgba(108, 140, 255, 0.2);
 }
@@ -395,6 +456,47 @@
 .route-card-list::-webkit-scrollbar-thumb {
   background: rgba(255,255,255,0.1);
   border-radius: var(--radius-full);
+}
+
+/* Quick-load dropdown inside WaypointList */
+.route-quick-load-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 180px;
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: var(--z-dropdown);
+  box-shadow: var(--shadow-md);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+.route-quick-load-dropdown::-webkit-scrollbar { width: 4px; }
+.route-quick-load-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: var(--radius-full);
+}
+.route-quick-load-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  color: var(--color-text-1);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 120ms;
+}
+.route-quick-load-item:hover {
+  background: rgba(255,255,255,0.06);
 }
 
 .route-card-point {
@@ -449,6 +551,7 @@
   gap: 6px;
   width: 100%;
   padding: 11px;
+  min-height: 44px;
   border: none;
   border-radius: 10px;
   font-size: var(--text-base);
@@ -459,13 +562,18 @@
 .seg-cta:hover { opacity: 0.9; }
 .seg-cta:active { transform: scale(0.97); }
 .seg-cta:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.seg-cta:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 .seg-cta-accent { background: var(--color-accent); color: white; }
 .seg-cta-danger { background: var(--color-danger); color: white; }
 .seg-cta-ghost { background: var(--color-surface-3); color: var(--color-text-1); }
 .seg-cta-ghost:hover { background: var(--color-surface-hover); opacity: 1; }
 
 .seg-cta-sm {
-  padding: 7px;
+  padding: 8px;
+  min-height: 36px;
   font-size: var(--text-sm);
   border-radius: 8px;
 }
@@ -491,6 +599,10 @@
   cursor: pointer;
   transition: background 150ms;
   flex-shrink: 0;
+}
+.toggle-switch:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
 }
 .toggle-switch[data-checked="true"] { background: var(--color-accent); }
 .toggle-switch::after {
@@ -617,7 +729,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 10px 14px;
+  min-height: 36px;
   font-size: 13px;
   color: var(--color-text-1);
   cursor: pointer;
@@ -627,9 +740,15 @@
   width: 100%;
   text-align: left;
 }
-.context-menu-item:hover { background: var(--color-accent-dim); color: var(--color-accent); }
+.context-menu-item:hover { background: var(--color-accent-dim); color: var(--color-accent-strong); }
+.context-menu-item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  background: var(--color-accent-dim);
+  color: var(--color-accent-strong);
+}
 .context-menu-item svg { flex-shrink: 0; opacity: 0.7; }
-.context-menu-item:hover svg { opacity: 1; }
+.context-menu-item:hover svg, .context-menu-item:focus-visible svg { opacity: 1; }
 
 /* ── Control panel & sections ───────────────────────────────── */
 .control-panel {
@@ -675,7 +794,8 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 7px 12px;
+  padding: 9px 14px;
+  min-height: 36px;
   background: var(--color-surface-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -690,6 +810,10 @@
 .action-btn:hover { background: var(--color-surface-hover); color: var(--color-text-1); border-color: var(--color-border-strong); }
 .action-btn:active:not(:disabled) { transform: scale(0.97); transition-duration: 80ms; }
 .action-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.action-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 .action-btn svg { flex-shrink: 0; }
 
 .action-btn.primary {
@@ -791,16 +915,26 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 6px;
+  padding: 8px;
+  min-height: 36px;
   cursor: pointer;
   border-radius: var(--radius-sm);
   font-size: 12px;
   color: var(--color-text-1);
   transition: background 140ms var(--ease-out-expo);
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
 }
 .bookmark-item:hover { background: var(--color-surface-hover); }
+.bookmark-item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  background: var(--color-surface-hover);
+}
 .bookmark-item svg { opacity: 0.5; flex-shrink: 0; }
-.bookmark-item:hover svg { opacity: 0.8; }
+.bookmark-item:hover svg, .bookmark-item:focus-visible svg { opacity: 0.8; }
 .bookmark-group { margin-bottom: 4px; }
 
 /* ── Toast / notification pill ───────────────────────────────
@@ -839,6 +973,31 @@
 /* ── Utility classes ────────────────────────────────────────── */
 .flex-1 { flex: 1; }
 .font-mono { font-family: var(--font-mono); }
+
+/* Screen-reader-only — visually hidden, available to assistive tech.
+   Use the `focus:not-sr-only` pattern to expose skip links on focus. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.focus\:not-sr-only:focus,
+.focus\:not-sr-only:focus-visible {
+  position: fixed;
+  width: auto;
+  height: auto;
+  padding: var(--spacing-3) var(--spacing-4);
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
 
 
 /* ═══════════════════════════════════════════════════════════════

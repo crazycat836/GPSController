@@ -24,6 +24,7 @@ export default function ModeToolbar({ activeMode, onModeChange }: ModeToolbarPro
   const t = useT()
 
   return (
+    <nav aria-label="Simulation modes">
     <VerticalToolbar
       className="fixed right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 -translate-y-1/2 z-[var(--z-ui)]"
     >
@@ -39,5 +40,6 @@ export default function ModeToolbar({ activeMode, onModeChange }: ModeToolbarPro
         </React.Fragment>
       ))}
     </VerticalToolbar>
+    </nav>
   )
 }

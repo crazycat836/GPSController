@@ -110,9 +110,9 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
             {scanning ? (
               <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('device.scan_scanning')}</>
             ) : scanResult != null && scanResult > 0 ? (
-              <><Check className="w-3.5 h-3.5 text-green-400" /> <span className="text-green-400">{t('device.scan_found', { n: scanResult })}</span></>
+              <><Check className="w-3.5 h-3.5 text-[var(--color-success-text)]" /> <span className="text-[var(--color-success-text)]">{t('device.scan_found', { n: scanResult })}</span></>
             ) : scanResult === 0 ? (
-              <><XCircle className="w-3.5 h-3.5 text-red-400" /> <span className="text-red-400">{t('device.scan_none')}</span></>
+              <><XCircle className="w-3.5 h-3.5 text-[var(--color-error-text)]" /> <span className="text-[var(--color-error-text)]">{t('device.scan_none')}</span></>
             ) : (
               <><Usb className="w-3.5 h-3.5" /> USB</>
             )}
@@ -142,7 +142,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                     ].join(' ')}
                   >
                     {unsupported
-                      ? <CircleSlash className="w-4 h-4 text-red-400 shrink-0" />
+                      ? <CircleSlash className="w-4 h-4 text-[var(--color-error-text)] shrink-0" />
                       : <Smartphone className="w-4 h-4 text-[var(--color-text-3)] shrink-0" />}
                     <div className="flex-1 min-w-0">
                       <div className={`text-[12px] truncate ${isSelected ? 'font-semibold text-[var(--color-text-1)]' : 'text-[var(--color-text-2)]'}`}>
@@ -150,14 +150,14 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {unsupported ? (
-                          <span className="text-[10px] text-red-400">{t('device.ios_unsupported_label', { version: d.ios_version })}</span>
+                          <span className="text-[10px] text-[var(--color-error-text)]">{t('device.ios_unsupported_label', { version: d.ios_version })}</span>
                         ) : (
                           <span className="text-[10px] text-[var(--color-text-3)]">iOS {d.ios_version}</span>
                         )}
                         {d.connection_type && !unsupported && (
                           <span className={[
                             'inline-flex items-center gap-1 text-[9px] px-1.5 py-px rounded-md',
-                            d.connection_type === 'Network' ? 'bg-green-500/15 text-green-400' : 'bg-[var(--color-accent-dim)] text-[var(--color-accent)]',
+                            d.connection_type === 'Network' ? 'bg-[var(--color-success-dim)] text-[var(--color-success-text)]' : 'bg-[var(--color-accent-dim)] text-[var(--color-accent)]',
                           ].join(' ')}>
                             {d.connection_type === 'Network' ? <Wifi className="w-2.5 h-2.5" /> : <Usb className="w-2.5 h-2.5" />}
                             {d.connection_type === 'Network' ? 'WiFi' : 'USB'}
@@ -165,7 +165,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                         )}
                       </div>
                     </div>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-green-400 shrink-0" />}
+                    {isSelected && <Check className="w-3.5 h-3.5 text-[var(--color-success-text)] shrink-0" />}
                   </button>
                 )
               })}
@@ -184,7 +184,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                 <div className="text-[10px] text-[var(--color-text-3)]">{t('wifi.section_hint')}</div>
               </div>
               {device.tunnelStatus.running && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-green-500/15 text-green-400 flex items-center gap-1 shrink-0">
+                <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-[var(--color-success-dim)] text-[var(--color-success-text)] flex items-center gap-1 shrink-0">
                   <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
                   Active
                 </span>
@@ -229,7 +229,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                 {/* Tunnel connect / status */}
                 {device.tunnelStatus.running ? (
                   <div className="flex flex-col gap-2">
-                    <div className="text-[11px] text-[var(--color-text-3)] p-2 rounded-lg bg-green-500/8">
+                    <div className="text-[11px] text-[var(--color-text-3)] p-2 rounded-lg bg-[var(--color-success-dim)]">
                       <div>RSD: {device.tunnelStatus.rsd_address}:{device.tunnelStatus.rsd_port}</div>
                       <div className="text-[10px] text-[var(--color-text-3)] mt-0.5">{t('wifi.tunnel_usb_can_disconnect')}</div>
                     </div>
@@ -252,7 +252,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                         <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('wifi.tunnel_establishing')}</>
                       ) : t('wifi.tunnel_start')}
                     </button>
-                    {tunnelError && <p className="text-[11px] text-red-400 p-2 rounded-lg bg-red-400/10 border border-red-400/30">{tunnelError}</p>}
+                    {tunnelError && <p className="text-[11px] text-[var(--color-error-text)] p-2 rounded-lg bg-red-400/10 border border-red-400/30">{tunnelError}</p>}
                     <p className="text-[10px] text-[var(--color-text-3)] opacity-40">{t('wifi.tunnel_admin_hint')}</p>
                   </div>
                 )}
@@ -285,12 +285,12 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
             {repairState === 'running' && (
               <div className="text-center py-6">
                 <Loader2 className="w-8 h-8 mx-auto mb-3 text-[var(--color-accent)] animate-spin" />
-                <p className="text-amber-400 text-sm">{t('wifi.repair_running')}</p>
+                <p className="text-[var(--color-amber-text)] text-sm">{t('wifi.repair_running')}</p>
               </div>
             )}
             {repairState === 'success' && (
               <>
-                <p className="text-green-400 text-[13px] leading-relaxed">{t('wifi.repair_success')}</p>
+                <p className="text-[var(--color-success-text)] text-[13px] leading-relaxed">{t('wifi.repair_success')}</p>
                 {repairMessage && <p className="text-xs text-[var(--color-text-3)] mt-2">{repairMessage}</p>}
                 <div className="flex justify-end mt-5">
                   <button onClick={() => setShowRepairConfirm(false)} className="action-btn primary">{t('wifi.warning_ok')}</button>
@@ -299,7 +299,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
             )}
             {repairState === 'failed' && (
               <>
-                <p className="text-red-400 text-[13px] leading-relaxed">{t('wifi.repair_failed')}</p>
+                <p className="text-[var(--color-error-text)] text-[13px] leading-relaxed">{t('wifi.repair_failed')}</p>
                 {repairMessage && <p className="text-xs text-[var(--color-text-2)] mt-2 p-2 rounded-lg bg-red-400/8 border border-red-400/30 whitespace-pre-wrap break-words">{repairMessage}</p>}
                 <div className="flex justify-end gap-2 mt-5">
                   <button onClick={() => setShowRepairConfirm(false)} className="action-btn">{t('wifi.repair_cancel')}</button>

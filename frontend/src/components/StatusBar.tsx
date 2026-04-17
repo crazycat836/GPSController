@@ -172,7 +172,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
                 setTimeout(() => setCopied(false), 1500);
               }}
               title={t('status.copy_coord')}
-              className={`bg-transparent border-none cursor-pointer px-1 inline-flex items-center transition-colors ${copied ? 'text-[var(--color-success)]' : 'text-[rgba(255,255,255,0.6)]'}`}
+              className={`bg-transparent border-none cursor-pointer px-1 inline-flex items-center transition-colors ${copied ? 'text-[var(--color-success)]' : 'text-[var(--color-text-2)]'}`}
             >
               {copied ? (
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
