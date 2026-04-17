@@ -149,6 +149,9 @@ export interface ReverseGeocodeResult {
   importance: number
   country_code: string  // ISO 3166-1 alpha-2 lowercase, '' if unknown
   country: string       // localized country name
+  /** Short human label (POI > road > neighbourhood > …); empty string if
+   *  Nominatim has no usable label for the coordinate. */
+  place_name?: string
 }
 
 export const searchAddress = (q: string) => request<any[]>('GET', `/api/geocode/search?q=${encodeURIComponent(q)}`)
@@ -163,6 +166,10 @@ export const getBookmarks = () => request<any>('GET', '/api/bookmarks')
 export const createBookmark = (bm: any) => request<any>('POST', '/api/bookmarks', bm)
 export const updateBookmark = (id: string, bm: any) => request<any>('PUT', `/api/bookmarks/${id}`, bm)
 export const deleteBookmark = (id: string) => request<any>('DELETE', `/api/bookmarks/${id}`)
+export const deleteBookmarksBatch = (ids: string[]) =>
+  request<{ deleted: number; requested: number }>('POST', '/api/bookmarks/batch-delete', { ids })
+export const backfillBookmarkFlags = () =>
+  request<{ filled: number }>('POST', '/api/bookmarks/backfill-flags')
 export const moveBookmarks = (ids: string[], catId: string) =>
   request<any>('POST', '/api/bookmarks/move', { bookmark_ids: ids, target_category_id: catId })
 export const getCategories = () => request<any[]>('GET', '/api/bookmarks/categories')

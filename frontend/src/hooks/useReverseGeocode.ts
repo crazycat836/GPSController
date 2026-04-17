@@ -6,6 +6,13 @@ interface CountryInfo {
   country: string      // localized country name
 }
 
+interface ReverseGeocodeOptions {
+  /** When true, suppresses API calls and preserves the last-known value.
+   *  Typical use: gate on active simulation so Navigate/RandomWalk doesn't
+   *  flood the USB channel with debounced geocode requests every 600ms. */
+  paused?: boolean
+}
+
 const EMPTY: CountryInfo = { countryCode: '', country: '' }
 const DEBOUNCE_MS = 600
 
@@ -18,11 +25,16 @@ function nominatimLang(lang: string): string {
 export function useReverseGeocode(
   pos: { lat: number; lng: number } | null,
   lang: string,
+  options: ReverseGeocodeOptions = {},
 ): CountryInfo {
+  const { paused = false } = options
   const [info, setInfo] = useState<CountryInfo>(EMPTY)
 
   useEffect(() => {
     if (!pos) return
+    // Hold the last-known flag/country while moving. The flag doesn't need
+    // per-tick refresh during travel — we only re-query once the user stops.
+    if (paused) return
     let cancelled = false
     const tid = setTimeout(async () => {
       try {
@@ -41,7 +53,7 @@ export function useReverseGeocode(
       cancelled = true
       clearTimeout(tid)
     }
-  }, [pos?.lat, pos?.lng, lang])
+  }, [pos?.lat, pos?.lng, lang, paused])
 
   return info
 }
