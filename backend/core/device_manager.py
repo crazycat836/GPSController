@@ -124,6 +124,13 @@ class DeviceManager:
             logger.exception("Failed to list usbmux devices")
             return devices
 
+        # Surface the raw count at INFO so "nothing plugged in" vs "device
+        # present but enumeration failed" is obvious in the backend log.
+        logger.info(
+            "discover_devices: usbmux returned %d raw entr%s",
+            len(raw_devices), "y" if len(raw_devices) == 1 else "ies",
+        )
+
         for raw in raw_devices:
             try:
                 conn_type = getattr(raw, "connection_type", "USB")
@@ -151,8 +158,10 @@ class DeviceManager:
                 )
                 info.is_connected = raw.serial in self._connections
                 devices.append(info)
-                logger.debug("Discovered device %s (%s) running iOS %s via %s (connected=%s)",
-                             info.name, info.udid, info.ios_version, conn_type, info.is_connected)
+                logger.info(
+                    "  device %s '%s' iOS %s via %s (connected=%s)",
+                    info.udid, info.name, info.ios_version, conn_type, info.is_connected,
+                )
             except Exception:
                 logger.exception("Failed to query device %s", getattr(raw, "serial", "?"))
 
@@ -315,10 +324,13 @@ class DeviceManager:
             except Exception:
                 logger.exception("Error closing tunnel for %s", udid)
 
-        # Close tunnel proxy.
+        # Close tunnel proxy. CoreDeviceTunnelProxy.close() is an async
+        # coroutine in current pymobiledevice3; without await it logs a
+        # "coroutine was never awaited" RuntimeWarning on shutdown and the
+        # underlying socket is cleaned up by GC rather than deterministically.
         if conn.tunnel_proxy is not None:
             try:
-                conn.tunnel_proxy.close()
+                await conn.tunnel_proxy.close()
             except Exception:
                 logger.exception("Error closing tunnel proxy for %s", udid)
 

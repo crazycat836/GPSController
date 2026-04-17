@@ -254,7 +254,12 @@ async def wifi_repair():
                     pass
             try:
                 if proxy is not None:
-                    proxy.close()
+                    # CoreDeviceTunnelProxy.close() is a coroutine — mirror
+                    # the await-if-awaitable pattern used for the closers
+                    # above so we don't leak a "was never awaited" warning.
+                    r = proxy.close()
+                    if hasattr(r, "__await__"):
+                        await r
             except Exception:
                 pass
 
