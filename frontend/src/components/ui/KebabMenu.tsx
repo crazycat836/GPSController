@@ -1,0 +1,224 @@
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { MoreVertical } from 'lucide-react'
+import { ICON_SIZE } from '../../lib/icons'
+
+type Side = 'top' | 'bottom'
+type Align = 'start' | 'end'
+
+export interface KebabMenuItem {
+  id: string
+  label: React.ReactNode
+  icon?: React.ReactNode
+  /** 'danger' tints the item red; 'section' renders the entry as a muted label instead of a button. */
+  kind?: 'default' | 'danger' | 'section'
+  onSelect?: () => void
+  disabled?: boolean
+  /** Dot swatch on the leading edge (used for "Move to <category>"). */
+  colorDot?: string
+  keepOpen?: boolean
+}
+
+interface KebabMenuProps {
+  items: KebabMenuItem[] | (() => KebabMenuItem[])
+  ariaLabel?: string
+  side?: Side
+  align?: Align
+  /** Override the default MoreVertical trigger (e.g. for row-level kebab). */
+  trigger?: React.ReactElement<Record<string, unknown>>
+  className?: string
+  triggerSize?: number
+}
+
+// Portal-rendered popup menu. Arrow keys cycle items, Esc closes,
+// click-outside dismisses. Callers can swap the trigger via `trigger`.
+export default function KebabMenu({
+  items,
+  ariaLabel = 'More actions',
+  side = 'bottom',
+  align = 'end',
+  trigger,
+  className,
+  triggerSize = ICON_SIZE.sm,
+}: KebabMenuProps) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  const triggerRef = useRef<HTMLElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  const close = useCallback(() => setOpen(false), [])
+
+  // Compute position from the trigger rect on open.
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return
+    const r = triggerRef.current.getBoundingClientRect()
+    const menu = menuRef.current
+    const menuWidth = menu?.offsetWidth ?? 180
+    const menuHeight = menu?.offsetHeight ?? 200
+    let left = align === 'end' ? r.right - menuWidth : r.left
+    let top = side === 'bottom' ? r.bottom + 6 : r.top - menuHeight - 6
+    // Clamp to viewport with a small gutter.
+    left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8))
+    top = Math.max(8, Math.min(top, window.innerHeight - menuHeight - 8))
+    setPos({ left, top })
+  }, [open, align, side])
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as Node | null
+      if (!target) return
+      if (menuRef.current?.contains(target)) return
+      if (triggerRef.current?.contains(target)) return
+      close()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        close()
+        ;(triggerRef.current as HTMLElement | null)?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open, close])
+
+  // Focus first actionable item when opening.
+  useEffect(() => {
+    if (!open) return
+    const t = setTimeout(() => {
+      const first = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])')
+      first?.focus()
+    }, 0)
+    return () => clearTimeout(t)
+  }, [open])
+
+  const onMenuKey = (e: React.KeyboardEvent) => {
+    const buttons = Array.from(
+      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? [],
+    )
+    if (buttons.length === 0) return
+    const active = document.activeElement as HTMLButtonElement | null
+    const idx = active ? buttons.indexOf(active) : -1
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      buttons[(idx + 1) % buttons.length]?.focus()
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      buttons[(idx - 1 + buttons.length) % buttons.length]?.focus()
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      buttons[0]?.focus()
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      buttons[buttons.length - 1]?.focus()
+    }
+  }
+
+  const toggle = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setOpen((v) => !v)
+  }, [])
+
+  const triggerElement = trigger
+    ? React.cloneElement(trigger, {
+        ref: (el: HTMLElement | null) => { triggerRef.current = el },
+        onClick: (e: React.MouseEvent<HTMLElement>) => {
+          const prev = trigger.props.onClick as ((evt: React.MouseEvent<HTMLElement>) => void) | undefined
+          prev?.(e)
+          toggle(e)
+        },
+        'aria-expanded': open,
+        'aria-haspopup': 'menu',
+      } as Record<string, unknown>)
+    : (
+      <button
+        ref={(el) => { triggerRef.current = el }}
+        type="button"
+        className={['kebab-btn', className].filter(Boolean).join(' ')}
+        onClick={toggle}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        title={ariaLabel}
+      >
+        <MoreVertical width={triggerSize} height={triggerSize} />
+      </button>
+    )
+
+  const resolvedItems = typeof items === 'function' ? (open ? items() : []) : items
+
+  return (
+    <>
+      {triggerElement}
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label={ariaLabel}
+          onKeyDown={onMenuKey}
+          className="surface-popup anim-fade-slide-down"
+          style={{
+            position: 'fixed',
+            left: pos?.left ?? -9999,
+            top: pos?.top ?? -9999,
+            zIndex: 'var(--z-dropdown)',
+            borderRadius: 'var(--radius-md)',
+            padding: '4px 0',
+            minWidth: 180,
+            maxWidth: 260,
+            visibility: pos ? 'visible' : 'hidden',
+          }}
+        >
+          {resolvedItems.map((item) => {
+            if (item.kind === 'section') {
+              return (
+                <div
+                  key={item.id}
+                  role="presentation"
+                  className="px-3 py-1 text-[10px] uppercase tracking-wider text-[var(--color-text-3)] opacity-70"
+                >
+                  {item.label}
+                </div>
+              )
+            }
+            const isDanger = item.kind === 'danger'
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="menuitem"
+                className="context-menu-item"
+                disabled={item.disabled}
+                style={isDanger ? { color: 'var(--color-danger-text)' } : undefined}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  item.onSelect?.()
+                  if (!item.keepOpen) close()
+                }}
+              >
+                {item.colorDot && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: item.colorDot, flexShrink: 0,
+                    }}
+                  />
+                )}
+                {item.icon}
+                <span className="flex-1 text-left truncate">{item.label}</span>
+              </button>
+            )
+          })}
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
