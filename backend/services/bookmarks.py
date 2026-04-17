@@ -152,6 +152,8 @@ class BookmarkManager:
         lng: float,
         address: str = "",
         category_id: str = "default",
+        country_code: str = "",
+        country: str = "",
     ) -> Bookmark:
         """Create a new bookmark."""
         # Validate category
@@ -168,6 +170,8 @@ class BookmarkManager:
             category_id=category_id,
             created_at=now,
             last_used_at=now,
+            country_code=country_code,
+            country=country,
         )
         self.store.bookmarks.append(bm)
         self._save()
@@ -179,7 +183,10 @@ class BookmarkManager:
         if bm is None:
             return None
 
-        allowed = {"name", "lat", "lng", "address", "category_id", "last_used_at"}
+        allowed = {
+            "name", "lat", "lng", "address", "category_id", "last_used_at",
+            "country_code", "country",
+        }
         for key, value in kwargs.items():
             if key in allowed and value is not None:
                 setattr(bm, key, value)
@@ -195,6 +202,20 @@ class BookmarkManager:
             self._save()
             return True
         return False
+
+    def delete_bookmarks(self, bm_ids: list[str]) -> int:
+        """Delete multiple bookmarks by ID. Returns the number actually
+        removed. Unknown IDs are silently ignored — the caller just gets a
+        count of real deletions."""
+        if not bm_ids:
+            return 0
+        ids = set(bm_ids)
+        before = len(self.store.bookmarks)
+        self.store.bookmarks = [b for b in self.store.bookmarks if b.id not in ids]
+        removed = before - len(self.store.bookmarks)
+        if removed:
+            self._save()
+        return removed
 
     def list_bookmarks(self) -> list[Bookmark]:
         return list(self.store.bookmarks)

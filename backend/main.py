@@ -161,8 +161,46 @@ class AppState:
             return self.simulation_engine
         return self.simulation_engines.get(udid)
 
+    async def terminate_engine(self, udid: str, *, timeout: float = 2.0) -> None:
+        """Stop and dispose of the simulation engine for *udid*.
+
+        Guarantees that any in-flight Navigate / Loop / MultiStop /
+        RandomWalk / Joystick task is cancelled before the engine is
+        removed from the registry. Without this, a USB unplug during
+        active simulation leaves the background task running — it keeps
+        emitting ``position_update`` / ``navigation_complete`` events
+        against a dead device until it eventually errors out.
+        """
+        engine = self.simulation_engines.get(udid)
+        if engine is None:
+            return
+        try:
+            await asyncio.wait_for(engine.stop(), timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Engine stop for %s exceeded %.1fs — forcing cleanup",
+                udid, timeout,
+            )
+        except Exception:
+            logger.exception("Engine stop for %s raised; forcing cleanup", udid)
+        finally:
+            self.simulation_engines.pop(udid, None)
+            if self._primary_udid == udid:
+                self._primary_udid = next(iter(self.simulation_engines), None)
+
     async def create_engine_for_device(self, udid: str):
-        """Create a SimulationEngine for the connected device."""
+        """Create a SimulationEngine for the connected device.
+
+        The engine is left idle — no virtual location is pushed to the
+        iPhone until the user explicitly triggers a teleport / navigate /
+        bookmark / joystick action. This preserves the phone's real GPS
+        reading on pure connect and avoids silently overwriting it with a
+        stale saved position.
+
+        Primary-device slot rule: the first connected device becomes
+        primary. Subsequent connections are tracked as secondaries — they
+        do not hijack the map-view focus.
+        """
         from core.simulation_engine import SimulationEngine
         from api.websocket import broadcast
 
@@ -178,43 +216,130 @@ class AppState:
 
         engine = SimulationEngine(loc_service, event_callback)
         self.simulation_engines[udid] = engine
-        self._primary_udid = udid
-
-        # Set initial position and push to device
-        init = self.get_initial_position()
-        from models.schemas import Coordinate
-        engine.current_position = Coordinate(
-            lat=init["lat"], lng=init["lng"]
-        )
-
-        # Actually simulate the position on the device
-        try:
-            await loc_service.set(init["lat"], init["lng"])
-            logger.info("Initial position set on device: (%.6f, %.6f)", init["lat"], init["lng"])
-            # Notify frontend so it shows the restored position immediately.
-            await event_callback("position_update", {"lat": init["lat"], "lng": init["lng"]})
-        except Exception as exc:
-            # Don't leave a half-constructed engine behind — the location
-            # service channel is broken; drop the engine so _engine() will
-            # lazy-rebuild on the next movement command instead of reusing
-            # a dead service. Broadcast so the UI knows.
-            logger.exception("Failed to push initial position to device; clearing engine")
-            self.simulation_engines.pop(udid, None)
-            if self._primary_udid == udid:
-                self._primary_udid = next(iter(self.simulation_engines), None)
-            try:
-                await broadcast("device_error", {
-                    "udid": udid,
-                    "stage": "initial_position",
-                    "error": f"{exc.__class__.__name__}: {exc}",
-                })
-            except Exception:
-                pass
+        # Only claim the primary slot when it's free — preserves first-
+        # connected device on subsequent connections.
+        became_primary = self._primary_udid is None
+        if became_primary:
+            self._primary_udid = udid
 
         # Setup reconnect manager
         self.reconnect_manager = ReconnectManager(self.device_manager)
 
-        logger.info("Simulation engine created for device %s", udid)
+        logger.info(
+            "Simulation engine created for device %s (primary=%s)",
+            udid, became_primary,
+        )
+
+        # Dual-device auto-sync: if the primary is already running something,
+        # mirror it on the newcomer so both phones end up following the same
+        # plan without the user having to stop / restart.
+        if not became_primary:
+            await self._sync_new_device_to_primary(udid)
+
+    async def _sync_new_device_to_primary(self, new_udid: str) -> None:
+        """Replay the primary device's in-flight simulation on *new_udid*.
+
+        Run as fire-and-forget so the connect flow doesn't block on OSRM
+        route fetches. Always writes the primary's current position first so
+        the newcomer starts from the same coordinate; then dispatches the
+        snapshot-matching engine call on the new device's engine.
+        """
+        primary_udid = self._primary_udid
+        if primary_udid is None or primary_udid == new_udid:
+            return
+        primary = self.simulation_engines.get(primary_udid)
+        new_engine = self.simulation_engines.get(new_udid)
+        if primary is None or new_engine is None:
+            return
+        snapshot = primary.snapshot
+        if snapshot is None:
+            # Primary is idle — nothing to mirror.
+            return
+        start_pos = primary.current_position
+        if start_pos is None:
+            return
+
+        from models.schemas import Coordinate, MovementMode
+        from api.websocket import broadcast
+
+        try:
+            mmode = MovementMode(snapshot.movement_mode)
+        except ValueError:
+            logger.warning(
+                "Cannot replay snapshot on %s: unknown movement_mode %r",
+                new_udid, snapshot.movement_mode,
+            )
+            return
+
+        async def _do_sync() -> None:
+            try:
+                # Anchor the secondary to the primary's current coordinate
+                # so OSRM routing / random-walk origin matches.
+                await new_engine.teleport(start_pos.lat, start_pos.lng)
+                try:
+                    await broadcast("dual_sync_start", {
+                        "udid": new_udid,
+                        "primary_udid": primary_udid,
+                        "mode": snapshot.mode,
+                    })
+                except Exception:
+                    pass
+
+                if snapshot.mode == "navigate" and snapshot.destination:
+                    await new_engine.navigate(
+                        Coordinate(lat=snapshot.destination["lat"], lng=snapshot.destination["lng"]),
+                        mmode,
+                        speed_kmh=snapshot.speed_kmh,
+                        speed_min_kmh=snapshot.speed_min_kmh,
+                        speed_max_kmh=snapshot.speed_max_kmh,
+                        straight_line=snapshot.straight_line,
+                    )
+                elif snapshot.mode == "loop" and snapshot.waypoints:
+                    wps = [Coordinate(lat=w["lat"], lng=w["lng"]) for w in snapshot.waypoints]
+                    await new_engine.start_loop(
+                        wps, mmode,
+                        speed_kmh=snapshot.speed_kmh,
+                        speed_min_kmh=snapshot.speed_min_kmh,
+                        speed_max_kmh=snapshot.speed_max_kmh,
+                        pause_enabled=snapshot.pause_enabled,
+                        pause_min=snapshot.pause_min,
+                        pause_max=snapshot.pause_max,
+                        straight_line=snapshot.straight_line,
+                    )
+                elif snapshot.mode == "multi_stop" and snapshot.waypoints:
+                    wps = [Coordinate(lat=w["lat"], lng=w["lng"]) for w in snapshot.waypoints]
+                    await new_engine.multi_stop(
+                        wps, mmode,
+                        stop_duration=snapshot.stop_duration,
+                        loop=snapshot.loop_multistop,
+                        speed_kmh=snapshot.speed_kmh,
+                        speed_min_kmh=snapshot.speed_min_kmh,
+                        speed_max_kmh=snapshot.speed_max_kmh,
+                        pause_enabled=snapshot.pause_enabled,
+                        pause_min=snapshot.pause_min,
+                        pause_max=snapshot.pause_max,
+                        straight_line=snapshot.straight_line,
+                    )
+                elif snapshot.mode == "random_walk" and snapshot.center and snapshot.radius_m:
+                    await new_engine.random_walk(
+                        Coordinate(lat=snapshot.center["lat"], lng=snapshot.center["lng"]),
+                        snapshot.radius_m, mmode,
+                        speed_kmh=snapshot.speed_kmh,
+                        speed_min_kmh=snapshot.speed_min_kmh,
+                        speed_max_kmh=snapshot.speed_max_kmh,
+                        pause_enabled=snapshot.pause_enabled,
+                        pause_min=snapshot.pause_min,
+                        pause_max=snapshot.pause_max,
+                        seed=snapshot.seed,
+                        straight_line=snapshot.straight_line,
+                    )
+            except Exception:
+                logger.exception(
+                    "Dual-device auto-sync failed for %s (snapshot mode=%s)",
+                    new_udid, snapshot.mode,
+                )
+
+        asyncio.create_task(_do_sync(), name=f"dual-sync-{new_udid}")
 
 
 app_state = AppState()
@@ -281,17 +406,18 @@ async def _usbmux_presence_watchdog():
                 logger.warning("usbmux watchdog: device(s) gone → %s", lost_now)
                 for udid in lost_now:
                     miss_counts.pop(udid, None)
+                    # Stop & dispose the engine *before* tearing down the
+                    # transport. Otherwise the background simulation task
+                    # keeps emitting position_update / navigation_complete
+                    # events against a dead device.
+                    try:
+                        await app_state.terminate_engine(udid)
+                    except Exception:
+                        logger.exception("watchdog: terminate_engine failed for %s", udid)
                     try:
                         await dm.disconnect(udid)
                     except Exception:
                         logger.exception("watchdog: disconnect failed for %s", udid)
-                    # Only remove the lost device's engine. The legacy setter
-                    # `simulation_engine = None` wipes *all* engines, which
-                    # destroys the surviving device's engine in dual mode.
-                    app_state.simulation_engines.pop(udid, None)
-                    if app_state._primary_udid == udid:
-                        remaining = next(iter(app_state.simulation_engines.keys()), None)
-                        app_state._primary_udid = remaining
                 try:
                     await broadcast("device_disconnected", {
                         "udids": lost_now,
@@ -392,6 +518,14 @@ async def lifespan(application: FastAPI):
         pass
 
     app_state.save_settings()
+    # Stop all simulation engines before we drop transport. Otherwise
+    # async tasks racing against `disconnect_all()` can log push failures
+    # during shutdown.
+    for udid in list(app_state.simulation_engines.keys()):
+        try:
+            await app_state.terminate_engine(udid)
+        except Exception:
+            logger.exception("shutdown: terminate_engine failed for %s", udid)
     await app_state.device_manager.disconnect_all()
     logger.info("GPSController shut down")
 

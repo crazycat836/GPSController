@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from models.schemas import (
     Coordinate,
@@ -27,6 +29,43 @@ from core.random_walk import RandomWalkHandler
 from core.restore import RestoreHandler
 
 logger = logging.getLogger(__name__)
+
+
+SnapshotMode = Literal["navigate", "loop", "multi_stop", "random_walk"]
+
+
+@dataclass
+class SimulationSnapshot:
+    """Replayable description of a running simulation.
+
+    When a secondary device joins while the primary is already mid-action,
+    AppState hands this structure to the secondary's engine so both phones
+    end up following the same plan from the primary's current position.
+    Teleport/joystick are not snapshotted — teleport is a single-shot and
+    joystick is driven interactively from the frontend.
+    """
+
+    mode: SnapshotMode
+    movement_mode: str  # MovementMode.value
+    speed_kmh: float | None = None
+    speed_min_kmh: float | None = None
+    speed_max_kmh: float | None = None
+    # navigate
+    destination: dict | None = None  # {lat, lng}
+    # loop / multi_stop
+    waypoints: list[dict] = field(default_factory=list)  # list of {lat, lng}
+    # multi_stop extras
+    stop_duration: float = 0.0
+    loop_multistop: bool = False
+    # random_walk
+    center: dict | None = None  # {lat, lng}
+    radius_m: float | None = None
+    seed: int | None = None
+    # shared options
+    pause_enabled: bool = DEFAULT_PAUSE_ENABLED
+    pause_min: float = DEFAULT_PAUSE_MIN
+    pause_max: float = DEFAULT_PAUSE_MAX
+    straight_line: bool = False
 
 
 # ── ETA Tracker ──────────────────────────────────────────────────────────
@@ -103,6 +142,12 @@ class SimulationEngine:
         self.state: SimulationState = SimulationState.IDLE
         self.current_position: Coordinate | None = None
         self.event_callback = event_callback
+
+        # Most recent long-running action. Populated by navigate/start_loop/
+        # multi_stop/random_walk at the moment each begins, cleared when the
+        # engine returns to IDLE. AppState reads this to replay the same
+        # action on a newly-connected secondary device.
+        self.snapshot: SimulationSnapshot | None = None
 
         # Task management
         self._active_task: asyncio.Task | None = None
@@ -188,14 +233,27 @@ class SimulationEngine:
         await self._ensure_stopped()
         self._stop_event.clear()
         self._pause_event.set()
-        await self._run_handler(
-            self._navigator.navigate_to(
-                dest, mode, speed_kmh=speed_kmh,
-                speed_min_kmh=speed_min_kmh, speed_max_kmh=speed_max_kmh,
-                straight_line=straight_line,
-            ),
-            "Navigate",
+        self.snapshot = SimulationSnapshot(
+            mode="navigate",
+            movement_mode=mode.value,
+            speed_kmh=speed_kmh,
+            speed_min_kmh=speed_min_kmh,
+            speed_max_kmh=speed_max_kmh,
+            destination={"lat": dest.lat, "lng": dest.lng},
+            straight_line=straight_line,
         )
+        try:
+            await self._run_handler(
+                self._navigator.navigate_to(
+                    dest, mode, speed_kmh=speed_kmh,
+                    speed_min_kmh=speed_min_kmh, speed_max_kmh=speed_max_kmh,
+                    straight_line=straight_line,
+                ),
+                "Navigate",
+            )
+        finally:
+            if self.state == SimulationState.IDLE:
+                self.snapshot = None
 
     async def start_loop(
         self,
@@ -213,15 +271,31 @@ class SimulationEngine:
         await self._ensure_stopped()
         self._stop_event.clear()
         self._pause_event.set()
-        await self._run_handler(
-            self._looper.start_loop(
-                waypoints, mode, speed_kmh=speed_kmh,
-                speed_min_kmh=speed_min_kmh, speed_max_kmh=speed_max_kmh,
-                pause_enabled=pause_enabled, pause_min=pause_min, pause_max=pause_max,
-                straight_line=straight_line,
-            ),
-            "Loop",
+        self.snapshot = SimulationSnapshot(
+            mode="loop",
+            movement_mode=mode.value,
+            speed_kmh=speed_kmh,
+            speed_min_kmh=speed_min_kmh,
+            speed_max_kmh=speed_max_kmh,
+            waypoints=[{"lat": w.lat, "lng": w.lng} for w in waypoints],
+            pause_enabled=pause_enabled,
+            pause_min=pause_min,
+            pause_max=pause_max,
+            straight_line=straight_line,
         )
+        try:
+            await self._run_handler(
+                self._looper.start_loop(
+                    waypoints, mode, speed_kmh=speed_kmh,
+                    speed_min_kmh=speed_min_kmh, speed_max_kmh=speed_max_kmh,
+                    pause_enabled=pause_enabled, pause_min=pause_min, pause_max=pause_max,
+                    straight_line=straight_line,
+                ),
+                "Loop",
+            )
+        finally:
+            if self.state == SimulationState.IDLE:
+                self.snapshot = None
 
     async def joystick_start(self, mode: MovementMode) -> None:
         """Activate joystick mode."""
@@ -256,15 +330,33 @@ class SimulationEngine:
         await self._ensure_stopped()
         self._stop_event.clear()
         self._pause_event.set()
-        await self._run_handler(
-            self._multi_stop.start(
-                waypoints, mode, stop_duration, loop, speed_kmh=speed_kmh,
-                speed_min_kmh=speed_min_kmh, speed_max_kmh=speed_max_kmh,
-                pause_enabled=pause_enabled, pause_min=pause_min, pause_max=pause_max,
-                straight_line=straight_line,
-            ),
-            "Multi-stop",
+        self.snapshot = SimulationSnapshot(
+            mode="multi_stop",
+            movement_mode=mode.value,
+            speed_kmh=speed_kmh,
+            speed_min_kmh=speed_min_kmh,
+            speed_max_kmh=speed_max_kmh,
+            waypoints=[{"lat": w.lat, "lng": w.lng} for w in waypoints],
+            stop_duration=stop_duration,
+            loop_multistop=loop,
+            pause_enabled=pause_enabled,
+            pause_min=pause_min,
+            pause_max=pause_max,
+            straight_line=straight_line,
         )
+        try:
+            await self._run_handler(
+                self._multi_stop.start(
+                    waypoints, mode, stop_duration, loop, speed_kmh=speed_kmh,
+                    speed_min_kmh=speed_min_kmh, speed_max_kmh=speed_max_kmh,
+                    pause_enabled=pause_enabled, pause_min=pause_min, pause_max=pause_max,
+                    straight_line=straight_line,
+                ),
+                "Multi-stop",
+            )
+        finally:
+            if self.state == SimulationState.IDLE:
+                self.snapshot = None
 
     async def random_walk(
         self,
@@ -284,17 +376,40 @@ class SimulationEngine:
         await self._ensure_stopped()
         self._stop_event.clear()
         self._pause_event.set()
-        await self._run_handler(
-            self._random_walk.start(
-                center, radius_m, mode,
-                speed_kmh=speed_kmh,
-                speed_min_kmh=speed_min_kmh, speed_max_kmh=speed_max_kmh,
-                pause_enabled=pause_enabled, pause_min=pause_min, pause_max=pause_max,
-                seed=seed,
-                straight_line=straight_line,
-            ),
-            "Random walk",
+        # Always have a seed so a secondary device joining mid-walk can
+        # replay the same destination sequence. Unseeded callers get a
+        # time-based seed that's captured in the snapshot.
+        if seed is None:
+            seed = int(time.time() * 1000) & 0x7FFFFFFF
+        self.snapshot = SimulationSnapshot(
+            mode="random_walk",
+            movement_mode=mode.value,
+            speed_kmh=speed_kmh,
+            speed_min_kmh=speed_min_kmh,
+            speed_max_kmh=speed_max_kmh,
+            center={"lat": center.lat, "lng": center.lng},
+            radius_m=radius_m,
+            seed=seed,
+            pause_enabled=pause_enabled,
+            pause_min=pause_min,
+            pause_max=pause_max,
+            straight_line=straight_line,
         )
+        try:
+            await self._run_handler(
+                self._random_walk.start(
+                    center, radius_m, mode,
+                    speed_kmh=speed_kmh,
+                    speed_min_kmh=speed_min_kmh, speed_max_kmh=speed_max_kmh,
+                    pause_enabled=pause_enabled, pause_min=pause_min, pause_max=pause_max,
+                    seed=seed,
+                    straight_line=straight_line,
+                ),
+                "Random walk",
+            )
+        finally:
+            if self.state == SimulationState.IDLE:
+                self.snapshot = None
 
     async def pause(self) -> None:
         """Pause the active movement.
@@ -360,6 +475,9 @@ class SimulationEngine:
             await self._emit("state_change", {"state": self.state.value})
 
         self._paused_from = None
+        # Invalidate the replay snapshot — stop() is a user-intent terminator,
+        # and a late-joining secondary shouldn't resurrect the dead action.
+        self.snapshot = None
         logger.info("Simulation stopped")
 
     def get_status(self) -> SimulationStatus:

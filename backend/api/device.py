@@ -389,17 +389,20 @@ async def _cleanup_wifi_connections() -> list[str]:
             udid for udid, conn in list(dm._connections.items())
             if getattr(conn, "connection_type", "") == "Network"
         ]
+        # Stop engine tasks *before* tearing down the transport. A running
+        # Navigate / RandomWalk loop would otherwise keep emitting events
+        # against a dead RSD and spam "arrived at destination" log noise.
+        for udid in udids:
+            try:
+                await app_state.terminate_engine(udid)
+            except Exception:
+                _tunnel_logger.exception("Failed to terminate engine for %s", udid)
         for udid in udids:
             try:
                 await dm.disconnect(udid)
                 _tunnel_logger.info("Disconnected WiFi device %s", udid)
             except (OSError, RuntimeError):
                 _tunnel_logger.exception("Failed to disconnect %s", udid)
-        for udid in udids:
-            app_state.simulation_engines.pop(udid, None)
-            if app_state._primary_udid == udid:
-                remaining = next(iter(app_state.simulation_engines.keys()), None)
-                app_state._primary_udid = remaining
         if udids:
             try:
                 from api.websocket import broadcast
@@ -567,13 +570,13 @@ async def wifi_tunnel_stop():
                         usb_dev.udid,
                     )
                     try:
+                        await app_state.terminate_engine(usb_dev.udid)
+                    except Exception:
+                        pass
+                    try:
                         await dm.disconnect(usb_dev.udid)
                     except Exception:
                         pass
-                    app_state.simulation_engines.pop(usb_dev.udid, None)
-                    if app_state._primary_udid == usb_dev.udid:
-                        remaining = next(iter(app_state.simulation_engines.keys()), None)
-                        app_state._primary_udid = remaining
                     try:
                         from api.websocket import broadcast
                         await broadcast("device_error", {
@@ -680,11 +683,10 @@ async def connect_device(udid: str):
 async def disconnect_device(udid: str):
     from main import app_state
     dm = _dm()
+    # Terminate the simulation engine *before* the transport goes away so
+    # any running Navigate/Loop/MultiStop/RandomWalk task exits cleanly.
+    await app_state.terminate_engine(udid)
     await dm.disconnect(udid)
-    # Drop the per-udid engine (if any) so _engine() won't route to a dead service.
-    app_state.simulation_engines.pop(udid, None)
-    if app_state._primary_udid == udid:
-        app_state._primary_udid = next(iter(app_state.simulation_engines), None)
     try:
         from api.websocket import broadcast
         await broadcast("device_disconnected", {"udid": udid, "udids": [udid], "reason": "user"})

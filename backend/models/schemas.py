@@ -168,6 +168,12 @@ class Bookmark(BaseModel):
     category_id: str = "default"
     created_at: str = ""
     last_used_at: str = ""
+    # Populated by the backend when the bookmark is first created or edited.
+    # Kept as plain strings so the frontend can render a flag without a
+    # follow-up reverse-geocode round-trip. Optional for backward compat —
+    # existing JSON files without these fields load unchanged.
+    country_code: str = ""
+    country: str = ""
 
 
 class BookmarkMoveRequest(BaseModel):
@@ -207,3 +213,7 @@ class GeocodingResult(BaseModel):
     importance: float = 0.0
     country_code: str = ""
     country: str = ""
+    # A human-friendly short label extracted from the richest tier of the
+    # Nominatim address tree (POI > road > suburb > city > …). Populated by
+    # reverse lookups; empty on forward search results.
+    place_name: str = ""
