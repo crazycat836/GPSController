@@ -52,7 +52,7 @@ def _box_border(left: str, fill: str, right: str, inner_width: int = BOX_WIDTH) 
 def print_banner():
     print()
     print(_box_border("╔", "═", "╗"))
-    print(_box_line("   GPSController — iOS 虛擬定位模擬器 v0.6.1"))
+    print(_box_line("   GPSController — iOS 虛擬定位模擬器 v0.7.0"))
     print(_box_border("╚", "═", "╝"))
     print()
 
