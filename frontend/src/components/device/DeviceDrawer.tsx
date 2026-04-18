@@ -176,49 +176,98 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
             />
           ) : (
             <div className="flex flex-col gap-1.5">
-              {device.devices.map((d) => {
+              {device.devices.map((d, idx) => {
                 const major = parseInt((d.ios_version || '0').split('.')[0], 10) || 0
                 const unsupported = major > 0 && major < 16
                 const isSelected = d.udid === selectedUdid
                 const isNetwork = d.connection_type === 'Network'
+                // Letter avatar — design uses per-device initials. We use the
+                // list index (A, B, C, ...) since devices don't have a
+                // pre-assigned letter; falls back to first char of name for
+                // overflow past Z.
+                const letter = idx < 26 ? String.fromCharCode(65 + idx) : (d.name?.[0] ?? '•')
+                const avatarColor = isNetwork
+                  ? 'linear-gradient(135deg, #4ecdc4, #2aa39b)'
+                  : 'linear-gradient(135deg, #3a7cff, #1e50d4)'
 
                 const leading = unsupported ? (
-                  <CircleSlash
-                    width={ICON_SIZE.md}
-                    height={ICON_SIZE.md}
-                    className="text-[var(--color-error-text)]"
-                  />
-                ) : (
-                  <Smartphone
-                    width={ICON_SIZE.md}
-                    height={ICON_SIZE.md}
-                    className={isSelected ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-3)]'}
-                  />
-                )
-
-                const meta = unsupported ? undefined : (
                   <span
-                    className={[
-                      'inline-flex items-center gap-1 text-[10px] px-1.5 py-px rounded-md',
-                      isNetwork
-                        ? 'bg-[var(--color-success-dim)] text-[var(--color-success-text)]'
-                        : 'bg-[var(--color-accent-dim)] text-[var(--color-accent-strong)]',
-                    ].join(' ')}
+                    className="w-9 h-9 rounded-[10px] grid place-items-center shrink-0"
+                    style={{
+                      background: 'rgba(255,71,87,0.08)',
+                      border: '1px solid rgba(255,71,87,0.3)',
+                      color: 'var(--color-error-text)',
+                    }}
+                    aria-hidden="true"
                   >
-                    {isNetwork
-                      ? <Wifi width={10} height={10} />
-                      : <Usb width={10} height={10} />}
-                    {isNetwork ? 'Wi-Fi' : 'USB'}
+                    <CircleSlash width={ICON_SIZE.md} height={ICON_SIZE.md} />
+                  </span>
+                ) : (
+                  <span
+                    className="w-9 h-9 rounded-[10px] grid place-items-center shrink-0 text-white font-semibold text-[14px]"
+                    style={{
+                      background: avatarColor,
+                      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1)',
+                    }}
+                    aria-hidden="true"
+                  >
+                    {letter}
                   </span>
                 )
 
-                const trailing = isSelected ? (
-                  <Check
-                    width={ICON_SIZE.sm}
-                    height={ICON_SIZE.sm}
-                    className="text-[var(--color-success-text)]"
-                  />
-                ) : undefined
+                // Mono subtitle combining connection type + iOS version —
+                // matches the design's `USB · iOS 18.2` line.
+                const subtitle = unsupported ? (
+                  <span className="text-[var(--color-error-text)]">
+                    {t('device.ios_unsupported_label', { version: d.ios_version })}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 font-mono">
+                    {isNetwork
+                      ? <Wifi width={10} height={10} className="text-[var(--color-success-text)]" />
+                      : <Usb width={10} height={10} className="text-[var(--color-accent-strong)]" />}
+                    <span>{isNetwork ? 'Wi-Fi' : 'USB'}</span>
+                    <span className="text-[var(--color-text-3)] opacity-50">·</span>
+                    <span>iOS {d.ios_version}</span>
+                  </span>
+                )
+
+                // Status pill — dot + label matching the design's
+                // dev-status treatment (online / offline / pairing).
+                let statusDotColor = 'var(--color-text-3)'
+                let statusLabel: string = t('device.chip_state_idle')
+                let statusLabelColor = 'var(--color-text-3)'
+                if (unsupported) {
+                  statusDotColor = 'var(--color-danger)'
+                  statusLabel = 'Unsupported'
+                  statusLabelColor = 'var(--color-error-text)'
+                } else if (isSelected) {
+                  statusDotColor = 'var(--color-success-text)'
+                  statusLabel = t('device.chip_state_idle')
+                  statusLabelColor = 'var(--color-success-text)'
+                } else {
+                  statusDotColor = 'rgba(255,255,255,0.35)'
+                  statusLabel = 'Ready'
+                  statusLabelColor = 'var(--color-text-3)'
+                }
+
+                const trailing = (
+                  <span
+                    className="inline-flex items-center gap-1.5 font-mono text-[10px] shrink-0"
+                    style={{ color: statusLabelColor }}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{
+                        background: statusDotColor,
+                        boxShadow: isSelected && !unsupported
+                          ? '0 0 6px var(--color-success-text)'
+                          : 'none',
+                      }}
+                    />
+                    {statusLabel}
+                  </span>
+                )
 
                 return (
                   <ListRow
@@ -230,16 +279,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                     aria-label={d.name}
                     leading={leading}
                     title={<span className="truncate">{d.name}</span>}
-                    subtitle={
-                      unsupported
-                        ? (
-                          <span className="text-[var(--color-error-text)]">
-                            {t('device.ios_unsupported_label', { version: d.ios_version })}
-                          </span>
-                        )
-                        : <span className="font-mono">iOS {d.ios_version}</span>
-                    }
-                    meta={meta}
+                    subtitle={subtitle}
                     trailing={trailing}
                   />
                 )
