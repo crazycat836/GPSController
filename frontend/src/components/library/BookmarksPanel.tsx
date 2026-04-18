@@ -66,7 +66,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   }, [bookmarks, search, activeCategoryId, categoryMap])
 
   const chips = useMemo<Chip<string>[]>(() => {
-    const list: Chip<string>[] = [{ id: ALL_ID, label: 'All', count: bookmarks.length }]
+    const list: Chip<string>[] = [{ id: ALL_ID, label: t('bm.filter_all'), count: bookmarks.length }]
     for (const cat of categories) {
       list.push({
         id: cat.id,
@@ -409,7 +409,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
                     width={ICON_SIZE.xs}
                     height={ICON_SIZE.xs}
                     className="text-[var(--color-text-3)] opacity-60 shrink-0"
-                    aria-label="Has note"
+                    aria-label={t('bm.has_note')}
                   />
                 )}
               </>
@@ -506,7 +506,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
           confirm?.kind === 'batch'
             ? t('bm.confirm_batch_delete', { n: confirm.ids.length })
             : confirm?.kind === 'single'
-              ? `${t('generic.delete')} "${confirm.name}"?`
+              ? t('bm.confirm_delete', { name: confirm.name })
               : undefined
         }
         confirmLabel={t('generic.delete')}
