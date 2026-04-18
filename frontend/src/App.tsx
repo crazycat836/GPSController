@@ -349,11 +349,9 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
       {/* Floating overlay components */}
       <TopBar
-        leftContent={
-          <>
-            <Brand />
-            <SearchBar onTeleport={handleTeleportOrStage} deviceConnected={device.connectedDevice !== null} />
-          </>
+        leftContent={<Brand />}
+        centerContent={
+          <SearchBar onTeleport={handleTeleportOrStage} deviceConnected={device.connectedDevice !== null} />
         }
         rightContent={
           <TopBarActions

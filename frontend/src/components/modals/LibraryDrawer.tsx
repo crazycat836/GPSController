@@ -32,13 +32,17 @@ const LibraryDrawer: React.FC<LibraryDrawerProps> = ({ open, onClose }) => {
     { id: 'routes', label: t('panel.routes_count'), count: savedRoutes.length },
   ]
 
+  const activeCategoryCount = bm.categories.length
+  const libSubtitle = `${bm.bookmarks.length} ${t('panel.bookmarks_count').toLowerCase()} · ${activeCategoryCount} ${t('bm.manage_categories').toLowerCase()}`
+
   return (
     <Drawer
       open={open}
       onClose={onClose}
       title="Library"
-      icon={<BookOpen className="w-4 h-4" />}
-      width="w-[min(440px,92vw)]"
+      subtitle={libSubtitle}
+      icon={<BookOpen className="w-[18px] h-[18px]" />}
+      width="w-[min(480px,100vw)]"
     >
       <div className="px-4 pt-3 pb-1">
         <PanelTabs

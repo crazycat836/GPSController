@@ -45,7 +45,10 @@ export default function MiniStatusBar() {
     })
   }, [currentPos])
 
-  if (!isConnected) return null
+  // Even when no device is connected we still render a placeholder chip so
+  // the top-left "status pair" doesn't appear to vanish. The old bar used
+  // an early-return-null; users found it confusing in the redesigned
+  // layout because the whole corner went empty on launch.
 
   const presetKey = avatar.current.kind === 'preset' ? avatar.current.key : null
   const avatarPreset = presetKey
@@ -58,8 +61,16 @@ export default function MiniStatusBar() {
       className="absolute top-[4.25rem] left-3 z-[var(--z-ui)] flex flex-col items-start gap-2 max-w-[300px]"
       aria-label="Status"
     >
-      {/* Device pill(s) */}
-      {isDual ? (
+      {/* Device pill(s) — placeholder when none connected */}
+      {!isConnected ? (
+        <div
+          className="glass-pill inline-flex items-center gap-2 h-10 px-3.5 text-[12px]"
+          title={t('status.disconnected')}
+        >
+          <Smartphone className="w-4 h-4 text-[var(--color-text-3)] shrink-0" />
+          <span className="text-[var(--color-text-2)]">{t('device.no_device')}</span>
+        </div>
+      ) : isDual ? (
         device.connectedDevices.slice(0, 2).map((dev, i) => (
           <DevicePill
             key={dev.udid}

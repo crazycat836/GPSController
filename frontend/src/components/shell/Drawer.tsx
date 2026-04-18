@@ -6,34 +6,47 @@ interface DrawerProps {
   open: boolean
   onClose: () => void
   title: string
+  /** Muted line below the title — e.g. "24 bookmarks · 4 categories". */
+  subtitle?: React.ReactNode
   icon?: React.ReactNode
   side?: 'left' | 'right'
   width?: string
+  /** Optional 34px glass icon buttons rendered to the left of the close button. */
+  headerActions?: React.ReactNode
   children: React.ReactNode
 }
 
-export default function Drawer({ open, onClose, title, icon, side = 'right', width = 'w-80', children }: DrawerProps) {
+// Deep-glass drawer derived from the redesign/Home library/device surfaces:
+// rgba(15,16,20,0.96) + blur(28px) saturate(1.5). Keeps the existing
+// focus trap / Esc dismissal / backdrop behaviour.
+export default function Drawer({
+  open,
+  onClose,
+  title,
+  subtitle,
+  icon,
+  side = 'right',
+  width = 'w-80',
+  headerActions,
+  children,
+}: DrawerProps) {
   const isLeft = side === 'left'
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const titleId = `drawer-title-${title.replace(/\s+/g, '-').toLowerCase()}`
 
-  // Save previously focused element and focus the close button when drawer opens
   useEffect(() => {
     if (open) {
       previousFocusRef.current = document.activeElement as HTMLElement
-      // Defer focus to after the transition starts
       const timer = setTimeout(() => {
         closeButtonRef.current?.focus()
       }, 50)
       return () => clearTimeout(timer)
     } else {
-      // Return focus when drawer closes
       previousFocusRef.current?.focus()
     }
   }, [open])
 
-  // Close on Escape key
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => {
@@ -43,7 +56,6 @@ export default function Drawer({ open, onClose, title, icon, side = 'right', wid
     return () => document.removeEventListener('keydown', handler)
   }, [open, onClose])
 
-  // Focus trap
   useEffect(() => {
     if (!open) return
     const panel = closeButtonRef.current?.closest('[role="dialog"]') as HTMLElement | null
@@ -78,7 +90,11 @@ export default function Drawer({ open, onClose, title, icon, side = 'right', wid
       {/* Backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-[var(--z-drawer)] bg-black/30 transition-opacity"
+          className={[
+            'fixed inset-0 z-[var(--z-drawer)]',
+            'bg-[rgba(8,9,13,0.55)] backdrop-blur-[4px] [-webkit-backdrop-filter:blur(4px)]',
+            'transition-opacity',
+          ].join(' ')}
           onClick={onClose}
           aria-hidden="true"
         />
@@ -91,11 +107,14 @@ export default function Drawer({ open, onClose, title, icon, side = 'right', wid
         aria-labelledby={titleId}
         className={[
           'fixed inset-y-0 z-[var(--z-drawer)]',
-          isLeft ? 'left-0 border-r' : 'right-0 border-l',
+          isLeft ? 'left-0' : 'right-0',
           width,
-          'bg-[var(--color-surface-1)]',
-          'border-[var(--color-border)]',
-          'shadow-[var(--shadow-lg)]',
+          // Deep-glass surface — matches redesign/Home library drawer.
+          'bg-[rgba(15,16,20,0.96)] backdrop-blur-[28px] backdrop-saturate-150',
+          '[-webkit-backdrop-filter:blur(28px)_saturate(1.5)]',
+          isLeft
+            ? 'border-r border-[var(--color-border-strong)] shadow-[16px_0_48px_rgba(0,0,0,0.5)]'
+            : 'border-l border-[var(--color-border-strong)] shadow-[-16px_0_48px_rgba(0,0,0,0.5)]',
           'flex flex-col',
           'transform transition-transform duration-[280ms] ease-[var(--ease-out-expo)]',
           open
@@ -104,17 +123,41 @@ export default function Drawer({ open, onClose, title, icon, side = 'right', wid
         ].join(' ')}
       >
         {/* Header */}
-        <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-[var(--color-border)] shrink-0">
-          {icon && <span className="text-[var(--color-accent)]">{icon}</span>}
-          <h2 id={titleId} className="text-[14px] font-semibold text-[var(--color-text-1)] flex-1">{title}</h2>
-          <button
-            ref={closeButtonRef}
-            onClick={onClose}
-            className="w-11 h-11 rounded-lg flex items-center justify-center text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-white/[0.06] transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
-            aria-label="Close"
-          >
-            <X className="w-4 h-4" />
-          </button>
+        <div className="flex items-start gap-3 px-5 pt-5 pb-4 border-b border-[var(--color-border-subtle)] shrink-0">
+          {icon && (
+            <span className="text-[var(--color-accent)] mt-1 shrink-0">{icon}</span>
+          )}
+          <div className="flex-1 min-w-0">
+            <h2
+              id={titleId}
+              className="text-[22px] font-semibold tracking-[-0.02em] text-[var(--color-text-1)] leading-tight"
+            >
+              {title}
+            </h2>
+            {subtitle != null && (
+              <div className="text-[12px] text-[var(--color-text-3)] font-medium mt-0.5 truncate">
+                {subtitle}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {headerActions}
+            <button
+              ref={closeButtonRef}
+              onClick={onClose}
+              className={[
+                'w-[34px] h-[34px] rounded-[10px] grid place-items-center',
+                'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
+                'bg-white/[0.04] hover:bg-white/[0.08]',
+                'border border-[var(--color-border)]',
+                'transition-colors duration-150 cursor-pointer',
+                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]',
+              ].join(' ')}
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}

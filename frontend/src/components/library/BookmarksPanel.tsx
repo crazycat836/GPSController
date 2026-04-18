@@ -347,38 +347,31 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
             const checked = selectedIds.has(b.id)
             const isInlineEditing = inlineEditId === b.id
 
-            const leading = (
-              <>
-                {selectionMode ? (
-                  <span
-                    aria-hidden="true"
-                    className="w-4 h-4 rounded-[4px] border flex items-center justify-center"
-                    style={{
-                      borderColor: checked ? 'var(--color-accent)' : 'var(--color-border-strong)',
-                      background: checked ? 'var(--color-accent)' : 'transparent',
-                    }}
-                  >
-                    {checked && <Check width={ICON_SIZE.xs} height={ICON_SIZE.xs} className="text-white" />}
-                  </span>
-                ) : (
-                  <>
-                    <span
-                      aria-hidden="true"
-                      style={{ width: 8, height: 8, borderRadius: '50%', background: catColor }}
-                    />
-                    {b.country_code && (
-                      <img
-                        src={`https://flagcdn.com/w40/${b.country_code}.png`}
-                        alt={b.country_code.toUpperCase()}
-                        width={14}
-                        height={10}
-                        className="rounded-[2px] shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                      />
-                    )}
-                  </>
-                )}
-              </>
+            // Gradient icon tile per category, derived from the redesign/Home
+            // library rows. Selection mode swaps the tile for a checkbox.
+            const leading = selectionMode ? (
+              <span
+                aria-hidden="true"
+                className="w-9 h-9 rounded-[10px] border flex items-center justify-center shrink-0"
+                style={{
+                  borderColor: checked ? 'var(--color-accent)' : 'var(--color-border-strong)',
+                  background: checked ? 'var(--color-accent)' : 'rgba(255,255,255,0.02)',
+                }}
+              >
+                {checked && <Check width={ICON_SIZE.sm} height={ICON_SIZE.sm} className="text-white" strokeWidth={3} />}
+              </span>
+            ) : (
+              <span
+                aria-hidden="true"
+                className="w-9 h-9 rounded-[10px] grid place-items-center shrink-0"
+                style={{
+                  background: `linear-gradient(135deg, color-mix(in srgb, ${catColor} 22%, transparent), color-mix(in srgb, ${catColor} 6%, transparent))`,
+                  border: `1px solid color-mix(in srgb, ${catColor} 32%, transparent)`,
+                  color: catColor,
+                }}
+              >
+                <BookmarkIcon width={ICON_SIZE.md} height={ICON_SIZE.md} strokeWidth={2} />
+              </span>
             )
 
             const titleNode = isInlineEditing ? (
@@ -415,11 +408,43 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
               </>
             )
 
-            const meta = cat ? (
-              <span className="opacity-75 truncate max-w-[80px]">
-                {displayCat(catName)}
+            // Subtitle blends the category tag + coords + country so the
+            // category is visible in text (design treats tile color as the
+            // primary cue, text as the secondary confirmation).
+            const subtitleNode = (
+              <span className="inline-flex items-center gap-1.5 min-w-0">
+                {cat && (
+                  <span
+                    className="inline-block px-1.5 py-px rounded-[3px] text-[9.5px] font-medium uppercase tracking-[0.03em]"
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'var(--color-text-2)',
+                      fontFamily: 'Inter, sans-serif',
+                      letterSpacing: '0.03em',
+                    }}
+                  >
+                    {displayCat(catName)}
+                  </span>
+                )}
+                <span className="font-mono truncate">
+                  {b.lat.toFixed(4)}°, {b.lng.toFixed(4)}°
+                </span>
+                {b.country_code && (
+                  <>
+                    <span className="text-[var(--color-text-3)] opacity-50">·</span>
+                    <img
+                      src={`https://flagcdn.com/w40/${b.country_code}.png`}
+                      alt={b.country_code.toUpperCase()}
+                      width={14}
+                      height={10}
+                      className="rounded-[2px] shadow-[0_0_0_1px_rgba(255,255,255,0.08)] shrink-0"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                    />
+                    {b.country && <span className="truncate max-w-[80px]">{b.country}</span>}
+                  </>
+                )}
               </span>
-            ) : undefined
+            )
 
             const trailing = selectionMode ? undefined : (
               <KebabMenu
@@ -457,9 +482,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
                 aria-pressed={selectionMode ? checked : undefined}
                 leading={leading}
                 title={titleNode}
-                subtitle={`${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}`}
-                monoSubtitle
-                meta={meta}
+                subtitle={subtitleNode}
                 trailing={trailing}
               />
             )
