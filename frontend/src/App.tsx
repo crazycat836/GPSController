@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Smartphone, Wifi, Usb } from 'lucide-react'
 import { useT } from './i18n'
 import { useWebSocket } from './hooks/useWebSocket'
 import { SimMode } from './hooks/useSimulation'
@@ -324,29 +323,10 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
           <ErrorBanner message={sim.error} onDismiss={sim.clearError} />
         )}
 
-        {/* Device chip — bottom-left */}
-        <button
-          onClick={() => setDeviceDrawerOpen(true)}
-          className="absolute bottom-3 left-3 z-[var(--z-ui)] surface-control rounded-lg px-3 py-2 flex items-center gap-2.5 text-xs cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors"
-        >
-          <div className="relative">
-            <Smartphone className="w-4 h-4 text-[var(--color-text-2)]" />
-            <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ring-2 ring-[var(--color-surface-1)] ${device.connectedDevices.length > 0 ? 'bg-green-400' : 'bg-red-400'}`} />
-          </div>
-          {device.connectedDevices.length > 0 ? (
-            device.connectedDevices.map((d, i) => (
-              <span key={d.udid} className="flex items-center gap-1.5">
-                {i > 0 && <span className="text-[var(--color-text-3)]">/</span>}
-                <span className="text-[var(--color-text-1)] font-medium">{d.name}</span>
-                {d.connection_type === 'Network'
-                  ? <Wifi className="w-3 h-3 text-green-400" />
-                  : <Usb className="w-3 h-3 text-[var(--color-accent)]" />}
-              </span>
-            ))
-          ) : (
-            <span className="text-[var(--color-text-3)]">{t('status.disconnected')}</span>
-          )}
-        </button>
+        {/* The bottom-left device chip was removed in the design-handoff
+            phase 3: device info lives in the top-right status pair
+            (MiniStatusBar) and the DeviceDrawer trigger lives in the
+            TopBar's right action cluster. */}
 
         <EtaBar
           runtimes={sim.runtimes}
