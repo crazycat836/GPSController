@@ -65,6 +65,41 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     })
   }, [bookmarks, search, activeCategoryId, categoryMap])
 
+  // Sections for the "All" chip view — design/Home renders library as
+  // grouped sections (Pinned / Recents / …). We group by category so
+  // users see structure without needing new backend fields.
+  const sections = useMemo(() => {
+    const searching = search.trim().length > 0
+    if (searching || activeCategoryId !== ALL_ID) return null
+    const buckets = new Map<string, Bookmark[]>()
+    for (const b of filtered) {
+      const key = b.category_id || '__uncategorized__'
+      if (!buckets.has(key)) buckets.set(key, [])
+      buckets.get(key)!.push(b)
+    }
+    const ordered = categories
+      .map((c) => ({
+        id: c.id,
+        label: displayCat(c.name),
+        list: buckets.get(c.id) ?? [],
+      }))
+      .filter((s) => s.list.length > 0)
+    const orphans = buckets.get('__uncategorized__')
+    if (orphans && orphans.length > 0) {
+      ordered.push({ id: '__uncategorized__', label: displayCat('Uncategorized'), list: orphans })
+    }
+    return ordered
+  }, [filtered, activeCategoryId, search, categories, displayCat])
+
+  // Match by coordinate to flag the currently-loaded bookmark — mirrors
+  // the design's `.bm.active` left accent bar. Float epsilon accounts
+  // for round-trip through SimContext (stores as number, not string).
+  const isBookmarkActive = useCallback((b: Bookmark): boolean => {
+    if (!currentPosition) return false
+    return Math.abs(b.lat - currentPosition.lat) < 1e-5
+      && Math.abs(b.lng - currentPosition.lng) < 1e-5
+  }, [currentPosition])
+
   const chips = useMemo<Chip<string>[]>(() => {
     const list: Chip<string>[] = [{ id: ALL_ID, label: t('bm.filter_all'), count: bookmarks.length }]
     for (const cat of categories) {
@@ -222,6 +257,178 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   // ─── Render ─────────────────────────────────────────────────
   const searching = search.trim().length > 0
 
+  // Shared row renderer — used by both the flat filtered view and the
+  // sectioned (chip="All") grouped view, so both paths stay in lockstep.
+  const renderBookmarkRow = (b: Bookmark) => {
+    const cat = categoryMap.get(b.category_id || '')
+    const catName = cat?.name || ''
+    const catColor = cat ? getCategoryColor(catName) : 'var(--color-text-3)'
+    const checked = selectedIds.has(b.id)
+    const isInlineEditing = inlineEditId === b.id
+    const isActive = isBookmarkActive(b)
+
+    // Gradient icon tile per category, derived from the redesign/Home
+    // library rows. Selection mode swaps the tile for a checkbox.
+    const leading = selectionMode ? (
+      <span
+        aria-hidden="true"
+        className="w-9 h-9 rounded-[10px] border flex items-center justify-center shrink-0"
+        style={{
+          borderColor: checked ? 'var(--color-accent)' : 'var(--color-border-strong)',
+          background: checked ? 'var(--color-accent)' : 'rgba(255,255,255,0.02)',
+        }}
+      >
+        {checked && <Check width={ICON_SIZE.sm} height={ICON_SIZE.sm} className="text-white" strokeWidth={3} />}
+      </span>
+    ) : (
+      <span
+        aria-hidden="true"
+        className="w-9 h-9 rounded-[10px] grid place-items-center shrink-0"
+        style={{
+          background: `linear-gradient(135deg, color-mix(in srgb, ${catColor} 22%, transparent), color-mix(in srgb, ${catColor} 6%, transparent))`,
+          border: `1px solid color-mix(in srgb, ${catColor} 32%, transparent)`,
+          color: catColor,
+        }}
+      >
+        <BookmarkIcon width={ICON_SIZE.md} height={ICON_SIZE.md} strokeWidth={2} />
+      </span>
+    )
+
+    const titleNode = isInlineEditing ? (
+      <input
+        autoFocus
+        type="text"
+        className="search-input w-full"
+        value={inlineEditName}
+        onChange={(e) => setInlineEditName(e.target.value)}
+        onBlur={() => commitInlineRename(b.id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commitInlineRename(b.id)
+          else if (e.key === 'Escape') setInlineEditId(null)
+        }}
+        onClick={(e) => e.stopPropagation()}
+        style={{ paddingLeft: 8, height: 28 }}
+      />
+    ) : (
+      <>
+        <span className="truncate">{b.name}</span>
+        {copiedId === b.id && (
+          <span className="text-[10px] text-[var(--color-success-text)]">
+            <Check width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
+          </span>
+        )}
+        {b.note && (
+          <StickyNote
+            width={ICON_SIZE.xs}
+            height={ICON_SIZE.xs}
+            className="text-[var(--color-text-3)] opacity-60 shrink-0"
+            aria-label={t('bm.has_note')}
+          />
+        )}
+      </>
+    )
+
+    const subtitleNode = (
+      <span className="inline-flex items-center gap-1.5 min-w-0">
+        {cat && (
+          <span
+            className="inline-block px-1.5 py-px rounded-[3px] text-[9.5px] font-medium uppercase tracking-[0.03em]"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              color: 'var(--color-text-2)',
+              fontFamily: 'Inter, sans-serif',
+              letterSpacing: '0.03em',
+            }}
+          >
+            {displayCat(catName)}
+          </span>
+        )}
+        <span className="font-mono truncate">
+          {b.lat.toFixed(4)}°, {b.lng.toFixed(4)}°
+        </span>
+        {b.country_code && (
+          <>
+            <span className="text-[var(--color-text-3)] opacity-50">·</span>
+            <img
+              src={`https://flagcdn.com/w40/${b.country_code}.png`}
+              alt={b.country_code.toUpperCase()}
+              width={14}
+              height={10}
+              className="rounded-[2px] shadow-[0_0_0_1px_rgba(255,255,255,0.08)] shrink-0"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+            />
+            {b.country && <span className="truncate max-w-[80px]">{b.country}</span>}
+          </>
+        )}
+      </span>
+    )
+
+    const trailing = selectionMode ? undefined : (
+      <span className="inline-flex items-center gap-1">
+        <HoverAction
+          onClick={(e) => { e.stopPropagation(); setEditing({ mode: 'edit', bookmark: b }) }}
+          label={t('bm.edit')}
+        >
+          <Pencil width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
+        </HoverAction>
+        <HoverAction
+          onClick={(e) => { e.stopPropagation(); confirmDeleteOne(b) }}
+          label={t('generic.delete')}
+          danger
+        >
+          <Trash2 width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
+        </HoverAction>
+        <KebabMenu
+          items={() => rowMenuItems(b)}
+          ariaLabel={t('bm.bookmark_actions')}
+        />
+      </span>
+    )
+
+    return (
+      <div key={b.id} className="relative">
+        {/* Design's .bm.active left accent bar — rendered only when the
+            bookmark's coords match the current simulated position. */}
+        {isActive && (
+          <span
+            aria-hidden="true"
+            className="absolute left-[2px] top-[14px] bottom-[14px] w-[2px] rounded-[2px]"
+            style={{ background: 'var(--color-accent)' }}
+          />
+        )}
+        <ListRow
+          as="button"
+          density="compact"
+          className={['group', isActive ? 'pl-4' : ''].join(' ')}
+          selected={(selectionMode && checked) || isActive}
+          onClick={() => {
+            if (selectionMode) toggleSelected(b.id)
+            else if (!isInlineEditing) onBookmarkClick(b.lat, b.lng)
+          }}
+          onDoubleClick={(e) => {
+            if (selectionMode) return
+            e.preventDefault()
+            setInlineEditId(b.id)
+            setInlineEditName(b.name)
+          }}
+          onContextMenu={(e) => {
+            if (selectionMode || isInlineEditing) return
+            e.preventDefault()
+            const kebab = (e.currentTarget as HTMLElement)
+              .querySelector<HTMLButtonElement>('.list-row-trailing .kebab-btn')
+            kebab?.click()
+          }}
+          aria-label={b.name}
+          aria-pressed={selectionMode ? checked : undefined}
+          leading={leading}
+          title={titleNode}
+          subtitle={subtitleNode}
+          trailing={trailing}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex flex-col gap-3 p-4 pb-[92px]">
       {/* Top row: search occupies main width, kebab tucks to the right.
@@ -283,7 +490,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         </div>
       )}
 
-      {/* List */}
+      {/* List — sectioned when chip is "All" (no search), flat otherwise. */}
       {bookmarks.length === 0 ? (
         <EmptyState
           icon={<BookmarkIcon width={ICON_SIZE.lg} height={ICON_SIZE.lg} />}
@@ -295,177 +502,27 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
           icon={<BookmarkIcon width={ICON_SIZE.lg} height={ICON_SIZE.lg} />}
           title={searching ? t('bm.search_no_results') : t('bm.blank')}
         />
+      ) : sections ? (
+        <div className="flex flex-col gap-4">
+          {sections.map((section) => (
+            <div key={section.id} className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between px-1 pt-1">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-3)]">
+                  {section.label}
+                </span>
+                <span className="font-mono text-[10px] text-[var(--color-text-3)] opacity-70">
+                  {section.list.length}
+                </span>
+              </div>
+              {section.list.map((b) => renderBookmarkRow(b))}
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {filtered.map((b) => {
-            const cat = categoryMap.get(b.category_id || '')
-            const catName = cat?.name || ''
-            const catColor = cat ? getCategoryColor(catName) : 'var(--color-text-3)'
-            const checked = selectedIds.has(b.id)
-            const isInlineEditing = inlineEditId === b.id
-
-            // Gradient icon tile per category, derived from the redesign/Home
-            // library rows. Selection mode swaps the tile for a checkbox.
-            const leading = selectionMode ? (
-              <span
-                aria-hidden="true"
-                className="w-9 h-9 rounded-[10px] border flex items-center justify-center shrink-0"
-                style={{
-                  borderColor: checked ? 'var(--color-accent)' : 'var(--color-border-strong)',
-                  background: checked ? 'var(--color-accent)' : 'rgba(255,255,255,0.02)',
-                }}
-              >
-                {checked && <Check width={ICON_SIZE.sm} height={ICON_SIZE.sm} className="text-white" strokeWidth={3} />}
-              </span>
-            ) : (
-              <span
-                aria-hidden="true"
-                className="w-9 h-9 rounded-[10px] grid place-items-center shrink-0"
-                style={{
-                  background: `linear-gradient(135deg, color-mix(in srgb, ${catColor} 22%, transparent), color-mix(in srgb, ${catColor} 6%, transparent))`,
-                  border: `1px solid color-mix(in srgb, ${catColor} 32%, transparent)`,
-                  color: catColor,
-                }}
-              >
-                <BookmarkIcon width={ICON_SIZE.md} height={ICON_SIZE.md} strokeWidth={2} />
-              </span>
-            )
-
-            const titleNode = isInlineEditing ? (
-              <input
-                autoFocus
-                type="text"
-                className="search-input w-full"
-                value={inlineEditName}
-                onChange={(e) => setInlineEditName(e.target.value)}
-                onBlur={() => commitInlineRename(b.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitInlineRename(b.id)
-                  else if (e.key === 'Escape') setInlineEditId(null)
-                }}
-                onClick={(e) => e.stopPropagation()}
-                style={{ paddingLeft: 8, height: 28 }}
-              />
-            ) : (
-              <>
-                <span className="truncate">{b.name}</span>
-                {copiedId === b.id && (
-                  <span className="text-[10px] text-[var(--color-success-text)]">
-                    <Check width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
-                  </span>
-                )}
-                {b.note && (
-                  <StickyNote
-                    width={ICON_SIZE.xs}
-                    height={ICON_SIZE.xs}
-                    className="text-[var(--color-text-3)] opacity-60 shrink-0"
-                    aria-label={t('bm.has_note')}
-                  />
-                )}
-              </>
-            )
-
-            // Subtitle blends the category tag + coords + country so the
-            // category is visible in text (design treats tile color as the
-            // primary cue, text as the secondary confirmation).
-            const subtitleNode = (
-              <span className="inline-flex items-center gap-1.5 min-w-0">
-                {cat && (
-                  <span
-                    className="inline-block px-1.5 py-px rounded-[3px] text-[9.5px] font-medium uppercase tracking-[0.03em]"
-                    style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      color: 'var(--color-text-2)',
-                      fontFamily: 'Inter, sans-serif',
-                      letterSpacing: '0.03em',
-                    }}
-                  >
-                    {displayCat(catName)}
-                  </span>
-                )}
-                <span className="font-mono truncate">
-                  {b.lat.toFixed(4)}°, {b.lng.toFixed(4)}°
-                </span>
-                {b.country_code && (
-                  <>
-                    <span className="text-[var(--color-text-3)] opacity-50">·</span>
-                    <img
-                      src={`https://flagcdn.com/w40/${b.country_code}.png`}
-                      alt={b.country_code.toUpperCase()}
-                      width={14}
-                      height={10}
-                      className="rounded-[2px] shadow-[0_0_0_1px_rgba(255,255,255,0.08)] shrink-0"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                    />
-                    {b.country && <span className="truncate max-w-[80px]">{b.country}</span>}
-                  </>
-                )}
-              </span>
-            )
-
-            // Trailing — hover-reveal Edit + Delete quick actions plus a
-            // always-visible kebab for Copy / Move-to / Delete fallback.
-            // Matches the redesign/Home .bm-actions strip.
-            const trailing = selectionMode ? undefined : (
-              <span className="inline-flex items-center gap-1">
-                <HoverAction
-                  onClick={(e) => { e.stopPropagation(); setEditing({ mode: 'edit', bookmark: b }) }}
-                  label={t('bm.edit')}
-                >
-                  <Pencil width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
-                </HoverAction>
-                <HoverAction
-                  onClick={(e) => { e.stopPropagation(); confirmDeleteOne(b) }}
-                  label={t('generic.delete')}
-                  danger
-                >
-                  <Trash2 width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
-                </HoverAction>
-                <KebabMenu
-                  items={() => rowMenuItems(b)}
-                  ariaLabel={t('bm.bookmark_actions')}
-                />
-              </span>
-            )
-
-            return (
-              <ListRow
-                key={b.id}
-                as="button"
-                density="compact"
-                className="group"
-                selected={selectionMode && checked}
-                onClick={() => {
-                  if (selectionMode) toggleSelected(b.id)
-                  else if (!isInlineEditing) onBookmarkClick(b.lat, b.lng)
-                }}
-                onDoubleClick={(e) => {
-                  if (selectionMode) return
-                  e.preventDefault()
-                  setInlineEditId(b.id)
-                  setInlineEditName(b.name)
-                }}
-                onContextMenu={(e) => {
-                  // Keep muscle-memory: right-click surfaces the same kebab
-                  // menu without requiring users to find the small ⋮ trigger.
-                  if (selectionMode || isInlineEditing) return
-                  e.preventDefault()
-                  const kebab = (e.currentTarget as HTMLElement)
-                    .querySelector<HTMLButtonElement>('.list-row-trailing .kebab-btn')
-                  kebab?.click()
-                }}
-                aria-label={b.name}
-                aria-pressed={selectionMode ? checked : undefined}
-                leading={leading}
-                title={titleNode}
-                subtitle={subtitleNode}
-                trailing={trailing}
-              />
-            )
-          })}
+          {filtered.map((b) => renderBookmarkRow(b))}
         </div>
       )}
-
       {/* Edit dialog (create + edit share one component) */}
       {editing && (
         editing.mode === 'create' ? (
