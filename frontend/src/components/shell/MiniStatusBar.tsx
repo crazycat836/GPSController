@@ -1,22 +1,19 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { Copy, Check, Smartphone, Usb, Wifi, MapPin } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
-import { useAvatarContext } from '../../contexts/AvatarContext'
 import { useI18n, useT } from '../../i18n'
 import { useReverseGeocode } from '../../hooks/useReverseGeocode'
 import { useWeather } from '../../hooks/useWeather'
 import WeatherChip from './WeatherChip'
-import AvatarPicker from './AvatarPicker'
-import { AVATAR_PRESETS } from '../../lib/avatars'
 import { DEVICE_COLORS, DEVICE_LETTERS } from '../../lib/constants'
 import type { DeviceInfo } from '../../hooks/useDevice'
 
-// Status pair — three glass-pill chips stacked vertically in the top-right.
-// Derived from the redesign/Home design (which placed it at top-left);
-// kept on the right in this app so it doesn't collide with the existing
-// FloatingPanel on the left. Rows top-to-bottom: device pill → coord chip
-// → location+weather chip → avatar picker.
+// Status pair — stacked glass-pill chips at the top-left.
+// Rows top-to-bottom: device pill(s) → coord chip → flag+weather chip.
+// The avatar picker (previously a 4th chip here) now lives inside the
+// Settings popover — keeps the status pair focused on passive status
+// and moves configuration where users already look for it.
 //
 // Dual-device mode stacks two device pills A/B, each carrying its own
 // live coordinate.
@@ -27,11 +24,8 @@ export default function MiniStatusBar() {
   const device = useDeviceContext()
   const { countryCode, country } = useReverseGeocode(currentPos, lang, { paused: isRunning })
   const weather = useWeather(currentPos, { paused: isRunning })
-  const avatar = useAvatarContext()
 
   const [copied, setCopied] = useState(false)
-  const [pickerAnchor, setPickerAnchor] = useState<DOMRect | null>(null)
-  const avatarBtnRef = useRef<HTMLButtonElement>(null)
 
   const isDual = device.connectedDevices.length >= 2
   const isConnected = device.connectedDevices.length > 0
@@ -49,12 +43,6 @@ export default function MiniStatusBar() {
   // the top-left "status pair" doesn't appear to vanish. The old bar used
   // an early-return-null; users found it confusing in the redesigned
   // layout because the whole corner went empty on launch.
-
-  const presetKey = avatar.current.kind === 'preset' ? avatar.current.key : null
-  const avatarPreset = presetKey
-    ? AVATAR_PRESETS.find((p) => p.key === presetKey) ?? AVATAR_PRESETS[0]
-    : null
-  const AvatarIcon = avatarPreset?.Icon
 
   return (
     <div
@@ -125,28 +113,6 @@ export default function MiniStatusBar() {
         </div>
       )}
 
-      {/* Avatar picker — small glass circle */}
-      <button
-        ref={avatarBtnRef}
-        onClick={() => {
-          if (pickerAnchor) { setPickerAnchor(null); return }
-          const r = avatarBtnRef.current?.getBoundingClientRect()
-          if (r) setPickerAnchor(r)
-        }}
-        className="glass-pill w-8 h-8 grid place-items-center text-[var(--color-text-2)] hover:text-[var(--color-accent)] transition-colors cursor-pointer"
-        aria-label={t('avatar.picker_title')}
-        title={t('avatar.picker_tooltip')}
-      >
-        {avatar.current.kind === 'custom' && avatar.customDataUrl ? (
-          <img src={avatar.customDataUrl} alt="" width={18} height={18} style={{ borderRadius: '50%', objectFit: 'cover' }} />
-        ) : AvatarIcon ? (
-          <AvatarIcon className="w-[15px] h-[15px]" strokeWidth={2} />
-        ) : null}
-      </button>
-
-      {pickerAnchor && (
-        <AvatarPicker anchor={pickerAnchor} onClose={() => setPickerAnchor(null)} />
-      )}
     </div>
   )
 }

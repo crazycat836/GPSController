@@ -83,6 +83,8 @@ const AvatarPicker: React.FC<AvatarPickerProps> = ({ anchor, onClose }) => {
       ref={menuRef}
       role="dialog"
       aria-label={t('avatar.picker_title')}
+      data-avatar-picker
+
       style={{
         position: 'fixed',
         top,

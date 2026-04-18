@@ -2,14 +2,17 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import {
   RotateCcw, FileText, MapPin, Timer, Languages, Layers, Info,
-  Trash2, Sun, ChevronRight,
+  Trash2, Sun, ChevronRight, UserCircle2,
 } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
+import { useAvatarContext } from '../../contexts/AvatarContext'
 import { useT } from '../../i18n'
 import * as api from '../../services/api'
 import LangToggle from '../LangToggle'
+import AvatarPicker from './AvatarPicker'
+import { AVATAR_PRESETS } from '../../lib/avatars'
 import pkg from '../../../package.json'
 
 const APP_VERSION = (pkg as { version: string }).version
@@ -50,6 +53,15 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
   const [initialBusy, setInitialBusy] = useState(false)
 
   const popoverRef = useRef<HTMLDivElement>(null)
+  const avatarRowRef = useRef<HTMLButtonElement>(null)
+  const [avatarPickerAnchor, setAvatarPickerAnchor] = useState<DOMRect | null>(null)
+
+  const avatarCtx = useAvatarContext()
+  const avatarPresetKey = avatarCtx.current.kind === 'preset' ? avatarCtx.current.key : null
+  const avatarPreset = avatarPresetKey
+    ? AVATAR_PRESETS.find((p) => p.key === avatarPresetKey) ?? AVATAR_PRESETS[0]
+    : null
+  const AvatarIcon = avatarPreset?.Icon
 
   const dualDevice = device.connectedDevices.length >= 2
 
@@ -58,6 +70,10 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement
       if (target.closest('[data-settings-trigger]')) return
+      // Keep the popover open while the avatar picker is driving its own
+      // outside-click dismissal. Otherwise clicks inside the picker would
+      // bubble up and collapse the settings menu behind it.
+      if (target.closest('[data-avatar-picker]')) return
       if (popoverRef.current && !popoverRef.current.contains(target)) {
         onClose()
       }
@@ -227,6 +243,45 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
               interactive={false}
               trailing={<span className="font-mono text-[11px] text-[var(--color-text-3)]">Dark</span>}
             />
+
+            {/* Map Pin Avatar — previously lived in the top-left status pair.
+                Moved here so configuration sits where users look for it,
+                and the status pair can stay focused on passive status. */}
+            <button
+              ref={avatarRowRef}
+              type="button"
+              onClick={() => {
+                const r = avatarRowRef.current?.getBoundingClientRect()
+                if (r) setAvatarPickerAnchor(r)
+              }}
+              className={[
+                'flex items-center gap-3 px-3 py-[9px] rounded-[9px] text-[13px]',
+                'text-[var(--color-text-1)] tracking-[-0.005em]',
+                'hover:bg-white/[0.04] cursor-pointer',
+                'transition-colors duration-150',
+              ].join(' ')}
+            >
+              <span className="w-7 h-7 rounded-lg grid place-items-center shrink-0 border text-[var(--color-text-2)] border-[var(--color-border)] bg-white/[0.04]">
+                <UserCircle2 className="w-[14px] h-[14px]" />
+              </span>
+              <span className="flex-1 text-left truncate">{t('avatar.picker_title')}</span>
+              <span className="shrink-0 flex items-center gap-1.5">
+                <span className="w-6 h-6 rounded-full grid place-items-center bg-white/[0.04] border border-[var(--color-border)] overflow-hidden">
+                  {avatarCtx.current.kind === 'custom' && avatarCtx.customDataUrl ? (
+                    <img
+                      src={avatarCtx.customDataUrl}
+                      alt=""
+                      width={22}
+                      height={22}
+                      style={{ borderRadius: '50%', objectFit: 'cover' }}
+                    />
+                  ) : AvatarIcon ? (
+                    <AvatarIcon className="w-[14px] h-[14px] text-[var(--color-accent-strong)]" strokeWidth={2} />
+                  ) : null}
+                </span>
+                <ChevronRight className="w-3 h-3 text-[var(--color-text-3)] opacity-60" />
+              </span>
+            </button>
           </Section>
 
           {/* Privacy / About */}
@@ -245,6 +300,15 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
             />
           </Section>
         </div>
+      )}
+
+      {/* Avatar picker portal — opens anchored to the Settings row,
+          dismisses on its own outside-click handling. */}
+      {avatarPickerAnchor && (
+        <AvatarPicker
+          anchor={avatarPickerAnchor}
+          onClose={() => setAvatarPickerAnchor(null)}
+        />
       )}
 
       {/* Set Initial Position modal */}
