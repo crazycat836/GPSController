@@ -356,6 +356,14 @@ export const STRINGS = {
   'bm.clear_selection': { zh: '清除選取', en: 'Clear' },
   'bm.selection_toolbar': { zh: '多選工具列', en: 'Selection toolbar' },
   'bm.confirm_batch_delete': { zh: '確定刪除已選的 {n} 筆收藏?', en: 'Delete {n} selected bookmarks?' },
+  'bm.confirm_delete': { zh: '確定刪除「{name}」?', en: 'Delete "{name}"?' },
+  'bm.note': { zh: '備註', en: 'Note' },
+  'bm.has_note': { zh: '有備註', en: 'Has note' },
+  'bm.filter_all': { zh: '全部', en: 'All' },
+  'bm.bookmark_actions_aria': { zh: '收藏動作', en: 'Bookmark actions' },
+  'bm.category_color': { zh: '分類顏色', en: 'Category' },
+  'panel.devices': { zh: '裝置', en: 'Devices' },
+  'wifi.rsd_endpoint': { zh: 'RSD 位址', en: 'RSD endpoint' },
 
   // ── Address search ───────────────────────────
   'search.placeholder': { zh: '搜尋地址...', en: 'Search address...' },

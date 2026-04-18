@@ -222,7 +222,7 @@ export default function BookmarkEditDialog(props: Props) {
 
           {/* Category */}
           <label className="flex flex-col gap-1.5">
-            <span className="text-[11px] text-[var(--color-text-3)]">{t('bm.manage_categories')}</span>
+            <span className="text-[11px] text-[var(--color-text-3)]">{t('bm.category_color')}</span>
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
@@ -239,7 +239,7 @@ export default function BookmarkEditDialog(props: Props) {
 
           {/* Note — optional */}
           <label className="flex flex-col gap-1.5">
-            <span className="text-[11px] text-[var(--color-text-3)]">Note</span>
+            <span className="text-[11px] text-[var(--color-text-3)]">{t('bm.note')}</span>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}

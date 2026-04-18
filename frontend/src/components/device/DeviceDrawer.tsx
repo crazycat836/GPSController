@@ -162,7 +162,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
         <div className="p-4 flex flex-col gap-3">
           <SectionHeader
             icon={<Smartphone width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
-            title="Devices"
+            title={t('panel.devices')}
             count={device.devices.length}
             right={scanButton}
           />
@@ -266,7 +266,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                 <ListRow
                   density="compact"
                   leading={<PlugZap width={ICON_SIZE.sm} height={ICON_SIZE.sm} className="text-[var(--color-success-text)]" />}
-                  title="RSD endpoint"
+                  title={t('wifi.rsd_endpoint')}
                   subtitle={
                     <span className="font-mono">
                       {device.tunnelStatus.rsd_address}:{device.tunnelStatus.rsd_port}
