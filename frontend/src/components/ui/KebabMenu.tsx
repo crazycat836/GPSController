@@ -26,6 +26,9 @@ interface KebabMenuProps {
   align?: Align
   /** Override the default MoreVertical trigger (e.g. for row-level kebab). */
   trigger?: React.ReactElement<Record<string, unknown>>
+  /** When true, right-click on the trigger also toggles the menu (and blocks
+      the native browser menu). Useful for replacing contextmenu-style UIs. */
+  openOnContextMenu?: boolean
   className?: string
   triggerSize?: number
 }
@@ -38,6 +41,7 @@ export default function KebabMenu({
   side = 'bottom',
   align = 'end',
   trigger,
+  openOnContextMenu,
   className,
   triggerSize = ICON_SIZE.sm,
 }: KebabMenuProps) {
@@ -133,6 +137,13 @@ export default function KebabMenu({
           prev?.(e)
           toggle(e)
         },
+        onContextMenu: openOnContextMenu
+          ? (e: React.MouseEvent<HTMLElement>) => {
+              const prev = trigger.props.onContextMenu as ((evt: React.MouseEvent<HTMLElement>) => void) | undefined
+              prev?.(e)
+              toggle(e)
+            }
+          : trigger.props.onContextMenu,
         'aria-expanded': open,
         'aria-haspopup': 'menu',
       } as Record<string, unknown>)
