@@ -6,22 +6,25 @@ interface TopBarProps {
   rightContent?: React.ReactNode
 }
 
-// Three-slot top bar so brand stays left, search stays centered against
-// the map, and actions stay right — mirrors the redesign/Home topbar
-// layout (.brand · .search-pill · .top-actions with justify-between).
+// Three-slot top bar. Uses a 1fr/auto/1fr grid so the center slot sits
+// at the viewport midpoint regardless of how wide the brand pill vs.
+// the action cluster end up — otherwise a flex layout drifts the
+// "center" slot whenever the two sides have different widths, which
+// broke alignment with viewport-centred overlays (like the main toast
+// under the search pill).
 export default function TopBar({ leftContent, centerContent, rightContent }: TopBarProps) {
   return (
-    <div className="fixed top-3 left-3 right-3 z-[var(--z-ui)] flex items-center gap-3 pointer-events-none">
-      <div className="pointer-events-auto flex items-center gap-2 shrink-0">
+    <div
+      className="fixed top-3 left-3 right-3 z-[var(--z-ui)] grid items-center gap-3 pointer-events-none"
+      style={{ gridTemplateColumns: '1fr auto 1fr' }}
+    >
+      <div className="pointer-events-auto flex items-center gap-2 justify-self-start min-w-0">
         {leftContent}
       </div>
-      {centerContent && (
-        <div className="pointer-events-auto flex-1 flex items-center justify-center min-w-0">
-          {centerContent}
-        </div>
-      )}
-      {!centerContent && <div className="flex-1" />}
-      <div className="pointer-events-auto shrink-0">
+      <div className="pointer-events-auto justify-self-center min-w-0">
+        {centerContent}
+      </div>
+      <div className="pointer-events-auto justify-self-end min-w-0">
         {rightContent}
       </div>
     </div>
