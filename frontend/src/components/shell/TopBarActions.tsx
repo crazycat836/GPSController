@@ -3,14 +3,15 @@ import { Smartphone, Bookmark, Settings } from 'lucide-react'
 import { useT } from '../../i18n'
 
 interface TopBarActionsProps {
-  onAddDevice?: () => void
+  /** Receives the triggering button element so the popover can anchor to it. */
+  onDeviceClick?: (anchor: HTMLElement) => void
   addDeviceDisabled?: boolean
   onLibraryClick?: () => void
   onSettingsClick?: () => void
 }
 
 export default function TopBarActions({
-  onAddDevice,
+  onDeviceClick,
   addDeviceDisabled,
   onLibraryClick,
   onSettingsClick,
@@ -22,7 +23,7 @@ export default function TopBarActions({
       <ActionButton
         icon={Smartphone}
         label={t('device.add_device')}
-        onClick={onAddDevice}
+        onClick={(e) => onDeviceClick?.(e.currentTarget)}
         disabled={addDeviceDisabled}
       />
       <ActionButton

@@ -40,6 +40,7 @@ import JoystickPanel from './components/panels/JoystickPanel'
 
 // Modals/Drawers
 import DeviceDrawer from './components/device/DeviceDrawer'
+import DevicesPopover from './components/device/DevicesPopover'
 import LibraryDrawer from './components/modals/LibraryDrawer'
 
 // Root component — just providers
@@ -141,6 +142,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
   // UI state
   const [deviceDrawerOpen, setDeviceDrawerOpen] = useState(false)
+  const [devicesPopoverAnchor, setDevicesPopoverAnchor] = useState<DOMRect | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [layerKey, setLayerKey] = useState(() => {
@@ -355,15 +357,11 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         }
         rightContent={
           <TopBarActions
-            onAddDevice={() => {
-              if (device.connectedDevices.length >= 2) {
-                toast.showToast(t('device.max_reached'))
-                return
-              }
-              device.scan()
-              setDeviceDrawerOpen(true)
+            onDeviceClick={(anchor) => {
+              // Open the compact popover anchored to the clicked button.
+              // "Manage" inside escalates to the full DeviceDrawer.
+              setDevicesPopoverAnchor(anchor.getBoundingClientRect())
             }}
-            addDeviceDisabled={device.connectedDevices.length >= 2}
             onLibraryClick={() => setLibraryOpen(true)}
             onSettingsClick={() => setSettingsOpen(prev => !prev)}
           />
@@ -385,6 +383,11 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
 
       <BottomModeBar activeMode={sim.mode} onModeChange={sim.setMode} />
       <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} layerKey={layerKey} onLayerChange={handleLayerChange} />
+      <DevicesPopover
+        anchor={devicesPopoverAnchor}
+        onClose={() => setDevicesPopoverAnchor(null)}
+        onOpenManage={() => setDeviceDrawerOpen(true)}
+      />
       <DeviceDrawer open={deviceDrawerOpen} onClose={() => setDeviceDrawerOpen(false)} />
       <LibraryDrawer open={libraryOpen} onClose={() => setLibraryOpen(false)} />
     </div>
