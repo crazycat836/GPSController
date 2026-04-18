@@ -22,6 +22,7 @@ import UpdateChecker from './components/UpdateChecker'
 // Shell components
 import FloatingPanel from './components/shell/FloatingPanel'
 import TopBar from './components/shell/TopBar'
+import Brand from './components/shell/Brand'
 import SearchBar from './components/shell/SearchBar'
 import ModeToolbar from './components/shell/ModeToolbar'
 import MiniStatusBar from './components/shell/MiniStatusBar'
@@ -369,7 +370,10 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
       {/* Floating overlay components */}
       <TopBar
         leftContent={
-          <SearchBar onTeleport={handleTeleportOrStage} deviceConnected={device.connectedDevice !== null} />
+          <>
+            <Brand />
+            <SearchBar onTeleport={handleTeleportOrStage} deviceConnected={device.connectedDevice !== null} />
+          </>
         }
         rightContent={
           <TopBarActions

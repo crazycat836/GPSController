@@ -117,11 +117,11 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
       {/* Input */}
       <div
         className={[
-          'flex items-center gap-2 px-3 h-11 w-[22rem] rounded-xl surface-control transition-all duration-200',
+          'glass-pill flex items-center gap-2.5 px-4 h-11 w-[22rem] transition-[box-shadow,border-color] duration-200',
           focused ? 'search-bar-focused' : '',
         ].join(' ')}
       >
-        <Search className="w-4 h-4 text-[var(--color-text-3)] shrink-0" />
+        <Search className="w-[14px] h-[14px] text-[var(--color-text-3)] shrink-0" />
         <input
           ref={inputRef}
           type="text"
@@ -134,10 +134,10 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
             if (e.key === 'Escape') { setOpen(false); inputRef.current?.blur() }
           }}
           placeholder={t('search.unified_placeholder')}
-          className="flex-1 bg-transparent border-none outline-none text-[var(--color-text-1)] text-[14px] placeholder:text-[var(--color-text-3)]"
+          className="flex-1 bg-transparent border-none outline-none text-[var(--color-text-1)] text-[13px] placeholder:text-[var(--color-text-3)]"
         />
         {!focused && (
-          <kbd className="text-[11px] font-mono text-[var(--color-text-3)] bg-white/[0.06] px-1.5 py-0.5 rounded border border-[var(--color-border)]">
+          <kbd className="text-[10px] font-mono text-[var(--color-text-3)] bg-white/[0.05] px-1.5 py-0.5 rounded border border-[var(--color-border)]">
             ⌘K
           </kbd>
         )}
