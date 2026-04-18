@@ -344,7 +344,8 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         <CooldownBadge />
         <UpdateChecker />
 
-        <Toast key={toast.toastMsg ?? ''} visible={!!toast.toastMsg} position="center">
+        {/* Anchored under the top-bar search pill (top-3 + 44px + 12px gap ≈ top-16). */}
+        <Toast key={toast.toastMsg ?? ''} visible={!!toast.toastMsg} top="top-16">
           {toast.toastMsg}
         </Toast>
       </div>
