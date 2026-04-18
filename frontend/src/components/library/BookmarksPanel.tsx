@@ -444,6 +444,15 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
                   setInlineEditId(b.id)
                   setInlineEditName(b.name)
                 }}
+                onContextMenu={(e) => {
+                  // Keep muscle-memory: right-click surfaces the same kebab
+                  // menu without requiring users to find the small ⋮ trigger.
+                  if (selectionMode || isInlineEditing) return
+                  e.preventDefault()
+                  const kebab = (e.currentTarget as HTMLElement)
+                    .querySelector<HTMLButtonElement>('.list-row-trailing .kebab-btn')
+                  kebab?.click()
+                }}
                 aria-label={b.name}
                 aria-pressed={selectionMode ? checked : undefined}
                 leading={leading}

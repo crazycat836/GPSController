@@ -67,29 +67,36 @@ export default function BookmarkEditDialog(props: Props) {
   const [note, setNote] = useState('')
 
   const nameRef = useRef<HTMLInputElement>(null)
+  const wasOpenRef = useRef(false)
 
-  // Initialize on open/mode change.
+  // Initialize form state once per open transition. We deliberately ignore
+  // `currentPosition` / `initial` / `firstCategory` after the dialog is
+  // already open — otherwise a live position update mid-edit would clobber
+  // what the user has typed. The "Use current position" toggle's separate
+  // effect below handles live-position sync while the checkbox is on.
   useEffect(() => {
-    if (!open) return
-    if (initial) {
-      setName(initial.name)
-      setUseCurrent(false)
-      setLatStr(String(initial.lat))
-      setLngStr(String(initial.lng))
-      setCategoryId(initial.categoryId || firstCategory)
-      setNote(initial.note ?? '')
-    } else {
-      setName('')
-      const canUseCurrent = !!currentPosition
-      setUseCurrent(canUseCurrent)
-      setLatStr(canUseCurrent ? String(currentPosition!.lat) : '')
-      setLngStr(canUseCurrent ? String(currentPosition!.lng) : '')
-      setCategoryId(firstCategory)
-      setNote('')
+    if (open && !wasOpenRef.current) {
+      wasOpenRef.current = true
+      if (initial) {
+        setName(initial.name)
+        setUseCurrent(false)
+        setLatStr(String(initial.lat))
+        setLngStr(String(initial.lng))
+        setCategoryId(initial.categoryId || firstCategory)
+        setNote(initial.note ?? '')
+      } else {
+        setName('')
+        const canUseCurrent = !!currentPosition
+        setUseCurrent(canUseCurrent)
+        setLatStr(canUseCurrent ? String(currentPosition!.lat) : '')
+        setLngStr(canUseCurrent ? String(currentPosition!.lng) : '')
+        setCategoryId(firstCategory)
+        setNote('')
+      }
+      const f = setTimeout(() => nameRef.current?.focus(), 60)
+      return () => clearTimeout(f)
     }
-    // Focus name after the entrance animation lands.
-    const f = setTimeout(() => nameRef.current?.focus(), 60)
-    return () => clearTimeout(f)
+    if (!open) wasOpenRef.current = false
   }, [open, initial, firstCategory, currentPosition])
 
   // When toggling "Use current position" on, lock the inputs to live pos.
