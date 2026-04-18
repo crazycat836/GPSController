@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import {
   Plus, Bookmark as BookmarkIcon, Pencil, Trash2, Copy,
-  FolderInput, Download, Upload, Layers, Check, X, ClipboardList, StickyNote,
+  FolderInput, Layers, Check, X, ClipboardList, StickyNote,
 } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import type { Bookmark, BookmarkCategory } from '../../hooks/useBookmarks'
@@ -159,11 +159,6 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     setInlineEditId(null)
   }, [inlineEditName, bookmarks, bm])
 
-  // ─── Import helper ──────────────────────────────────────────
-  const handleImportFile = useCallback(async (file: File) => {
-    await bm.handleBookmarkImport(file)
-  }, [bm])
-
   // ─── Header kebab items ─────────────────────────────────────
   const headerMenuItems: KebabMenuItem[] = useMemo(() => [
     {
@@ -181,35 +176,9 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         else setSelectionMode(true)
       },
     },
-    {
-      id: 'import',
-      label: t('bm.import'),
-      icon: <Upload width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
-      onSelect: () => {
-        const input = document.createElement('input')
-        input.type = 'file'
-        input.accept = 'application/json,.json'
-        input.onchange = () => {
-          const f = input.files?.[0]
-          if (f) void handleImportFile(f)
-        }
-        input.click()
-      },
-    },
-    {
-      id: 'export',
-      label: t('bm.export'),
-      icon: <Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
-      disabled: bookmarks.length === 0,
-      onSelect: () => {
-        const a = document.createElement('a')
-        a.href = bm.bookmarkExportUrl
-        a.download = 'bookmarks.json'
-        a.click()
-      },
-    },
+    // Import / Export moved to the Drawer's headerActions slot.
     // Manage categories moved to the fixed footer button.
-  ], [t, selectionMode, exitSelection, bookmarks.length, bm.bookmarkExportUrl, handleImportFile])
+  ], [t, selectionMode, exitSelection])
 
   // ─── Row kebab builder ──────────────────────────────────────
   const rowMenuItems = useCallback((b: Bookmark): KebabMenuItem[] => {
@@ -434,11 +403,29 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
               </span>
             )
 
+            // Trailing — hover-reveal Edit + Delete quick actions plus a
+            // always-visible kebab for Copy / Move-to / Delete fallback.
+            // Matches the redesign/Home .bm-actions strip.
             const trailing = selectionMode ? undefined : (
-              <KebabMenu
-                items={() => rowMenuItems(b)}
-                ariaLabel={t('bm.bookmark_actions')}
-              />
+              <span className="inline-flex items-center gap-1">
+                <HoverAction
+                  onClick={(e) => { e.stopPropagation(); setEditing({ mode: 'edit', bookmark: b }) }}
+                  label={t('bm.edit')}
+                >
+                  <Pencil width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
+                </HoverAction>
+                <HoverAction
+                  onClick={(e) => { e.stopPropagation(); confirmDeleteOne(b) }}
+                  label={t('generic.delete')}
+                  danger
+                >
+                  <Trash2 width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
+                </HoverAction>
+                <KebabMenu
+                  items={() => rowMenuItems(b)}
+                  ariaLabel={t('bm.bookmark_actions')}
+                />
+              </span>
             )
 
             return (
@@ -446,6 +433,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
                 key={b.id}
                 as="button"
                 density="compact"
+                className="group"
                 selected={selectionMode && checked}
                 onClick={() => {
                   if (selectionMode) toggleSelected(b.id)
@@ -582,5 +570,40 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         </button>
       </div>
     </div>
+  )
+}
+
+// ─── Hover-reveal quick action button ──────────────────────────────
+// Matches the redesign/Home .bm-actions button: 28px rounded-7 tile
+// that fades in on row hover and red-tints when `danger`.
+
+interface HoverActionProps {
+  onClick: (e: React.MouseEvent) => void
+  label: string
+  danger?: boolean
+  children: React.ReactNode
+}
+
+function HoverAction({ onClick, label, danger, children }: HoverActionProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={[
+        'w-7 h-7 rounded-[7px] grid place-items-center shrink-0',
+        'border border-[var(--color-border)] bg-white/[0.04]',
+        'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+        'translate-x-1 group-hover:translate-x-0 focus-visible:translate-x-0',
+        'transition-[opacity,transform,background,color,border-color] duration-150',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]',
+        danger
+          ? 'text-[var(--color-text-3)] hover:text-[var(--color-danger-text)] hover:bg-[var(--color-danger-dim)] hover:border-[rgba(255,71,87,0.3)]'
+          : 'text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-white/[0.1]',
+      ].join(' ')}
+    >
+      {children}
+    </button>
   )
 }
