@@ -55,7 +55,7 @@ export default function MiniStatusBar() {
 
   return (
     <div
-      className="absolute top-[4.25rem] right-3 z-[var(--z-ui)] flex flex-col items-end gap-2 max-w-[300px]"
+      className="absolute top-[4.25rem] left-3 z-[var(--z-ui)] flex flex-col items-start gap-2 max-w-[300px]"
       aria-label="Status"
     >
       {/* Device pill(s) */}

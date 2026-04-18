@@ -19,11 +19,11 @@ import JoystickPad from './components/JoystickPad'
 import EtaBar from './components/EtaBar'
 import UpdateChecker from './components/UpdateChecker'
 // Shell components
-import FloatingPanel from './components/shell/FloatingPanel'
 import TopBar from './components/shell/TopBar'
 import Brand from './components/shell/Brand'
 import SearchBar from './components/shell/SearchBar'
 import BottomModeBar from './components/shell/BottomModeBar'
+import BottomDock from './components/shell/BottomDock'
 import MiniStatusBar from './components/shell/MiniStatusBar'
 import TopBarActions from './components/shell/TopBarActions'
 import SettingsMenu from './components/shell/SettingsMenu'
@@ -372,14 +372,18 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         }
       />
 
-      <FloatingPanel mode={sim.mode} key={sim.mode}>
-        {sim.mode === SimMode.Teleport && <TeleportPanel />}
-        {sim.mode === SimMode.Navigate && <NavigatePanel />}
-        {sim.mode === SimMode.Loop && <LoopPanel />}
-        {sim.mode === SimMode.MultiStop && <MultiStopPanel />}
-        {sim.mode === SimMode.RandomWalk && <RandomWalkPanel />}
-        {sim.mode === SimMode.Joystick && <JoystickPanel />}
-      </FloatingPanel>
+      <BottomDock
+        details={
+          <div key={sim.mode}>
+            {sim.mode === SimMode.Teleport && <TeleportPanel />}
+            {sim.mode === SimMode.Navigate && <NavigatePanel />}
+            {sim.mode === SimMode.Loop && <LoopPanel />}
+            {sim.mode === SimMode.MultiStop && <MultiStopPanel />}
+            {sim.mode === SimMode.RandomWalk && <RandomWalkPanel />}
+            {sim.mode === SimMode.Joystick && <JoystickPanel />}
+          </div>
+        }
+      />
 
       <BottomModeBar activeMode={sim.mode} onModeChange={sim.setMode} />
       <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} layerKey={layerKey} onLayerChange={handleLayerChange} />
