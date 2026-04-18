@@ -208,12 +208,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         a.click()
       },
     },
-    {
-      id: 'manage',
-      label: t('bm.manage_categories'),
-      icon: <Layers width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
-      onSelect: () => setCategoryMgrOpen(true),
-    },
+    // Manage categories moved to the fixed footer button.
   ], [t, selectionMode, exitSelection, bookmarks.length, bm.bookmarkExportUrl, handleImportFile])
 
   // ─── Row kebab builder ──────────────────────────────────────
@@ -259,28 +254,21 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   const searching = search.trim().length > 0
 
   return (
-    <div className="flex flex-col gap-3 p-4">
-      {/* Header: primary CTA + kebab */}
+    <div className="relative flex flex-col gap-3 p-4 pb-[92px]">
+      {/* Top row: search occupies main width, kebab tucks to the right.
+          Primary Add CTA lives in the fixed footer at panel bottom
+          (matches redesign/Home library structure). */}
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="seg-cta seg-cta-sm seg-cta-accent flex-1"
-          onClick={() => setEditing({ mode: 'create' })}
-          disabled={selectionMode}
-        >
-          <Plus width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-          {t('bm.add')}
-        </button>
-        <KebabMenu items={headerMenuItems} ariaLabel={t('bm.manage_categories')} />
+        <div className="flex-1 min-w-0">
+          <SearchField
+            value={search}
+            onChange={setSearch}
+            placeholder={t('bm.search_placeholder')}
+            clearLabel={t('bm.search_clear')}
+          />
+        </div>
+        <KebabMenu items={headerMenuItems} ariaLabel={t('bm.bookmark_actions_aria')} />
       </div>
-
-      {/* Search */}
-      <SearchField
-        value={search}
-        onChange={setSearch}
-        placeholder={t('bm.search_placeholder')}
-        clearLabel={t('bm.search_clear')}
-      />
 
       {/* Category chip filter — hidden while searching */}
       {!searching && categories.length > 0 && (
@@ -547,6 +535,52 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         onConfirm={runConfirm}
         onCancel={() => setConfirm(null)}
       />
+
+      {/* Fixed footer — primary Add CTA + Manage-categories ghost.
+          Mirrors the redesign/Home .lib-footer: absolute at the bottom
+          of the scroll area with a gradient fade so list content
+          doesn't collide with the buttons. */}
+      <div
+        className="sticky bottom-0 left-0 right-0 -mx-4 px-4 pt-4 pb-4 flex gap-2.5 items-center"
+        style={{
+          background: 'linear-gradient(180deg, rgba(15,16,20,0) 0%, rgba(15,16,20,0.96) 30%)',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setCategoryMgrOpen(true)}
+          disabled={selectionMode}
+          className={[
+            'inline-flex items-center justify-center gap-2 h-11 px-4 rounded-[12px]',
+            'text-[13px] font-semibold shrink-0',
+            'bg-white/[0.04] border border-[var(--color-border)] text-[var(--color-text-1)]',
+            'hover:bg-white/[0.08]',
+            'disabled:opacity-40 disabled:cursor-not-allowed',
+            'transition-colors duration-150 cursor-pointer',
+          ].join(' ')}
+          title={t('bm.manage_categories')}
+        >
+          <Layers width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
+          <span className="hidden sm:inline">{t('bm.new_category')}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditing({ mode: 'create' })}
+          disabled={selectionMode}
+          className={[
+            'flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-[12px]',
+            'text-[13px] font-semibold text-[var(--color-surface-0)]',
+            'transition-[transform,box-shadow] duration-150',
+            'hover:-translate-y-px',
+            'disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0',
+            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] focus-visible:outline-offset-2',
+          ].join(' ')}
+          style={{ background: 'var(--color-accent)', boxShadow: 'var(--shadow-glow)' }}
+        >
+          <Plus width={ICON_SIZE.sm} height={ICON_SIZE.sm} strokeWidth={2.5} />
+          {t('bm.add')}
+        </button>
+      </div>
     </div>
   )
 }

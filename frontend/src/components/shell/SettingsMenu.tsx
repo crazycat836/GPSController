@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { RotateCcw, FileText, MapPin, Timer, Languages, Layers, Info } from 'lucide-react'
+import {
+  RotateCcw, FileText, MapPin, Timer, Languages, Layers, Info,
+  Trash2, Sun, ChevronRight,
+} from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
@@ -30,6 +33,10 @@ interface SettingsMenuProps {
   onLayerChange: (key: string) => void
 }
 
+// Glass settings popover derived from redesign/Home #pop-settings.
+// Three sections (Actions / Preferences / About) with uppercase
+// headers; each row renders a 28px icon tile + label + value/toggle
+// + optional chevron to mirror the design's .set-row anatomy.
 export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }: SettingsMenuProps) {
   const t = useT()
   const { handleRestore, handleOpenLog, cooldown, cooldownEnabled, handleToggleCooldown } = useSimContext()
@@ -46,19 +53,22 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
 
   const dualDevice = device.connectedDevices.length >= 2
 
-  // Close popover on outside click — skip clicks on the settings trigger button
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      // Don't close if clicking the TopBar settings trigger (it handles its own toggle)
       if (target.closest('[data-settings-trigger]')) return
       if (popoverRef.current && !popoverRef.current.contains(target)) {
         onClose()
       }
     }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [open, onClose])
 
   const handleOpenInitial = useCallback(async () => {
@@ -116,13 +126,6 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
     }
   }, [initialLat, initialLng, t, showToast])
 
-  const menuRowClass = [
-    'flex items-center gap-3.5 w-full px-3.5 py-2.5 rounded-xl text-[13px]',
-    'text-[var(--color-text-1)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer',
-  ].join(' ')
-
-  const iconClass = 'w-[18px] h-[18px] text-[var(--color-text-2)] shrink-0'
-
   if (!open && !initialOpen) return null
 
   return (
@@ -132,120 +135,115 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
         <div
           ref={popoverRef}
           className={[
-            'fixed top-14 right-3 w-[272px] z-[var(--z-ui)]',
-            'surface-popup rounded-2xl',
-            'p-2.5 flex flex-col',
+            'fixed top-16 right-3 w-[300px] z-[var(--z-dropdown)] overflow-hidden',
+            'bg-[rgba(19,20,24,0.96)] backdrop-blur-[28px] backdrop-saturate-150',
+            '[-webkit-backdrop-filter:blur(28px)_saturate(1.5)]',
+            'border border-[var(--color-border-strong)] rounded-2xl',
+            'shadow-[0_24px_64px_rgba(0,0,0,0.55),0_2px_8px_rgba(0,0,0,0.3)]',
+            'anim-scale-in-tl',
           ].join(' ')}
+          style={{ transformOrigin: 'top right' }}
         >
-          {/* Actions group */}
-          <div className="flex flex-col gap-0.5">
-            <button onClick={() => { handleRestore(); onClose() }} className={menuRowClass}>
-              <RotateCcw className={iconClass} />
-              <span className="flex-1 text-left">{dualDevice ? t('status.restore_all') : t('status.restore')}</span>
-            </button>
+          {/* Actions */}
+          <Section label={t('settings.title')}>
+            <SettingsRow
+              icon={<RotateCcw className="w-[14px] h-[14px]" />}
+              label={dualDevice ? t('status.restore_all') : t('status.restore')}
+              onClick={() => { handleRestore(); onClose() }}
+              trailing={<ChevronRight className="w-3 h-3 text-[var(--color-text-3)] opacity-60" />}
+            />
+            <SettingsRow
+              icon={<FileText className="w-[14px] h-[14px]" />}
+              label={t('status.open_log')}
+              onClick={() => { handleOpenLog(); onClose() }}
+              trailing={<ChevronRight className="w-3 h-3 text-[var(--color-text-3)] opacity-60" />}
+            />
+            <SettingsRow
+              icon={<MapPin className="w-[14px] h-[14px]" />}
+              label={t('status.set_initial')}
+              onClick={() => { handleOpenInitial(); onClose() }}
+              trailing={<ChevronRight className="w-3 h-3 text-[var(--color-text-3)] opacity-60" />}
+            />
+          </Section>
 
-            <button onClick={() => { handleOpenLog(); onClose() }} className={menuRowClass}>
-              <FileText className={iconClass} />
-              <span className="flex-1 text-left">{t('status.open_log')}</span>
-            </button>
-
-            <button onClick={() => { handleOpenInitial(); onClose() }} className={menuRowClass}>
-              <MapPin className={iconClass} />
-              <span className="flex-1 text-left">{t('status.set_initial')}</span>
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-[var(--color-border)] mx-2 my-1.5" />
-
-          {/* Preferences group */}
-          <div className="flex flex-col gap-0.5">
-            <label
-              className={[
-                menuRowClass,
-                dualDevice ? 'opacity-55 cursor-not-allowed' : '',
-              ].join(' ')}
+          {/* Preferences */}
+          <Section label="Preferences">
+            <SettingsRow
+              icon={<Timer className="w-[14px] h-[14px]" />}
+              label={cooldownEnabled ? t('status.cooldown_enabled') : t('status.cooldown_disabled')}
+              disabled={dualDevice}
               title={dualDevice ? t('status.cooldown_dual_disabled') : t('status.cooldown_tooltip')}
-            >
-              <Timer className={iconClass} />
-              <span className="flex-1 text-left">
-                {cooldownEnabled ? t('status.cooldown_enabled') : t('status.cooldown_disabled')}
-              </span>
-              <div className="flex items-center gap-2">
-                {cooldown > 0 && (
-                  <span className="text-[10px] font-semibold text-[var(--color-amber-text)] bg-[var(--color-amber-dim)] px-1.5 py-0.5 rounded-full">
-                    {formatCooldown(cooldown)}
-                  </span>
-                )}
-                <div
-                  role="switch"
-                  aria-checked={cooldownEnabled && !dualDevice}
-                  tabIndex={0}
-                  aria-label="Toggle GPS cooldown"
-                  className={[
-                    'relative w-9 h-5 rounded-full transition-colors',
-                    (cooldownEnabled && !dualDevice) ? 'bg-[var(--color-accent)]' : 'bg-white/15',
-                  ].join(' ')}
-                  onClick={(e) => {
-                    if (dualDevice) { e.preventDefault(); return }
-                    handleToggleCooldown(!cooldownEnabled)
-                  }}
-                  onKeyDown={(e) => {
-                    if (dualDevice) return
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      handleToggleCooldown(!cooldownEnabled)
-                    }
-                  }}
-                >
-                  <div
-                    className={[
-                      'absolute top-[3px] w-3.5 h-3.5 rounded-full bg-white transition-transform',
-                      (cooldownEnabled && !dualDevice) ? 'translate-x-[17px]' : 'translate-x-[3px]',
-                    ].join(' ')}
+              trailing={
+                <div className="flex items-center gap-2">
+                  {cooldown > 0 && (
+                    <span className="text-[10px] font-semibold text-[var(--color-amber-text)] bg-[var(--color-amber-dim)] px-1.5 py-0.5 rounded-full font-mono">
+                      {formatCooldown(cooldown)}
+                    </span>
+                  )}
+                  <Toggle
+                    checked={cooldownEnabled && !dualDevice}
+                    onChange={(v) => { if (!dualDevice) handleToggleCooldown(v) }}
+                    ariaLabel="Toggle GPS cooldown"
                   />
                 </div>
-              </div>
-            </label>
+              }
+            />
 
-            <div className={menuRowClass}>
-              <Languages className={iconClass} />
-              <span className="flex-1 text-left">{t('generic.cancel').includes('取消') ? '語言' : 'Language'}</span>
-              <LangToggle />
-            </div>
+            <SettingsRow
+              icon={<Languages className="w-[14px] h-[14px]" />}
+              label={t('generic.cancel').includes('取消') ? '語言' : 'Language'}
+              trailing={<LangToggle />}
+              interactive={false}
+            />
 
-            <div className={[menuRowClass, 'cursor-default hover:bg-transparent'].join(' ')}>
-              <Layers className={iconClass} />
-              <span className="flex-1 text-left">{t('settings.map_layer')}</span>
-              <div className="flex items-center gap-1">
-                {LAYER_OPTIONS.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    onClick={() => onLayerChange(key)}
-                    aria-pressed={layerKey === key}
-                    className={[
-                      'px-2.5 py-1 text-[10px] font-semibold rounded-md transition-colors cursor-pointer',
-                      layerKey === key
-                        ? 'bg-[var(--color-accent)] text-white'
-                        : 'bg-white/10 text-[var(--color-text-2)] hover:bg-white/15',
-                    ].join(' ')}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+            <SettingsRow
+              icon={<Layers className="w-[14px] h-[14px]" />}
+              label={t('settings.map_layer')}
+              interactive={false}
+              trailing={
+                <div className="flex items-center gap-1">
+                  {LAYER_OPTIONS.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => onLayerChange(key)}
+                      aria-pressed={layerKey === key}
+                      className={[
+                        'px-2 py-[3px] text-[10px] font-semibold rounded-md transition-colors cursor-pointer',
+                        layerKey === key
+                          ? 'bg-[var(--color-accent)] text-white'
+                          : 'bg-white/10 text-[var(--color-text-2)] hover:bg-white/15',
+                      ].join(' ')}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              }
+            />
 
-          {/* Divider */}
-          <div className="h-px bg-[var(--color-border)] mx-2 my-1.5" />
+            <SettingsRow
+              icon={<Sun className="w-[14px] h-[14px]" />}
+              label="Theme"
+              interactive={false}
+              trailing={<span className="font-mono text-[11px] text-[var(--color-text-3)]">Dark</span>}
+            />
+          </Section>
 
-          {/* Info */}
-          <div className={[menuRowClass, 'cursor-default hover:bg-transparent'].join(' ')}>
-            <Info className={iconClass} />
-            <span className="flex-1 text-left">Version</span>
-            <span className="text-[11px] font-mono text-[var(--color-text-3)]">v{APP_VERSION}</span>
-          </div>
+          {/* Privacy / About */}
+          <Section label="About">
+            <SettingsRow
+              icon={<Info className="w-[14px] h-[14px]" />}
+              label="Version"
+              interactive={false}
+              trailing={<span className="font-mono text-[11px] text-[var(--color-text-3)]">v{APP_VERSION}</span>}
+            />
+            <SettingsRow
+              icon={<Trash2 className="w-[14px] h-[14px]" />}
+              label="Clear all history"
+              danger
+              onClick={() => { /* hook up if you add a clear-history flow */ }}
+            />
+          </Section>
         </div>
       )}
 
@@ -334,5 +332,92 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
         document.body,
       )}
     </>
+  )
+}
+
+// ─── Subcomponents ──────────────────────────────────────────────────
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="py-2 px-1.5 [&+*]:border-t [&+*]:border-[var(--color-border-subtle)]">
+      <div className="px-3 pt-1.5 pb-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-3)]">
+        {label}
+      </div>
+      <div className="flex flex-col">{children}</div>
+    </div>
+  )
+}
+
+interface SettingsRowProps {
+  icon: React.ReactNode
+  label: React.ReactNode
+  trailing?: React.ReactNode
+  onClick?: () => void
+  /** `false` renders the row as presentational (no hover/cursor). */
+  interactive?: boolean
+  disabled?: boolean
+  danger?: boolean
+  title?: string
+}
+
+function SettingsRow({
+  icon, label, trailing, onClick, interactive = true, disabled, danger, title,
+}: SettingsRowProps) {
+  const Tag = interactive && onClick ? 'button' : 'div'
+  return (
+    <Tag
+      {...(Tag === 'button' ? { type: 'button', onClick, disabled } : {})}
+      title={title}
+      className={[
+        'flex items-center gap-3 px-3 py-[9px] rounded-[9px] text-[13px]',
+        'text-[var(--color-text-1)] tracking-[-0.005em]',
+        'transition-colors duration-150',
+        interactive && onClick && !disabled ? 'hover:bg-white/[0.04] cursor-pointer' : '',
+        disabled ? 'opacity-55 cursor-not-allowed' : '',
+        danger ? 'text-[var(--color-danger-text)]' : '',
+      ].join(' ')}
+    >
+      <span
+        className={[
+          'w-7 h-7 rounded-lg grid place-items-center shrink-0 border',
+          danger
+            ? 'text-[var(--color-danger-text)] border-[rgba(255,71,87,0.3)] bg-[rgba(255,71,87,0.08)]'
+            : 'text-[var(--color-text-2)] border-[var(--color-border)] bg-white/[0.04]',
+        ].join(' ')}
+      >
+        {icon}
+      </span>
+      <span className="flex-1 text-left truncate">{label}</span>
+      {trailing != null && <span className="shrink-0">{trailing}</span>}
+    </Tag>
+  )
+}
+
+interface ToggleProps {
+  checked: boolean
+  onChange: (v: boolean) => void
+  ariaLabel?: string
+}
+
+function Toggle({ checked, onChange, ariaLabel }: ToggleProps) {
+  return (
+    <button
+      role="switch"
+      type="button"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      onClick={() => onChange(!checked)}
+      className={[
+        'relative w-8 h-[18px] rounded-[9px] shrink-0 transition-colors',
+        checked ? 'bg-[var(--color-accent)]' : 'bg-white/10',
+      ].join(' ')}
+    >
+      <span
+        className={[
+          'absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform',
+          checked ? 'translate-x-[16px]' : 'translate-x-[2px]',
+        ].join(' ')}
+      />
+    </button>
   )
 }
