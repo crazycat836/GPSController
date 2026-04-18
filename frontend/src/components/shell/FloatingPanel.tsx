@@ -28,11 +28,17 @@ export default function FloatingPanel({ mode, children }: FloatingPanelProps) {
     <div
       className={[
         'fixed top-[4.25rem] left-3 w-[22rem] z-[var(--z-ui)]',
-        'bg-[var(--color-surface-1)] border border-[var(--color-border)]',
+        // Glass-pill aesthetic to match the redesign/Home dock surface.
+        'bg-[rgba(19,20,22,0.82)] backdrop-blur-[24px] backdrop-saturate-150',
+        '[-webkit-backdrop-filter:blur(24px)_saturate(1.4)]',
+        'border border-[var(--color-border)]',
         'rounded-2xl overflow-hidden flex flex-col p-3_5 gap-3',
-        'shadow-[var(--shadow-lg)]',
+        'shadow-[var(--shadow-xl)]',
+        '[box-shadow:var(--shadow-xl),inset_0_1px_0_rgba(255,255,255,0.06)]',
         'transition-all duration-200 ease-[var(--ease-out-expo)]',
-        collapsed ? '' : 'max-h-[calc(100vh-80px)]',
+        // Leave room at the bottom so content doesn't slip under the new
+        // BottomModeBar (56px pill + 12px gap from screen bottom).
+        collapsed ? '' : 'max-h-[calc(100vh-4.25rem-84px)]',
       ].join(' ')}
     >
       {/* Header — floats inside panel with its own rounding */}

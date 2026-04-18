@@ -24,7 +24,7 @@ import FloatingPanel from './components/shell/FloatingPanel'
 import TopBar from './components/shell/TopBar'
 import Brand from './components/shell/Brand'
 import SearchBar from './components/shell/SearchBar'
-import ModeToolbar from './components/shell/ModeToolbar'
+import BottomModeBar from './components/shell/BottomModeBar'
 import MiniStatusBar from './components/shell/MiniStatusBar'
 import TopBarActions from './components/shell/TopBarActions'
 import SettingsMenu from './components/shell/SettingsMenu'
@@ -401,7 +401,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         {sim.mode === SimMode.Joystick && <JoystickPanel />}
       </FloatingPanel>
 
-      <ModeToolbar activeMode={sim.mode} onModeChange={sim.setMode} />
+      <BottomModeBar activeMode={sim.mode} onModeChange={sim.setMode} />
       <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} layerKey={layerKey} onLayerChange={handleLayerChange} />
       <DeviceDrawer open={deviceDrawerOpen} onClose={() => setDeviceDrawerOpen(false)} />
       <LibraryDrawer open={libraryOpen} onClose={() => setLibraryOpen(false)} />

@@ -57,7 +57,9 @@ export default function MiniStatusBar() {
 
   return (
     <StatusPill
-      className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[var(--z-ui)]"
+      // Sits above the BottomModeBar (bottom-3 + 48px pill + gap).
+      // Phase 3 will move this stack to the top-left status pair.
+      className="absolute bottom-[76px] left-1/2 -translate-x-1/2 z-[var(--z-ui)]"
     >
       {isDual ? (
         device.connectedDevices.slice(0, 2).map((dev, i) => {
