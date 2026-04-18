@@ -984,14 +984,26 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: var(--shadow-lg);
-  animation: fade-slide-down 200ms var(--ease-out-expo) both;
+  /* Dedicated keyframe that preserves the horizontal translateX(-50%)
+     — the generic fade-slide-down animation used to wipe that out and
+     anchor the toast's left edge at viewport-center, making it read as
+     offset right. */
+  animation: toast-pill-enter 200ms var(--ease-out-expo) both;
+}
+@keyframes toast-pill-enter {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
 /* Centered variant — vertical midpoint on top of the horizontal
    midpoint already baked into .toast-pill. Used for blocking /
    "please wait" messages that should dominate the viewport. */
 .toast-pill.toast-pill--centered {
   top: 50%;
-  transform: translate(-50%, -50%);
+  animation: toast-pill-enter-centered 200ms var(--ease-out-expo) both;
+}
+@keyframes toast-pill-enter-centered {
+  from { opacity: 0; transform: translate(-50%, calc(-50% - 8px)); }
+  to   { opacity: 1; transform: translate(-50%, -50%); }
 }
 
 .toast-pill-dark {
