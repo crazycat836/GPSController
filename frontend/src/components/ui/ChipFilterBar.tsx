@@ -37,19 +37,24 @@ export default function ChipFilterBar<Id extends string>({
   const [moreOpenSignal, setMoreOpenSignal] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Keep the active chip visible when overflow exists: if the active chip
-  // would be in the overflow popover, promote it into the visible bucket.
+  // Slot budget when overflow exists: (visibleCap - 1) chips + 1 "More" =
+  // visibleCap total slots. If the active chip would land in overflow,
+  // promote it into the last visible slot and push the displaced chip
+  // into the overflow bucket, so the bar stays the same width regardless
+  // of which category is active.
   const { visible, overflow } = useMemo(() => {
-    if (chips.length <= visibleCap) return { visible: chips, overflow: [] as Chip<Id>[] }
-    const head = chips.slice(0, visibleCap - 1)
-    const tail = chips.slice(visibleCap - 1)
-    const activeInTail = tail.find((c) => c.id === activeId)
-    if (activeInTail) {
-      const swapped = [...head.slice(0, -1), activeInTail, head[head.length - 1]]
-      const rest = [...tail.filter((c) => c.id !== activeId), head[head.length - 1]].filter(Boolean) as Chip<Id>[]
-      return { visible: swapped, overflow: rest }
+    if (chips.length <= visibleCap) {
+      return { visible: chips as readonly Chip<Id>[], overflow: [] as Chip<Id>[] }
     }
-    return { visible: head, overflow: tail }
+    const budget = visibleCap - 1
+    const activeIdx = chips.findIndex((c) => c.id === activeId)
+    if (activeIdx >= budget) {
+      const promoted = chips[activeIdx]
+      const visible = [...chips.slice(0, budget - 1), promoted]
+      const overflow = chips.filter((_, i) => i >= budget - 1 && i !== activeIdx)
+      return { visible, overflow }
+    }
+    return { visible: chips.slice(0, budget), overflow: chips.slice(budget) }
   }, [chips, visibleCap, activeId])
 
   const overflowIncludesActive = overflow.some((c) => c.id === activeId)
