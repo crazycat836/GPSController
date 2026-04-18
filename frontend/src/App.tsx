@@ -344,7 +344,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         <CooldownBadge />
         <UpdateChecker />
 
-        <Toast key={toast.toastMsg ?? ''} visible={!!toast.toastMsg}>
+        <Toast key={toast.toastMsg ?? ''} visible={!!toast.toastMsg} position="center">
           {toast.toastMsg}
         </Toast>
       </div>
