@@ -83,7 +83,7 @@ export default function ChipFilterBar<Id extends string>({
           )}
           <span>{chip.label}</span>
           {typeof chip.count === 'number' && (
-            <span className="opacity-60 tabular-nums text-[10px]">{chip.count}</span>
+            <span className="chip-filter-count">{chip.count}</span>
           )}
         </button>
       ))}

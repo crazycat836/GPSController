@@ -332,12 +332,17 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       <span className="inline-flex items-center gap-1.5 min-w-0">
         {cat && (
           <span
-            className="inline-block px-1.5 py-px rounded-[3px] text-[9.5px] font-medium uppercase tracking-[0.03em]"
+            className="inline-block uppercase"
             style={{
+              padding: '1px 5px',
               background: 'rgba(255,255,255,0.05)',
-              color: 'var(--color-text-2)',
+              borderRadius: '3px',
               fontFamily: 'Inter, sans-serif',
+              fontSize: '9.5px',
+              color: 'var(--color-text-2)',
+              fontWeight: 500,
               letterSpacing: '0.03em',
+              lineHeight: 1.4,
             }}
           >
             {displayCat(catName)}

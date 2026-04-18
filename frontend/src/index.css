@@ -1679,24 +1679,26 @@
 .chip-filter-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 4px 10px;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px;
   border-radius: var(--radius-full);
   border: 1px solid var(--color-border);
-  background: var(--color-surface-2);
-  color: var(--color-text-3);
-  font-size: var(--text-xs);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text-2);
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: all 120ms var(--ease-out-expo);
+  transition: color 120ms var(--ease-out-expo),
+              background 120ms var(--ease-out-expo),
+              border-color 120ms var(--ease-out-expo);
   white-space: nowrap;
   flex-shrink: 0;
   scroll-snap-align: start;
 }
 .chip-filter-chip:hover {
   color: var(--color-text-1);
-  border-color: var(--color-border-strong);
+  background: rgba(255, 255, 255, 0.06);
 }
 .chip-filter-chip[aria-pressed="true"] {
   background: var(--color-accent-dim);
@@ -1712,6 +1714,22 @@
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+/* Count badge nested inside a chip — small mono pill that inherits
+   active-state tinting from its parent. */
+.chip-filter-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.chip-filter-chip[aria-pressed="true"] .chip-filter-count {
+  background: rgba(108, 140, 255, 0.2);
+  color: var(--color-accent-strong);
 }
 
 /* ── CollapsibleSection ────────────────────────────────────── */
