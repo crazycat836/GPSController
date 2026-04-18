@@ -1469,9 +1469,10 @@
 }
 .tab-trigger:hover { color: var(--color-text-2); }
 .tab-trigger[aria-selected="true"] {
-  color: var(--color-accent-strong);
-  background: var(--color-accent-dim);
+  color: var(--color-text-1);
+  background: var(--color-surface-hover);
   font-weight: 600;
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .tab-trigger[aria-selected="true"] .tab-trigger-count { opacity: 0.7; }
 .tab-trigger:focus-visible {
@@ -1671,15 +1672,8 @@
   gap: 6px;
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 2px;
+  padding: 2px 0;
   scroll-snap-type: x proximity;
-  mask-image: linear-gradient(
-    to right,
-    transparent 0,
-    #000 16px,
-    #000 calc(100% - 16px),
-    transparent 100%
-  );
 }
 .chip-filter-bar::-webkit-scrollbar { display: none; }
 .chip-filter-chip {
@@ -1707,7 +1701,7 @@
 .chip-filter-chip[aria-pressed="true"] {
   background: var(--color-accent-dim);
   color: var(--color-accent-strong);
-  border-color: rgba(108, 140, 255, 0.3);
+  border-color: rgba(108, 140, 255, 0.18);
 }
 .chip-filter-chip:focus-visible {
   outline: 2px solid var(--color-accent);

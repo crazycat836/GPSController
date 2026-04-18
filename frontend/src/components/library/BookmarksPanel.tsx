@@ -541,15 +541,16 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
           className={[
             'inline-flex items-center justify-center gap-2 h-11 px-4 rounded-[12px]',
             'text-[13px] font-semibold shrink-0',
-            'bg-white/[0.04] border border-[var(--color-border)] text-[var(--color-text-1)]',
+            'bg-white/[0.04] border border-[var(--color-border)]',
             'hover:bg-white/[0.08]',
             'disabled:opacity-40 disabled:cursor-not-allowed',
             'transition-colors duration-150 cursor-pointer',
           ].join(' ')}
+          style={{ color: 'var(--color-text-1)' }}
           title={t('bm.manage_categories')}
         >
           <Layers width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-          <span className="hidden sm:inline">{t('bm.new_category')}</span>
+          <span>{t('bm.manage_categories')}</span>
         </button>
         <button
           type="button"
@@ -557,13 +558,17 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
           disabled={selectionMode}
           className={[
             'flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-[12px]',
-            'text-[13px] font-semibold text-[var(--color-surface-0)]',
-            'transition-[transform,box-shadow] duration-150',
+            'text-[13px] font-semibold',
+            'transition-[transform,box-shadow,opacity] duration-150',
             'hover:-translate-y-px',
             'disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0',
             'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] focus-visible:outline-offset-2',
           ].join(' ')}
-          style={{ background: 'var(--color-accent)', boxShadow: 'var(--shadow-glow)' }}
+          style={{
+            background: 'var(--color-accent)',
+            color: '#ffffff',
+            boxShadow: 'var(--shadow-glow)',
+          }}
         >
           <Plus width={ICON_SIZE.sm} height={ICON_SIZE.sm} strokeWidth={2.5} />
           {t('bm.add')}
