@@ -175,6 +175,12 @@ export function useSimulation(subscribe?: WsSubscribe) {
   const [pauseRemaining, setPauseRemaining] = useState<number | null>(null)
   const [ddiMounting, setDdiMounting] = useState(false)
   const [waypointProgress, setWaypointProgress] = useState<{ current: number; next: number; total: number } | null>(null)
+  // Loop / MultiStop target lap count. null = unlimited (existing
+  // behaviour). Positive = backend will auto-stop after N laps.
+  const [loopLapCount, setLoopLapCount] = useState<number | null>(null)
+  // Progress readout from the `lap_complete` WS event. total is the
+  // target (when set) so the UI can render "3 / 5" style.
+  const [lapProgress, setLapProgress] = useState<{ current: number; total: number | null } | null>(null)
   // What's *actually* running on the device — set when a route handler
   // starts or when applySpeed succeeds. Used by the status bar so the user
   // doesn't see the typed-but-unapplied speed before pressing Apply.
@@ -308,6 +314,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         setEta(null)
         setPauseEndAt(null)
         setWaypointProgress(null)
+        setLapProgress(null)
         setDestination(null)
         setRoutePath([])
         break
@@ -319,6 +326,16 @@ export function useSimulation(subscribe?: WsSubscribe) {
             current: d.current_index,
             next: d.next_index ?? d.current_index + 1,
             total: d.total ?? 0,
+          })
+        }
+        break
+      }
+      case 'lap_complete': {
+        const d = wsMessage.data
+        if (d && typeof d.lap === 'number') {
+          setLapProgress({
+            current: d.lap,
+            total: typeof d.total === 'number' ? d.total : null,
           })
         }
         break
@@ -465,7 +482,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
         // waypoints here would prepend the start point on every restart,
         // and break the backend↔UI seg_idx mapping for highlighting.
         setProgress(0)
-        const res = await api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, undefined, straightLine)
+        setLapProgress(loopLapCount != null ? { current: 0, total: loopLapCount } : null)
+        const res = await api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, undefined, straightLine, loopLapCount)
         setStatus((prev) => ({ ...prev, running: true, paused: false }))
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
@@ -474,7 +492,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         throw err
       }
     },
-    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, pauseLoop, pauseRandomWalk, straightLine],
+    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, pauseLoop, pauseRandomWalk, straightLine, loopLapCount],
   )
 
   const multiStop = useCallback(
@@ -484,7 +502,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
         _setMode(SimMode.MultiStop)
         // See startLoop — do not overwrite UI waypoints with the backend route.
         setProgress(0)
-        const res = await api.multiStop(wps, moveMode, stopDuration, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, undefined, straightLine)
+        setLapProgress(loop && loopLapCount != null ? { current: 0, total: loopLapCount } : null)
+        const res = await api.multiStop(wps, moveMode, stopDuration, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, undefined, straightLine, loop ? loopLapCount : null)
         setStatus((prev) => ({ ...prev, running: true, paused: false }))
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
@@ -493,7 +512,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         throw err
       }
     },
-    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, pauseLoop, pauseRandomWalk, straightLine],
+    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, pauseLoop, pauseRandomWalk, straightLine, loopLapCount],
   )
 
   const randomWalk = useCallback(
@@ -687,12 +706,14 @@ export function useSimulation(subscribe?: WsSubscribe) {
   }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, straightLine])
   const startLoopAll = useCallback(async (udids: string[], wps: LatLng[]) => {
     await preSyncStart(udids)
-    return fanout(udids, 'loop', (u) => api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, u, straightLine))
-  }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseLoop, straightLine])
+    setLapProgress(loopLapCount != null ? { current: 0, total: loopLapCount } : null)
+    return fanout(udids, 'loop', (u) => api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, u, straightLine, loopLapCount))
+  }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseLoop, straightLine, loopLapCount])
   const multiStopAll = useCallback(async (udids: string[], wps: LatLng[], dur: number, loop: boolean) => {
     await preSyncStart(udids)
-    return fanout(udids, 'multistop', (u) => api.multiStop(wps, moveMode, dur, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, u, straightLine))
-  }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, straightLine])
+    setLapProgress(loop && loopLapCount != null ? { current: 0, total: loopLapCount } : null)
+    return fanout(udids, 'multistop', (u) => api.multiStop(wps, moveMode, dur, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, u, straightLine, loop ? loopLapCount : null))
+  }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, straightLine, loopLapCount])
   const randomWalkAll = useCallback(async (udids: string[], center: LatLng, r: number) => {
     await preSyncStart(udids)
     // Shared seed → both engines produce identical destination sequences.
@@ -791,6 +812,9 @@ export function useSimulation(subscribe?: WsSubscribe) {
     pauseRemaining,
     ddiMounting,
     waypointProgress,
+    loopLapCount,
+    setLoopLapCount,
+    lapProgress,
     effectiveSpeed,
     applySpeed,
     error,

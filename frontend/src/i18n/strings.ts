@@ -382,6 +382,9 @@ export const STRINGS = {
   // ── Pause settings ──────────────────────────
   'pause.multi_stop': { zh: '每站隨機暫停', en: 'Random pause at each stop' },
   'pause.loop': { zh: '每圈隨機暫停', en: 'Random pause between laps' },
+  'loop.lap_count_label': { zh: '圈數目標', en: 'Laps' },
+  'loop.lap_count_placeholder': { zh: '無限', en: 'Unlimited' },
+  'loop.lap_count_unit': { zh: '圈', en: 'laps' },
   'pause.random_walk': { zh: '每段隨機暫停', en: 'Random pause between legs' },
   'pause.min': { zh: '最小', en: 'Min' },
   'pause.max': { zh: '最大', en: 'Max' },
