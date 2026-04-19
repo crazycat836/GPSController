@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useModalDismiss } from '../../hooks/useModalDismiss'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 
 interface DrawerProps {
   open: boolean
@@ -32,57 +34,16 @@ export default function Drawer({
 }: DrawerProps) {
   const isLeft = side === 'left'
   const closeButtonRef = useRef<HTMLButtonElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const titleId = `drawer-title-${title.replace(/\s+/g, '-').toLowerCase()}`
 
-  useEffect(() => {
-    if (open) {
-      previousFocusRef.current = document.activeElement as HTMLElement
-      const timer = setTimeout(() => {
-        closeButtonRef.current?.focus()
-      }, 50)
-      return () => clearTimeout(timer)
-    } else {
-      previousFocusRef.current?.focus()
-    }
-  }, [open])
+  useModalDismiss({ open, onDismiss: onClose })
+  useFocusTrap(panelRef, open)
 
   useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [open, onClose])
-
-  useEffect(() => {
-    if (!open) return
-    const panel = closeButtonRef.current?.closest('[role="dialog"]') as HTMLElement | null
-    if (!panel) return
-
-    const handleTrap = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return
-      const focusable = panel.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
-      )
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      if (!first) return
-      if (e.shiftKey) {
-        if (document.activeElement === first) {
-          e.preventDefault()
-          last?.focus()
-        }
-      } else {
-        if (document.activeElement === last) {
-          e.preventDefault()
-          first?.focus()
-        }
-      }
-    }
-    document.addEventListener('keydown', handleTrap)
-    return () => document.removeEventListener('keydown', handleTrap)
+    const timer = setTimeout(() => closeButtonRef.current?.focus(), 50)
+    return () => clearTimeout(timer)
   }, [open])
 
   return createPortal(
@@ -102,6 +63,7 @@ export default function Drawer({
 
       {/* Panel */}
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

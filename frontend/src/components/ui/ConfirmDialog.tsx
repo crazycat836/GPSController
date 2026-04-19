@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useModalDismiss } from '../../hooks/useModalDismiss'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -30,29 +32,16 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   const descId = useId()
   const confirmRef = useRef<HTMLButtonElement>(null)
-  const previousFocus = useRef<HTMLElement | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  useModalDismiss({ open, onDismiss: onCancel, busy })
+  useFocusTrap(dialogRef, open)
 
   useEffect(() => {
     if (!open) return
-    previousFocus.current = document.activeElement as HTMLElement | null
     const t = setTimeout(() => confirmRef.current?.focus(), 50)
-    return () => {
-      clearTimeout(t)
-      previousFocus.current?.focus?.()
-    }
+    return () => clearTimeout(t)
   }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) {
-        e.preventDefault()
-        onCancel()
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, busy, onCancel])
 
   const handleConfirm = useCallback(() => {
     void onConfirm()
@@ -67,6 +56,7 @@ export default function ConfirmDialog({
       role="presentation"
     >
       <div
+        ref={dialogRef}
         className="modal-dialog anim-scale-in"
         role="alertdialog"
         aria-modal="true"

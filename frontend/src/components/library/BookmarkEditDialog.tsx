@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useModalDismiss } from '../../hooks/useModalDismiss'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { createPortal } from 'react-dom'
 import { MapPin, Crosshair } from 'lucide-react'
 import type { BookmarkCategory } from '../../hooks/useBookmarks'
@@ -67,6 +69,7 @@ export default function BookmarkEditDialog(props: Props) {
   const [note, setNote] = useState('')
 
   const nameRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const wasOpenRef = useRef(false)
 
   // Initialize form state once per open transition. We deliberately ignore
@@ -125,15 +128,8 @@ export default function BookmarkEditDialog(props: Props) {
     })
   }, [canSubmit, name, effectiveLat, effectiveLng, categoryId, note, onSubmit])
 
-  // Esc to close.
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); onClose() }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  useModalDismiss({ open, onDismiss: onClose })
+  useFocusTrap(dialogRef, open)
 
   if (!open) return null
 
@@ -143,6 +139,7 @@ export default function BookmarkEditDialog(props: Props) {
   return createPortal(
     <div className="modal-overlay anim-fade-in" onClick={onClose}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { useT } from '../../i18n'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { parseBulkCoords, type ParsedCoord } from '../../lib/parseBulkCoords'
+import { useModalDismiss } from '../../hooks/useModalDismiss'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 
 export type BulkMode = 'bookmarks' | 'waypoints'
 
@@ -36,20 +38,18 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
-  const previousFocus = useRef<HTMLElement | null>(null)
   const summaryId = useId()
   const titleId = useId()
 
   const parsed = useMemo(() => parseBulkCoords(text), [text])
 
+  useModalDismiss({ open, onDismiss: onCancel, busy })
+  useFocusTrap(dialogRef, open)
+
   useEffect(() => {
     if (!open) return
-    previousFocus.current = document.activeElement as HTMLElement | null
     const timer = setTimeout(() => textareaRef.current?.focus(), 50)
-    return () => {
-      clearTimeout(timer)
-      previousFocus.current?.focus?.()
-    }
+    return () => clearTimeout(timer)
   }, [open])
 
   // Reset body when the dialog closes so a subsequent open starts clean.
@@ -59,39 +59,6 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
     setErrorsOpen(false)
     setBusy(false)
   }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) {
-        e.preventDefault()
-        onCancel()
-        return
-      }
-      // Basic focus trap: wrap Tab / Shift+Tab within the dialog so
-      // keyboard users can't accidentally tab out onto the page
-      // behind. aria-modal alone doesn't enforce containment in
-      // browsers, only announces it to ATs.
-      if (e.key === 'Tab' && dialogRef.current) {
-        const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
-          'button, textarea, select, input, [tabindex]:not([tabindex="-1"])',
-        )
-        const enabled = Array.from(focusables).filter((el) => !el.hasAttribute('disabled'))
-        if (enabled.length === 0) return
-        const first = enabled[0]
-        const last = enabled[enabled.length - 1]
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault()
-          last.focus()
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, busy, onCancel])
 
   const handleConfirm = async () => {
     if (parsed.ok.length === 0 || busy) return

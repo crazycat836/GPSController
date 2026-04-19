@@ -1,9 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Layers, Pencil, Trash2, Plus } from 'lucide-react'
 import type { BookmarkCategory } from '../../hooks/useBookmarks'
 import { ICON_SIZE } from '../../lib/icons'
 import { useT } from '../../i18n'
+import { useModalDismiss } from '../../hooks/useModalDismiss'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 
 interface CategoryManagerDialogProps {
   open: boolean
@@ -46,13 +48,10 @@ export default function CategoryManagerDialog({
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
+  const dialogRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  useModalDismiss({ open, onDismiss: onClose })
+  useFocusTrap(dialogRef, open)
 
   const commitAdd = useCallback(() => {
     const n = newName.trim()
@@ -77,6 +76,7 @@ export default function CategoryManagerDialog({
   return createPortal(
     <div className="modal-overlay anim-fade-in" onClick={onClose}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={t('bm.manage_categories')}
