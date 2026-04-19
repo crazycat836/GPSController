@@ -95,6 +95,7 @@ import logging
 from core.wifi_tunnel import TunnelRunner
 
 _tunnel_logger = logging.getLogger("wifi_tunnel")
+logger = logging.getLogger(__name__)
 
 # In-process tunnel runner. Serialised by its own asyncio.Lock so concurrent
 # /start or /stop requests never race.
@@ -725,7 +726,7 @@ async def amfi_reveal_developer_mode(udid: str):
     if conn is None:
         raise HTTPException(
             status_code=404,
-            detail={"code": "device_not_connected", "message": "Device is not currently connected"},
+            detail={"code": "device_not_connected", "message": "裝置目前未連線"},
         )
 
     # iOS 15 and below have no Developer Mode concept, so the AMFI
@@ -763,14 +764,13 @@ async def amfi_reveal_developer_mode(udid: str):
             status_code=500,
             detail={
                 "code": "amfi_unavailable",
-                "message": f"pymobiledevice3 AMFI service not importable ({type(exc).__name__}: {exc})",
+                "message": f"pymobiledevice3 AMFI 服務無法載入 ({type(exc).__name__}: {exc})",
             },
         )
 
     try:
         AmfiService(conn.lockdown).reveal_developer_mode_option_in_ui()
     except Exception as exc:
-        logger = logging.getLogger(__name__)
         logger.exception("AMFI reveal failed for %s", udid)
         raise HTTPException(
             status_code=500,
