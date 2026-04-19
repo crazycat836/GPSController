@@ -13,10 +13,12 @@ export interface DeviceInfo {
   ios_version: string
   connection_type: string
   is_connected: boolean
-  /** iOS 16+ only. null = unknown (older iOS or lockdown query failed);
-   *  false = toggle present but OFF (AMFI reveal is useful here);
-   *  true = already ON (reveal button hidden). */
+  /** Raw toggle state — usually not needed by the frontend. Consume
+   *  `can_reveal_developer_mode` instead. */
   developer_mode_enabled?: boolean | null
+  /** True when all preconditions for the AMFI "Reveal Developer Mode"
+   *  action are met (connected, USB, iOS 16+, toggle OFF). */
+  can_reveal_developer_mode?: boolean
 }
 
 export interface WifiScanResult {

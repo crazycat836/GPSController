@@ -204,6 +204,14 @@ class DeviceManager:
                                 "get_developer_mode_status failed for %s",
                                 raw.serial, exc_info=True,
                             )
+                # Derived gate for the frontend AMFI button — all
+                # four preconditions in one place.
+                info.can_reveal_developer_mode = (
+                    info.is_connected
+                    and (conn_type or "").lower() == "usb"
+                    and ios_major >= 16
+                    and info.developer_mode_enabled is False
+                )
                 devices.append(info)
                 logger.info(
                     "  device %s '%s' iOS %s via %s (connected=%s)",

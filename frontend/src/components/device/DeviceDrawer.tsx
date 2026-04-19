@@ -290,16 +290,10 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                   </span>
                 )
 
-                // AMFI reveal is useful only when: connected via USB
-                // (WiFi tunnel doesn't route `com.apple.amfi.lockdown`),
-                // iOS 16+ (toggle doesn't exist before), and the toggle
-                // is currently OFF (backend reported explicit false —
-                // not null "unknown").
-                const canRevealDevMode =
-                  isSelected
-                  && !isNetwork
-                  && major >= 16
-                  && d.developer_mode_enabled === false
+                // Backend derives `can_reveal_developer_mode` from
+                // connected-USB-iOS16-and-toggle-OFF; render the
+                // button when it's selected AND that's true.
+                const canRevealDevMode = isSelected && !!d.can_reveal_developer_mode
                 const busy = !!revealInFlight[d.udid]
 
                 return (
