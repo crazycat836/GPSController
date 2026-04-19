@@ -72,6 +72,10 @@ class LoopRequest(BaseModel):
     pause_max: float = 20.0
     straight_line: bool = False
     udid: str | None = None
+    # None / 0 = run forever (user stops manually). Positive = auto-stop
+    # after that many completed laps. Cap is arbitrary but prevents
+    # accidental runaway from a typo.
+    lap_count: int | None = Field(default=None, ge=1, le=9999)
 
 
 class MultiStopRequest(BaseModel):
@@ -87,6 +91,9 @@ class MultiStopRequest(BaseModel):
     pause_max: float = 20.0
     straight_line: bool = False
     udid: str | None = None
+    # Only meaningful when `loop=True`; otherwise the route runs once
+    # and stops naturally. Same semantics as `LoopRequest.lap_count`.
+    lap_count: int | None = Field(default=None, ge=1, le=9999)
 
 
 class RandomWalkRequest(BaseModel):

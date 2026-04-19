@@ -33,6 +33,7 @@ class MultiStopNavigator:
         pause_min: float = DEFAULT_PAUSE_MIN,
         pause_max: float = DEFAULT_PAUSE_MAX,
         straight_line: bool = False,
+        lap_count: int | None = None,
     ) -> None:
         """Navigate through *waypoints* one leg at a time.
 
@@ -47,6 +48,10 @@ class MultiStopNavigator:
         loop
             If True, loop back to the start after reaching the last
             waypoint and repeat indefinitely.
+        lap_count
+            When ``loop=True`` and this is positive, stop after the given
+            number of completed laps. ``None`` / ``0`` = unlimited (the
+            pre-existing behaviour). Ignored when ``loop=False``.
         """
         engine = self.engine
 
@@ -217,8 +222,23 @@ class MultiStopNavigator:
                 running = False
             else:
                 engine.lap_count += 1
-                await engine._emit("lap_complete", {"lap": engine.lap_count})
-                logger.info("Multi-stop lap %d complete", engine.lap_count)
+                # Mirror route_loop: 0 / None = unlimited; positive = cap.
+                limit = lap_count if (lap_count is not None and lap_count > 0) else None
+                await engine._emit(
+                    "lap_complete",
+                    {"lap": engine.lap_count, "total": limit},
+                )
+                logger.info(
+                    "Multi-stop lap %d%s complete",
+                    engine.lap_count,
+                    f"/{limit}" if limit else "",
+                )
+                if limit is not None and engine.lap_count >= limit:
+                    logger.info(
+                        "Multi-stop reached configured lap count %d, stopping",
+                        limit,
+                    )
+                    running = False
 
         engine._route_offset_remaining = 0.0
         if engine.state == SimulationState.MULTI_STOP:

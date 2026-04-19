@@ -30,6 +30,7 @@ class RouteLooper:
         pause_min: float = DEFAULT_PAUSE_MIN,
         pause_max: float = DEFAULT_PAUSE_MAX,
         straight_line: bool = False,
+        lap_count: int | None = None,
     ) -> None:
         """Build a multi-waypoint route that forms a closed loop, then
         traverse it repeatedly until stopped.
@@ -41,6 +42,10 @@ class RouteLooper:
             by appending the first waypoint at the end.
         mode
             Movement mode determining speed profile.
+        lap_count
+            When positive, stop automatically after that many completed
+            laps. ``None`` / ``0`` means "loop forever until the user
+            calls stop".
         """
         engine = self.engine
 
@@ -109,8 +114,20 @@ class RouteLooper:
                 break
 
             engine.lap_count += 1
-            await engine._emit("lap_complete", {"lap": engine.lap_count})
-            logger.info("Loop lap %d complete", engine.lap_count)
+            # lap_count <= 0 is treated the same as None ("unlimited")
+            # so the field is safe even if a caller passes 0 by accident.
+            limit = lap_count if (lap_count is not None and lap_count > 0) else None
+            await engine._emit("lap_complete", {"lap": engine.lap_count, "total": limit})
+            logger.info(
+                "Loop lap %d%s complete",
+                engine.lap_count,
+                f"/{limit}" if limit else "",
+            )
+
+            # Auto-stop after the configured lap count.
+            if limit is not None and engine.lap_count >= limit:
+                logger.info("Loop reached configured lap count %d, stopping", limit)
+                break
 
             # Optional random pause between laps
             if pause_enabled:

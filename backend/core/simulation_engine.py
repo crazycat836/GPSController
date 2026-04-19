@@ -266,6 +266,7 @@ class SimulationEngine:
         pause_min: float = DEFAULT_PAUSE_MIN,
         pause_max: float = DEFAULT_PAUSE_MAX,
         straight_line: bool = False,
+        lap_count: int | None = None,
     ) -> None:
         """Start looping through a closed route."""
         await self._ensure_stopped()
@@ -290,6 +291,7 @@ class SimulationEngine:
                     speed_min_kmh=speed_min_kmh, speed_max_kmh=speed_max_kmh,
                     pause_enabled=pause_enabled, pause_min=pause_min, pause_max=pause_max,
                     straight_line=straight_line,
+                    lap_count=lap_count,
                 ),
                 "Loop",
             )
@@ -325,6 +327,7 @@ class SimulationEngine:
         pause_min: float = DEFAULT_PAUSE_MIN,
         pause_max: float = DEFAULT_PAUSE_MAX,
         straight_line: bool = False,
+        lap_count: int | None = None,
     ) -> None:
         """Navigate through waypoints with optional stops."""
         await self._ensure_stopped()
@@ -351,6 +354,7 @@ class SimulationEngine:
                     speed_min_kmh=speed_min_kmh, speed_max_kmh=speed_max_kmh,
                     pause_enabled=pause_enabled, pause_min=pause_min, pause_max=pause_max,
                     straight_line=straight_line,
+                    lap_count=lap_count,
                 ),
                 "Multi-stop",
             )
