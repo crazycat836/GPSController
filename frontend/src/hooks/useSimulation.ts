@@ -612,6 +612,11 @@ export function useSimulation(subscribe?: WsSubscribe) {
       setEta(null)
       setRoutePath([])
       setWaypointProgress(null)
+      // Clear the lap progress counter too — otherwise a stopped run
+      // keeps showing "3 / 5" in the Loop / MultiStop panel until the
+      // next `simulation_complete` WS event (which never arrives on a
+      // manual Stop in some edge cases).
+      setLapProgress(null)
       setEffectiveSpeed(null)
       // Clear the destination so the red "target" marker goes away —
       // lingering destination pin after Stop was a reported UX bug.
@@ -636,6 +641,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
       setWaypoints([])
       setRoutePath([])
       setWaypointProgress(null)
+      setLapProgress(null)
       setEffectiveSpeed(null)
       return res
     } catch (err: any) {
@@ -766,6 +772,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
     setWaypoints([])
     setRoutePath([])
     setWaypointProgress(null)
+    setLapProgress(null)
     setEffectiveSpeed(null)
     return outcome
   }, [fanout])
