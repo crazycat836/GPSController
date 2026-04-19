@@ -18,7 +18,9 @@ interface EtaBarProps {
   plannedEtaSeconds?: number
 }
 
-const ACTIVE_STATES = ['navigating', 'looping', 'multi_stop', 'random_walk']
+// Keep `paused` here — the pause/resume button lives inside this pill,
+// so hiding it on pause would trap the user with no visible way to resume.
+const ACTIVE_STATES = ['navigating', 'looping', 'multi_stop', 'random_walk', 'paused']
 
 // Format ETA as HH:MM:SS to match the redesign/Home treatment
 // (mono, accent-coloured, always 2-digit HH prefix even for < 1h).
@@ -78,16 +80,31 @@ const EtaBar: React.FC<EtaBarProps> = ({
       role="status"
       aria-live="polite"
       className={[
-        'fixed top-[76px] left-1/2 -translate-x-1/2 z-[var(--z-bar)]',
-        // Glass pill — rgba(19,20,22,0.82) + blur(20) sat(1.3).
-        'bg-[rgba(19,20,22,0.82)] backdrop-blur-[20px] backdrop-saturate-[1.3]',
-        '[-webkit-backdrop-filter:blur(20px)_saturate(1.3)]',
+        // No Tailwind `-translate-x-1/2` here: Tailwind v4 emits it as
+        // the CSS `translate:` longhand, which *stacks* with the
+        // animation's `transform: translate(-50%, …)` and double-shifts
+        // the pill off-canvas. The `eta-bar-enter` keyframe bakes the
+        // horizontal translate into every frame (with fill-mode `both`),
+        // so it's centred before / during / after the animation.
+        // `--z-map-ui` (1000) sits above every Leaflet pane (map-pane 400,
+        // marker-pane 600, popup-pane 700). `--z-bar` (200) loses to
+        // map-pane in the cascade so the pill renders behind tiles and
+        // only flickers into view while Leaflet is mid-zoom.
+        'fixed top-[76px] left-1/2 z-[var(--z-map-ui)]',
         'border border-[var(--color-border)] rounded-full',
         'shadow-[var(--shadow-md)]',
         'pl-5 pr-4 py-2.5 flex items-center gap-[18px]',
-        'anim-fade-slide-down',
+        'eta-bar-enter',
       ].join(' ')}
-      style={{ transformOrigin: 'top center' }}
+      // Inline backdrop-filter so blur + saturate compose into a
+      // single declaration (Tailwind v4 arbitrary utility split them
+      // into two `backdrop-filter` rules, only the last survived).
+      style={{
+        background: 'rgba(19,20,22,0.88)',
+        backdropFilter: 'blur(20px) saturate(1.3)',
+        WebkitBackdropFilter: 'blur(20px) saturate(1.3)',
+        transformOrigin: 'top center',
+      }}
     >
       {/* ETA — accent mono value */}
       <Stat label={t('eta.eta')} value={formatClock(aggEta)} accent />

@@ -1006,6 +1006,21 @@
   to   { opacity: 1; transform: translate(-50%, -50%); }
 }
 
+/* Dedicated entrance for the top-centre ETA pill. The shared
+   `fade-slide-down` keyframe sets `transform: translateY(0)` with
+   `animation-fill-mode: both`, which would permanently wipe out the
+   `-translate-x-1/2` Tailwind class and leave the pill anchored at
+   viewport-center (extending off-screen to the right). Baking
+   translateX(-50%) into every keyframe keeps it horizontally centred
+   for the full lifetime of the element. */
+.eta-bar-enter {
+  animation: eta-bar-enter var(--duration-enter) var(--ease-out-expo) both;
+}
+@keyframes eta-bar-enter {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
 .toast-pill-dark {
   background: rgba(24, 26, 32, 0.88);
   color: var(--color-text-1);
