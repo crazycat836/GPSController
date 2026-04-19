@@ -305,6 +305,7 @@ class AppState:
                         pause_min=snapshot.pause_min,
                         pause_max=snapshot.pause_max,
                         straight_line=snapshot.straight_line,
+                        lap_count=snapshot.lap_count,
                     )
                 elif snapshot.mode == "multi_stop" and snapshot.waypoints:
                     wps = [Coordinate(lat=w["lat"], lng=w["lng"]) for w in snapshot.waypoints]
@@ -319,6 +320,7 @@ class AppState:
                         pause_min=snapshot.pause_min,
                         pause_max=snapshot.pause_max,
                         straight_line=snapshot.straight_line,
+                        lap_count=snapshot.lap_count,
                     )
                 elif snapshot.mode == "random_walk" and snapshot.center and snapshot.radius_m:
                     await new_engine.random_walk(

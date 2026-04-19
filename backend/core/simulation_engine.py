@@ -66,6 +66,10 @@ class SimulationSnapshot:
     pause_min: float = DEFAULT_PAUSE_MIN
     pause_max: float = DEFAULT_PAUSE_MAX
     straight_line: bool = False
+    # Loop / MultiStop lap cap. Positive = stop after N laps; None =
+    # unlimited (previous behaviour). Must survive a snapshot/restore
+    # so a reconnecting follower device doesn't run the route forever.
+    lap_count: int | None = None
 
 
 # ── ETA Tracker ──────────────────────────────────────────────────────────
@@ -283,6 +287,7 @@ class SimulationEngine:
             pause_min=pause_min,
             pause_max=pause_max,
             straight_line=straight_line,
+            lap_count=lap_count,
         )
         try:
             await self._run_handler(
@@ -346,6 +351,7 @@ class SimulationEngine:
             pause_min=pause_min,
             pause_max=pause_max,
             straight_line=straight_line,
+            lap_count=lap_count,
         )
         try:
             await self._run_handler(
