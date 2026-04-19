@@ -11,15 +11,10 @@ import ListRow from '../ui/ListRow'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
 import EmptyState from '../ui/EmptyState'
 import ConfirmDialog from '../ui/ConfirmDialog'
+import type { SavedRoute } from '../../services/api'
 
 interface RoutesPanelProps {
   onRouteLoaded: () => void
-}
-
-interface SavedRoute {
-  id: string
-  name: string
-  waypoints: { lat: number; lng: number }[]
 }
 
 export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
@@ -27,7 +22,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   const bm = useBookmarkContext()
   const sim = useSimContext()
 
-  const savedRoutes = bm.savedRoutes as unknown as SavedRoute[]
+  const savedRoutes = bm.savedRoutes
   const waypointsCount = sim.sim.waypoints.length
 
   const [routeName, setRouteName] = useState('')

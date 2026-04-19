@@ -1,5 +1,55 @@
 import { STORAGE_KEYS } from '../lib/storage-keys'
 import { API_BASE, DEFAULT_TUNNEL_PORT } from '../lib/constants'
+import type { Bookmark, BookmarkCategory } from '../hooks/useBookmarks'
+import type { DeviceInfo } from '../hooks/useDevice'
+
+// ─── Shared response shapes ─────────────────────────────────
+
+/** Envelope used by most action endpoints (connect, teleport, etc.). */
+export interface StatusResponse {
+  status: string
+  [key: string]: unknown
+}
+
+/** Stored route payload shared by RoutesPanel and the library flows. */
+export interface SavedRoute {
+  id: string
+  name: string
+  waypoints: { lat: number; lng: number }[]
+  created_at?: string
+  /** OSRM profile / movement mode (e.g. "foot", "car"). Sent by
+   *  `saveRoute` and stored by the backend. */
+  profile?: string
+}
+
+/** Store envelope returned by `/api/bookmarks`. */
+export interface BookmarkStore {
+  categories: BookmarkCategory[]
+  bookmarks: Bookmark[]
+}
+
+export interface WifiTunnelStatus {
+  running: boolean
+  ip?: string
+  port?: number
+  rsd_address?: string
+  rsd_port?: number
+}
+
+export interface WifiScanResult {
+  ip: string
+  name: string
+  udid: string
+  ios_version: string
+}
+
+export interface AddressSearchResult {
+  display_name: string
+  lat: number
+  lng: number
+  type?: string
+  importance?: number
+}
 
 const API = API_BASE
 
@@ -79,16 +129,23 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 // Device
-export const listDevices = () => request<any[]>('GET', '/api/device/list')
-export const connectDevice = (udid: string) => request<any>('POST', `/api/device/${udid}/connect`)
-export const disconnectDevice = (udid: string) => request<any>('DELETE', `/api/device/${udid}/connect`)
-export const wifiConnect = (ip: string) => request<any>('POST', '/api/device/wifi/connect', { ip })
-export const wifiScan = () => request<any[]>('GET', '/api/device/wifi/scan')
+export const listDevices = () => request<DeviceInfo[]>('GET', '/api/device/list')
+export const connectDevice = (udid: string) => request<StatusResponse>('POST', `/api/device/${udid}/connect`)
+export const disconnectDevice = (udid: string) => request<StatusResponse>('DELETE', `/api/device/${udid}/connect`)
+export interface WifiConnectResponse {
+  status: string
+  udid: string
+  name: string
+  ios_version: string
+  connection_type?: string
+}
+export const wifiConnect = (ip: string) => request<WifiConnectResponse>('POST', '/api/device/wifi/connect', { ip })
+export const wifiScan = () => request<WifiScanResult[]>('GET', '/api/device/wifi/scan')
 export const wifiTunnelStartAndConnect = (ip: string, port = DEFAULT_TUNNEL_PORT, udid?: string) =>
-  request<any>('POST', '/api/device/wifi/tunnel/start-and-connect', { ip, port, ...(udid ? { udid } : {}) })
-export const wifiTunnelStatus = () => request<any>('GET', '/api/device/wifi/tunnel/status')
+  request<WifiConnectResponse & WifiTunnelStatus>('POST', '/api/device/wifi/tunnel/start-and-connect', { ip, port, ...(udid ? { udid } : {}) })
+export const wifiTunnelStatus = () => request<WifiTunnelStatus>('GET', '/api/device/wifi/tunnel/status')
 export const wifiTunnelDiscover = () => request<{ devices: { ip: string; port: number; host: string; name: string }[] }>('GET', '/api/device/wifi/tunnel/discover')
-export const wifiTunnelStop = () => request<any>('POST', '/api/device/wifi/tunnel/stop')
+export const wifiTunnelStop = () => request<StatusResponse>('POST', '/api/device/wifi/tunnel/stop')
 export const wifiRepair = () => request<{ status: string; udid: string; name: string; ios_version: string; remote_record_regenerated: boolean }>('POST', '/api/device/wifi/repair')
 export const revealDeveloperMode = (udid: string) =>
   request<{ status: string; udid: string }>(
@@ -103,7 +160,7 @@ const ud = (udid?: string | null) => (udid ? { udid } : {})
 const qs = (udid?: string | null) => (udid ? `?udid=${encodeURIComponent(udid)}` : '')
 
 export const teleport = (lat: number, lng: number, udid?: string) =>
-  request<any>('POST', '/api/location/teleport', { lat, lng, ...ud(udid) })
+  request<StatusResponse>('POST', '/api/location/teleport', { lat, lng, ...ud(udid) })
 export interface SpeedOpts { speed_kmh?: number | null; speed_min_kmh?: number | null; speed_max_kmh?: number | null }
 export interface PauseOpts { pause_enabled?: boolean; pause_min?: number; pause_max?: number }
 const sp = (o?: SpeedOpts) => ({
@@ -118,7 +175,7 @@ const pp = (o?: PauseOpts) => (o ? {
 } : {})
 const sl = (v?: boolean) => (v ? { straight_line: true } : {})
 export const navigate = (lat: number, lng: number, mode: string, speed?: SpeedOpts, udid?: string, straightLine?: boolean) =>
-  request<any>('POST', '/api/location/navigate', { lat, lng, mode, ...sp(speed), ...sl(straightLine), ...ud(udid) })
+  request<StatusResponse>('POST', '/api/location/navigate', { lat, lng, mode, ...sp(speed), ...sl(straightLine), ...ud(udid) })
 // lap_count is `null` = unlimited (matches backend Field default). Only
 // included in the payload when a positive target is set, so existing
 // backend contracts keep working for callers that don't care.
@@ -126,30 +183,42 @@ const lc = (lapCount?: number | null) =>
   lapCount != null && lapCount > 0 ? { lap_count: lapCount } : {}
 
 export const startLoop = (waypoints: { lat: number; lng: number }[], mode: string, speed?: SpeedOpts, pause?: PauseOpts, udid?: string, straightLine?: boolean, lapCount?: number | null) =>
-  request<any>('POST', '/api/location/loop', { waypoints, mode, ...sp(speed), ...pp(pause), ...sl(straightLine), ...ud(udid), ...lc(lapCount) })
+  request<StatusResponse>('POST', '/api/location/loop', { waypoints, mode, ...sp(speed), ...pp(pause), ...sl(straightLine), ...ud(udid), ...lc(lapCount) })
 export const multiStop = (waypoints: { lat: number; lng: number }[], mode: string, stop_duration: number, loop: boolean, speed?: SpeedOpts, pause?: PauseOpts, udid?: string, straightLine?: boolean, lapCount?: number | null) =>
-  request<any>('POST', '/api/location/multistop', { waypoints, mode, stop_duration, loop, ...sp(speed), ...pp(pause), ...sl(straightLine), ...ud(udid), ...lc(lapCount) })
+  request<StatusResponse>('POST', '/api/location/multistop', { waypoints, mode, stop_duration, loop, ...sp(speed), ...pp(pause), ...sl(straightLine), ...ud(udid), ...lc(lapCount) })
 export const randomWalk = (center: { lat: number; lng: number }, radius_m: number, mode: string, speed?: SpeedOpts, pause?: PauseOpts, udid?: string, seed?: number | null, straightLine?: boolean) =>
-  request<any>('POST', '/api/location/randomwalk', { center, radius_m, mode, ...sp(speed), ...pp(pause), ...sl(straightLine), ...ud(udid), ...(seed != null ? { seed } : {}) })
+  request<StatusResponse>('POST', '/api/location/randomwalk', { center, radius_m, mode, ...sp(speed), ...pp(pause), ...sl(straightLine), ...ud(udid), ...(seed != null ? { seed } : {}) })
 export const joystickStart = (mode: string, udid?: string) =>
-  request<any>('POST', '/api/location/joystick/start', { mode, ...ud(udid) })
-export const joystickStop = (udid?: string) => request<any>('POST', `/api/location/joystick/stop${qs(udid)}`)
-export const pauseSim = (udid?: string) => request<any>('POST', `/api/location/pause${qs(udid)}`)
-export const resumeSim = (udid?: string) => request<any>('POST', `/api/location/resume${qs(udid)}`)
-export const restoreSim = (udid?: string) => request<any>('POST', `/api/location/restore${qs(udid)}`)
-export const stopSim = (udid?: string) => request<any>('POST', `/api/location/stop${qs(udid)}`)
-export const getStatus = (udid?: string) => request<any>('GET', `/api/location/status${qs(udid)}`)
+  request<StatusResponse>('POST', '/api/location/joystick/start', { mode, ...ud(udid) })
+export const joystickStop = (udid?: string) => request<StatusResponse>('POST', `/api/location/joystick/stop${qs(udid)}`)
+export const pauseSim = (udid?: string) => request<StatusResponse>('POST', `/api/location/pause${qs(udid)}`)
+export const resumeSim = (udid?: string) => request<StatusResponse>('POST', `/api/location/resume${qs(udid)}`)
+export const restoreSim = (udid?: string) => request<StatusResponse>('POST', `/api/location/restore${qs(udid)}`)
+export const stopSim = (udid?: string) => request<StatusResponse>('POST', `/api/location/stop${qs(udid)}`)
+export interface SimulationStatusResponse {
+  running?: boolean
+  paused?: boolean
+  speed?: number
+  mode?: string
+  position?: { lat: number; lng: number } | null
+  destination?: { lat: number; lng: number } | null
+  progress?: number
+  eta_seconds?: number | null
+  [key: string]: unknown
+}
+export const getStatus = (udid?: string) =>
+  request<SimulationStatusResponse>('GET', `/api/location/status${qs(udid)}`)
 
 // Cooldown
-export const getCooldownStatus = () => request<any>('GET', '/api/location/cooldown/status')
+export const getCooldownStatus = () => request<{ enabled: boolean; remaining: number; total: number }>('GET', '/api/location/cooldown/status')
 export const setCooldownEnabled = (enabled: boolean) =>
-  request<any>('PUT', '/api/location/cooldown/settings', { enabled })
-export const dismissCooldown = () => request<any>('POST', '/api/location/cooldown/dismiss')
+  request<StatusResponse>('PUT', '/api/location/cooldown/settings', { enabled })
+export const dismissCooldown = () => request<StatusResponse>('POST', '/api/location/cooldown/dismiss')
 
 // Coord format
-export const getCoordFormat = () => request<any>('GET', '/api/location/settings/coord-format')
+export const getCoordFormat = () => request<{ format: string }>('GET', '/api/location/settings/coord-format')
 export const setCoordFormat = (format: string) =>
-  request<any>('PUT', '/api/location/settings/coord-format', { format })
+  request<StatusResponse>('PUT', '/api/location/settings/coord-format', { format })
 
 // Geocoding
 export interface ReverseGeocodeResult {
@@ -165,7 +234,7 @@ export interface ReverseGeocodeResult {
   place_name?: string
 }
 
-export const searchAddress = (q: string) => request<any[]>('GET', `/api/geocode/search?q=${encodeURIComponent(q)}`)
+export const searchAddress = (q: string) => request<AddressSearchResult[]>('GET', `/api/geocode/search?q=${encodeURIComponent(q)}`)
 export const reverseGeocode = (lat: number, lng: number, lang?: string) =>
   request<ReverseGeocodeResult | null>(
     'GET',
@@ -173,23 +242,23 @@ export const reverseGeocode = (lat: number, lng: number, lang?: string) =>
   )
 
 // Bookmarks
-export const getBookmarks = () => request<any>('GET', '/api/bookmarks')
-export const createBookmark = (bm: any) => request<any>('POST', '/api/bookmarks', bm)
-export const updateBookmark = (id: string, bm: any) => request<any>('PUT', `/api/bookmarks/${id}`, bm)
-export const deleteBookmark = (id: string) => request<any>('DELETE', `/api/bookmarks/${id}`)
+export const getBookmarks = () => request<BookmarkStore>('GET', '/api/bookmarks')
+export const createBookmark = (bm: Omit<Bookmark, 'id'>) => request<Bookmark>('POST', '/api/bookmarks', bm)
+export const updateBookmark = (id: string, bm: Partial<Bookmark>) => request<Bookmark>('PUT', `/api/bookmarks/${id}`, bm)
+export const deleteBookmark = (id: string) => request<StatusResponse>('DELETE', `/api/bookmarks/${id}`)
 export const deleteBookmarksBatch = (ids: string[]) =>
   request<{ deleted: number; requested: number }>('POST', '/api/bookmarks/batch-delete', { ids })
 export const backfillBookmarkFlags = () =>
   request<{ filled: number }>('POST', '/api/bookmarks/backfill-flags')
 export const moveBookmarks = (ids: string[], catId: string) =>
-  request<any>('POST', '/api/bookmarks/move', { bookmark_ids: ids, target_category_id: catId })
-export const getCategories = () => request<any[]>('GET', '/api/bookmarks/categories')
-export const createCategory = (cat: any) => request<any>('POST', '/api/bookmarks/categories', cat)
-export const updateCategory = (id: string, cat: any) => request<any>('PUT', `/api/bookmarks/categories/${id}`, cat)
-export const deleteCategory = (id: string) => request<any>('DELETE', `/api/bookmarks/categories/${id}`)
+  request<{ moved: number }>('POST', '/api/bookmarks/move', { bookmark_ids: ids, target_category_id: catId })
+export const getCategories = () => request<BookmarkCategory[]>('GET', '/api/bookmarks/categories')
+export const createCategory = (cat: Omit<BookmarkCategory, 'id'>) => request<BookmarkCategory>('POST', '/api/bookmarks/categories', cat)
+export const updateCategory = (id: string, cat: Partial<BookmarkCategory>) => request<BookmarkCategory>('PUT', `/api/bookmarks/categories/${id}`, cat)
+export const deleteCategory = (id: string) => request<StatusResponse>('DELETE', `/api/bookmarks/categories/${id}`)
 
 export const bookmarksExportUrl = () => `${API}/api/bookmarks/export`
-export const importBookmarks = (data: any) => request<{ imported: number }>('POST', '/api/bookmarks/import', data)
+export const importBookmarks = (data: BookmarkStore) => request<{ imported: number }>('POST', '/api/bookmarks/import', data)
 
 export const getInitialPosition = () =>
   request<{ position: { lat: number; lng: number } | null }>('GET', '/api/location/settings/initial-position')
@@ -199,7 +268,7 @@ export const setInitialPosition = (lat: number | null, lng: number | null) =>
 export const openLog = () => request<{ status: string; path: string }>('POST', '/api/system/open-log')
 export const openLogFolder = () => request<{ status: string; path: string }>('POST', '/api/system/open-log-folder')
 
-export const applySpeed = (mode: string, opts: { speed_kmh?: number | null; speed_min_kmh?: number | null; speed_max_kmh?: number | null }, udid?: string) =>
+export const applySpeed = (mode: string, opts: SpeedOpts, udid?: string) =>
   request<{ status: string; speed_mps: number }>('POST', '/api/location/apply-speed', {
     mode,
     speed_kmh: opts.speed_kmh ?? null,
@@ -209,12 +278,19 @@ export const applySpeed = (mode: string, opts: { speed_kmh?: number | null; spee
   })
 
 // Routes
-export const planRoute = (start: any, end: any, profile: string) =>
-  request<any>('POST', '/api/route/plan', { start, end, profile })
-export const getSavedRoutes = () => request<any[]>('GET', '/api/route/saved')
-export const saveRoute = (route: any) => request<any>('POST', '/api/route/saved', route)
-export const deleteRoute = (id: string) => request<any>('DELETE', `/api/route/saved/${id}`)
-export const renameRoute = (id: string, name: string) => request<any>('PATCH', `/api/route/saved/${id}`, { name })
+interface LatLng { lat: number; lng: number }
+export interface RoutePlanResponse {
+  coordinates: LatLng[]
+  distance_m?: number
+  duration_s?: number
+}
+export const planRoute = (start: LatLng, end: LatLng, profile: string) =>
+  request<RoutePlanResponse>('POST', '/api/route/plan', { start, end, profile })
+export const getSavedRoutes = () => request<SavedRoute[]>('GET', '/api/route/saved')
+export const saveRoute = (route: Omit<SavedRoute, 'id' | 'created_at'>) =>
+  request<SavedRoute>('POST', '/api/route/saved', route)
+export const deleteRoute = (id: string) => request<StatusResponse>('DELETE', `/api/route/saved/${id}`)
+export const renameRoute = (id: string, name: string) => request<SavedRoute>('PATCH', `/api/route/saved/${id}`, { name })
 
 // GPX import/export
 export async function importGpx(file: File): Promise<{ status: string; id: string; points: number }> {
@@ -237,5 +313,5 @@ export function exportAllRoutesUrl(): string {
   return `${API}/api/route/saved/export`
 }
 
-export const importAllRoutes = (data: { routes: any[] }) =>
+export const importAllRoutes = (data: { routes: SavedRoute[] }) =>
   request<{ imported: number }>('POST', '/api/route/saved/import', data)

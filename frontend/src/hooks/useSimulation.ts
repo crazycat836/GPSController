@@ -676,7 +676,10 @@ export function useSimulation(subscribe?: WsSubscribe) {
       if (res.position) {
         setCurrentPosition({ lat: res.position.lat, lng: res.position.lng })
       }
-      if (res.mode) _setMode(res.mode)
+      if (res.mode) {
+        const mapped = stateToMode(res.mode)
+        if (mapped) _setMode(mapped)
+      }
       if (res.running != null || res.paused != null) {
         setStatus({
           running: !!res.running,

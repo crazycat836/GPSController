@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { useBookmarks, type Bookmark, type BookmarkCategory } from '../hooks/useBookmarks'
 import * as api from '../services/api'
+import type { SavedRoute } from '../services/api'
 import { useToastContext } from './ToastContext'
 import { useT } from '../i18n'
 
@@ -38,7 +39,7 @@ interface BookmarkContextValue {
   bookmarkExportUrl: string
 
   // Saved routes
-  savedRoutes: readonly Record<string, unknown>[]
+  savedRoutes: readonly SavedRoute[]
   handleRouteLoad: (id: string) => { lat: number; lng: number }[] | null
   handleRouteSave: (name: string, waypoints: { lat: number; lng: number }[], moveMode: string) => Promise<void>
   handleRouteRename: (id: string, name: string) => Promise<void>
@@ -60,7 +61,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
   const { showToast } = useToastContext()
   const bm = useBookmarks()
 
-  const [savedRoutes, setSavedRoutes] = useState<Record<string, unknown>[]>([])
+  const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([])
   const [addBmDialog, setAddBmDialog] = useState<AddBmDialog | null>(null)
 
   // Load saved routes on mount
