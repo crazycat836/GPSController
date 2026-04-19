@@ -1486,6 +1486,12 @@
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-full);
   color: var(--color-text-2);
+  /* Design spec stretches both coord chips to fill the status-pair
+     container so rows 2 and 3 share a width and the stack reads as a
+     single cohesive pair rather than two detached badges. */
+  width: 100%;
+  box-sizing: border-box;
+  justify-content: flex-start;
 }
 
 

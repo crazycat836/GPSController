@@ -34,9 +34,11 @@ export function useReverseGeocode(
     if (!pos) return
     // Hold the last-known flag/country while moving. The flag doesn't need
     // per-tick refresh during travel — we only re-query once the user stops.
-    if (paused) return
+    const hasValue = !!info.countryCode
+    if (paused && hasValue) return
+
     let cancelled = false
-    const tid = setTimeout(async () => {
+    const doFetch = async () => {
       try {
         const res = await reverseGeocode(pos.lat, pos.lng, nominatimLang(lang))
         if (cancelled || !res) return
@@ -48,12 +50,25 @@ export function useReverseGeocode(
       } catch {
         // offline / rate-limited — keep previous value
       }
-    }, DEBOUNCE_MS)
+    }
+
+    // First resolution (no cached value yet) fires immediately. During an
+    // active sim the position ticks every ~600ms, so the debounce below
+    // would otherwise be reset every tick and the status pair's location
+    // chip would stay empty forever.
+    if (!hasValue) {
+      doFetch()
+      return () => {
+        cancelled = true
+      }
+    }
+
+    const tid = setTimeout(doFetch, DEBOUNCE_MS)
     return () => {
       cancelled = true
       clearTimeout(tid)
     }
-  }, [pos?.lat, pos?.lng, lang, paused])
+  }, [pos?.lat, pos?.lng, lang, paused, info.countryCode])
 
   return info
 }
