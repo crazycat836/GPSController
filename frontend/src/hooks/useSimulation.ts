@@ -232,16 +232,25 @@ export function useSimulation(subscribe?: WsSubscribe) {
     if (udid) {
       const d = wsMessage.data
       switch (wsMessage.type) {
-        case 'position_update':
-          updateRuntime(udid, {
-            currentPos: (typeof d.lat === 'number' && typeof d.lng === 'number') ? { lat: d.lat, lng: d.lng } : undefined as any,
-            progress: d.progress ?? undefined as any,
-            eta: d.eta_seconds ?? d.eta ?? undefined as any,
-            distanceRemaining: d.distance_remaining ?? undefined as any,
-            distanceTraveled: d.distance_traveled ?? undefined as any,
-            currentSpeedKmh: d.speed_mps != null ? d.speed_mps * 3.6 : undefined as any,
-          })
+        case 'position_update': {
+          // Build the patch conditionally: previously we passed
+          // `undefined as any` for missing fields, which meant a tick
+          // that didn't include (say) `eta` would overwrite the
+          // cached value with `undefined`. Only include each key
+          // when the incoming payload actually carries it.
+          const patch: Partial<DeviceRuntime> = {}
+          if (typeof d.lat === 'number' && typeof d.lng === 'number') {
+            patch.currentPos = { lat: d.lat, lng: d.lng }
+          }
+          if (d.progress != null) patch.progress = d.progress
+          const etaVal = d.eta_seconds ?? d.eta
+          if (etaVal != null) patch.eta = etaVal
+          if (d.distance_remaining != null) patch.distanceRemaining = d.distance_remaining
+          if (d.distance_traveled != null) patch.distanceTraveled = d.distance_traveled
+          if (d.speed_mps != null) patch.currentSpeedKmh = d.speed_mps * 3.6
+          if (Object.keys(patch).length > 0) updateRuntime(udid, patch)
           break
+        }
         case 'route_path':
           if (Array.isArray(d.coords)) {
             updateRuntime(udid, {
