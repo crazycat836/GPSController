@@ -112,6 +112,20 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
   const [wpGenRadius, setWpGenRadius] = useState(DEFAULT_WP_GEN_RADIUS)
   const [wpGenCount, setWpGenCount] = useState(5)
 
+  // v0.2.58-adapted: auto-mount attempts still run, but if they fail
+  // (timeout, RSD drop on iOS 26.4.1, missing extras, etc.) the backend
+  // emits `ddi_mount_missing`. Surface a one-shot hint so the user
+  // knows to mount DDI via Xcode / 愛思助手 / 3uTools and retry.
+  const lastDdiMissingTs = React.useRef<number>(0)
+  useEffect(() => {
+    const m = sim.ddiMissing
+    if (!m) return
+    if (m.ts === lastDdiMissingTs.current) return
+    lastDdiMissingTs.current = m.ts
+    console.warn('[ddi_mount_missing]', m.stage ?? '?', m.reason)
+    showToast(t('ddi.missing_hint'), 10000)
+  }, [sim.ddiMissing, showToast, t])
+
   // --- Handlers ---
 
   const handleRestore = useCallback(async () => {

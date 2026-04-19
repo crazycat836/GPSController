@@ -174,6 +174,14 @@ export function useSimulation(subscribe?: WsSubscribe) {
   const [pauseEndAt, setPauseEndAt] = useState<number | null>(null)
   const [pauseRemaining, setPauseRemaining] = useState<number | null>(null)
   const [ddiMounting, setDdiMounting] = useState(false)
+  // One-shot signal for the "DDI not mounted, please mount via Xcode /
+  // 愛思助手 / 3uTools once" hint toast. Bumped whenever a mount
+  // attempt fails (timeout, RSD drop, etc.) so the parent context can
+  // observe via useEffect and call `showToast`. Carries the exception
+  // reason for log / debugging surfaces.
+  const [ddiMissing, setDdiMissing] = useState<
+    { reason: string; stage?: string; ts: number } | null
+  >(null)
   const [waypointProgress, setWaypointProgress] = useState<{ current: number; next: number; total: number } | null>(null)
   // Loop / MultiStop target lap count. null = unlimited (existing
   // behaviour). Positive = backend will auto-stop after N laps.
@@ -347,6 +355,18 @@ export function useSimulation(subscribe?: WsSubscribe) {
       case 'ddi_mounted':
       case 'ddi_mount_failed': {
         setDdiMounting(false)
+        break
+      }
+      case 'ddi_mount_missing': {
+        // Auto-mount failed. The SimContext observer will surface a
+        // single hint toast so the user knows what to do next.
+        setDdiMounting(false)
+        const d = wsMessage.data ?? {}
+        setDdiMissing({
+          reason: typeof d.reason === 'string' ? d.reason : 'unknown',
+          stage: typeof d.stage === 'string' ? d.stage : undefined,
+          ts: Date.now(),
+        })
         break
       }
       case 'tunnel_lost': {
@@ -811,6 +831,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
     setPauseRandomWalk,
     pauseRemaining,
     ddiMounting,
+    ddiMissing,
     waypointProgress,
     loopLapCount,
     setLoopLapCount,

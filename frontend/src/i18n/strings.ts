@@ -288,6 +288,14 @@ export const STRINGS = {
   'panel.waypoint_fly_to': { zh: '點擊飛到此路徑點 (保留目前模式)', en: 'Fly here (keeps current mode)' },
   'panel.waypoints_menu': { zh: '更多動作', en: 'More actions' },
   'panel.waypoints_bulk_paste': { zh: '批次貼上座標', en: 'Bulk paste…' },
+
+  // DDI hints (Phase 7 / upstream v0.2.58-adapted) — shown when the
+  // auto-mount attempt fails so the user knows to mount DDI manually
+  // via Xcode / 愛思助手 / 3uTools once and retry.
+  'ddi.missing_hint': {
+    zh: 'DDI 掛載失敗。請先用 Xcode、愛思助手或 3uTools 手動掛載開發者磁碟一次,然後重新連線。',
+    en: 'DDI mount failed. Mount the Developer Disk Image once via Xcode / 3uTools / iMazing, then reconnect.',
+  },
   'panel.waypoints_running_hint': { zh: '進行中無法重新開始,請先按下方停止', en: 'In progress, press Stop below to restart' },
   'panel.waypoints_gen_tooltip': { zh: '在當前位置周圍隨機產生路徑點', en: 'Random waypoints around current position' },
   'panel.waypoints_gen_all_tooltip': { zh: '半徑與數量全隨機', en: 'Fully randomize radius and count' },

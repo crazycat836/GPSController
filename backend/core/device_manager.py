@@ -455,9 +455,19 @@ class DeviceManager:
             logger.error("DDI mount timed out after 120s for %s", conn.udid)
             try:
                 from api.websocket import broadcast
-                await broadcast("ddi_mount_failed", {
+                # Both the legacy `ddi_mount_failed` (kept for API stability)
+                # and the richer `ddi_mount_missing` the frontend uses to
+                # render the "mount DDI yourself" hint toast.
+                payload = {
                     "udid": conn.udid,
-                    "error": "DDI download/mount timed out (120s). Check network access to github.com.",
+                    "stage": "personalized",
+                    "reason": "TimeoutError: DDI download/mount timed out after 120s",
+                    "hint_key": "ddi.missing_hint",
+                }
+                await broadcast("ddi_mount_missing", payload)
+                await broadcast("ddi_mount_failed", {
+                    **payload,
+                    "error": payload["reason"],
                 })
             except Exception:
                 pass
@@ -466,10 +476,15 @@ class DeviceManager:
             logger.exception("auto_mount_personalized failed for %s", conn.udid)
             try:
                 from api.websocket import broadcast
-                await broadcast("ddi_mount_failed", {
+                reason = f"{type(exc).__name__}: {exc}"
+                payload = {
                     "udid": conn.udid,
-                    "error": f"{exc.__class__.__name__}: {exc}",
-                })
+                    "stage": "personalized",
+                    "reason": reason,
+                    "hint_key": "ddi.missing_hint",
+                }
+                await broadcast("ddi_mount_missing", payload)
+                await broadcast("ddi_mount_failed", {**payload, "error": reason})
             except Exception:
                 pass
             raise
@@ -528,20 +543,32 @@ class DeviceManager:
             pass
 
         mounted = False
+        failure_reason: str | None = None
         try:
             await asyncio.wait_for(mount_fn(conn.lockdown), timeout=120.0)
             mounted = True
             logger.info("Classic DDI mounted successfully for %s", conn.udid)
-        except Exception:
+        except Exception as exc:
+            failure_reason = f"{type(exc).__name__}: {exc}"
             logger.warning("Classic DDI auto-mount failed for %s", conn.udid, exc_info=True)
         finally:
             try:
                 from api.websocket import broadcast
-                event = "ddi_mounted" if mounted else "ddi_mount_failed"
-                payload = {"udid": conn.udid}
-                if not mounted:
-                    payload["error"] = "Classic DDI mount failed"
-                await broadcast(event, payload)
+                if mounted:
+                    await broadcast("ddi_mounted", {"udid": conn.udid})
+                else:
+                    payload = {
+                        "udid": conn.udid,
+                        "stage": "classic",
+                        "reason": failure_reason or "Classic DDI mount failed",
+                        "hint_key": "ddi.missing_hint",
+                    }
+                    await broadcast("ddi_mount_missing", payload)
+                    # Legacy event name kept for API stability.
+                    await broadcast("ddi_mount_failed", {
+                        **payload,
+                        "error": payload["reason"],
+                    })
             except Exception:
                 pass
 
