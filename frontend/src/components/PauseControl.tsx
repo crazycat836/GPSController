@@ -1,6 +1,7 @@
 import React from 'react'
 import { useT } from '../i18n'
 import type { StringKey } from '../i18n'
+import Toggle from './ui/Toggle'
 
 interface PauseSetting {
   enabled: boolean
@@ -22,19 +23,10 @@ export default function PauseControl({ labelKey, value, onChange }: PauseControl
     <div className="seg">
       <div className="seg-row">
         <span className="seg-label flex-1">{t(labelKey)}</span>
-        <div
-          className="toggle-switch"
-          data-checked={value.enabled}
-          role="switch"
-          aria-checked={value.enabled}
-          tabIndex={0}
-          onClick={() => update({ enabled: !value.enabled })}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              update({ enabled: !value.enabled })
-            }
-          }}
+        <Toggle
+          checked={value.enabled}
+          onChange={(next) => update({ enabled: next })}
+          ariaLabel={t(labelKey)}
         />
       </div>
       {value.enabled && (

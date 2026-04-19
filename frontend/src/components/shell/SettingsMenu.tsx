@@ -11,6 +11,7 @@ import { useAvatarContext } from '../../contexts/AvatarContext'
 import { useI18n, useT, type Lang } from '../../i18n'
 import * as api from '../../services/api'
 import AvatarPicker from './AvatarPicker'
+import Toggle from '../ui/Toggle'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
 import { AVATAR_PRESETS } from '../../lib/avatars'
 import pkg from '../../../package.json'
@@ -492,31 +493,3 @@ function ChoiceRow({ icon, label, value, items, ariaLabel }: ChoiceRowProps) {
   )
 }
 
-interface ToggleProps {
-  checked: boolean
-  onChange: (v: boolean) => void
-  ariaLabel?: string
-}
-
-function Toggle({ checked, onChange, ariaLabel }: ToggleProps) {
-  return (
-    <button
-      role="switch"
-      type="button"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      onClick={() => onChange(!checked)}
-      className={[
-        'relative w-8 h-[18px] rounded-[9px] shrink-0 transition-colors',
-        checked ? 'bg-[var(--color-accent)]' : 'bg-white/10',
-      ].join(' ')}
-    >
-      <span
-        className={[
-          'absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform',
-          checked ? 'translate-x-[16px]' : 'translate-x-[2px]',
-        ].join(' ')}
-      />
-    </button>
-  )
-}
