@@ -9,6 +9,8 @@ type Align = 'start' | 'end'
 export interface KebabMenuItem {
   id: string
   label: React.ReactNode
+  /** Optional secondary line beneath the label — renders muted + smaller, not truncated. */
+  hint?: React.ReactNode
   icon?: React.ReactNode
   /** 'danger' tints the item red; 'section' renders the entry as a muted label instead of a button. */
   kind?: 'default' | 'danger' | 'section'
@@ -199,6 +201,7 @@ export default function KebabMenu({
               )
             }
             const isDanger = item.kind === 'danger'
+            const hasHint = item.hint != null
             return (
               <button
                 key={item.id}
@@ -223,7 +226,16 @@ export default function KebabMenu({
                   />
                 )}
                 {item.icon}
-                <span className="flex-1 text-left truncate">{item.label}</span>
+                {hasHint ? (
+                  <span className="flex-1 flex flex-col text-left min-w-0">
+                    <span className="truncate">{item.label}</span>
+                    <span className="text-[11px] text-[var(--color-text-3)] opacity-80 leading-snug">
+                      {item.hint}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="flex-1 text-left truncate">{item.label}</span>
+                )}
               </button>
             )
           })}
