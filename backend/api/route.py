@@ -1,4 +1,6 @@
 import logging
+import re
+import urllib.parse
 import uuid
 from datetime import datetime, timezone
 
@@ -141,6 +143,18 @@ async def import_gpx(file: UploadFile = File(...)):
     return {"status": "imported", "id": route.id, "points": len(coords)}
 
 
+def _ascii_safe_filename(name: str) -> str:
+    """Reduce a route name to a strict ASCII filename fallback.
+
+    HTTP headers are encoded latin-1 by ASGI servers, so raw non-ASCII
+    in the ``filename="..."`` parameter blows up with UnicodeEncodeError
+    and returns a 500. This strips to a safe ASCII subset for the legacy
+    parameter; modern clients read the ``filename*=UTF-8''`` form below.
+    """
+    safe = re.sub(r"[^A-Za-z0-9_.\-]+", "_", name).strip("_.")
+    return safe or "route"
+
+
 @router.get("/gpx/export/{route_id}")
 async def export_gpx(route_id: str):
     if route_id not in _saved_routes:
@@ -148,6 +162,20 @@ async def export_gpx(route_id: str):
     route = _saved_routes[route_id]
     points = [{"lat": c.lat, "lng": c.lng} for c in route.waypoints]
     gpx_xml = gpx_service.generate_gpx(points, name=route.name)
+    # RFC 5987 / RFC 6266: emit both a plain ASCII `filename` for legacy
+    # clients and `filename*=UTF-8''<percent-encoded>` so modern browsers
+    # save routes with Chinese / emoji / etc. names intact. Previously the
+    # raw `filename="{name}.gpx"` triggered a 500 whenever the route name
+    # contained non-ASCII because ASGI refuses to encode it as latin-1.
+    ascii_name = _ascii_safe_filename(route.name) + ".gpx"
+    utf8_encoded = urllib.parse.quote(route.name + ".gpx", safe="")
+    disposition = (
+        f'attachment; filename="{ascii_name}"; '
+        f"filename*=UTF-8''{utf8_encoded}"
+    )
     from fastapi.responses import Response
-    return Response(content=gpx_xml, media_type="application/gpx+xml",
-                    headers={"Content-Disposition": f'attachment; filename="{route.name}.gpx"'})
+    return Response(
+        content=gpx_xml,
+        media_type="application/gpx+xml",
+        headers={"Content-Disposition": disposition},
+    )
