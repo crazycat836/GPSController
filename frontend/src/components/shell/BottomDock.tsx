@@ -130,17 +130,24 @@ export default function BottomDock() {
 
           {/* panel-controls */}
           <div className="flex items-center gap-2.5 shrink-0">
-            <SpeedToggle
-              presetActive={presetActive}
-              onPreset={(mode) => {
-                sim.setMoveMode(mode)
-                sim.setCustomSpeedKmh(null)
-                sim.setSpeedMinKmh(null)
-                sim.setSpeedMaxKmh(null)
-              }}
-              disabled={speedToggleDisabled}
-              t={t}
-            />
+            {/* Speed selection is irrelevant in Teleport (instant) and
+                Joystick (direction-driven) modes. Rendering it at
+                opacity-40 made it look like a stained / masked region
+                against bright map tiles — hiding it entirely keeps the
+                dock clean and lets the action button sit flush. */}
+            {!speedToggleDisabled && (
+              <SpeedToggle
+                presetActive={presetActive}
+                onPreset={(mode) => {
+                  sim.setMoveMode(mode)
+                  sim.setCustomSpeedKmh(null)
+                  sim.setSpeedMinKmh(null)
+                  sim.setSpeedMaxKmh(null)
+                }}
+                disabled={false}
+                t={t}
+              />
+            )}
             <ActionGroup
               mode={sim.mode}
               isRunning={isRunning}
