@@ -21,6 +21,11 @@ export interface RoutePoint {
   labelColor?: string
   /** Color for the coordinate text (defaults to --color-accent) */
   coordColor?: string
+  /** Optional click handler for the label/coord region — used by the
+   *  waypoint list to "fly to" a row without touching the sim mode. */
+  onPointClick?: () => void
+  /** Accessible label for the click target when `onPointClick` is set. */
+  clickTitle?: string
 }
 
 export interface RouteCardProps {
@@ -121,7 +126,79 @@ interface RoutePointRowProps {
 }
 
 function RoutePointRow({ point, isFirst, isLast, showConnector, compact }: RoutePointRowProps) {
-  const { label, position, placeholder, icon, actions, labelColor, coordColor } = point
+  const { label, position, placeholder, icon, actions, labelColor, coordColor, onPointClick, clickTitle } = point
+
+  // When `onPointClick` is set, wrap the label/coord area in a button
+  // so the user can fly-to-this-row. Actions cluster stays outside the
+  // button so Star / X clicks still work without double-handling.
+  const contentNode = compact ? (
+    /* Compact: single-line label + coords inline */
+    <>
+      <span
+        className="text-[13px] font-semibold shrink-0"
+        style={{ color: labelColor ?? 'var(--color-text-1)', minWidth: 32 }}
+      >
+        {label}
+      </span>
+      {position && (
+        <span
+          className="font-mono text-[13px] truncate"
+          style={{ color: coordColor ?? 'var(--color-text-2)' }}
+        >
+          {position.lat.toFixed(5)}, {position.lng.toFixed(5)}
+        </span>
+      )}
+      {!position && placeholder && (
+        <span className="text-[13px]" style={{ color: 'var(--color-text-3)' }}>
+          {placeholder}
+        </span>
+      )}
+    </>
+  ) : (
+    /* Normal: two-line label + coords stacked */
+    <>
+      <div
+        className="text-[13px] font-semibold"
+        style={{ color: labelColor ?? 'var(--color-text-1)' }}
+      >
+        {label}
+      </div>
+      {position ? (
+        <div
+          className="font-mono text-[13px] mt-0.5 truncate"
+          style={{ color: coordColor ?? 'var(--color-accent)' }}
+        >
+          {position.lat.toFixed(6)}, {position.lng.toFixed(6)}
+        </div>
+      ) : placeholder ? (
+        <div
+          className="text-[13px] mt-0.5"
+          style={{ color: 'var(--color-accent)' }}
+        >
+          {placeholder}
+        </div>
+      ) : null}
+    </>
+  )
+
+  const contentBaseClass = compact
+    ? 'flex-1 min-w-0 flex items-center gap-2'
+    : 'flex-1 min-w-0'
+
+  const content = onPointClick ? (
+    <button
+      type="button"
+      onClick={onPointClick}
+      title={clickTitle}
+      className={`${contentBaseClass} text-left cursor-pointer bg-transparent border-0 p-0 rounded-md hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]`}
+    >
+      {contentNode}
+    </button>
+  ) : (
+    <div className={contentBaseClass}>
+      {contentNode}
+    </div>
+  )
 
   return (
     <div
@@ -140,55 +217,7 @@ function RoutePointRow({ point, isFirst, isLast, showConnector, compact }: Route
       </div>
 
       {/* Content */}
-      {compact ? (
-        /* Compact: single-line label + coords inline */
-        <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span
-            className="text-[13px] font-semibold shrink-0"
-            style={{ color: labelColor ?? 'var(--color-text-1)', minWidth: 32 }}
-          >
-            {label}
-          </span>
-          {position && (
-            <span
-              className="font-mono text-[13px] truncate"
-              style={{ color: coordColor ?? 'var(--color-text-2)' }}
-            >
-              {position.lat.toFixed(5)}, {position.lng.toFixed(5)}
-            </span>
-          )}
-          {!position && placeholder && (
-            <span className="text-[13px]" style={{ color: 'var(--color-text-3)' }}>
-              {placeholder}
-            </span>
-          )}
-        </div>
-      ) : (
-        /* Normal: two-line label + coords stacked */
-        <div className="flex-1 min-w-0">
-          <div
-            className="text-[13px] font-semibold"
-            style={{ color: labelColor ?? 'var(--color-text-1)' }}
-          >
-            {label}
-          </div>
-          {position ? (
-            <div
-              className="font-mono text-[13px] mt-0.5 truncate"
-              style={{ color: coordColor ?? 'var(--color-accent)' }}
-            >
-              {position.lat.toFixed(6)}, {position.lng.toFixed(6)}
-            </div>
-          ) : placeholder ? (
-            <div
-              className="text-[13px] mt-0.5"
-              style={{ color: 'var(--color-accent)' }}
-            >
-              {placeholder}
-            </div>
-          ) : null}
-        </div>
-      )}
+      {content}
 
       {/* Actions */}
       {actions}

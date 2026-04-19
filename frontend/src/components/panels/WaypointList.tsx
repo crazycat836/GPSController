@@ -21,6 +21,7 @@ export default function WaypointList({ mode }: WaypointListProps) {
     handleGenerateAllRandom,
     handleRemoveWaypoint,
     handleClearWaypoints,
+    handleTeleport,
     isRunning,
   } = useSimContext()
   const { handleAddBookmark, savedRoutes, handleRouteSave, handleRouteLoad } = useBookmarkContext()
@@ -93,6 +94,11 @@ export default function WaypointList({ mode }: WaypointListProps) {
       icon,
       labelColor: approaching ? 'var(--color-device-b)' : passed ? 'var(--color-text-3)' : undefined,
       coordColor: passed ? 'var(--color-text-3)' : undefined,
+      // Click the coord / label to fly to this waypoint without
+      // touching the active Loop/MultiStop mode. Relies on the
+      // `teleport()` fix that stopped force-setting SimMode.Teleport.
+      onPointClick: () => handleTeleport(wp.lat, wp.lng),
+      clickTitle: t('panel.waypoint_fly_to'),
       actions: (
         <div className="flex items-center gap-0.5">
           <button

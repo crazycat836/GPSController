@@ -283,6 +283,7 @@ export const STRINGS = {
   'panel.waypoints_remove': { zh: '移除', en: 'Remove' },
   'panel.waypoint_num': { zh: '路徑點 {n}', en: 'Waypoint {n}' },
   'panel.waypoint_start': { zh: '起點', en: 'Start' },
+  'panel.waypoint_fly_to': { zh: '點擊飛到此路徑點 (保留目前模式)', en: 'Fly here (keeps current mode)' },
   'panel.waypoints_running_hint': { zh: '進行中無法重新開始,請先按下方停止', en: 'In progress, press Stop below to restart' },
   'panel.waypoints_gen_tooltip': { zh: '在當前位置周圍隨機產生路徑點', en: 'Random waypoints around current position' },
   'panel.waypoints_gen_all_tooltip': { zh: '半徑與數量全隨機', en: 'Fully randomize radius and count' },
