@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
-import { wifiTunnelDiscover, wifiRepair } from '../../services/api'
+import { wifiTunnelDiscover, wifiRepair, revealDeveloperMode } from '../../services/api'
 import { useT } from '../../i18n'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
 import { DEFAULT_TUNNEL_PORT } from '../../lib/constants'
@@ -63,6 +63,27 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
   const [showRepairConfirm, setShowRepairConfirm] = useState(false)
   const [repairState, setRepairState] = useState<RepairState>('idle')
   const [repairMessage, setRepairMessage] = useState('')
+
+  // Per-udid state for the AMFI "Reveal Developer Mode" button. Keyed by
+  // udid so two devices in the list can each show their own loading /
+  // completed state without cross-contaminating.
+  const [revealInFlight, setRevealInFlight] = useState<Record<string, boolean>>({})
+  const handleRevealDevMode = useCallback(async (udid: string) => {
+    setRevealInFlight((prev) => ({ ...prev, [udid]: true }))
+    try {
+      await revealDeveloperMode(udid)
+      showToast(t('dev_mode.reveal_success'))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showToast(`${t('dev_mode.reveal_failed')}: ${msg}`)
+    } finally {
+      setRevealInFlight((prev) => {
+        const next = { ...prev }
+        delete next[udid]
+        return next
+      })
+    }
+  }, [showToast, t])
 
   // Auto-expand tunnel section when running or the user has saved an IP.
   const tunnelShouldStartOpen = device.tunnelStatus.running || !!localStorage.getItem(STORAGE_KEYS.tunnelIp)
@@ -269,19 +290,43 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                   </span>
                 )
 
+                // AMFI reveal is useful only when: connected via USB
+                // (WiFi tunnel doesn't route `com.apple.amfi.lockdown`),
+                // iOS 16+ (toggle doesn't exist before), and the toggle
+                // is currently OFF (backend reported explicit false —
+                // not null "unknown").
+                const canRevealDevMode =
+                  isSelected
+                  && !isNetwork
+                  && major >= 16
+                  && d.developer_mode_enabled === false
+                const busy = !!revealInFlight[d.udid]
+
                 return (
-                  <ListRow
-                    key={d.udid}
-                    as="button"
-                    selected={isSelected}
-                    disabled={unsupported}
-                    onClick={() => { if (!unsupported) device.connect(d.udid) }}
-                    aria-label={d.name}
-                    leading={leading}
-                    title={<span className="truncate">{d.name}</span>}
-                    subtitle={subtitle}
-                    trailing={trailing}
-                  />
+                  <div key={d.udid} className="flex flex-col gap-1">
+                    <ListRow
+                      as="button"
+                      selected={isSelected}
+                      disabled={unsupported}
+                      onClick={() => { if (!unsupported) device.connect(d.udid) }}
+                      aria-label={d.name}
+                      leading={leading}
+                      title={<span className="truncate">{d.name}</span>}
+                      subtitle={subtitle}
+                      trailing={trailing}
+                    />
+                    {canRevealDevMode && (
+                      <button
+                        type="button"
+                        className="self-end text-[11px] px-2.5 py-1 rounded-md border border-[var(--color-border)] text-[var(--color-text-2)] hover:text-[var(--color-text-1)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-wait transition-colors cursor-pointer"
+                        onClick={() => handleRevealDevMode(d.udid)}
+                        disabled={busy}
+                        title={t('dev_mode.reveal_hint')}
+                      >
+                        {busy ? t('dev_mode.reveal_working') : t('dev_mode.reveal_button')}
+                      </button>
+                    )}
+                  </div>
                 )
               })}
             </div>

@@ -385,6 +385,17 @@ export const STRINGS = {
   'loop.lap_count_label': { zh: '圈數目標', en: 'Laps' },
   'loop.lap_count_placeholder': { zh: '無限', en: 'Unlimited' },
   'loop.lap_count_unit': { zh: '圈', en: 'laps' },
+
+  // AMFI reveal Developer Mode — only shown in DeviceDrawer when the
+  // device is USB-connected, iOS 16+, and developer_mode_enabled === false.
+  'dev_mode.reveal_button':  { zh: '顯示開發者模式', en: 'Reveal Developer Mode' },
+  'dev_mode.reveal_working': { zh: '處理中…',        en: 'Working…' },
+  'dev_mode.reveal_success': { zh: '已在 iPhone 設定內顯示開發者模式', en: 'Developer Mode option revealed in Settings' },
+  'dev_mode.reveal_failed':  { zh: '顯示開發者模式失敗', en: 'Failed to reveal Developer Mode' },
+  'dev_mode.reveal_hint':    {
+    zh: '在 iPhone 設定 → 隱私權與安全性 內顯示「開發者模式」選項 (需 USB 連線且 iOS 16+)',
+    en: 'Surface the Developer Mode toggle in Settings → Privacy & Security (USB + iOS 16+ only)',
+  },
   'pause.random_walk': { zh: '每段隨機暫停', en: 'Random pause between legs' },
   'pause.min': { zh: '最小', en: 'Min' },
   'pause.max': { zh: '最大', en: 'Max' },
