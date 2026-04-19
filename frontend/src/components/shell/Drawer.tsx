@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import GlassIconButton from '../ui/GlassIconButton'
 
 interface DrawerProps {
   open: boolean
@@ -104,21 +105,12 @@ export default function Drawer({
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {headerActions}
-            <button
+            <GlassIconButton
               ref={closeButtonRef}
               onClick={onClose}
-              className={[
-                'w-[34px] h-[34px] rounded-[10px] grid place-items-center',
-                'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
-                'bg-white/[0.04] hover:bg-white/[0.08]',
-                'border border-[var(--color-border)]',
-                'transition-colors duration-150 cursor-pointer',
-                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]',
-              ].join(' ')}
-              aria-label="Close"
-            >
-              <X className="w-4 h-4" />
-            </button>
+              label="Close"
+              icon={<X className="w-4 h-4" />}
+            />
           </div>
         </div>
 
