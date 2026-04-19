@@ -1,6 +1,7 @@
 import React from 'react'
 import { Smartphone, Bookmark, Settings } from 'lucide-react'
 import { useT } from '../../i18n'
+import LocatePcButton from './LocatePcButton'
 
 interface TopBarActionsProps {
   /** Receives the triggering button element so the popover can anchor to it. */
@@ -8,6 +9,8 @@ interface TopBarActionsProps {
   addDeviceDisabled?: boolean
   onLibraryClick?: () => void
   onSettingsClick?: () => void
+  /** Imperative map camera pan — required for the "Locate PC" feature. */
+  onFlyToCoordinate?: (lat: number, lng: number, zoom?: number) => void
 }
 
 export default function TopBarActions({
@@ -15,11 +18,13 @@ export default function TopBarActions({
   addDeviceDisabled,
   onLibraryClick,
   onSettingsClick,
+  onFlyToCoordinate,
 }: TopBarActionsProps) {
   const t = useT()
 
   return (
     <div className="flex items-center gap-2">
+      {onFlyToCoordinate && <LocatePcButton onFlyToCoordinate={onFlyToCoordinate} />}
       <ActionButton
         icon={Smartphone}
         label={t('device.add_device')}
@@ -43,7 +48,7 @@ export default function TopBarActions({
 }
 
 interface ActionButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  icon: React.FC<{ className?: string }>
+  icon: React.ComponentType<{ className?: string }>
   label: string
   shortcut?: string
 }

@@ -1,15 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import pkg from '../../package.json';
 import { useT } from '../i18n';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 
 const CURRENT = (pkg as { version: string }).version;
-const REPO = 'keezxc1223/locwarp';
+const REPO = 'crazycat836/GPSController';
 const RELEASES_URL = `https://github.com/${REPO}/releases`;
 const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
 const COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const DISMISS_KEY = STORAGE_KEYS.updateDismissed;
+
+// Electron preload exposes an `openExternal` bridge so clicks on GitHub
+// links open in the system browser rather than the webview. Web builds
+// don't define it; fall back to the native `<a target="_blank">` nav.
+interface ElectronBridge {
+  gpscontroller?: { openExternal?: (url: string) => void }
+}
 
 function parseVer(s: string): number[] {
   return s.replace(/^v/i, '').split('.').map((p) => parseInt(p, 10) || 0);
@@ -28,53 +35,53 @@ function isNewer(a: string, b: string): boolean {
   return false;
 }
 
+function openExternalOrDefault(url: string, e: React.MouseEvent) {
+  const bridge = (window as unknown as ElectronBridge).gpscontroller;
+  if (bridge?.openExternal) {
+    e.preventDefault();
+    bridge.openExternal(url);
+  }
+}
+
 /**
  * Checks GitHub on mount for a newer release; shows a dismissible dialog
  * when one is found. Silent when already on the latest version or when
  * the network / API is unreachable. User-dismissed versions are cached
  * in localStorage for 6 hours to avoid nagging.
  */
-const UpdateChecker: React.FC = () => {
+export default function UpdateChecker() {
   const t = useT();
   const [latest, setLatest] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      let dismissedVersion: string | null = null;
       try {
-        // Previously dismissed the same version recently?
-        try {
-          const raw = localStorage.getItem(DISMISS_KEY);
-          if (raw) {
-            const { version, at } = JSON.parse(raw);
-            if (typeof version === 'string' && typeof at === 'number' &&
-                Date.now() - at < COOLDOWN_MS) {
-              // Only suppress if the dismissed version is still the latest
-              // we know of; if a *newer* version than that appears, show again.
-              // We don't know yet — fetch and compare below.
-              var dismissedVersion: string | null = version;
-              var dismissedAt: number = at;
-            }
+        const raw = localStorage.getItem(DISMISS_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { version?: unknown; at?: unknown };
+          if (typeof parsed.version === 'string' && typeof parsed.at === 'number' &&
+              Date.now() - parsed.at < COOLDOWN_MS) {
+            dismissedVersion = parsed.version;
           }
-        } catch { /* ignore malformed cache */ }
+        }
+      } catch { /* malformed cache — treat as not-dismissed */ }
 
+      try {
         const r = await fetch(API_URL, {
           headers: { Accept: 'application/vnd.github+json' },
         });
-        if (!r.ok) return;
+        if (!r.ok || cancelled) return;
         const data = await r.json();
         const tag: string | undefined = data?.tag_name;
-        if (!tag || cancelled) return;
-        if (!isNewer(tag, CURRENT)) return;
+        if (!tag || !isNewer(tag, CURRENT)) return;
 
-        // If user already dismissed THIS version within cooldown, stay quiet.
-        // (But a brand-new tag beyond the dismissed one will show.)
-        // @ts-ignore — defined conditionally above
-        if (typeof dismissedVersion !== 'undefined' && dismissedVersion !== null) {
-          // @ts-ignore
-          if (parseVer(tag).join('.') === parseVer(dismissedVersion).join('.')) {
-            return;
-          }
+        // Respect an in-cooldown dismissal for this exact version; a
+        // newer tag still shows so we don't strand users on a skipped
+        // release forever.
+        if (dismissedVersion && parseVer(tag).join('.') === parseVer(dismissedVersion).join('.')) {
+          return;
         }
         setLatest(tag);
       } catch {
@@ -134,16 +141,7 @@ const UpdateChecker: React.FC = () => {
               target="_blank"
               rel="noreferrer"
               className="font-mono text-[var(--color-accent)] font-semibold no-underline"
-              onClick={(e) => {
-                // Electron webview: intercept and open externally if possible.
-                try {
-                  const anyWin: any = window;
-                  if (anyWin.gpscontroller?.openExternal) {
-                    e.preventDefault();
-                    anyWin.gpscontroller.openExternal(RELEASES_URL);
-                  }
-                } catch { /* default browser nav */ }
-              }}
+              onClick={(e) => openExternalOrDefault(RELEASES_URL, e)}
             >
               {latest} ↗
             </a>
@@ -160,15 +158,7 @@ const UpdateChecker: React.FC = () => {
             target="_blank"
             rel="noreferrer"
             className="action-btn primary flex-1 text-center no-underline inline-flex items-center justify-center gap-1.5"
-            onClick={(e) => {
-              try {
-                const anyWin: any = window;
-                if (anyWin.gpscontroller?.openExternal) {
-                  e.preventDefault();
-                  anyWin.gpscontroller.openExternal(RELEASES_URL);
-                }
-              } catch { /* default */ }
-            }}
+            onClick={(e) => openExternalOrDefault(RELEASES_URL, e)}
           >
             {t('update.download')}
           </a>
@@ -180,6 +170,4 @@ const UpdateChecker: React.FC = () => {
     </div>,
     document.body,
   );
-};
-
-export default UpdateChecker;
+}

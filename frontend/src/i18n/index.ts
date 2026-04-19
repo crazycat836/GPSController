@@ -29,7 +29,7 @@ function interpolate(str: string, vars?: Record<string, string | number>): strin
   return str.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : `{${k}}`));
 }
 
-export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>(detectInitialLang);
 
   const setLang = useCallback((l: Lang) => {
@@ -56,7 +56,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [lang]);
 
   return React.createElement(I18nContext.Provider, { value: { lang, setLang, t } }, children);
-};
+}
 
 export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext);

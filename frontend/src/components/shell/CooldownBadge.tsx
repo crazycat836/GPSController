@@ -1,10 +1,11 @@
-import React from 'react'
 import { Timer } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
+import { useT } from '../../i18n'
 import Toast from './Toast'
 
 export default function CooldownBadge() {
   const { cooldown, cooldownEnabled } = useSimContext()
+  const t = useT()
 
   if (!cooldownEnabled || cooldown <= 0) return null
 
@@ -23,7 +24,7 @@ export default function CooldownBadge() {
       variant="warning"
       icon={<Timer className="w-4 h-4" />}
     >
-      Cooldown {display}
+      {t('status.cooldown_badge', { t: display })}
     </Toast>
   )
 }

@@ -43,13 +43,13 @@ function formatDistance(meters: number): string {
 // stat columns for ETA / Remaining / Speed, vertical separators,
 // and a 32px pause/resume button on the right. Fades in when a
 // simulation is actively running.
-const EtaBar: React.FC<EtaBarProps> = ({
+function EtaBar({
   state,
   progress,
   remainingDistance,
   eta,
   runtimes,
-}) => {
+}: EtaBarProps) {
   const t = useT()
   const { displaySpeed, isPaused, handlePause, handleResume } = useSimContext()
 

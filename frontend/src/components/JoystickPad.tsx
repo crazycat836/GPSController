@@ -18,12 +18,12 @@ const MAX_DISTANCE = PAD_RADIUS - HANDLE_RADIUS;
 const SMOOTH_TAU_MS = 40;
 const SETTLE_EPS = 0.05; // px — stop animating when both axes are within this
 
-const JoystickPad: React.FC<JoystickPadProps> = ({
+function JoystickPad({
   direction,
   intensity,
   onMove,
   onRelease,
-}) => {
+}: JoystickPadProps) {
   const t = useT();
   const padRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);

@@ -15,7 +15,7 @@ interface WeatherChipProps {
   size?: number
 }
 
-const ICON_MAP: Record<WeatherIcon, React.ComponentType<{ className?: string }>> = {
+const ICON_MAP: Record<WeatherIcon, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   sun: Sun,
   cloud: Cloud,
   'cloud-sun': CloudSun,
@@ -37,7 +37,7 @@ const ICON_MOTION: Record<WeatherIcon, string> = {
   thunder: 'weather-anim-flash',
 }
 
-const WeatherChip: React.FC<WeatherChipProps> = ({ snapshot, size = 14 }) => {
+export default function WeatherChip({ snapshot, size = 14 }: WeatherChipProps) {
   if (!snapshot) return null
   const Icon = ICON_MAP[snapshot.icon] ?? Cloud
   const motionCls = ICON_MOTION[snapshot.icon] ?? ''
@@ -47,11 +47,8 @@ const WeatherChip: React.FC<WeatherChipProps> = ({ snapshot, size = 14 }) => {
       title={`${Math.round(snapshot.temperatureC)}°C`}
       aria-label={`Weather ${Math.round(snapshot.temperatureC)} degrees Celsius`}
     >
-      <Icon className={`weather-chip-icon ${motionCls}`} />
+      <Icon className={`weather-chip-icon ${motionCls}`} style={{ width: size, height: size }} />
       <span className="font-mono">{Math.round(snapshot.temperatureC)}°</span>
-      <style>{`.weather-chip-icon { width: ${size}px; height: ${size}px; }`}</style>
     </span>
   )
 }
-
-export default WeatherChip

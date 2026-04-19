@@ -16,7 +16,7 @@ interface LibraryDrawerProps {
 
 type TabId = 'bookmarks' | 'routes'
 
-const LibraryDrawer: React.FC<LibraryDrawerProps> = ({ open, onClose }) => {
+function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
   const t = useT()
   const bm = useBookmarkContext()
   const sim = useSimContext()

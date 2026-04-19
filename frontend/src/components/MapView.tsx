@@ -55,6 +55,10 @@ interface MapViewProps {
   // still driven by the legacy currentPosition/destination/routePath props.
   runtimes?: RuntimesMap;
   devices?: DeviceInfo[];
+  /** Fires once after Leaflet initializes so parents can drive imperative
+   *  camera moves (fly-to, setView) without owning the instance. Called
+   *  with null on unmount. */
+  onMapReady?: (map: L.Map | null) => void;
 }
 
 // Leaflet requires raw hex — CSS variables don't work in SVG marker innerHTML.
@@ -65,7 +69,7 @@ import MapControls from './shell/MapControls';
 import { useAvatarContext } from '../contexts/AvatarContext';
 import { getPresetSvg } from '../lib/avatars';
 
-const MapView: React.FC<MapViewProps> = ({
+function MapView({
   currentPosition,
   destination,
   waypoints,
@@ -83,7 +87,8 @@ const MapView: React.FC<MapViewProps> = ({
   onLayerChange,
   runtimes,
   devices,
-}) => {
+  onMapReady,
+}: MapViewProps) {
   // Dual-mode rendering disabled by design: with pre-sync (both devices
   // teleport to the same start before any group action) and shared random
   // seed, the two phones always sit at the exact same coordinate, so two
@@ -243,6 +248,7 @@ const MapView: React.FC<MapViewProps> = ({
     });
 
     mapRef.current = map;
+    onMapReady?.(map);
 
     // Ensure the map fills its container after layout settles and on resize.
     const ro = new ResizeObserver(() => {
@@ -262,6 +268,7 @@ const MapView: React.FC<MapViewProps> = ({
       ro.disconnect();
       map.remove();
       mapRef.current = null;
+      onMapReady?.(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

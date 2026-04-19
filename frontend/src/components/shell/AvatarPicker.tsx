@@ -11,7 +11,7 @@ interface AvatarPickerProps {
   onClose: () => void
 }
 
-const AvatarPicker: React.FC<AvatarPickerProps> = ({ anchor, onClose }) => {
+function AvatarPicker({ anchor, onClose }: AvatarPickerProps) {
   const t = useT()
   const { current, customDataUrl, applyPreset, applyCustom, uploadCustom, clearCustom } = useAvatarContext()
   // Staged selection — user picks/uploads first, then Save commits. Prevents

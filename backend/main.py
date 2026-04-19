@@ -14,7 +14,6 @@ from core.device_manager import DeviceManager
 from services.cooldown import CooldownTimer
 from services.bookmarks import BookmarkManager
 from services.coord_format import CoordinateFormatter
-from services.reconnect import ReconnectManager
 
 # Migrate legacy ~/.locwarp → ~/.gpscontroller if needed
 _old_data_dir = Path.home() / ".locwarp"
@@ -92,7 +91,6 @@ class AppState:
         self.cooldown_timer = CooldownTimer(broadcast=broadcast)
         self.bookmark_manager = BookmarkManager()
         self.coord_formatter = CoordinateFormatter()
-        self.reconnect_manager = None
         self._last_position = None
         # User-chosen initial map center (persisted between launches). When
         # None, the frontend falls back to a hardcoded default.
@@ -221,9 +219,6 @@ class AppState:
         became_primary = self._primary_udid is None
         if became_primary:
             self._primary_udid = udid
-
-        # Setup reconnect manager
-        self.reconnect_manager = ReconnectManager(self.device_manager)
 
         logger.info(
             "Simulation engine created for device %s (primary=%s)",

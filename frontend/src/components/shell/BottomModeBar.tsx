@@ -61,11 +61,7 @@ export default function BottomModeBar({ activeMode, onModeChange }: BottomModeBa
             <span className={active ? '' : 'hidden sm:inline'}>{t(labelKey)}</span>
             {active && (
               <span
-                className="font-mono text-[10px] px-1 py-px rounded"
-                style={{
-                  background: 'rgba(0,0,0,0.18)',
-                  color: 'rgba(0,0,0,0.65)',
-                }}
+                className="font-mono text-[10px] px-1 py-px rounded bg-black/20 text-black/65"
                 aria-hidden="true"
               >
                 {kbd}

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import type L from 'leaflet'
 import { useT } from './i18n'
 import { useWebSocket } from './hooks/useWebSocket'
 import { SimMode } from './hooks/useSimulation'
@@ -44,7 +45,7 @@ import DevicesPopover from './components/device/DevicesPopover'
 import LibraryDrawer from './components/modals/LibraryDrawer'
 
 // Root component — just providers
-const App: React.FC = () => {
+function App() {
   const ws = useWebSocket()
   return (
     <ToastProvider>
@@ -145,6 +146,18 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
   const [devicesPopoverAnchor, setDevicesPopoverAnchor] = useState<DOMRect | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // Leaflet instance is owned by MapView; we hold a ref here so features
+  // like "Locate PC" can pan the camera without teleporting.
+  const mapRef = useRef<L.Map | null>(null)
+  const handleMapReady = useCallback((map: L.Map | null) => {
+    mapRef.current = map
+  }, [])
+  const handleFlyToCoordinate = useCallback((lat: number, lng: number, zoom?: number) => {
+    const map = mapRef.current
+    if (!map) return
+    map.setView([lat, lng], zoom ?? map.getZoom(), { animate: true })
+  }, [])
   const [layerKey, setLayerKey] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEYS.tileLayer) || 'osm' } catch { return 'osm' }
   })
@@ -257,6 +270,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
           onShowToast={toast.showToast}
           layerKey={layerKey}
           onLayerChange={handleLayerChange}
+          onMapReady={handleMapReady}
         />
 
         {sim.mode === SimMode.Joystick && (
@@ -365,6 +379,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
             }}
             onLibraryClick={() => setLibraryOpen(true)}
             onSettingsClick={() => setSettingsOpen(prev => !prev)}
+            onFlyToCoordinate={handleFlyToCoordinate}
           />
         }
       />

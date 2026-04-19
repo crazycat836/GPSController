@@ -46,6 +46,7 @@ export const STRINGS = {
   'status.set_initial_saved': { zh: '已儲存預設畫面:{lat}, {lng} (下次開啟生效)', en: 'Default view saved: {lat}, {lng} (effective next launch)' },
   'status.set_initial_cleared': { zh: '已清除自訂預設畫面,下次開啟回到預設', en: 'Custom default view cleared. Next launch uses the built-in default.' },
   'status.cooldown_dual_disabled': { zh: '雙裝置模式不支援冷卻保護', en: 'Cooldown protection disabled in dual-device mode' },
+  'status.cooldown_badge': { zh: '冷卻 {t}', en: 'Cooldown {t}' },
 
   // ── Group mode (dual device) ─────────────────
   'group.action_all_success': { zh: '{action} 已啟動於全部裝置', en: '{action} started on all devices' },
