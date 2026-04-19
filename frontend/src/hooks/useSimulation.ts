@@ -414,9 +414,16 @@ export function useSimulation(subscribe?: WsSubscribe) {
   }, [])
 
   const teleport = useCallback(async (lat: number, lng: number) => {
+    // v0.2.71 port: previously this unconditionally called
+    // `_setMode(SimMode.Teleport)`, which meant every bookmark click,
+    // address-search fly, or TeleportPanel "Go" dropped the user out of
+    // Loop / MultiStop / Navigate and wiped their waypoint setup. The
+    // backend already stops any active simulation atomically when a
+    // teleport request arrives (see `backend/core/teleport.py`), so the
+    // frontend mode flip was purely cosmetic and actively harmful. The
+    // mode tab is now owned exclusively by the user's explicit choice.
     setError(null)
     try {
-      _setMode(SimMode.Teleport)
       const res = await api.teleport(lat, lng)
       setCurrentPosition({ lat, lng })
       setDestination(null)
