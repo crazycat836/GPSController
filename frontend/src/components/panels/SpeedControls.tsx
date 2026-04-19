@@ -3,10 +3,12 @@ import { Footprints, Rabbit, Car, Check, Gauge } from 'lucide-react'
 import { useSimContext, MoveMode } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
 
+// Values in km/h. Must match `SimContext.SPEED_MAP` and
+// `BottomDock.SPEED_PRESETS` (retuned 2026-04).
 const SPEED_PRESETS = [
-  { labelKey: 'move.walking' as const, value: 5, mode: 'walking' as MoveMode, Icon: Footprints },
-  { labelKey: 'move.running' as const, value: 10, mode: 'running' as MoveMode, Icon: Rabbit },
-  { labelKey: 'move.driving' as const, value: 40, mode: 'driving' as MoveMode, Icon: Car },
+  { labelKey: 'move.walking' as const, value: 10.8, mode: 'walking' as MoveMode, Icon: Footprints },
+  { labelKey: 'move.running' as const, value: 19.8, mode: 'running' as MoveMode, Icon: Rabbit },
+  { labelKey: 'move.driving' as const, value: 60,   mode: 'driving' as MoveMode, Icon: Car },
 ] as const
 
 // Logarithmic slider mapping for 0.36 – 120 km/h.

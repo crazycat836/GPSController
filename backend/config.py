@@ -23,11 +23,16 @@ class SpeedProfile(TypedDict):
     update_interval: float  # tick period (seconds)
 
 
-# Speed profiles (m/s)
+# Speed profiles (m/s). Retuned 2026-04 to match upstream v0.2.50:
+# walking 10.8 km/h (≈ 3.0 m/s, brisk walk / slow jog)
+# running 19.8 km/h (≈ 5.5 m/s, fast run)
+# driving 60   km/h (≈ 16.667 m/s, city driving)
+# Previous values (5 / 10 / 40 km/h) under-represented driving so much
+# that ETA on long routes was wildly optimistic.
 SPEED_PROFILES: dict[str, SpeedProfile] = {
-    "walking": {"speed_mps": 1.4, "jitter": 0.3, "update_interval": 1.0},
-    "running": {"speed_mps": 2.8, "jitter": 0.5, "update_interval": 1.0},
-    "driving": {"speed_mps": 11.1, "jitter": 1.0, "update_interval": 0.5},
+    "walking": {"speed_mps": 3.0,    "jitter": 0.3, "update_interval": 1.0},
+    "running": {"speed_mps": 5.5,    "jitter": 0.5, "update_interval": 1.0},
+    "driving": {"speed_mps": 16.667, "jitter": 1.0, "update_interval": 0.5},
 }
 
 

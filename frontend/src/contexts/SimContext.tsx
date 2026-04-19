@@ -39,10 +39,14 @@ export function toastForFanout<T>(
   })
 }
 
+// Retuned 2026-04 to match upstream v0.2.50: walking 10.8, running 19.8,
+// driving 60 km/h. The earlier 5/10/40 was too slow for realistic
+// navigation — a cross-city drive would ETA to "3 hours" instead of
+// the 45 min you'd actually see.
 export const SPEED_MAP: Record<MoveMode, number> = {
-  walking: 5,
-  running: 10,
-  driving: 40,
+  walking: 10.8,
+  running: 19.8,
+  driving: 60,
 }
 
 interface SimContextValue {

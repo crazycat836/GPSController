@@ -15,10 +15,12 @@ void (undefined as _MoveMode | undefined)
 
 // Speed preset rail. Icons map to design's Walk/Run/Drive glyphs;
 // lucide's Footprints / Rabbit / Car are the closest analogues.
+// Values in km/h. Must match `SimContext.SPEED_MAP` and backend
+// `SPEED_PROFILES` (m/s equivalents 3.0 / 5.5 / 16.667).
 const SPEED_PRESETS: Array<{ mode: MoveMode; Icon: typeof Footprints; labelKey: StringKey; value: number }> = [
-  { mode: MoveMode.Walking, Icon: Footprints, labelKey: 'move.walking', value: 5 },
-  { mode: MoveMode.Running, Icon: Rabbit,     labelKey: 'move.running', value: 10 },
-  { mode: MoveMode.Driving, Icon: Car,        labelKey: 'move.driving', value: 40 },
+  { mode: MoveMode.Walking, Icon: Footprints, labelKey: 'move.walking', value: 10.8 },
+  { mode: MoveMode.Running, Icon: Rabbit,     labelKey: 'move.running', value: 19.8 },
+  { mode: MoveMode.Driving, Icon: Car,        labelKey: 'move.driving', value: 60 },
 ]
 
 const RADIUS_PRESETS = [200, 500, 1000, 2000] as const
