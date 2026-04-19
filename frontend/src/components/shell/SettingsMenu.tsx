@@ -8,10 +8,10 @@ import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { useAvatarContext } from '../../contexts/AvatarContext'
-import { useT } from '../../i18n'
+import { useI18n, useT, type Lang } from '../../i18n'
 import * as api from '../../services/api'
-import LangToggle from '../LangToggle'
 import AvatarPicker from './AvatarPicker'
+import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
 import { AVATAR_PRESETS } from '../../lib/avatars'
 import pkg from '../../../package.json'
 
@@ -42,6 +42,7 @@ interface SettingsMenuProps {
 // + optional chevron to mirror the design's .set-row anatomy.
 export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }: SettingsMenuProps) {
   const t = useT()
+  const { lang, setLang } = useI18n()
   const { handleRestore, handleOpenLog, cooldown, cooldownEnabled, handleToggleCooldown } = useSimContext()
   const device = useDeviceContext()
   const { showToast } = useToastContext()
@@ -205,36 +206,27 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
               }
             />
 
-            <SettingsRow
+            <ChoiceRow
               icon={<Languages className="w-[14px] h-[14px]" />}
-              label={t('generic.cancel').includes('取消') ? '語言' : 'Language'}
-              trailing={<LangToggle />}
-              interactive={false}
+              label={lang === 'zh' ? '語言' : 'Language'}
+              value={lang === 'zh' ? '中文' : 'English'}
+              ariaLabel="Language / 語言"
+              items={[
+                { id: 'zh', label: '中文', onSelect: () => setLang('zh' as Lang) },
+                { id: 'en', label: 'English', onSelect: () => setLang('en' as Lang) },
+              ]}
             />
 
-            <SettingsRow
+            <ChoiceRow
               icon={<Layers className="w-[14px] h-[14px]" />}
               label={t('settings.map_layer')}
-              interactive={false}
-              trailing={
-                <div className="flex items-center gap-1">
-                  {LAYER_OPTIONS.map(({ key, label }) => (
-                    <button
-                      key={key}
-                      onClick={() => onLayerChange(key)}
-                      aria-pressed={layerKey === key}
-                      className={[
-                        'px-2 py-[3px] text-[10px] font-semibold rounded-md transition-colors cursor-pointer',
-                        layerKey === key
-                          ? 'bg-[var(--color-accent)] text-white'
-                          : 'bg-white/10 text-[var(--color-text-2)] hover:bg-white/15',
-                      ].join(' ')}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              }
+              value={LAYER_OPTIONS.find((o) => o.key === layerKey)?.label ?? layerKey}
+              ariaLabel={t('settings.map_layer')}
+              items={LAYER_OPTIONS.map(({ key, label }) => ({
+                id: key,
+                label,
+                onSelect: () => onLayerChange(key),
+              }))}
             />
 
             <SettingsRow
@@ -454,6 +446,49 @@ function SettingsRow({
       <span className="flex-1 text-left truncate">{label}</span>
       {trailing != null && <span className="shrink-0">{trailing}</span>}
     </Tag>
+  )
+}
+
+// ─── Choice row — shared for rows that pick one of N options ──
+// Renders the same anatomy as SettingsRow (28px icon tile + label +
+// trailing value + chevron), but the trailing chevron signals that
+// clicking opens a dropdown. Avoids inline pill rails for cases like
+// language / map-layer where design calls for "value + chevron"
+// rather than 3 small crammed buttons.
+
+interface ChoiceRowProps {
+  icon: React.ReactNode
+  label: React.ReactNode
+  value: React.ReactNode
+  items: KebabMenuItem[]
+  ariaLabel?: string
+}
+
+function ChoiceRow({ icon, label, value, items, ariaLabel }: ChoiceRowProps) {
+  return (
+    <KebabMenu
+      items={items}
+      ariaLabel={ariaLabel ?? (typeof label === 'string' ? label : 'Choose option')}
+      align="end"
+      trigger={
+        <button
+          type="button"
+          className={[
+            'flex items-center gap-3 px-3 py-[9px] rounded-[9px] text-[13px]',
+            'text-[var(--color-text-1)] tracking-[-0.005em]',
+            'hover:bg-white/[0.04] cursor-pointer',
+            'transition-colors duration-150 w-full',
+          ].join(' ')}
+        >
+          <span className="w-7 h-7 rounded-lg grid place-items-center shrink-0 border text-[var(--color-text-2)] border-[var(--color-border)] bg-white/[0.04]">
+            {icon}
+          </span>
+          <span className="flex-1 text-left truncate">{label}</span>
+          <span className="font-mono text-[11px] text-[var(--color-text-3)]">{value}</span>
+          <ChevronRight className="w-3 h-3 text-[var(--color-text-3)] opacity-60 shrink-0" />
+        </button>
+      }
+    />
   )
 }
 
