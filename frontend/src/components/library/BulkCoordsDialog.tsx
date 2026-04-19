@@ -35,8 +35,10 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
   const [errorsOpen, setErrorsOpen] = useState(false)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const previousFocus = useRef<HTMLElement | null>(null)
   const summaryId = useId()
+  const titleId = useId()
 
   const parsed = useMemo(() => parseBulkCoords(text), [text])
 
@@ -64,6 +66,27 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
       if (e.key === 'Escape' && !busy) {
         e.preventDefault()
         onCancel()
+        return
+      }
+      // Basic focus trap: wrap Tab / Shift+Tab within the dialog so
+      // keyboard users can't accidentally tab out onto the page
+      // behind. aria-modal alone doesn't enforce containment in
+      // browsers, only announces it to ATs.
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button, textarea, select, input, [tabindex]:not([tabindex="-1"])',
+        )
+        const enabled = Array.from(focusables).filter((el) => !el.hasAttribute('disabled'))
+        if (enabled.length === 0) return
+        const first = enabled[0]
+        const last = enabled[enabled.length - 1]
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
       }
     }
     document.addEventListener('keydown', onKey)
@@ -92,14 +115,16 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
       role="presentation"
     >
       <div
+        ref={dialogRef}
         className="modal-dialog anim-scale-in"
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
         aria-describedby={summaryId}
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: 560 }}
       >
-        <div className="modal-title">{t('bulk.title')}</div>
+        <div id={titleId} className="modal-title">{t('bulk.title')}</div>
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <p className="text-[12px] text-[var(--color-text-3)]">
             {t('bulk.hint')}
@@ -126,6 +151,8 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
           <div
             id={summaryId}
             className="text-[12px] flex items-center gap-3"
+            aria-live="polite"
+            aria-atomic="true"
           >
             <span style={{ color: validCount > 0 ? 'var(--color-success-text)' : 'var(--color-text-3)' }}>
               {t('bulk.summary_valid', { n: validCount })}
@@ -144,14 +171,8 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
           </div>
           {errorsOpen && errorCount > 0 && (
             <ul
-              className="text-[11px] font-mono max-h-32 overflow-y-auto flex flex-col gap-0.5"
-              style={{
-                padding: '6px 8px',
-                background: 'rgba(255,71,87,0.06)',
-                border: '1px solid rgba(255,71,87,0.2)',
-                borderRadius: 6,
-                color: 'var(--color-text-2)',
-              }}
+              className="text-[11px] font-mono max-h-32 overflow-y-auto flex flex-col gap-0.5 bg-[var(--color-danger-dim)] border border-[var(--color-danger)]/30 rounded-md text-[var(--color-text-2)]"
+              style={{ padding: '6px 8px' }}
             >
               {parsed.errors.slice(0, 50).map((err, i) => (
                 <li key={i}>
