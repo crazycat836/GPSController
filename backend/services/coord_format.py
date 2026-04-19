@@ -50,6 +50,54 @@ class CoordinateFormatter:
     # Parsing (auto-detect)
     # ------------------------------------------------------------------
 
+    # Characters we strip before running the DD/DM/DMS matchers below.
+    # Google Maps share URLs paste as "@35.68,139.69,15z" — leading '@'
+    # and the trailing zoom token need to disappear. IME users often
+    # wrap a coord pair in fullwidth parens / CJK brackets; those are
+    # also decoration, not content. Fullwidth space U+3000 → ASCII.
+    _PARENS_OPEN = "(（「【〔〈《"
+    _PARENS_CLOSE = ")）」】〕〉》"
+
+    @staticmethod
+    def _preprocess(text: str) -> str:
+        """Strip paste-noise so the DD/DM/DMS matchers get clean input.
+
+        Handles (in order):
+        * Fullwidth space U+3000 + other unicode whitespace → ASCII space.
+        * Fullwidth comma U+FF0C / semicolon U+FF1B → ASCII.
+        * Leading ``@`` from Google Maps share URLs.
+        * Matched pairs of ``()`` ``（）`` ``「」`` ``【】`` ``〔〕`` ``〈〉`` ``《》``.
+        * Trailing zoom token (``,15z`` style) appended by Maps.
+        """
+        t = text.strip()
+        if not t:
+            return t
+
+        # Normalise whitespace and CJK punctuation to ASCII equivalents.
+        t = t.replace("\u3000", " ").replace("\uFF0C", ",").replace("\uFF1B", ";")
+
+        # Drop leading '@' used by Google Maps URLs.
+        if t.startswith("@"):
+            t = t[1:].lstrip()
+
+        # Strip matched bracket pairs at the edges (iterative so
+        # nested wrappings like "（(25, 121)）" collapse in one call).
+        for _ in range(4):  # cap iterations; deep nesting is not a real case
+            if len(t) < 2:
+                break
+            first, last = t[0], t[-1]
+            opens = CoordinateFormatter._PARENS_OPEN
+            closes = CoordinateFormatter._PARENS_CLOSE
+            if first in opens and last in closes and opens.index(first) == closes.index(last):
+                t = t[1:-1].strip()
+                continue
+            break
+
+        # Chop off trailing Google Maps zoom/altitude tokens like ",15z".
+        t = re.sub(r"\s*,\s*-?\d+(?:\.\d+)?z\s*$", "", t)
+
+        return t
+
     @staticmethod
     def parse_coord(text: str) -> Coordinate | None:
         """Auto-detect and parse a coordinate string into a :class:`Coordinate`.
@@ -59,10 +107,14 @@ class CoordinateFormatter:
         * DD:   ``25.033, 121.565``  or  ``25.033°N, 121.565°E``
         * DMS:  ``25°2'1.5"N, 121°33'52.3"E``
         * DM:   ``25°2.025'N, 121°33.872'E``
+        * Paste-friendly wrappings around any of the above:
+          - ``(25.033, 121.565)`` / ``（25.033, 121.565）`` / ``「...」`` / ``【...】``
+          - ``@25.033,121.565,15z`` (Google Maps share URL tail)
+          - Fullwidth space / comma / semicolon normalised to ASCII
 
         Returns ``None`` when the input cannot be parsed.
         """
-        text = text.strip()
+        text = CoordinateFormatter._preprocess(text)
         if not text:
             return None
 
