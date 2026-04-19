@@ -6,6 +6,7 @@ import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useSimContext } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
+import { pickFile, downloadUrl } from '../../lib/fileIo'
 import ListRow from '../ui/ListRow'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
 import EmptyState from '../ui/EmptyState'
@@ -64,30 +65,18 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       id: 'gpx-import',
       label: t('panel.route_gpx_import'),
       icon: <FileUp width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
-      onSelect: () => {
-        const input = document.createElement('input')
-        input.type = 'file'
-        input.accept = '.gpx,application/gpx+xml'
-        input.onchange = () => {
-          const f = input.files?.[0]
-          if (f) void bm.handleGpxImport(f)
-        }
-        input.click()
+      onSelect: async () => {
+        const f = await pickFile('.gpx,application/gpx+xml')
+        if (f) void bm.handleGpxImport(f)
       },
     },
     {
       id: 'import-all',
       label: t('panel.routes_import_all'),
       icon: <Upload width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
-      onSelect: () => {
-        const input = document.createElement('input')
-        input.type = 'file'
-        input.accept = '.json,application/json'
-        input.onchange = () => {
-          const f = input.files?.[0]
-          if (f) void bm.handleRoutesImportAll(f)
-        }
-        input.click()
+      onSelect: async () => {
+        const f = await pickFile('.json,application/json')
+        if (f) void bm.handleRoutesImportAll(f)
       },
     },
     {
@@ -95,12 +84,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       label: t('panel.routes_export_all'),
       icon: <Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
       disabled: savedRoutes.length === 0,
-      onSelect: () => {
-        const a = document.createElement('a')
-        a.href = bm.routesExportAllUrl
-        a.download = 'gpscontroller-routes.json'
-        a.click()
-      },
+      onSelect: () => downloadUrl(bm.routesExportAllUrl, 'gpscontroller-routes.json'),
     },
   ], [t, bm, savedRoutes.length])
 

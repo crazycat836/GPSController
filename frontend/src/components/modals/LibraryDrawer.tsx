@@ -4,6 +4,7 @@ import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useSimContext } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
+import { pickFile, downloadUrl } from '../../lib/fileIo'
 import Drawer from '../shell/Drawer'
 import PanelTabs, { panelPropsForTab, type PanelTab } from '../ui/PanelTabs'
 import BookmarksPanel from '../library/BookmarksPanel'
@@ -44,27 +45,16 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
         <>
           <IconBtnSm
             label={t('bm.import')}
-            onClick={() => {
-              const input = document.createElement('input')
-              input.type = 'file'
-              input.accept = 'application/json,.json'
-              input.onchange = () => {
-                const f = input.files?.[0]
-                if (f) void bm.handleBookmarkImport(f)
-              }
-              input.click()
+            onClick={async () => {
+              const f = await pickFile('application/json,.json')
+              if (f) void bm.handleBookmarkImport(f)
             }}
             icon={<Upload width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
           />
           <IconBtnSm
             label={t('bm.export')}
             disabled={bm.bookmarks.length === 0}
-            onClick={() => {
-              const a = document.createElement('a')
-              a.href = bm.bookmarkExportUrl
-              a.download = 'bookmarks.json'
-              a.click()
-            }}
+            onClick={() => downloadUrl(bm.bookmarkExportUrl, 'bookmarks.json')}
             icon={<Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
           />
         </>
@@ -75,41 +65,24 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
       <>
         <IconBtnSm
           label={t('panel.route_gpx_import')}
-          onClick={() => {
-            const input = document.createElement('input')
-            input.type = 'file'
-            input.accept = '.gpx,application/gpx+xml'
-            input.onchange = () => {
-              const f = input.files?.[0]
-              if (f) void bm.handleGpxImport(f)
-            }
-            input.click()
+          onClick={async () => {
+            const f = await pickFile('.gpx,application/gpx+xml')
+            if (f) void bm.handleGpxImport(f)
           }}
           icon={<FileUp width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
         />
         <IconBtnSm
           label={t('panel.routes_import_all')}
-          onClick={() => {
-            const input = document.createElement('input')
-            input.type = 'file'
-            input.accept = '.json,application/json'
-            input.onchange = () => {
-              const f = input.files?.[0]
-              if (f) void bm.handleRoutesImportAll(f)
-            }
-            input.click()
+          onClick={async () => {
+            const f = await pickFile('.json,application/json')
+            if (f) void bm.handleRoutesImportAll(f)
           }}
           icon={<Upload width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
         />
         <IconBtnSm
           label={t('panel.routes_export_all')}
           disabled={savedRoutes.length === 0}
-          onClick={() => {
-            const a = document.createElement('a')
-            a.href = bm.routesExportAllUrl
-            a.download = 'gpscontroller-routes.json'
-            a.click()
-          }}
+          onClick={() => downloadUrl(bm.routesExportAllUrl, 'gpscontroller-routes.json')}
           icon={<Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
         />
       </>
