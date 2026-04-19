@@ -708,3 +708,76 @@ async def device_info(udid: str):
         if d.udid == udid:
             return d
     raise HTTPException(status_code=404, detail="Device not found")
+
+
+# ── AMFI: "Reveal Developer Mode in Settings" (iOS 16+) ─────────────
+#
+# Same end state as sideloading a dev-signed IPA via Sideloadly / Xcode,
+# but done directly through AMFI. Action 0 of the
+# `com.apple.amfi.lockdown` service creates the `AMFIShowOverridePath`
+# marker file on the device — no reboot, no passcode prompt, no
+# sideload round-trip. Saves new users the "why doesn't the Developer
+# Mode toggle appear" question entirely.
+@router.post("/{udid}/amfi/reveal-developer-mode")
+async def amfi_reveal_developer_mode(udid: str):
+    dm = _dm()
+    conn = dm._connections.get(udid)
+    if conn is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "device_not_connected", "message": "Device is not currently connected"},
+        )
+
+    # iOS 15 and below have no Developer Mode concept, so the AMFI
+    # service call would fail with a misleading error.
+    try:
+        ios_major = int((conn.ios_version or "0").split(".")[0])
+    except ValueError:
+        ios_major = 0
+    if ios_major < 16:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "ios_version_unsupported",
+                "message": "需要 iOS 16 或更新版本才能使用開發者模式",
+                "ios_version": conn.ios_version,
+            },
+        )
+
+    # WiFi tunnels don't route the AMFI lockdown service (it's a USB-only
+    # advertised port). Reject up-front instead of letting the service
+    # open fail deep inside pymobiledevice3.
+    if (conn.connection_type or "").lower() != "usb":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "usb_required",
+                "message": "AMFI 需要 USB 連線(WiFi tunnel 不會轉發此服務)",
+            },
+        )
+
+    try:
+        from pymobiledevice3.services.amfi import AmfiService
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "amfi_unavailable",
+                "message": f"pymobiledevice3 AMFI service not importable ({type(exc).__name__}: {exc})",
+            },
+        )
+
+    try:
+        AmfiService(conn.lockdown).reveal_developer_mode_option_in_ui()
+    except Exception as exc:
+        logger = logging.getLogger(__name__)
+        logger.exception("AMFI reveal failed for %s", udid)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "amfi_reveal_failed",
+                "message": f"{type(exc).__name__}: {exc}",
+            },
+        )
+
+    return {"status": "ok", "udid": udid}

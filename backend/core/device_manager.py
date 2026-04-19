@@ -157,6 +157,21 @@ class DeviceManager:
                     connection_type=conn_type,
                 )
                 info.is_connected = raw.serial in self._connections
+                # Populate `developer_mode_enabled` for iOS 16+ so the
+                # frontend can offer an AMFI "Reveal in Settings" button
+                # only when it's actually useful. iOS 15 and below have
+                # no Developer Mode concept, and lockdown's getter is a
+                # best-effort call — tolerate any failure silently.
+                ios_major = _parse_ios_version(info.ios_version)[0] if info.ios_version else 0
+                if ios_major >= 16:
+                    try:
+                        info.developer_mode_enabled = bool(
+                            lockdown.get_developer_mode_status()
+                        )
+                    except Exception:
+                        logger.debug(
+                            "get_developer_mode_status failed for %s", raw.serial, exc_info=True,
+                        )
                 devices.append(info)
                 logger.info(
                     "  device %s '%s' iOS %s via %s (connected=%s)",

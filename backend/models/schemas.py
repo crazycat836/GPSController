@@ -41,6 +41,11 @@ class DeviceInfo(BaseModel):
     ios_version: str
     connection_type: str = "usb"
     is_connected: bool = False
+    # None on iOS 15 and below (the toggle didn't exist) or when the
+    # lockdown query failed. True = the toggle is already ON; False =
+    # present but OFF, which is exactly when we can offer to "reveal"
+    # it in Settings via AMFI (see /device/{udid}/amfi/reveal-dev-mode).
+    developer_mode_enabled: bool | None = None
 
 
 # ── Location requests ────────────────────────────────────
