@@ -122,7 +122,16 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
     if (!m) return
     if (m.ts === lastDdiMissingTs.current) return
     lastDdiMissingTs.current = m.ts
-    console.warn('[ddi_mount_missing]', m.stage ?? '?', m.reason)
+    // The hint toast is the user-facing signal. The detailed reason
+    // (exception class + message) only matters for local debugging;
+    // gate on Vite's DEV flag so production bundles stay clean.
+    // `import.meta.env` types aren't present in this project; cast
+    // the narrow read we need.
+    const isDev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true
+    if (isDev) {
+      // eslint-disable-next-line no-console
+      console.warn('[ddi_mount_missing]', m.stage ?? '?', m.reason)
+    }
     showToast(t('ddi.missing_hint'), 10000)
   }, [sim.ddiMissing, showToast, t])
 
