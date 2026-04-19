@@ -1249,15 +1249,18 @@
   border-radius: 50%;
   object-fit: cover;
 }
+/* Animated via box-shadow spread instead of transform: scale. Paint-only
+   properties don't promote the element to its own compositor layer, which
+   prevents the BottomDock's backdrop-filter from re-sampling an animating
+   layer and rendering a visible vertical seam at the ring's max radius. */
 .pos-pulse-ring {
   position: absolute;
   top: 50%; left: 50%;
-  width: 44px; height: 44px;
-  margin: -22px 0 0 -22px;
+  width: 8px; height: 8px;
+  margin: -4px 0 0 -4px;
   border-radius: 50%;
-  border: 2px solid rgba(66, 133, 244, 0.5);
   background: transparent;
-  animation: pulse-expand 2.5s cubic-bezier(0, 0.5, 0.5, 1) infinite;
+  animation: pulse-shadow 2.5s cubic-bezier(0, 0.5, 0.5, 1) infinite;
   z-index: 1;
 }
 .pos-pulse-ring-2 { animation-delay: 1.25s; }
@@ -1388,9 +1391,9 @@
   0%, 100% { box-shadow: 0 0 8px rgba(108, 140, 255, 0.2); }
   50% { box-shadow: 0 0 16px rgba(108, 140, 255, 0.4); }
 }
-@keyframes pulse-expand {
-  0% { transform: scale(0.8); opacity: 0.8; }
-  100% { transform: scale(3); opacity: 0; }
+@keyframes pulse-shadow {
+  0%   { box-shadow: 0 0 0 0    rgba(66, 133, 244, 0.50); }
+  100% { box-shadow: 0 0 0 60px rgba(66, 133, 244, 0.00); }
 }
 @keyframes marker-drop {
   0%   { transform: translateY(-24px); opacity: 0; }
