@@ -52,7 +52,7 @@ export default function MiniStatusBar() {
       {/* Device pill(s) — placeholder when none connected */}
       {!isConnected ? (
         <div
-          className="glass-pill inline-flex items-center gap-2 h-10 px-3.5 text-[12px]"
+          className="status-device-pill inline-flex items-center gap-2.5 h-10 px-4 text-[12px] font-medium"
           title={t('status.disconnected')}
         >
           <Smartphone className="w-4 h-4 text-[var(--color-text-3)] shrink-0" />
@@ -72,11 +72,12 @@ export default function MiniStatusBar() {
         <DevicePill dev={device.connectedDevices[0]} letter={DEVICE_LETTERS[0]} color={DEVICE_COLORS[0]} />
       )}
 
-      {/* Coord chip — single-device mode only (dual shows coords inline per-device) */}
+      {/* Coord chip — lighter weight than device pill, mono for numerics.
+          Single-device only (dual-device mode shows coords inline per pill). */}
       {!isDual && currentPos && (
-        <div className="glass-pill inline-flex items-center gap-2 h-8 px-3 text-[11px]">
+        <div className="status-coord-chip inline-flex items-center gap-2.5 h-8 px-3 text-[11px] font-mono">
           <MapPin className="w-3 h-3 text-[var(--color-text-3)] shrink-0" />
-          <span className="font-mono text-[var(--color-text-2)]">
+          <span>
             {currentPos.lat.toFixed(5)}°, {currentPos.lng.toFixed(5)}°
           </span>
           <button
@@ -92,9 +93,9 @@ export default function MiniStatusBar() {
         </div>
       )}
 
-      {/* Location + weather chip */}
+      {/* Location + weather chip — same lighter treatment as the coord chip */}
       {!isDual && (countryCode || weather) && (
-        <div className="glass-pill inline-flex items-center gap-2 h-8 px-3 text-[11px]">
+        <div className="status-coord-chip inline-flex items-center gap-2.5 h-8 px-3 text-[11px]">
           {countryCode && (
             <>
               <img
@@ -108,7 +109,12 @@ export default function MiniStatusBar() {
               {country && <span className="text-[var(--color-text-1)] font-medium truncate max-w-[120px]">{country}</span>}
             </>
           )}
-          {countryCode && weather && <span className="w-1 h-1 rounded-full bg-[var(--color-text-3)] shrink-0" aria-hidden="true" />}
+          {countryCode && weather && (
+            <span
+              className="w-[3px] h-[3px] rounded-full bg-[var(--color-text-3)] shrink-0"
+              aria-hidden="true"
+            />
+          )}
           {weather && <WeatherChip snapshot={weather} size={14} />}
         </div>
       )}
@@ -129,7 +135,7 @@ function DevicePill({ dev, letter, color, coord }: DevicePillProps) {
   const isNetwork = dev.connection_type === 'Network'
   return (
     <div
-      className="glass-pill inline-flex items-center gap-2 h-10 pl-2 pr-3.5 text-[12px]"
+      className="status-device-pill inline-flex items-center gap-2.5 h-10 pl-2 pr-4 text-[12px] font-medium"
       title={dev.name}
     >
       {/* Letter avatar */}

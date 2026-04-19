@@ -1447,6 +1447,32 @@
   color: var(--color-text-1);
 }
 
+/* ─── Status pair variants ──────────────────────────────────
+   The top-left status pair renders two visual weights — a primary
+   `device-pill` (weightier, 0.82 surface + shadow-md) and a
+   secondary `coord-chip` (lighter, 0.72 surface, subtler border,
+   no shadow). Mirroring redesign/Home's `.device-pill` vs
+   `.coord-chip` so the viewer reads the device status as the
+   primary row and the coord/flag/weather rows as supporting info,
+   not three identical chips. */
+.status-device-pill {
+  background: rgba(19, 20, 22, 0.82);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text-1);
+}
+.status-coord-chip {
+  background: rgba(19, 20, 22, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  color: var(--color-text-2);
+}
+
 
 /* ═══════════════════════════════════════════════════════════════
    Shared Panel Primitives
