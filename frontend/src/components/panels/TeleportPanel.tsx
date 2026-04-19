@@ -1,11 +1,10 @@
-import React from 'react'
-import { MapPin, Star, Locate, Clock } from 'lucide-react'
+import { Locate, Clock } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
-import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT } from '../../i18n'
 import { haversineM } from '../../lib/geo'
 import { predictCooldown, formatCooldown } from '../../lib/cooldown'
-import RouteCard, { type RoutePoint } from '../RouteCard'
+import { useOriginDestPoints } from '../../hooks/useOriginDestPoints'
+import RouteCard from '../RouteCard'
 
 export default function TeleportPanel() {
   const {
@@ -14,8 +13,8 @@ export default function TeleportPanel() {
     handleTeleport,
     handleClearTeleportDest,
   } = useSimContext()
-  const { handleAddBookmark } = useBookmarkContext()
   const t = useT()
+  const points = useOriginDestPoints(currentPos, destPos)
 
   const handleMove = () => {
     if (!destPos) return
@@ -23,73 +22,15 @@ export default function TeleportPanel() {
   }
 
   const distanceM = currentPos && destPos ? haversineM(currentPos, destPos) : 0
-  const distanceKm = distanceM / 1000
-  const cooldownSec = predictCooldown(distanceKm)
+  const cooldownSec = predictCooldown(distanceM / 1000)
 
   const fmtDistance = (m: number) => {
     if (m < 1000) return `${m.toFixed(2)} m`
     return `${(m / 1000).toFixed(2)} km`
   }
 
-  /* ── Build route points ── */
-  const bookmarkBtn = (pos: { lat: number; lng: number }) => (
-    <button
-      onClick={() => handleAddBookmark(pos.lat, pos.lng)}
-      className="shrink-0 p-1 rounded-md transition-colors hover:opacity-80"
-      style={{ color: 'var(--color-warning, #f5a623)' }}
-      title={t('map.add_bookmark')}
-    >
-      <Star className="w-4 h-4" />
-    </button>
-  )
-
-  const points: RoutePoint[] = [
-    {
-      id: 'origin',
-      label: t('teleport.my_location'),
-      position: currentPos,
-      placeholder: t('teleport.no_position'),
-      icon: (
-        <Locate
-          className="w-4 h-4"
-          style={{ color: 'var(--color-accent)' }}
-        />
-      ),
-      actions: currentPos ? bookmarkBtn(currentPos) : undefined,
-    },
-  ]
-
-  if (destPos) {
-    points.push({
-      id: 'dest',
-      label: t('teleport.destination'),
-      position: destPos,
-      icon: (
-        <MapPin
-          className="w-4 h-4"
-          style={{ color: 'var(--color-danger, #e53935)' }}
-        />
-      ),
-      actions: bookmarkBtn(destPos),
-    })
-  } else {
-    points.push({
-      id: 'dest-placeholder',
-      label: t('teleport.add_destination'),
-      position: null,
-      icon: (
-        <MapPin
-          className="w-4 h-4"
-          style={{ color: 'var(--color-text-3)' }}
-        />
-      ),
-      labelColor: 'var(--color-text-3)',
-    })
-  }
-
   return (
     <div className="seg-stack">
-      {/* Route card */}
       <RouteCard
         title={t('teleport.route')}
         points={points}
