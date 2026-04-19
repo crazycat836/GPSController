@@ -124,6 +124,8 @@ export const STRINGS = {
   'panel.routes_import_all_tooltip': { zh: '匯入先前「全部匯出」產生的 JSON 檔', en: 'Import a JSON file produced by "Export all"' },
   'toast.routes_imported': { zh: '已匯入 {n} 條路線', en: 'Imported {n} routes' },
   'toast.routes_import_failed': { zh: '匯入失敗:{msg}', en: 'Import failed: {msg}' },
+  'toast.bookmarks_bulk_ok': { zh: '已匯入 {n} 筆座標收藏', en: 'Imported {n} bookmarks' },
+  'toast.bookmarks_bulk_partial': { zh: '{n} 筆匯入失敗', en: '{n} failed' },
   'panel.route_delete_confirm': { zh: '刪除路線「{name}」?', en: 'Delete route "{name}"?' },
   'panel.random_walk_radius': { zh: '隨機漫步半徑 (m)', en: 'Random walk radius (m)' },
 
@@ -299,6 +301,29 @@ export const STRINGS = {
 
   // ── Bookmarks ────────────────────────────────
   'bm.default': { zh: '預設', en: 'Default' },
+  'bm.default_name': { zh: '未命名收藏', en: 'Bookmark' },
+  'bm.bulk_import': { zh: '批次貼上座標', en: 'Bulk paste…' },
+  'bulk.title': { zh: '批次貼上座標', en: 'Bulk paste coordinates' },
+  'bulk.hint': {
+    zh: '每行一組座標。支援 "lat, lng"、"lat lng 名稱"、括號包起來、@lat,lng,zz 貼自 Google Maps 等格式。',
+    en: 'One coord per line. Accepts "lat, lng", "lat lng Name", brackets, or the Google Maps "@lat,lng,15z" paste.',
+  },
+  'bulk.placeholder_bookmark': {
+    zh: '25.0330, 121.5654 臺北車站\n(35.6895, 139.6917) 東京車站\n@40.4168,-3.7038,15z',
+    en: '25.0330, 121.5654 Taipei Main\n(35.6895, 139.6917) Tokyo Station\n@40.4168,-3.7038,15z',
+  },
+  'bulk.placeholder_waypoint': {
+    zh: '25.0330, 121.5654\n25.0340, 121.5700\n25.0350, 121.5650',
+    en: '25.0330, 121.5654\n25.0340, 121.5700\n25.0350, 121.5650',
+  },
+  'bulk.textarea_aria': { zh: '貼上多筆座標', en: 'Paste multiple coordinates' },
+  'bulk.summary_valid': { zh: '{n} 筆可匯入', en: '{n} valid' },
+  'bulk.summary_errors_show': { zh: '{n} 筆錯誤(展開)', en: '{n} errors (show)' },
+  'bulk.summary_errors_hide': { zh: '{n} 筆錯誤(收合)', en: '{n} errors (hide)' },
+  'bulk.errors_truncated': { zh: '… 還有 {n} 筆', en: '… and {n} more' },
+  'bulk.category_label': { zh: '分類', en: 'Category' },
+  'bulk.import_with_count': { zh: '匯入 {n} 筆', en: 'Import {n}' },
+  'bulk.importing': { zh: '匯入中…', en: 'Importing…' },
   'bm.add_here': { zh: '在目前位置新增收藏', en: 'Add bookmark at current position' },
   'bm.add': { zh: '新增收藏', en: 'Add Bookmark' },
   'bm.add_custom': { zh: '自訂座標收藏', en: 'Custom Coordinates' },

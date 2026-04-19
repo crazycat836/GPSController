@@ -16,6 +16,10 @@ interface BookmarkContextValue {
   bookmarks: Bookmark[]
   categories: BookmarkCategory[]
   createBookmark: (bm: Omit<Bookmark, 'id'>) => Promise<Bookmark>
+  createBookmarksBulk: (
+    items: Array<{ lat: number; lng: number; name?: string }>,
+    categoryId?: string,
+  ) => Promise<{ created: number; failed: number }>
   updateBookmark: (id: string, data: Partial<Bookmark>) => Promise<Bookmark>
   deleteBookmark: (id: string) => Promise<void>
   deleteBookmarksBatch: (ids: string[]) => Promise<number>
@@ -184,10 +188,42 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [showToast, t])
 
+  const createBookmarksBulk = useCallback(
+    async (
+      items: Array<{ lat: number; lng: number; name?: string }>,
+      categoryId?: string,
+    ): Promise<{ created: number; failed: number }> => {
+      if (items.length === 0) return { created: 0, failed: 0 }
+      const targetCat = (categoryId && bm.categories.some((c) => c.id === categoryId))
+        ? categoryId
+        : 'default'
+      const defaultName = t('bm.default_name')
+      const results = await Promise.allSettled(
+        items.map((it, idx) => bm.createBookmark({
+          name: (it.name || '').trim() || `${defaultName} ${idx + 1}`,
+          lat: it.lat,
+          lng: it.lng,
+          category_id: targetCat,
+        })),
+      )
+      let created = 0
+      let failed = 0
+      for (const r of results) {
+        if (r.status === 'fulfilled') created++
+        else failed++
+      }
+      if (created > 0) showToast(t('toast.bookmarks_bulk_ok', { n: created }))
+      if (failed > 0) showToast(t('toast.bookmarks_bulk_partial', { n: failed }))
+      return { created, failed }
+    },
+    [bm, showToast, t],
+  )
+
   const value: BookmarkContextValue = {
     bookmarks: bm.bookmarks,
     categories: bm.categories,
     createBookmark: bm.createBookmark,
+    createBookmarksBulk,
     updateBookmark: bm.updateBookmark,
     deleteBookmark: bm.deleteBookmark,
     deleteBookmarksBatch: bm.deleteBookmarksBatch,

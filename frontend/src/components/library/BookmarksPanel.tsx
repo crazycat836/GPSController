@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react'
 import {
   Plus, Bookmark as BookmarkIcon, Pencil, Trash2, Copy,
   FolderInput, Layers, Check, X, ClipboardList, StickyNote,
+  ClipboardPaste,
 } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import type { Bookmark, BookmarkCategory } from '../../hooks/useBookmarks'
@@ -15,6 +16,7 @@ import EmptyState from '../ui/EmptyState'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import BookmarkEditDialog, { type BookmarkEditValues } from './BookmarkEditDialog'
 import CategoryManagerDialog, { getCategoryColor } from './CategoryManagerDialog'
+import BulkCoordsDialog from './BulkCoordsDialog'
 
 interface BookmarksPanelProps {
   onBookmarkClick: (lat: number, lng: number) => void
@@ -38,6 +40,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   const [inlineEditId, setInlineEditId] = useState<string | null>(null)
   const [inlineEditName, setInlineEditName] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [bulkOpen, setBulkOpen] = useState(false)
 
   const displayCat = useCallback((name: string) => (name === '預設' ? t('bm.default') : name), [t])
 
@@ -201,6 +204,12 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       label: t('bm.add_custom'),
       icon: <Plus width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
       onSelect: () => setEditing({ mode: 'create' }),
+    },
+    {
+      id: 'bulk',
+      label: t('bm.bulk_import'),
+      icon: <ClipboardPaste width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
+      onSelect: () => setBulkOpen(true),
     },
     {
       id: 'select',
@@ -566,6 +575,17 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         categories={categories}
         onAdd={async (name) => { await bm.createCategory({ name }) }}
         onDelete={(id) => bm.deleteCategory(id)}
+      />
+
+      {/* Bulk import via pasted coords (v0.2.52) */}
+      <BulkCoordsDialog
+        open={bulkOpen}
+        mode="bookmarks"
+        onCancel={() => setBulkOpen(false)}
+        onConfirm={async (items, categoryId) => {
+          await bm.createBookmarksBulk(items, categoryId)
+          setBulkOpen(false)
+        }}
       />
 
       {/* Delete confirmation */}
