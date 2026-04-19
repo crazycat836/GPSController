@@ -1,10 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react'
-import { X, Star, Dices, Locate, MapPin, Flag, ChevronDown, Save, FolderOpen, Check } from 'lucide-react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
+import { X, Star, Dices, Locate, MapPin, Flag, ChevronDown, Save, FolderOpen, Check, ClipboardPaste } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT } from '../../i18n'
 import PauseControl from '../PauseControl'
 import RouteCard, { type RoutePoint } from '../RouteCard'
+import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
+import BulkCoordsDialog from '../library/BulkCoordsDialog'
+import { ICON_SIZE } from '../../lib/icons'
 
 interface WaypointListProps {
   mode: 'loop' | 'multistop'
@@ -31,6 +34,7 @@ export default function WaypointList({ mode }: WaypointListProps) {
   const [routeName, setRouteName] = useState('')
   const [loadOpen, setLoadOpen] = useState(false)
   const loadRef = useRef<HTMLDivElement>(null)
+  const [bulkOpen, setBulkOpen] = useState(false)
 
   useEffect(() => {
     if (!loadOpen) return
@@ -193,6 +197,17 @@ export default function WaypointList({ mode }: WaypointListProps) {
     </>
   )
 
+  /* ── Header overflow menu (bulk paste + future actions) ── */
+  const headerMenuItems: KebabMenuItem[] = useMemo(() => [
+    {
+      id: 'bulk',
+      label: t('panel.waypoints_bulk_paste'),
+      icon: <ClipboardPaste width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
+      disabled: isRunning,
+      onSelect: () => setBulkOpen(true),
+    },
+  ], [t, isRunning])
+
   /* ── Header extra: save / load icon buttons ── */
   const titleExtra = (
     <div className="flex items-center gap-0.5 ml-auto">
@@ -250,6 +265,11 @@ export default function WaypointList({ mode }: WaypointListProps) {
               </div>
             )}
           </div>
+          <KebabMenu
+            triggerSize={12}
+            items={headerMenuItems}
+            ariaLabel={t('panel.waypoints_menu')}
+          />
         </>
       )}
     </div>
@@ -289,6 +309,22 @@ export default function WaypointList({ mode }: WaypointListProps) {
         labelKey={pauseLabelKey}
         value={pauseValue}
         onChange={pauseOnChange}
+      />
+
+      {/* Bulk paste waypoints (v0.2.53) — same dialog as bookmark bulk
+          import but in waypoint mode (no category picker). Parsed
+          coords append to the current waypoint list. */}
+      <BulkCoordsDialog
+        open={bulkOpen}
+        mode="waypoints"
+        onCancel={() => setBulkOpen(false)}
+        onConfirm={(items) => {
+          sim.setWaypoints((prev: { lat: number; lng: number }[]) => [
+            ...prev,
+            ...items.map(({ lat, lng }) => ({ lat, lng })),
+          ])
+          setBulkOpen(false)
+        }}
       />
     </>
   )
