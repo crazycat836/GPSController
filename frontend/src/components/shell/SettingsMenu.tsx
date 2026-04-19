@@ -185,7 +185,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
           </Section>
 
           {/* Preferences */}
-          <Section label="Preferences">
+          <Section label={t('settings.preferences')}>
             <SettingsRow
               icon={<Timer className="w-[14px] h-[14px]" />}
               label={cooldownEnabled ? t('status.cooldown_enabled') : t('status.cooldown_disabled')}
@@ -232,9 +232,9 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
 
             <SettingsRow
               icon={<Sun className="w-[14px] h-[14px]" />}
-              label="Theme"
+              label={t('settings.theme')}
               interactive={false}
-              trailing={<span className="font-mono text-[11px] text-[var(--color-text-3)]">Dark</span>}
+              trailing={<span className="font-mono text-[11px] text-[var(--color-text-3)]">{t('settings.theme_dark')}</span>}
             />
 
             {/* Map Pin Avatar — previously lived in the top-left status pair.
@@ -278,19 +278,25 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
           </Section>
 
           {/* Privacy / About */}
-          <Section label="About">
+          <Section label={t('settings.about')}>
             <SettingsRow
               icon={<Info className="w-[14px] h-[14px]" />}
-              label="Version"
+              label={t('settings.version')}
               interactive={false}
               trailing={<span className="font-mono text-[11px] text-[var(--color-text-3)]">v{APP_VERSION}</span>}
             />
-            <SettingsRow
-              icon={<Trash2 className="w-[14px] h-[14px]" />}
-              label="Clear all history"
-              danger
-              onClick={() => { /* hook up if you add a clear-history flow */ }}
-            />
+            {/* TODO: "Clear all history" has no handler yet — hidden
+                until we decide whether it clears bookmarks / routes /
+                recents / everything. Re-enable by wiring onClick and
+                removing the `false &&` below. */}
+            {false && (
+              <SettingsRow
+                icon={<Trash2 className="w-[14px] h-[14px]" />}
+                label={t('settings.clear_history')}
+                danger
+                onClick={() => { /* unimplemented */ }}
+              />
+            )}
           </Section>
         </div>
       )}
