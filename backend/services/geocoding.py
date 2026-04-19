@@ -40,6 +40,10 @@ class GeocodingService:
         Returns
         -------
         list[GeocodingResult]
+
+        Network / upstream failures (DNS miss, timeout, 5xx, rate limit) are
+        logged and surfaced as an empty list so the caller doesn't receive a
+        500 for transient issues.
         """
         params = {
             "q": query,
@@ -49,14 +53,24 @@ class GeocodingService:
 
         logger.debug("Nominatim search: %s", query)
 
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resp = await client.get(
-                f"{NOMINATIM_BASE_URL}/search",
-                params=params,
-                headers=self._headers(),
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+                resp = await client.get(
+                    f"{NOMINATIM_BASE_URL}/search",
+                    params=params,
+                    headers=self._headers(),
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            logger.warning("Nominatim search unreachable (%s): %s", type(exc).__name__, exc)
+            return []
+        except httpx.HTTPStatusError as exc:
+            logger.warning("Nominatim search HTTP %d: %s", exc.response.status_code, exc.response.text[:200])
+            return []
+        except httpx.HTTPError as exc:
+            logger.warning("Nominatim search failed (%s): %s", type(exc).__name__, exc)
+            return []
 
         results: list[GeocodingResult] = []
         for item in data:
@@ -101,14 +115,28 @@ class GeocodingService:
 
         logger.debug("Nominatim reverse: %.6f, %.6f", lat, lng)
 
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resp = await client.get(
-                f"{NOMINATIM_BASE_URL}/reverse",
-                params=params,
-                headers=headers,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        # Network / upstream failures are logged and surfaced as None so the
+        # frontend's reverse-geocode hook falls back to "no flag / no country"
+        # instead of throwing away the whole status pair on a transient DNS
+        # or timeout hiccup.
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+                resp = await client.get(
+                    f"{NOMINATIM_BASE_URL}/reverse",
+                    params=params,
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            logger.warning("Nominatim reverse unreachable (%s): %s", type(exc).__name__, exc)
+            return None
+        except httpx.HTTPStatusError as exc:
+            logger.warning("Nominatim reverse HTTP %d: %s", exc.response.status_code, exc.response.text[:200])
+            return None
+        except httpx.HTTPError as exc:
+            logger.warning("Nominatim reverse failed (%s): %s", type(exc).__name__, exc)
+            return None
 
         if "error" in data:
             logger.info("Nominatim reverse returned error: %s", data["error"])
