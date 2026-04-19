@@ -369,18 +369,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         }
       />
 
-      <BottomDock
-        details={
-          <div key={sim.mode}>
-            {sim.mode === SimMode.Teleport && <TeleportPanel />}
-            {sim.mode === SimMode.Navigate && <NavigatePanel />}
-            {sim.mode === SimMode.Loop && <LoopPanel />}
-            {sim.mode === SimMode.MultiStop && <MultiStopPanel />}
-            {sim.mode === SimMode.RandomWalk && <RandomWalkPanel />}
-            {sim.mode === SimMode.Joystick && <JoystickPanel />}
-          </div>
-        }
-      />
+      <BottomDock />
 
       <BottomModeBar activeMode={sim.mode} onModeChange={sim.setMode} />
       <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} layerKey={layerKey} onLayerChange={handleLayerChange} />

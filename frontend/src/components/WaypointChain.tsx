@@ -1,5 +1,5 @@
 import React from 'react'
-import { Plus, X, Repeat } from 'lucide-react'
+import { Plus, X, Repeat, Dices } from 'lucide-react'
 import { haversineM } from '../lib/geo'
 
 export interface ChainPoint {
@@ -16,6 +16,8 @@ interface WaypointChainProps {
   loop?: boolean
   /** When true, renders a dashed "+ Add stop" trailing button. */
   onAdd?: () => void
+  /** Optional second trailing dashed button for "random stop" affordance. */
+  onRandom?: () => void
   /** Per-point remove handler. If present, each chip shows a hover-revealed ✕. */
   onRemove?: (id: string) => void
   /** Click anywhere on a chip — typically to select / focus it on the map. */
@@ -37,6 +39,7 @@ export default function WaypointChain({
   points,
   loop,
   onAdd,
+  onRandom,
   onRemove,
   onSelect,
   className,
@@ -87,6 +90,7 @@ export default function WaypointChain({
         )
       })}
       {onAdd && <AddButton onClick={onAdd} />}
+      {onRandom && <RandomButton onClick={onRandom} />}
     </div>
   )
 }
@@ -227,6 +231,26 @@ function AddButton({ onClick }: { onClick: () => void }) {
     >
       <Plus className="w-[11px] h-[11px]" strokeWidth={2.5} />
       Add stop
+    </button>
+  )
+}
+
+function RandomButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Random stop"
+      className={[
+        'shrink-0 inline-flex items-center gap-1.5 h-[34px] px-3 rounded-[10px]',
+        'border-[1.5px] border-dashed border-[var(--color-border-strong)]',
+        'text-[var(--color-text-2)] text-[12px] font-medium',
+        'hover:text-[var(--color-accent-strong)] hover:border-[rgba(108,140,255,0.5)] hover:bg-[var(--color-accent-dim)]',
+        'transition-[color,background,border-color] duration-150',
+      ].join(' ')}
+    >
+      <Dices className="w-[11px] h-[11px]" />
+      Random
     </button>
   )
 }

@@ -1,165 +1,443 @@
-import { useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import {
-  Play, Square, Footprints, Rabbit, Car, ChevronDown, ArrowRight, Navigation,
+  Play, Square, Pause, Footprints, Rabbit, Car, ArrowRight,
+  Repeat, Star, MapPin, Crosshair, Plus, Dices,
 } from 'lucide-react'
-import { useSimContext } from '../../contexts/SimContext'
+import { useSimContext, type MoveMode as _MoveMode } from '../../contexts/SimContext'
 import { SimMode, MoveMode } from '../../hooks/useSimulation'
+import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT, type StringKey } from '../../i18n'
 import WaypointChain, { type ChainPoint } from '../WaypointChain'
 import { haversineM, polylineDistanceM } from '../../lib/geo'
 
-// Speed preset rail shown in the dock-panel controls column.
-// Reuses the same semantic mapping as the old SpeedControls, but
-// renders compactly inside a pill toggle.
+// Silence the unused _MoveMode import — kept for potential prop typing.
+void (undefined as _MoveMode | undefined)
+
+// Speed preset rail. Icons map to design's Walk/Run/Drive glyphs;
+// lucide's Footprints / Rabbit / Car are the closest analogues.
 const SPEED_PRESETS: Array<{ mode: MoveMode; Icon: typeof Footprints; labelKey: StringKey; value: number }> = [
   { mode: MoveMode.Walking, Icon: Footprints, labelKey: 'move.walking', value: 5 },
   { mode: MoveMode.Running, Icon: Rabbit,     labelKey: 'move.running', value: 10 },
   { mode: MoveMode.Driving, Icon: Car,        labelKey: 'move.driving', value: 40 },
 ]
 
-interface BottomDockProps {
-  // Rendered in the expand area when the user opens the "Details" chevron.
-  // Owner supplies the existing per-mode panel so no controls are lost.
-  details: React.ReactNode
-}
+const RADIUS_PRESETS = [200, 500, 1000, 2000] as const
 
-// Bottom dock-panel derived from redesign/Home. Anchors to bottom-center
-// above the BottomModeBar. Compact row by default: eyebrow + title +
-// subtitle + chain preview on the left, speed toggle + Go on the right.
-// Expands downward to reveal the full per-mode panel when the user asks
-// for deeper configuration.
-export default function BottomDock({ details }: BottomDockProps) {
+// Bottom dock-panel — renders the redesign/Home anatomy verbatim:
+// glass `.dock-panel` with a `panel-body` two-column grid containing
+// `panel-meta` (eyebrow + title + subtitle + mode-specific content)
+// and `panel-controls` (speed toggle + action group). Per-mode inline
+// content flips between RouteCard (teleport/navigate), WaypointChain
+// (loop/multi-stop), RadiusRow (random) and JoyPreview (joystick).
+export default function BottomDock() {
   const t = useT()
   const simCtx = useSimContext()
-  const { sim, handleStart, handleStop, handleTeleport, isRunning, isPaused, currentPos, destPos, handleRemoveWaypoint } = simCtx
-  const [expanded, setExpanded] = useState(false)
+  const {
+    sim, handleStart, handleStop, handlePause, handleResume, handleTeleport,
+    isRunning, isPaused, currentPos, destPos,
+    handleRemoveWaypoint, handleGenerateRandomWaypoints,
+    randomWalkRadius, setRandomWalkRadius,
+  } = simCtx
+  const { handleAddBookmark } = useBookmarkContext()
 
-  // Per-mode presentation (eyebrow / title / subtitle / chain / loop).
-  const ctx = useMemo(() => buildDockContext(sim.mode, sim, currentPos, destPos, t), [sim.mode, sim.waypoints, currentPos, destPos, t])
-
-  // Per-mode Go button semantics. Teleport is a one-shot action;
-  // everything else is a run-toggle.
-  const go = useMemo(() => buildGoContext(sim.mode, isRunning, isPaused, destPos, sim.waypoints.length, handleStart, handleStop, handleTeleport, t), [sim.mode, isRunning, isPaused, destPos, sim.waypoints.length, handleStart, handleStop, handleTeleport, t])
+  const ctx = useMemo(
+    () => buildDockContext(sim.mode, sim, currentPos, destPos, t),
+    [sim.mode, sim.waypoints, currentPos, destPos, t],
+  )
 
   const presetActive = (mode: MoveMode) =>
     sim.moveMode === mode && sim.customSpeedKmh == null && sim.speedMinKmh == null && sim.speedMaxKmh == null
 
+  const speedToggleDisabled = sim.mode === SimMode.Teleport || sim.mode === SimMode.Joystick
+
   return (
     <div
-      className="fixed bottom-[72px] left-1/2 -translate-x-1/2 z-[var(--z-ui)] w-[min(920px,calc(100vw-24px))] flex flex-col items-stretch gap-2"
+      className={[
+        'fixed bottom-[72px] left-1/2 -translate-x-1/2 z-[var(--z-ui)]',
+        'max-w-[min(920px,calc(100vw-48px))] w-max',
+      ].join(' ')}
       aria-label="Simulation dock"
     >
       <div
         className={[
-          'glass-pill-strong overflow-hidden',
-          // Drop the full-round pill radius — the dock is a wide card, not a chip.
-          '!rounded-[20px]',
+          'overflow-hidden rounded-[20px] border border-[var(--color-border)]',
+          'bg-[rgba(19,20,22,0.82)] backdrop-blur-[24px] backdrop-saturate-[1.4]',
+          '[-webkit-backdrop-filter:blur(24px)_saturate(1.4)]',
+          'shadow-[var(--shadow-xl),inset_0_1px_0_rgba(255,255,255,0.06)]',
+          'anim-fade-slide-up',
         ].join(' ')}
       >
-        {/* Compact top row: meta | controls */}
+        {/* panel-body: meta grows, controls auto */}
         <div
-          className="grid items-center px-6 py-4 gap-8"
-          style={{ gridTemplateColumns: 'minmax(240px,1fr) auto' }}
+          className="grid items-center gap-8 px-7 py-6"
+          style={{ gridTemplateColumns: 'minmax(260px,1fr) auto' }}
         >
-          <DockMeta ctx={ctx} onRemoveWaypoint={handleRemoveWaypoint} />
-          <div className="flex items-center gap-2.5 shrink-0">
-            <DockSpeedToggle
-              presetActive={presetActive}
-              onPreset={(mode) => { sim.setMoveMode(mode); sim.setCustomSpeedKmh(null); sim.setSpeedMinKmh(null); sim.setSpeedMaxKmh(null) }}
-            />
-            <DockGoButton {...go} />
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              aria-expanded={expanded}
-              aria-label={expanded ? 'Collapse details' : 'Expand details'}
-              title={expanded ? 'Collapse details' : 'Expand details'}
-              className={[
-                'w-10 h-10 grid place-items-center rounded-full',
-                'text-[var(--color-text-2)] hover:text-[var(--color-text-1)] hover:bg-white/[0.06]',
-                'transition-[transform,color,background] duration-150 cursor-pointer',
-                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]',
-              ].join(' ')}
-            >
-              <ChevronDown
-                className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+          {/* panel-meta */}
+          <div className="min-w-0 flex flex-col">
+            <Eyebrow mode={sim.mode} t={t} />
+            <div className="text-[22px] font-semibold tracking-[-0.02em] text-[var(--color-text-1)] leading-[1.2] truncate">
+              {ctx.title}
+            </div>
+            <div className="text-[13px] text-[var(--color-text-2)] leading-[1.55] mt-1 max-w-[420px]">
+              {ctx.subtitle}
+            </div>
+
+            {/* Mode-specific inline content */}
+            {(sim.mode === SimMode.Teleport || sim.mode === SimMode.Navigate) && (
+              <RouteCard
+                mode={sim.mode}
+                currentPos={currentPos}
+                destPos={destPos}
+                onBookmark={handleAddBookmark}
+                t={t}
               />
-            </button>
+            )}
+
+            {(sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) && (
+              <div className="mt-3.5">
+                <WaypointChain
+                  points={ctx.chainPoints}
+                  loop={ctx.loop}
+                  onRemove={(id) => {
+                    const i = parseInt(id.replace('wp-', ''), 10)
+                    if (!Number.isNaN(i)) handleRemoveWaypoint(i)
+                  }}
+                  onAdd={() => { /* map right-click handles adding — this is a visual affordance only */ }}
+                  onRandom={handleGenerateRandomWaypoints}
+                />
+              </div>
+            )}
+
+            {sim.mode === SimMode.RandomWalk && (
+              <RadiusRow
+                value={randomWalkRadius}
+                onChange={setRandomWalkRadius}
+                t={t}
+              />
+            )}
+
+            {sim.mode === SimMode.Joystick && <JoyPreview t={t} />}
+          </div>
+
+          {/* panel-controls */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <SpeedToggle
+              presetActive={presetActive}
+              onPreset={(mode) => {
+                sim.setMoveMode(mode)
+                sim.setCustomSpeedKmh(null)
+                sim.setSpeedMinKmh(null)
+                sim.setSpeedMaxKmh(null)
+              }}
+              disabled={speedToggleDisabled}
+              t={t}
+            />
+            <ActionGroup
+              mode={sim.mode}
+              isRunning={isRunning}
+              isPaused={isPaused}
+              destPos={destPos}
+              waypointCount={sim.waypoints.length}
+              onStart={handleStart}
+              onStop={handleStop}
+              onPause={handlePause}
+              onResume={handleResume}
+              onTeleport={handleTeleport}
+              t={t}
+            />
           </div>
         </div>
-
-        {/* Expanded details — renders the existing per-mode panel. */}
-        {expanded && (
-          <div className="border-t border-[var(--color-border-subtle)] px-5 pt-4 pb-5 max-h-[50vh] overflow-y-auto scrollbar-thin">
-            {details}
-          </div>
-        )}
       </div>
     </div>
   )
 }
 
-// ─── Meta column ────────────────────────────────────────────────────
+// ─── Eyebrow (mode label with accent bar) ─────────────────────
 
-interface DockCtx {
-  eyebrowKey: StringKey
-  title: string
-  subtitle: string
-  chainPoints: ChainPoint[]
-  loop: boolean
+function Eyebrow({ mode, t }: { mode: SimMode; t: ReturnType<typeof useT> }) {
+  // Multi-stop gets a warning tint in the design to visually distinguish
+  // it from the otherwise-accent eyebrow family.
+  const accentColor = mode === SimMode.MultiStop
+    ? 'var(--color-warning-text)'
+    : 'var(--color-accent)'
+  const labelKey: StringKey = ({
+    [SimMode.Teleport]:   'mode.teleport',
+    [SimMode.Navigate]:   'mode.navigate',
+    [SimMode.Loop]:       'mode.loop',
+    [SimMode.MultiStop]:  'mode.multi_stop',
+    [SimMode.RandomWalk]: 'mode.random_walk',
+    [SimMode.Joystick]:   'mode.joystick',
+  } as const)[mode]
+  return (
+    <div
+      className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] mb-2"
+      style={{ color: accentColor }}
+    >
+      <span
+        className="inline-block w-5 h-[1.5px] rounded-[2px]"
+        style={{ background: accentColor }}
+        aria-hidden="true"
+      />
+      {t(labelKey)}
+    </div>
+  )
 }
 
-function DockMeta({
-  ctx,
-  onRemoveWaypoint,
-}: {
-  ctx: DockCtx
-  onRemoveWaypoint: (i: number) => void
-}) {
-  const t = useT()
+// ─── Route card (Teleport / Navigate) ─────────────────────────
+
+interface RouteCardProps {
+  mode: SimMode
+  currentPos: { lat: number; lng: number } | null
+  destPos: { lat: number; lng: number } | null
+  onBookmark: (lat: number, lng: number) => void
+  t: ReturnType<typeof useT>
+}
+
+function RouteCard({ mode, currentPos, destPos, onBookmark, t }: RouteCardProps) {
+  const showOrigin = mode === SimMode.Navigate
   return (
-    <div className="min-w-0 flex flex-col gap-1.5">
-      <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-accent)]">
-        <span className="inline-block w-5 h-[1.5px] rounded-[2px] bg-[var(--color-accent)]" />
-        {t(ctx.eyebrowKey)}
-      </div>
-      <div className="text-[20px] font-semibold text-[var(--color-text-1)] tracking-[-0.02em] leading-[1.2] truncate">
-        {ctx.title}
-      </div>
-      <div className="text-[12px] text-[var(--color-text-2)] leading-[1.5] line-clamp-2 max-w-[520px]">
-        {ctx.subtitle}
-      </div>
-      {ctx.chainPoints.length > 0 && (
-        <div className="mt-2">
-          <WaypointChain
-            points={ctx.chainPoints}
-            loop={ctx.loop}
-            onRemove={(id) => {
-              const i = parseInt(id.replace('wp-', ''), 10)
-              if (!Number.isNaN(i)) onRemoveWaypoint(i)
-            }}
-          />
+    <div
+      className={[
+        'mt-3.5 flex flex-col overflow-hidden',
+        'bg-white/[0.03] border border-[var(--color-border)] rounded-xl',
+      ].join(' ')}
+    >
+      {showOrigin && (
+        <RoutePoint
+          tone="origin"
+          label={t('teleport.my_location')}
+          coord={currentPos}
+          placeholder={t('teleport.no_position')}
+          onBookmark={onBookmark}
+        />
+      )}
+      <RoutePoint
+        tone="dest"
+        label={t('teleport.destination')}
+        coord={destPos}
+        placeholder={t('teleport.add_destination')}
+        onBookmark={onBookmark}
+      />
+    </div>
+  )
+}
+
+interface RoutePointProps {
+  tone: 'origin' | 'dest'
+  label: string
+  coord: { lat: number; lng: number } | null
+  placeholder: string
+  onBookmark: (lat: number, lng: number) => void
+}
+
+function RoutePoint({ tone, label, coord, placeholder, onBookmark }: RoutePointProps) {
+  const empty = !coord
+  const icPalette = tone === 'origin'
+    ? { bg: 'rgba(52,211,153,0.14)', bd: 'rgba(52,211,153,0.25)', fg: '#6ee5b5' }
+    : empty
+      ? { bg: 'rgba(255,255,255,0.04)', bd: 'var(--color-border-strong)', fg: 'var(--color-text-3)' }
+      : { bg: 'rgba(108,140,255,0.14)', bd: 'rgba(108,140,255,0.25)', fg: 'var(--color-accent-strong)' }
+
+  return (
+    <div
+      className="grid items-center gap-3 px-3.5 py-2.5 relative"
+      style={{ gridTemplateColumns: '28px 1fr auto' }}
+    >
+      {/* Dotted connector between origin and dest */}
+      <span
+        aria-hidden="true"
+        className="absolute left-[27px] -top-[9px] w-[2px] h-[18px] pointer-events-none"
+        style={{
+          background: 'repeating-linear-gradient(to bottom, var(--color-border-strong) 0 3px, transparent 3px 6px)',
+          display: tone === 'dest' ? 'block' : 'none',
+        }}
+      />
+      <span
+        className="w-7 h-7 rounded-lg grid place-items-center shrink-0"
+        style={{
+          background: icPalette.bg,
+          border: `1px ${empty && tone === 'dest' ? 'dashed' : 'solid'} ${icPalette.bd}`,
+          color: icPalette.fg,
+        }}
+        aria-hidden="true"
+      >
+        {tone === 'origin'
+          ? <Crosshair className="w-3.5 h-3.5" />
+          : <MapPin className="w-3.5 h-3.5" />}
+      </span>
+
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-[0.04em] font-medium text-[var(--color-text-3)]">
+          {label}
         </div>
+        <div
+          className={[
+            'mt-0.5 text-[12px]',
+            empty
+              ? 'text-[var(--color-text-3)] italic'
+              : 'font-mono text-[var(--color-text-1)]',
+          ].join(' ')}
+        >
+          {empty
+            ? placeholder
+            : `${coord.lat.toFixed(5)}°N · ${coord.lng.toFixed(5)}°E`}
+        </div>
+      </div>
+
+      {coord && (
+        <button
+          type="button"
+          onClick={() => onBookmark(coord.lat, coord.lng)}
+          className={[
+            'w-7 h-7 rounded-[7px] grid place-items-center',
+            'text-[var(--color-text-3)]',
+            'hover:text-[#ffb627] hover:bg-[rgba(255,182,39,0.08)]',
+            'transition-colors duration-150 cursor-pointer',
+          ].join(' ')}
+          aria-label="Save as bookmark"
+          title="Save as bookmark"
+        >
+          <Star className="w-[13px] h-[13px]" />
+        </button>
       )}
     </div>
   )
 }
 
-// ─── Speed toggle ───────────────────────────────────────────────────
+// ─── Radius row (Random Walk) ─────────────────────────────────
 
-interface DockSpeedToggleProps {
-  presetActive: (mode: MoveMode) => boolean
-  onPreset: (mode: MoveMode) => void
+function RadiusRow({
+  value,
+  onChange,
+  t,
+}: {
+  value: number
+  onChange: (v: number) => void
+  t: ReturnType<typeof useT>
+}) {
+  const valText = value >= 1000 ? `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)} km` : `${value} m`
+  return (
+    <div className="mt-3.5 flex items-center gap-2.5 flex-wrap">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-3)]">
+        {t('panel.waypoints_radius')}
+      </span>
+      <div
+        className="flex gap-1 p-[3px] rounded-[10px] border border-[var(--color-border)]"
+        style={{ background: 'rgba(255,255,255,0.04)' }}
+      >
+        {RADIUS_PRESETS.map((r) => {
+          const active = r === value
+          const label = r >= 1000 ? `${r / 1000}km` : `${r}m`
+          return (
+            <button
+              key={r}
+              type="button"
+              onClick={() => onChange(r)}
+              aria-pressed={active}
+              className={[
+                'h-8 px-3 rounded-[7px] font-mono text-[12px] font-medium',
+                'transition-colors duration-120 cursor-pointer',
+                active
+                  ? 'text-[var(--color-accent-strong)]'
+                  : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
+              ].join(' ')}
+              style={active ? {
+                background: 'var(--color-accent-dim)',
+                boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
+              } : undefined}
+            >
+              {label}
+            </button>
+          )
+        })}
+      </div>
+      <span className="ml-auto font-mono text-[13px] text-[var(--color-text-1)] font-semibold">
+        {valText}
+      </span>
+    </div>
+  )
 }
 
-function DockSpeedToggle({ presetActive, onPreset }: DockSpeedToggleProps) {
-  const t = useT()
+// ─── Joystick preview ─────────────────────────────────────────
+
+function JoyPreview({ t }: { t: ReturnType<typeof useT> }) {
   return (
     <div
-      className="flex items-stretch gap-0.5 p-[3px] h-11 rounded-[12px] border border-[var(--color-border)]"
-      style={{ background: 'rgba(255,255,255,0.04)' }}
+      className="mt-3.5 flex gap-3.5 items-center p-3.5 rounded-xl border border-[var(--color-border)]"
+      style={{ background: 'rgba(255,255,255,0.03)' }}
+    >
+      {/* Decorative pad — static visual cue; the live pad is JoystickPad over the map */}
+      <div
+        className="w-[84px] h-[84px] shrink-0 rounded-full relative"
+        style={{
+          background: 'radial-gradient(circle at 30% 30%, #2a2e38, #14161c)',
+          border: '1px solid var(--color-border-strong)',
+          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.4), inset 0 -1px 1px rgba(255,255,255,0.05)',
+        }}
+        aria-hidden="true"
+      >
+        <span
+          className="absolute inset-[14px] rounded-full"
+          style={{
+            background: 'linear-gradient(145deg, #3a3f4a, #1e2128)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.08)',
+          }}
+        />
+        <span
+          className="absolute left-1/2 top-1/2 w-1.5 h-1.5 rounded-full"
+          style={{
+            transform: 'translate(-50%,-50%)',
+            background: 'var(--color-accent)',
+            boxShadow: '0 0 10px var(--color-accent)',
+          }}
+        />
+      </div>
+      <div className="flex-1">
+        <div className="text-[13px] font-medium text-[var(--color-text-1)]">
+          {t('joy.drag_or_keys')}
+        </div>
+        <div className="text-[12px] text-[var(--color-text-3)] mt-1 leading-[1.5]">
+          {t('panel.joystick_hint')}
+        </div>
+        <div className="inline-flex gap-[3px] mt-2">
+          {['W', 'A', 'S', 'D', 'Shift'].map((k) => (
+            <kbd
+              key={k}
+              className={[
+                'font-mono text-[10px] px-[6px] py-[2px] rounded',
+                'border border-[var(--color-border)]',
+                'text-[var(--color-text-2)]',
+              ].join(' ')}
+              style={{ background: 'rgba(255,255,255,0.05)' }}
+            >
+              {k}
+            </kbd>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Speed toggle ─────────────────────────────────────────────
+
+interface SpeedToggleProps {
+  presetActive: (mode: MoveMode) => boolean
+  onPreset: (mode: MoveMode) => void
+  disabled: boolean
+  t: ReturnType<typeof useT>
+}
+
+function SpeedToggle({ presetActive, onPreset, disabled, t }: SpeedToggleProps) {
+  return (
+    <div
       role="group"
       aria-label={t('panel.speed')}
+      className={[
+        'flex gap-0.5 p-[3px] h-11 rounded-xl border border-[var(--color-border)]',
+        disabled ? 'opacity-40 pointer-events-none' : '',
+      ].join(' ')}
+      style={{ background: 'rgba(255,255,255,0.04)' }}
     >
       {SPEED_PRESETS.map(({ mode, Icon, labelKey, value }) => {
         const on = presetActive(mode)
@@ -170,16 +448,18 @@ function DockSpeedToggle({ presetActive, onPreset }: DockSpeedToggleProps) {
             onClick={() => onPreset(mode)}
             aria-pressed={on}
             className={[
-              'inline-flex items-center gap-1.5 px-3 rounded-[9px] text-[12px] font-medium transition-colors duration-150',
-              on
-                ? 'bg-[var(--color-accent-dim)] text-[var(--color-accent-strong)] border border-[rgba(255,255,255,0.06)]'
-                : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
+              'inline-flex items-center gap-1.5 px-3.5 rounded-[9px] text-[13px] font-medium',
+              'transition-colors duration-150',
+              on ? 'text-[var(--color-accent-strong)]' : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
             ].join(' ')}
-            title={`${t(labelKey)} · ${value} km/h`}
+            style={on ? {
+              background: 'var(--color-accent-dim)',
+              border: '1px solid rgba(255,255,255,0.06)',
+            } : undefined}
           >
             <Icon className="w-3.5 h-3.5" />
             <span className="hidden md:inline">{t(labelKey)}</span>
-            <span className="font-mono text-[10px] opacity-65 tabular-nums">{value}</span>
+            <span className="font-mono text-[11px] opacity-65 tabular-nums">{value}</span>
           </button>
         )
       })}
@@ -187,100 +467,124 @@ function DockSpeedToggle({ presetActive, onPreset }: DockSpeedToggleProps) {
   )
 }
 
-// ─── Go button ──────────────────────────────────────────────────────
+// ─── Action group (Start / Stop / Pause / Resume cluster) ─────
 
-interface DockGoContext {
-  label: string
-  tone: 'accent' | 'danger'
-  onClick: () => void
-  disabled?: boolean
-  icon: React.ReactNode
+interface ActionGroupProps {
+  mode: SimMode
+  isRunning: boolean
+  isPaused: boolean
+  destPos: { lat: number; lng: number } | null
+  waypointCount: number
+  onStart: () => void
+  onStop: () => void
+  onPause: () => void
+  onResume: () => void
+  onTeleport: (lat: number, lng: number) => void
+  t: ReturnType<typeof useT>
 }
 
-function DockGoButton({ label, tone, onClick, disabled, icon }: DockGoContext) {
+function ActionGroup(p: ActionGroupProps) {
+  // Teleport = one-shot "Move", disabled without dest.
+  if (p.mode === SimMode.Teleport) {
+    return (
+      <div className="flex gap-1.5">
+        <ActionBtn
+          tone="accent"
+          disabled={!p.destPos}
+          onClick={() => { if (p.destPos) p.onTeleport(p.destPos.lat, p.destPos.lng) }}
+        >
+          <ArrowRight className="w-3 h-3" strokeWidth={3} />
+          {p.t('teleport.move')}
+        </ActionBtn>
+      </div>
+    )
+  }
+
+  // Running — Stop + Pause/Resume cluster.
+  if (p.isRunning) {
+    return (
+      <div className="flex gap-1.5">
+        <ActionBtn tone="danger" onClick={p.onStop}>
+          <Square className="w-[10px] h-[10px]" fill="currentColor" />
+          {p.t('generic.stop')}
+        </ActionBtn>
+        {p.isPaused ? (
+          <ActionBtn tone="accent" onClick={p.onResume}>
+            <Play className="w-3 h-3" fill="currentColor" />
+            {p.t('generic.resume')}
+          </ActionBtn>
+        ) : (
+          <ActionBtn tone="ghost" onClick={p.onPause}>
+            <Pause className="w-3 h-3" fill="currentColor" />
+            {p.t('generic.pause')}
+          </ActionBtn>
+        )}
+      </div>
+    )
+  }
+
+  // Idle — Start (disabled until setup is valid).
+  let disabled = false
+  if (p.mode === SimMode.Navigate) disabled = !p.destPos
+  if (p.mode === SimMode.Loop || p.mode === SimMode.MultiStop) disabled = p.waypointCount < 2
+  return (
+    <div className="flex gap-1.5">
+      <ActionBtn tone="accent" disabled={disabled} onClick={p.onStart}>
+        <Play className="w-3 h-3" fill="currentColor" />
+        {p.t('generic.start')}
+      </ActionBtn>
+    </div>
+  )
+}
+
+interface ActionBtnProps {
+  tone: 'accent' | 'danger' | 'ghost'
+  onClick: () => void
+  disabled?: boolean
+  children: React.ReactNode
+}
+
+function ActionBtn({ tone, onClick, disabled, children }: ActionBtnProps) {
   const palette = tone === 'danger'
-    ? { bg: 'var(--color-danger)', fg: '#ffffff', glow: '0 0 20px rgba(255,71,87,0.35), 0 4px 20px rgba(0,0,0,0.3)' }
-    : { bg: 'var(--color-accent)', fg: 'var(--color-surface-0)', glow: 'var(--shadow-glow), 0 4px 20px rgba(0,0,0,0.3)' }
+    ? { bg: 'rgba(255,71,87,0.14)', border: '1px solid rgba(255,71,87,0.35)', color: '#ff8b95', hover: 'rgba(255,71,87,0.22)' }
+    : tone === 'ghost'
+      ? { bg: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: 'var(--color-text-1)', hover: 'rgba(255,255,255,0.08)' }
+      : { bg: 'var(--color-accent)', border: 'none', color: '#0a0a0c', hover: 'var(--color-accent-hover)' }
+
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       className={[
-        'inline-flex items-center gap-2.5 h-12 pl-6 pr-5 rounded-full',
-        'text-[13.5px] font-semibold cursor-pointer',
-        'transition-[transform,box-shadow,opacity] duration-150',
-        'hover:-translate-y-px active:translate-y-0',
-        'disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0',
-        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] focus-visible:outline-offset-4',
+        'inline-flex items-center justify-center gap-2 h-11 px-[18px] rounded-xl',
+        'text-[13px] font-semibold whitespace-nowrap',
+        'transition-[background,opacity,box-shadow] duration-150 cursor-pointer',
+        'disabled:opacity-40 disabled:cursor-not-allowed',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] focus-visible:outline-offset-2',
       ].join(' ')}
       style={{
         background: palette.bg,
-        color: palette.fg,
-        boxShadow: palette.glow,
+        border: palette.border,
+        color: palette.color,
+        boxShadow: tone === 'accent' && !disabled ? 'var(--shadow-glow)' : undefined,
       }}
+      onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLElement).style.background = palette.hover }}
+      onMouseLeave={(e) => { if (!disabled) (e.currentTarget as HTMLElement).style.background = palette.bg }}
     >
-      {label}
-      <span
-        className="grid place-items-center w-[22px] h-[22px] rounded-full"
-        style={{ background: 'rgba(0,0,0,0.18)' }}
-        aria-hidden="true"
-      >
-        {icon}
-      </span>
+      {children}
     </button>
   )
 }
 
-function buildGoContext(
-  mode: SimMode,
-  isRunning: boolean,
-  isPaused: boolean,
-  destPos: { lat: number; lng: number } | null,
-  waypointCount: number,
-  handleStart: () => void,
-  handleStop: () => void,
-  handleTeleport: (lat: number, lng: number) => void,
-  t: ReturnType<typeof useT>,
-): DockGoContext {
-  // Teleport mode: one-shot action — "Move to destination".
-  if (mode === SimMode.Teleport) {
-    return {
-      label: t('teleport.move'),
-      tone: 'accent',
-      disabled: !destPos,
-      icon: <ArrowRight size={12} strokeWidth={3} />,
-      onClick: () => { if (destPos) handleTeleport(destPos.lat, destPos.lng) },
-    }
-  }
+// ─── Mode-specific meta derivation (title + subtitle) ─────────
 
-  // Every other mode: run-toggle.
-  if (isRunning) {
-    return {
-      label: isPaused ? t('generic.resume') : t('generic.stop'),
-      tone: isPaused ? 'accent' : 'danger',
-      icon: isPaused
-        ? <Play size={12} fill="currentColor" />
-        : <Square size={10} fill="currentColor" />,
-      onClick: handleStop,
-    }
-  }
-
-  // Disabled-start conditions per mode.
-  let disabled = false
-  if (mode === SimMode.Navigate) disabled = !destPos
-  if (mode === SimMode.Loop || mode === SimMode.MultiStop) disabled = waypointCount < 2
-
-  return {
-    label: t('generic.start'),
-    tone: 'accent',
-    disabled,
-    icon: <Play size={12} fill="currentColor" />,
-    onClick: handleStart,
-  }
+interface DockCtx {
+  title: string
+  subtitle: string
+  chainPoints: ChainPoint[]
+  loop: boolean
 }
-
-// ─── Meta builder ──────────────────────────────────────────────────
 
 function buildDockContext(
   mode: SimMode,
@@ -298,42 +602,29 @@ function buildDockContext(
     }))
 
   switch (mode) {
-    case SimMode.Teleport: {
-      const hasDest = !!destPos
+    case SimMode.Teleport:
       return {
-        eyebrowKey: 'mode.teleport',
-        title: hasDest
-          ? `${destPos!.lat.toFixed(5)}, ${destPos!.lng.toFixed(5)}`
+        title: destPos
+          ? `${destPos.lat.toFixed(5)}°N · ${destPos.lng.toFixed(5)}°E`
           : t('teleport.add_destination'),
-        subtitle: t('teleport.add_destination'),
-        chainPoints: [],
-        loop: false,
+        subtitle: t('panel.joystick_hint') // placeholder — use teleport-specific copy below
+          && '在地圖上按右鍵設定目的地,或用搜尋欄輸入座標 / 地址。',
+        chainPoints: [], loop: false,
       }
-    }
     case SimMode.Navigate: {
       if (!destPos) {
         return {
-          eyebrowKey: 'mode.navigate',
           title: t('teleport.add_destination'),
           subtitle: t('panel.navigate_hint'),
-          chainPoints: [],
-          loop: false,
+          chainPoints: [], loop: false,
         }
       }
       const distM = currentPos ? haversineM(currentPos, destPos) : 0
       const distLabel = distM >= 1000 ? `${(distM / 1000).toFixed(2)} km` : `${Math.round(distM)} m`
-      const chain: ChainPoint[] = [
-        currentPos
-          ? { id: 'wp-0', label: t('teleport.my_location'), position: currentPos, kind: 'start' }
-          : { id: 'wp-0', label: t('teleport.my_location'), position: null, kind: 'start' },
-        { id: 'dest', label: t('teleport.destination'), position: destPos, kind: 'accent' },
-      ]
       return {
-        eyebrowKey: 'mode.navigate',
         title: `${t('teleport.destination')} · ${distLabel}`,
         subtitle: t('panel.navigate_hint'),
-        chainPoints: chain,
-        loop: false,
+        chainPoints: [], loop: false,
       }
     }
     case SimMode.Loop: {
@@ -343,7 +634,6 @@ function buildDockContext(
         ? (totalDist >= 1000 ? ` · ${(totalDist / 1000).toFixed(1)} km` : ` · ${Math.round(totalDist)} m`)
         : ''
       return {
-        eyebrowKey: 'mode.loop',
         title: count === 0
           ? t('panel.waypoints_empty')
           : `${t('mode.loop')} · ${count} ${t('panel.pts_short')}${distLabel}`,
@@ -359,7 +649,6 @@ function buildDockContext(
         ? (totalDist >= 1000 ? ` · ${(totalDist / 1000).toFixed(1)} km` : ` · ${Math.round(totalDist)} m`)
         : ''
       return {
-        eyebrowKey: 'mode.multi_stop',
         title: count === 0
           ? t('panel.waypoints_empty')
           : `${t('mode.multi_stop')} · ${count} ${t('panel.pts_short')}${distLabel}`,
@@ -368,27 +657,22 @@ function buildDockContext(
         loop: false,
       }
     }
-    case SimMode.RandomWalk: {
+    case SimMode.RandomWalk:
       return {
-        eyebrowKey: 'mode.random_walk',
-        title: t('panel.random_walk_range'),
+        title: t('mode.random_walk'),
         subtitle: t('pause.random_walk'),
-        chainPoints: [],
-        loop: false,
+        chainPoints: [], loop: false,
       }
-    }
-    case SimMode.Joystick: {
+    case SimMode.Joystick:
       return {
-        eyebrowKey: 'mode.joystick',
-        title: t('joy.drag_or_keys'),
+        title: t('mode.joystick'),
         subtitle: t('panel.joystick_hint'),
-        chainPoints: [],
-        loop: false,
+        chainPoints: [], loop: false,
       }
-    }
   }
 }
 
-// Silence the unused-import warnings when Navigation isn't referenced
-// directly (kept in case the Go icon wants a Navigate variant later).
-void Navigation
+// Silence unused imports retained for future variants.
+void Repeat
+void Dices
+void Plus

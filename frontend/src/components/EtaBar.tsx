@@ -1,172 +1,172 @@
-import React from 'react';
-import { useT } from '../i18n';
-import type { RuntimesMap } from '../hooks/useSimulation';
+import React from 'react'
+import { Pause, Play } from 'lucide-react'
+import { useT } from '../i18n'
+import { useSimContext } from '../contexts/SimContext'
+import type { RuntimesMap } from '../hooks/useSimulation'
 
 interface EtaBarProps {
   // Live simulation state
-  state: string;
-  progress: number;
-  remainingDistance: number;
-  traveledDistance: number;
-  eta: number;
-  runtimes?: RuntimesMap;
-  // Static preview (shown before starting)
-  plannedDistanceM?: number;
-  plannedEtaSeconds?: number;
+  state: string
+  progress: number
+  remainingDistance: number
+  traveledDistance: number
+  eta: number
+  runtimes?: RuntimesMap
+  // Static preview (shown before starting). Not displayed with the
+  // new top-center ETA pill — dock panel carries pre-run info now.
+  plannedDistanceM?: number
+  plannedEtaSeconds?: number
 }
 
-const ACTIVE_STATES = ['navigating', 'looping', 'multi_stop', 'random_walk'];
+const ACTIVE_STATES = ['navigating', 'looping', 'multi_stop', 'random_walk']
+
+// Format ETA as HH:MM:SS to match the redesign/Home treatment
+// (mono, accent-coloured, always 2-digit HH prefix even for < 1h).
+function formatClock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${pad(h)}:${pad(m)}:${pad(sec)}`
+}
 
 function formatDistance(meters: number): string {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(2)} km`;
-  }
-  return `${Math.round(meters)} m`;
+  if (meters >= 1000) return `${(meters / 1000).toFixed(2)} km`
+  return `${Math.round(meters)} m`
 }
 
-function formatTime(seconds: number): string {
-  if (seconds <= 0) return '0s';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-const BAR_CLASS =
-  'absolute bottom-12 left-1/2 -translate-x-1/2 z-[var(--z-ui)] surface-panel ' +
-  'rounded-[var(--radius-lg)] px-[18px] py-[7px] flex items-center flex-wrap ' +
-  'gap-x-4 gap-y-1.5 text-sm text-[var(--color-text-1)] ' +
-  'tracking-[var(--tracking-normal)] max-w-[90vw] w-auto';
-
+// Top-centre ETA pill — mirrors `.eta` from redesign/Home exactly:
+// glass-pill-strong surface, 160×4 progress bar with accent gradient,
+// stat columns for ETA / Remaining / Speed, vertical separators,
+// and a 32px pause/resume button on the right. Fades in when a
+// simulation is actively running.
 const EtaBar: React.FC<EtaBarProps> = ({
   state,
   progress,
   remainingDistance,
-  traveledDistance,
   eta,
   runtimes,
-  plannedDistanceM,
-  plannedEtaSeconds,
 }) => {
-  const t = useT();
+  const t = useT()
+  const { displaySpeed, isPaused, handlePause, handleResume } = useSimContext()
 
   const activeRuntimes = runtimes
     ? Object.values(runtimes).filter((r) => ACTIVE_STATES.includes(r.state))
-    : [];
-  const isGroup = activeRuntimes.length >= 2;
-  const isLive = isGroup || ACTIVE_STATES.includes(state);
-  const hasPreview = !isLive && plannedDistanceM != null && plannedDistanceM > 0;
+    : []
+  const isGroup = activeRuntimes.length >= 2
+  const isLive = isGroup || ACTIVE_STATES.includes(state)
 
-  if (!isLive && !hasPreview) return null;
+  // Design pins the bar on-screen only while something is running;
+  // before start the dock panel already carries planned distance/ETA.
+  if (!isLive) return null
 
-  /* ── Preview mode (not yet running) ──────────────────────────── */
-  if (hasPreview) {
-    return (
-      <div className={BAR_CLASS}>
-        <div className="flex items-center gap-1">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-60">
-            <path d="M12 2C7 2 3 6 3 11c0 5 9 11 9 11s9-6 9-11c0-5-4-9-9-9z" />
-            <circle cx="12" cy="11" r="3" />
-          </svg>
-          <span>{t('eta.planned_distance')} {formatDistance(plannedDistanceM!)}</span>
-        </div>
-
-        <div className="separator-v" />
-
-        <div className="flex items-center gap-1">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-60">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12,6 12,12 16,14" />
-          </svg>
-          <span>{t('eta.planned_time')} {formatTime(plannedEtaSeconds ?? 0)}</span>
-        </div>
-      </div>
-    );
-  }
-
-  /* ── Live mode (running) ──────────────────────────────────────── */
   const aggProgress = isGroup
     ? activeRuntimes.reduce((s, r) => s + (r.progress || 0), 0) / activeRuntimes.length
-    : progress;
+    : progress
   const aggEta = isGroup
     ? Math.max(...activeRuntimes.map((r) => r.eta || 0))
-    : eta;
+    : eta
   const aggRemaining = isGroup
     ? Math.max(...activeRuntimes.map((r) => r.distanceRemaining || 0))
-    : remainingDistance;
-  const aggTraveled = isGroup
-    ? activeRuntimes.reduce((s, r) => s + (r.distanceTraveled || 0), 0)
-    : traveledDistance;
+    : remainingDistance
 
-  const percent = Math.min(Math.max(aggProgress * 100, 0), 100);
+  const percent = Math.max(0, Math.min(aggProgress * 100, 100))
 
   return (
-    <div className={BAR_CLASS}>
-      {/* Progress bar */}
-      <div className="flex-1 h-1 rounded-sm bg-[var(--color-surface-2)] overflow-hidden min-w-[80px]">
+    <div
+      role="status"
+      aria-live="polite"
+      className={[
+        'fixed top-[76px] left-1/2 -translate-x-1/2 z-[var(--z-bar)]',
+        // Glass pill — rgba(19,20,22,0.82) + blur(20) sat(1.3).
+        'bg-[rgba(19,20,22,0.82)] backdrop-blur-[20px] backdrop-saturate-[1.3]',
+        '[-webkit-backdrop-filter:blur(20px)_saturate(1.3)]',
+        'border border-[var(--color-border)] rounded-full',
+        'shadow-[var(--shadow-md)]',
+        'pl-5 pr-4 py-2.5 flex items-center gap-[18px]',
+        'anim-fade-slide-down',
+      ].join(' ')}
+      style={{ transformOrigin: 'top center' }}
+    >
+      {/* ETA — accent mono value */}
+      <Stat label={t('eta.eta')} value={formatClock(aggEta)} accent />
+
+      {/* Progress bar (160×4) with gradient fill + glow */}
+      <div
+        className="w-40 h-1 rounded-[2px] bg-white/[0.08] overflow-hidden relative shrink-0"
+        aria-label="Progress"
+      >
         <div
-          className="h-full rounded-sm transition-[width] duration-500 ease-out"
+          className="absolute inset-y-0 left-0 rounded-[2px] transition-[width] duration-500 ease-out"
           style={{
             width: `${percent}%`,
-            background: 'linear-gradient(90deg, var(--color-device-a), var(--color-success))',
+            background: 'linear-gradient(90deg, var(--color-accent) 0%, var(--color-accent-strong) 100%)',
+            boxShadow: 'var(--shadow-glow)',
           }}
         />
       </div>
 
-      {/* Percentage */}
-      <span className="font-semibold min-w-[38px] text-right">
-        {percent.toFixed(0)}%
-      </span>
+      <Stat label={t('eta.remaining')} value={formatDistance(aggRemaining)} />
 
-      <div className="separator-v" />
+      <Sep />
 
-      {/* Remaining distance */}
-      <div className="flex items-center gap-1">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-60">
-          <circle cx="12" cy="12" r="10" />
-          <polyline points="12,6 12,12 16,14" />
-        </svg>
-        <span>{t('eta.remaining')} {formatDistance(aggRemaining)}</span>
-      </div>
+      <Stat label={t('panel.speed')} value={`${displaySpeed} km/h`} />
 
-      <div className="separator-v" />
+      <Sep />
 
-      {/* ETA */}
-      <div className="flex items-center gap-1">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-60">
-          <path d="M5 12h14" />
-          <path d="M12 5l7 7-7 7" />
-        </svg>
-        <span>{t('eta.eta')} {formatTime(aggEta)}</span>
-      </div>
-
-      <div className="separator-v" />
-
-      {/* Traveled distance */}
-      <div className="flex items-center gap-1 opacity-70">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-60">
-          <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" />
-        </svg>
-        <span>{t('eta.traveled')} {formatDistance(aggTraveled)}</span>
-      </div>
-
-      {isGroup && (
-        <>
-          <div className="separator-v" />
-          <div className="flex items-center gap-1.5 text-[11px] opacity-85">
-            <span className="opacity-60">{t('eta.group_progress')}</span>
-            {activeRuntimes.slice(0, 2).map((r, i) => (
-              <span key={r.udid} className="font-semibold" style={{ color: i === 0 ? 'var(--color-device-a)' : 'var(--color-device-b)' }}>
-                {i === 0 ? 'A' : 'B'} {formatTime(r.eta || 0)}
-              </span>
-            ))}
-          </div>
-        </>
-      )}
+      {/* Pause / Resume — 32px circle matching design `.eta .pause-btn` */}
+      <button
+        type="button"
+        onClick={() => { if (isPaused) handleResume(); else handlePause() }}
+        className={[
+          'w-8 h-8 rounded-full grid place-items-center',
+          'text-[var(--color-text-1)] bg-white/[0.05] hover:bg-white/[0.08]',
+          'transition-colors duration-150 cursor-pointer',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]',
+        ].join(' ')}
+        aria-label={isPaused ? t('generic.resume') : t('generic.pause')}
+        title={isPaused ? t('generic.resume') : t('generic.pause')}
+      >
+        {isPaused
+          ? <Play className="w-3 h-3" fill="currentColor" />
+          : <Pause className="w-3 h-3" fill="currentColor" />}
+      </button>
     </div>
-  );
-};
+  )
+}
 
-export default EtaBar;
+interface StatProps {
+  label: string
+  value: string
+  accent?: boolean
+}
+
+function Stat({ label, value, accent }: StatProps) {
+  return (
+    <div className="flex flex-col gap-0.5 text-left">
+      <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-3)] font-semibold leading-none">
+        {label}
+      </span>
+      <span
+        className={[
+          'font-mono text-[14px] font-medium leading-none tabular-nums',
+          accent ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-1)]',
+        ].join(' ')}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function Sep() {
+  return (
+    <span
+      className="w-px h-[26px] bg-[var(--color-border-strong)] shrink-0"
+      aria-hidden="true"
+    />
+  )
+}
+
+export default EtaBar
