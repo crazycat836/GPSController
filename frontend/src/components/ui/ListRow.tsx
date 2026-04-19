@@ -76,16 +76,38 @@ const ListRow = forwardRef<HTMLElement, ListRowProps>(function ListRow(props, re
   )
 
   if (as === 'button') {
+    // Render as div + role="button" instead of a real <button> so the
+    // trailing slot can host real interactive controls (kebab menus,
+    // hover-reveal action buttons) without triggering React's
+    // `validateDOMNesting(<button> cannot appear as a descendant of
+    // <button>)` warning. Keyboard activation (Enter / Space) is
+    // preserved with onKeyDown so AT users keep the "click the row"
+    // affordance.
+    const { onKeyDown: userKeyDown, onClick: userClick, ...restNoKeys } =
+      rest as React.HTMLAttributes<HTMLDivElement> & { onClick?: React.MouseEventHandler<HTMLElement> }
     return (
-      <button
-        ref={ref as React.Ref<HTMLButtonElement>}
-        type="button"
+      <div
+        ref={ref as React.Ref<HTMLDivElement>}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled || undefined}
         className={classes}
-        disabled={disabled}
-        {...(rest as React.ButtonHTMLAttributes<HTMLButtonElement>)}
+        onClick={(e) => {
+          if (disabled) return
+          userClick?.(e as unknown as React.MouseEvent<HTMLElement>)
+        }}
+        onKeyDown={(e) => {
+          (userKeyDown as React.KeyboardEventHandler<HTMLDivElement> | undefined)?.(e)
+          if (disabled || e.defaultPrevented) return
+          if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+            e.preventDefault()
+            userClick?.(e as unknown as React.MouseEvent<HTMLElement>)
+          }
+        }}
+        {...(restNoKeys as React.HTMLAttributes<HTMLDivElement>)}
       >
         {content}
-      </button>
+      </div>
     )
   }
   return (

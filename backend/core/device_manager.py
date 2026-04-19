@@ -165,8 +165,14 @@ class DeviceManager:
                 ios_major = _parse_ios_version(info.ios_version)[0] if info.ios_version else 0
                 if ios_major >= 16:
                     try:
+                        # `get_developer_mode_status` is a coroutine in the
+                        # pinned pymobiledevice3 (>=9.9). Without the
+                        # await the `bool(...)` wrapped the coroutine
+                        # object itself, always yielding True and
+                        # emitting a "coroutine was never awaited"
+                        # RuntimeWarning at runtime.
                         info.developer_mode_enabled = bool(
-                            lockdown.get_developer_mode_status()
+                            await lockdown.get_developer_mode_status()
                         )
                     except Exception:
                         logger.debug(
