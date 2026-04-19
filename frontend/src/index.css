@@ -599,6 +599,12 @@
 .seg-cta-danger { background: var(--color-danger); color: white; }
 .seg-cta-ghost { background: var(--color-surface-3); color: var(--color-text-1); }
 .seg-cta-ghost:hover { background: var(--color-surface-hover); opacity: 1; }
+.seg-cta-outline {
+  background: transparent;
+  color: var(--color-text-2);
+  border: 1px solid var(--color-border);
+}
+.seg-cta-outline:hover { color: var(--color-text-1); border-color: var(--color-border-strong); opacity: 1; }
 
 .seg-cta-sm {
   padding: 8px;

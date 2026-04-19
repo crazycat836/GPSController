@@ -1,22 +1,17 @@
 import React from 'react'
-import { MapPin, Star, Locate, Play, Square, Pause } from 'lucide-react'
+import { MapPin, Star, Locate } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT } from '../../i18n'
 import RouteCard, { type RoutePoint } from '../RouteCard'
 import SpeedControls from './SpeedControls'
+import ActionButtons from './ActionButtons'
 
 export default function NavigatePanel() {
   const {
     currentPos,
     destPos,
-    handleStart,
-    handleStop,
-    handlePause,
-    handleResume,
     handleClearTeleportDest,
-    isRunning,
-    isPaused,
   } = useSimContext()
   const { handleAddBookmark } = useBookmarkContext()
   const t = useT()
@@ -87,63 +82,17 @@ export default function NavigatePanel() {
 
       <SpeedControls />
 
-      {/* Action buttons */}
-      {isRunning ? (
-        <div className="flex gap-2 mt-1">
-          <button className="seg-cta seg-cta-danger flex-1" onClick={handleStop}>
-            <Square size={12} fill="currentColor" />
-            {t('generic.stop')}
-          </button>
-          {!isPaused ? (
-            <button className="seg-cta seg-cta-ghost flex-1" onClick={handlePause}>
-              <Pause size={12} fill="currentColor" />
-              {t('generic.pause')}
-            </button>
-          ) : (
-            <button className="seg-cta seg-cta-accent flex-1" onClick={handleResume}>
-              <Play size={12} fill="currentColor" />
-              {t('generic.resume')}
-            </button>
-          )}
-          {destPos && (
-            <button
-              className="seg-cta flex-1"
-              onClick={handleClearTeleportDest}
-              style={{
-                background: 'transparent',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text-2)',
-              }}
-            >
-              {t('teleport.clear')}
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="flex gap-2 mt-1">
+      <ActionButtons
+        canStart={!!destPos}
+        trailing={destPos ? (
           <button
-            className="seg-cta seg-cta-accent flex-1"
-            onClick={handleStart}
-            disabled={!destPos}
+            className="seg-cta seg-cta-outline flex-1"
+            onClick={handleClearTeleportDest}
           >
-            <Play size={14} fill="currentColor" />
-            {t('generic.start')}
+            {t('teleport.clear')}
           </button>
-          {destPos && (
-            <button
-              className="seg-cta flex-1"
-              onClick={handleClearTeleportDest}
-              style={{
-                background: 'transparent',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text-2)',
-              }}
-            >
-              {t('teleport.clear')}
-            </button>
-          )}
-        </div>
-      )}
+        ) : null}
+      />
     </div>
   )
 }

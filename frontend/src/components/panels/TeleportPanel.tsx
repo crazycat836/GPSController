@@ -1,5 +1,5 @@
 import React from 'react'
-import { MapPin, Star, Locate } from 'lucide-react'
+import { MapPin, Star, Locate, Clock } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT } from '../../i18n'
@@ -107,10 +107,7 @@ export default function TeleportPanel() {
           </span>
         </div>
         <div className="seg-row" style={{ gap: 8 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
+          <Clock className="w-4 h-4 shrink-0" style={{ color: 'var(--color-accent)' }} />
           <span className="text-[13px] font-semibold" style={{ color: 'var(--color-text-1)' }}>
             {t('teleport.cooldown_time')}:
           </span>
@@ -132,12 +129,7 @@ export default function TeleportPanel() {
         <button
           onClick={handleClearTeleportDest}
           disabled={!destPos}
-          className="seg-cta flex-1"
-          style={{
-            background: 'transparent',
-            border: '1px solid var(--color-border)',
-            color: 'var(--color-text-2)',
-          }}
+          className="seg-cta seg-cta-outline flex-1"
         >
           {t('teleport.clear')}
         </button>
