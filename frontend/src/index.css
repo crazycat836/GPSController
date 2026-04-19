@@ -1264,6 +1264,34 @@
   z-index: 1;
 }
 .pos-pulse-ring-2 { animation-delay: 1.25s; }
+
+/* PC geolocation marker — shows where the host computer actually is on
+   the map, distinct from the virtual GPS avatar. Amber palette avoids
+   colliding with the blue current-pos marker when both are visible. */
+.pc-pos-marker, .pc-pos-marker > * { background: none; border: none; }
+.pc-pos-pulse-ring {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 8px; height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: transparent;
+  animation: pulse-shadow-pc 2.5s cubic-bezier(0, 0.5, 0.5, 1) infinite;
+  z-index: 1;
+}
+.pc-pos-pulse-ring-2 { animation-delay: 1.25s; }
+.pc-pos-dot {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 14px; height: 14px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fbbf24, #d97706);
+  border: 2px solid rgba(255,255,255,0.92);
+  box-shadow: 0 2px 6px rgba(80, 40, 0, 0.45);
+  z-index: 2;
+}
+
 .dest-marker svg { animation: marker-drop 0.42s var(--ease-spring); transform-origin: 50% 90%; }
 .waypoint-marker svg { animation: marker-pop 0.28s var(--ease-spring); transform-origin: 50% 90%; }
 
@@ -1394,6 +1422,10 @@
 @keyframes pulse-shadow {
   0%   { box-shadow: 0 0 0 0    rgba(66, 133, 244, 0.50); }
   100% { box-shadow: 0 0 0 60px rgba(66, 133, 244, 0.00); }
+}
+@keyframes pulse-shadow-pc {
+  0%   { box-shadow: 0 0 0 0    rgba(245, 158, 11, 0.55); }
+  100% { box-shadow: 0 0 0 60px rgba(245, 158, 11, 0.00); }
 }
 @keyframes marker-drop {
   0%   { transform: translateY(-24px); opacity: 0; }

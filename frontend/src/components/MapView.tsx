@@ -59,6 +59,11 @@ interface MapViewProps {
    *  camera moves (fly-to, setView) without owning the instance. Called
    *  with null on unmount. */
   onMapReady?: (map: L.Map | null) => void;
+  /** Physical PC geolocation pin — rendered as an amber dot with a pulsing
+   *  halo so the user can see where the host computer actually is. Stays
+   *  on the map until explicitly cleared (e.g. by "Refresh" in the Locate
+   *  PC popover). Null/undefined removes the marker. */
+  pcPosition?: Position | null;
 }
 
 // Leaflet requires raw hex — CSS variables don't work in SVG marker innerHTML.
@@ -88,6 +93,7 @@ function MapView({
   runtimes,
   devices,
   onMapReady,
+  pcPosition,
 }: MapViewProps) {
   // Dual-mode rendering disabled by design: with pre-sync (both devices
   // teleport to the same start before any group action) and shared random
@@ -117,6 +123,7 @@ function MapView({
   const prevPositionRef = useRef<Position | null>(null);
   const destMarkerRef = useRef<L.Marker | null>(null);
   const waypointMarkersRef = useRef<L.Marker[]>([]);
+  const pcMarkerRef = useRef<L.Marker | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
   // clickMarkerRef removed — left-click no longer drops a pin.
   const radiusCircleRef = useRef<L.Circle | null>(null);
@@ -379,6 +386,49 @@ function MapView({
     });
     (marker as any).setIcon(icon);
   }, [avatarHtml]);
+
+  // PC geolocation marker — separate from the virtual GPS avatar. Added /
+  // updated / removed in response to the LocatePcButton feature so users
+  // can see where their host computer actually is on the map.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!pcPosition) {
+      if (pcMarkerRef.current) {
+        try { (pcMarkerRef.current as any).remove(); } catch { /* ignore */ }
+        pcMarkerRef.current = null;
+      }
+      return;
+    }
+
+    const latlng: L.LatLngExpression = [pcPosition.lat, pcPosition.lng];
+    const tooltip = `${pcPosition.lat.toFixed(6)}, ${pcPosition.lng.toFixed(6)}`;
+
+    if (pcMarkerRef.current) {
+      (pcMarkerRef.current as any).setLatLng(latlng);
+      (pcMarkerRef.current as any).setTooltipContent(tooltip);
+      return;
+    }
+
+    const icon = L.divIcon({
+      className: 'pc-pos-marker',
+      html: `<div class="pc-pos-pulse-ring"></div>
+        <div class="pc-pos-pulse-ring pc-pos-pulse-ring-2"></div>
+        <div class="pc-pos-dot"></div>`,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+    });
+    const marker = L.marker(latlng, {
+      icon,
+      // Sits above the current-pos avatar (1000) so the pin is always
+      // visible even if the two coincide right after a fly-and-teleport.
+      zIndexOffset: 1100,
+      interactive: true,
+    }).addTo(map);
+    marker.bindTooltip(tooltip, { direction: 'top', offset: [0, -16] });
+    pcMarkerRef.current = marker;
+  }, [pcPosition]);
 
   // Update destination marker
   const destSigRef = useRef<string | null>(null);

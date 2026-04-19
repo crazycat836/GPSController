@@ -9,6 +9,10 @@ import { useT } from '../../i18n'
 interface LocatePcButtonProps {
   /** Pan the map camera to a coordinate without touching the virtual GPS. */
   onFlyToCoordinate: (lat: number, lng: number, zoom?: number) => void
+  /** Signals the parent that a PC location is (or no longer is) active so
+   *  a map marker can be drawn. Fired with the coord after every fly and
+   *  with null on Refresh (pre-fetch) to wipe the stale pin. */
+  onPcLocated?: (coord: { lat: number; lng: number } | null) => void
 }
 
 const LOCATE_ZOOM = 16
@@ -23,7 +27,7 @@ function errorLabelKey(code: PcLocationErrorCode): string {
   }
 }
 
-export default function LocatePcButton({ onFlyToCoordinate }: LocatePcButtonProps) {
+export default function LocatePcButton({ onFlyToCoordinate, onPcLocated }: LocatePcButtonProps) {
   const t = useT()
   const simCtx = useSimContext()
   const { coord, loading, error, request, clear } = usePcLocation()
@@ -43,7 +47,8 @@ export default function LocatePcButton({ onFlyToCoordinate }: LocatePcButtonProp
   const handleFlyOnly = useCallback(() => {
     if (!coord) return
     onFlyToCoordinate(coord.lat, coord.lng, LOCATE_ZOOM)
-  }, [coord, onFlyToCoordinate])
+    onPcLocated?.({ lat: coord.lat, lng: coord.lng })
+  }, [coord, onFlyToCoordinate, onPcLocated])
 
   const handleFlyAndTeleport = useCallback(() => {
     if (!coord) return
@@ -52,21 +57,24 @@ export default function LocatePcButton({ onFlyToCoordinate }: LocatePcButtonProp
       return
     }
     onFlyToCoordinate(coord.lat, coord.lng, LOCATE_ZOOM)
+    onPcLocated?.({ lat: coord.lat, lng: coord.lng })
     simCtx.handleTeleport(coord.lat, coord.lng)
-  }, [coord, needsConfirm, onFlyToCoordinate, simCtx])
+  }, [coord, needsConfirm, onFlyToCoordinate, onPcLocated, simCtx])
 
   const handleRefresh = useCallback(() => {
     clear()
+    onPcLocated?.(null)
     void request()
-  }, [clear, request])
+  }, [clear, onPcLocated, request])
 
   const handleConfirmTeleport = useCallback(() => {
     if (!pendingTeleport) return
     const { lat, lng } = pendingTeleport
     onFlyToCoordinate(lat, lng, LOCATE_ZOOM)
+    onPcLocated?.({ lat, lng })
     simCtx.handleTeleport(lat, lng)
     setPendingTeleport(null)
-  }, [pendingTeleport, onFlyToCoordinate, simCtx])
+  }, [pendingTeleport, onFlyToCoordinate, onPcLocated, simCtx])
 
   const items = useCallback((): KebabMenuItem[] => {
     const list: KebabMenuItem[] = [

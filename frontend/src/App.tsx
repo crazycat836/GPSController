@@ -158,6 +158,9 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
     if (!map) return
     map.setView([lat, lng], zoom ?? map.getZoom(), { animate: true })
   }, [])
+  // Physical PC coordinate pin — surfaced on the map after the user fires
+  // a fly/teleport action from LocatePcButton; cleared on Refresh.
+  const [pcMarkerCoord, setPcMarkerCoord] = useState<{ lat: number; lng: number } | null>(null)
   const [layerKey, setLayerKey] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEYS.tileLayer) || 'osm' } catch { return 'osm' }
   })
@@ -271,6 +274,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
           layerKey={layerKey}
           onLayerChange={handleLayerChange}
           onMapReady={handleMapReady}
+          pcPosition={pcMarkerCoord}
         />
 
         {sim.mode === SimMode.Joystick && (
@@ -380,6 +384,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
             onLibraryClick={() => setLibraryOpen(true)}
             onSettingsClick={() => setSettingsOpen(prev => !prev)}
             onFlyToCoordinate={handleFlyToCoordinate}
+            onPcLocated={setPcMarkerCoord}
           />
         }
       />

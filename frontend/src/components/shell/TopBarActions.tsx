@@ -11,6 +11,10 @@ interface TopBarActionsProps {
   onSettingsClick?: () => void
   /** Imperative map camera pan — required for the "Locate PC" feature. */
   onFlyToCoordinate?: (lat: number, lng: number, zoom?: number) => void
+  /** Raised after the user fires a fly/teleport-to-PC action (with the
+   *  coord the map was sent to) or when the cached location is cleared
+   *  (null). Parent is responsible for surfacing the PC marker on the map. */
+  onPcLocated?: (coord: { lat: number; lng: number } | null) => void
 }
 
 export default function TopBarActions({
@@ -19,12 +23,15 @@ export default function TopBarActions({
   onLibraryClick,
   onSettingsClick,
   onFlyToCoordinate,
+  onPcLocated,
 }: TopBarActionsProps) {
   const t = useT()
 
   return (
     <div className="flex items-center gap-2">
-      {onFlyToCoordinate && <LocatePcButton onFlyToCoordinate={onFlyToCoordinate} />}
+      {onFlyToCoordinate && (
+        <LocatePcButton onFlyToCoordinate={onFlyToCoordinate} onPcLocated={onPcLocated} />
+      )}
       <ActionButton
         icon={Smartphone}
         label={t('device.add_device')}
