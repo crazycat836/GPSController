@@ -328,8 +328,10 @@ function MapView({
 
     const makeIcon = () => L.divIcon({
       className: 'current-pos-marker',
-      html: `<div class="pos-pulse-ring"></div>
-        <div class="pos-pulse-ring pos-pulse-ring-2"></div>
+      html: `<div class="pulse-stage">
+          <div class="pos-pulse-ring"></div>
+          <div class="pos-pulse-ring pos-pulse-ring-2"></div>
+        </div>
         <div class="pos-avatar-wrap">${avatarHtml}</div>`,
       iconSize: [44, 44],
       iconAnchor: [22, 22],
@@ -378,8 +380,10 @@ function MapView({
     if (!marker) return;
     const icon = L.divIcon({
       className: 'current-pos-marker',
-      html: `<div class="pos-pulse-ring"></div>
-        <div class="pos-pulse-ring pos-pulse-ring-2"></div>
+      html: `<div class="pulse-stage">
+          <div class="pos-pulse-ring"></div>
+          <div class="pos-pulse-ring pos-pulse-ring-2"></div>
+        </div>
         <div class="pos-avatar-wrap">${avatarHtml}</div>`,
       iconSize: [44, 44],
       iconAnchor: [22, 22],
@@ -413,8 +417,10 @@ function MapView({
 
     const icon = L.divIcon({
       className: 'pc-pos-marker',
-      html: `<div class="pc-pos-pulse-ring"></div>
-        <div class="pc-pos-pulse-ring pc-pos-pulse-ring-2"></div>
+      html: `<div class="pulse-stage">
+          <div class="pc-pos-pulse-ring"></div>
+          <div class="pc-pos-pulse-ring pc-pos-pulse-ring-2"></div>
+        </div>
         <div class="pc-pos-dot"></div>`,
       iconSize: [44, 44],
       iconAnchor: [22, 22],

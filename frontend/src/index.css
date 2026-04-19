@@ -1249,10 +1249,28 @@
   border-radius: 50%;
   object-fit: cover;
 }
+/* Paint-containment wrapper for marker pulse rings. Keeps the box-shadow
+   spread's paint damage inside this box so any backdrop-filter UI above
+   the map (search bar, BottomDock, popovers) never has to re-sample in
+   response to pulse animation frames.
+
+   Stage size must fit the ring at max spread — 8px base + 60px spread on
+   each side = 128px minimum; 140 leaves a 6px safety margin. `contain:
+   paint` implies `overflow: clip`, so undersizing will chop the halo. */
+.pulse-stage {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 140px; height: 140px;
+  margin: -70px 0 0 -70px;
+  contain: paint;
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* Animated via box-shadow spread instead of transform: scale. Paint-only
-   properties don't promote the element to its own compositor layer, which
-   prevents the BottomDock's backdrop-filter from re-sampling an animating
-   layer and rendering a visible vertical seam at the ring's max radius. */
+   properties don't promote the element to its own compositor layer, and
+   the .pulse-stage ancestor contains the paint damage — together these
+   keep backdrop-filter'd UI stable while the ring animates. */
 .pos-pulse-ring {
   position: absolute;
   top: 50%; left: 50%;
