@@ -8,6 +8,7 @@ import random
 
 from models.schemas import Coordinate, MovementMode, SimulationState
 from config import resolve_speed_profile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
+from core.lap_limit import record_lap_and_check_limit
 
 logger = logging.getLogger(__name__)
 
@@ -113,20 +114,7 @@ class RouteLooper:
             if engine._stop_event.is_set():
                 break
 
-            engine.lap_count += 1
-            # lap_count <= 0 is treated the same as None ("unlimited")
-            # so the field is safe even if a caller passes 0 by accident.
-            limit = lap_count if (lap_count is not None and lap_count > 0) else None
-            await engine._emit("lap_complete", {"lap": engine.lap_count, "total": limit})
-            logger.info(
-                "Loop lap %d%s complete",
-                engine.lap_count,
-                f"/{limit}" if limit else "",
-            )
-
-            # Auto-stop after the configured lap count.
-            if limit is not None and engine.lap_count >= limit:
-                logger.info("Loop reached configured lap count %d, stopping", limit)
+            if await record_lap_and_check_limit(engine, lap_count, kind="Loop", logger=logger):
                 break
 
             # Optional random pause between laps

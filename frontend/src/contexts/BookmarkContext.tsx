@@ -198,8 +198,13 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
         ? categoryId
         : 'default'
       const defaultName = t('bm.default_name')
+      // Call `api.createBookmark` directly (not `bm.createBookmark`) so
+      // each POST doesn't trigger its own `refresh()` — a 50-row
+      // import would otherwise fire 50 full GET /bookmarks round-trips
+      // on top of the 50 creates. One refresh after everything settles
+      // is enough to sync local state.
       const results = await Promise.allSettled(
-        items.map((it, idx) => bm.createBookmark({
+        items.map((it, idx) => api.createBookmark({
           name: (it.name || '').trim() || `${defaultName} ${idx + 1}`,
           lat: it.lat,
           lng: it.lng,
@@ -212,7 +217,10 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
         if (r.status === 'fulfilled') created++
         else failed++
       }
-      if (created > 0) showToast(t('toast.bookmarks_bulk_ok', { n: created }))
+      if (created > 0) {
+        await bm.refresh()
+        showToast(t('toast.bookmarks_bulk_ok', { n: created }))
+      }
       if (failed > 0) showToast(t('toast.bookmarks_bulk_partial', { n: failed }))
       return { created, failed }
     },

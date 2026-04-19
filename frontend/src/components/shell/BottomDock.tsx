@@ -130,11 +130,9 @@ export default function BottomDock() {
 
           {/* panel-controls */}
           <div className="flex items-center gap-2.5 shrink-0">
-            {/* Speed selection is irrelevant in Teleport (instant) and
-                Joystick (direction-driven) modes. Rendering it at
-                opacity-40 made it look like a stained / masked region
-                against bright map tiles — hiding it entirely keeps the
-                dock clean and lets the action button sit flush. */}
+            {/* Speed is irrelevant in Teleport (instant) and Joystick
+                (direction-driven) modes — hide rather than dim so the
+                dock reads cleanly. */}
             {!speedToggleDisabled && (
               <SpeedToggle
                 presetActive={presetActive}

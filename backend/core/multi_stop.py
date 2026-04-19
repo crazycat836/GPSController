@@ -8,6 +8,7 @@ import random
 
 from models.schemas import Coordinate, MovementMode, SimulationState
 from config import resolve_speed_profile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
+from core.lap_limit import record_lap_and_check_limit
 from utils.geo import haversine_m
 
 logger = logging.getLogger(__name__)
@@ -220,25 +221,10 @@ class MultiStopNavigator:
 
             if not loop or engine._stop_event.is_set():
                 running = False
-            else:
-                engine.lap_count += 1
-                # Mirror route_loop: 0 / None = unlimited; positive = cap.
-                limit = lap_count if (lap_count is not None and lap_count > 0) else None
-                await engine._emit(
-                    "lap_complete",
-                    {"lap": engine.lap_count, "total": limit},
-                )
-                logger.info(
-                    "Multi-stop lap %d%s complete",
-                    engine.lap_count,
-                    f"/{limit}" if limit else "",
-                )
-                if limit is not None and engine.lap_count >= limit:
-                    logger.info(
-                        "Multi-stop reached configured lap count %d, stopping",
-                        limit,
-                    )
-                    running = False
+            elif await record_lap_and_check_limit(
+                engine, lap_count, kind="Multi-stop", logger=logger,
+            ):
+                running = False
 
         engine._route_offset_remaining = 0.0
         if engine.state == SimulationState.MULTI_STOP:

@@ -731,10 +731,8 @@ async def amfi_reveal_developer_mode(udid: str):
 
     # iOS 15 and below have no Developer Mode concept, so the AMFI
     # service call would fail with a misleading error.
-    try:
-        ios_major = int((conn.ios_version or "0").split(".")[0])
-    except ValueError:
-        ios_major = 0
+    from core.device_manager import _parse_ios_version
+    ios_major = _parse_ios_version(conn.ios_version or "0")[0]
     if ios_major < 16:
         raise HTTPException(
             status_code=400,
@@ -780,4 +778,7 @@ async def amfi_reveal_developer_mode(udid: str):
             },
         )
 
+    # Invalidate the cached status so the next discover pays a fresh
+    # lockdown query and the frontend sees the toggle flip.
+    conn.developer_mode_enabled = None
     return {"status": "ok", "udid": udid}

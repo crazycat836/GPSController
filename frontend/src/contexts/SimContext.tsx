@@ -39,10 +39,8 @@ export function toastForFanout<T>(
   })
 }
 
-// Retuned 2026-04 to match upstream v0.2.50: walking 10.8, running 19.8,
-// driving 60 km/h. The earlier 5/10/40 was too slow for realistic
-// navigation — a cross-city drive would ETA to "3 hours" instead of
-// the 45 min you'd actually see.
+// km/h. Must stay in sync with `BottomDock.SPEED_PRESETS`,
+// `SpeedControls.SPEED_PRESETS`, and backend `SPEED_PROFILES`.
 export const SPEED_MAP: Record<MoveMode, number> = {
   walking: 10.8,
   running: 19.8,
@@ -112,21 +110,15 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
   const [wpGenRadius, setWpGenRadius] = useState(DEFAULT_WP_GEN_RADIUS)
   const [wpGenCount, setWpGenCount] = useState(5)
 
-  // v0.2.58-adapted: auto-mount attempts still run, but if they fail
-  // (timeout, RSD drop on iOS 26.4.1, missing extras, etc.) the backend
-  // emits `ddi_mount_missing`. Surface a one-shot hint so the user
-  // knows to mount DDI via Xcode / 愛思助手 / 3uTools and retry.
+  // Surface a user-facing hint when the backend reports a DDI mount
+  // failure. `ts` on the signal dedupes repeat failures across
+  // re-renders; reason + stage go to the console only in dev.
   const lastDdiMissingTs = React.useRef<number>(0)
   useEffect(() => {
     const m = sim.ddiMissing
     if (!m) return
     if (m.ts === lastDdiMissingTs.current) return
     lastDdiMissingTs.current = m.ts
-    // The hint toast is the user-facing signal. The detailed reason
-    // (exception class + message) only matters for local debugging;
-    // gate on Vite's DEV flag so production bundles stay clean.
-    // `import.meta.env` types aren't present in this project; cast
-    // the narrow read we need.
     const isDev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true
     if (isDev) {
       // eslint-disable-next-line no-console

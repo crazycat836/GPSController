@@ -174,11 +174,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
   const [pauseEndAt, setPauseEndAt] = useState<number | null>(null)
   const [pauseRemaining, setPauseRemaining] = useState<number | null>(null)
   const [ddiMounting, setDdiMounting] = useState(false)
-  // One-shot signal for the "DDI not mounted, please mount via Xcode /
-  // 愛思助手 / 3uTools once" hint toast. Bumped whenever a mount
-  // attempt fails (timeout, RSD drop, etc.) so the parent context can
-  // observe via useEffect and call `showToast`. Carries the exception
-  // reason for log / debugging surfaces.
+  // One-shot signal consumed by SimContext's toast observer. `ts`
+  // deduplicates repeats of the same failure across re-renders.
   const [ddiMissing, setDdiMissing] = useState<
     { reason: string; stage?: string; ts: number } | null
   >(null)
@@ -233,11 +230,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
       const d = wsMessage.data
       switch (wsMessage.type) {
         case 'position_update': {
-          // Build the patch conditionally: previously we passed
-          // `undefined as any` for missing fields, which meant a tick
-          // that didn't include (say) `eta` would overwrite the
-          // cached value with `undefined`. Only include each key
-          // when the incoming payload actually carries it.
+          // Only include a key when the incoming payload carries it,
+          // so a tick without `eta` doesn't wipe the cached value.
           const patch: Partial<DeviceRuntime> = {}
           if (typeof d.lat === 'number' && typeof d.lng === 'number') {
             patch.currentPos = { lat: d.lat, lng: d.lng }
@@ -460,14 +454,10 @@ export function useSimulation(subscribe?: WsSubscribe) {
   }, [])
 
   const teleport = useCallback(async (lat: number, lng: number) => {
-    // v0.2.71 port: previously this unconditionally called
-    // `_setMode(SimMode.Teleport)`, which meant every bookmark click,
-    // address-search fly, or TeleportPanel "Go" dropped the user out of
-    // Loop / MultiStop / Navigate and wiped their waypoint setup. The
-    // backend already stops any active simulation atomically when a
-    // teleport request arrives (see `backend/core/teleport.py`), so the
-    // frontend mode flip was purely cosmetic and actively harmful. The
-    // mode tab is now owned exclusively by the user's explicit choice.
+    // Mode is owned by the user's explicit tab choice; the backend
+    // stops any active simulation atomically on teleport, so we don't
+    // touch mode here — quick-fly actions (bookmark click, search,
+    // TeleportPanel "Go") keep the current Loop / MultiStop / Navigate.
     setError(null)
     try {
       const res = await api.teleport(lat, lng)

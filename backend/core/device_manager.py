@@ -63,6 +63,28 @@ def _parse_ios_version(version_string: str) -> tuple[int, ...]:
         return (0, 0)
 
 
+async def _broadcast_ddi_mount_failure(udid: str, stage: str, reason: str) -> None:
+    """Emit the structured failure pair the frontend expects.
+
+    ``ddi_mount_missing`` drives the user-facing hint toast;
+    ``ddi_mount_failed`` is the legacy event name retained for
+    downstream consumers. Both carry the same fields so either can be
+    handled consistently.
+    """
+    try:
+        from api.websocket import broadcast
+        payload = {
+            "udid": udid,
+            "stage": stage,
+            "reason": reason,
+            "hint_key": "ddi.missing_hint",
+        }
+        await broadcast("ddi_mount_missing", payload)
+        await broadcast("ddi_mount_failed", {**payload, "error": reason})
+    except Exception:
+        logger.debug("ddi broadcast failed", exc_info=True)
+
+
 @dataclass
 class _ActiveConnection:
     """Internal bookkeeping for a single connected device."""
@@ -76,6 +98,10 @@ class _ActiveConnection:
     rsd: Optional[RemoteServiceDiscoveryService] = None
     location_service: Optional[LocationService] = None
     usbmux_lockdown: object = None  # Original lockdown client (for legacy fallback on iOS 17+)
+    # Cached Developer Mode toggle state. Queried once at connect and
+    # invalidated by the AMFI reveal endpoint so `/device/list` doesn't
+    # pay a lockdown round-trip per device per poll.
+    developer_mode_enabled: Optional[bool] = None
 
 
 class DeviceManager:
@@ -159,25 +185,25 @@ class DeviceManager:
                 info.is_connected = raw.serial in self._connections
                 # Populate `developer_mode_enabled` for iOS 16+ so the
                 # frontend can offer an AMFI "Reveal in Settings" button
-                # only when it's actually useful. iOS 15 and below have
-                # no Developer Mode concept, and lockdown's getter is a
-                # best-effort call — tolerate any failure silently.
+                # only when it's actually useful. Reuse the per-connection
+                # cache when available so repeat polls don't pay a
+                # lockdown round-trip.
                 ios_major = _parse_ios_version(info.ios_version)[0] if info.ios_version else 0
                 if ios_major >= 16:
-                    try:
-                        # `get_developer_mode_status` is a coroutine in the
-                        # pinned pymobiledevice3 (>=9.9). Without the
-                        # await the `bool(...)` wrapped the coroutine
-                        # object itself, always yielding True and
-                        # emitting a "coroutine was never awaited"
-                        # RuntimeWarning at runtime.
-                        info.developer_mode_enabled = bool(
-                            await lockdown.get_developer_mode_status()
-                        )
-                    except Exception:
-                        logger.debug(
-                            "get_developer_mode_status failed for %s", raw.serial, exc_info=True,
-                        )
+                    cached = active_conn.developer_mode_enabled if active_conn else None
+                    if cached is not None:
+                        info.developer_mode_enabled = cached
+                    else:
+                        try:
+                            flag = bool(await lockdown.get_developer_mode_status())
+                            info.developer_mode_enabled = flag
+                            if active_conn is not None:
+                                active_conn.developer_mode_enabled = flag
+                        except Exception:
+                            logger.debug(
+                                "get_developer_mode_status failed for %s",
+                                raw.serial, exc_info=True,
+                            )
                 devices.append(info)
                 logger.info(
                     "  device %s '%s' iOS %s via %s (connected=%s)",
@@ -407,14 +433,9 @@ class DeviceManager:
                 AlreadyMountedError,
             )
         except ImportError as exc:
-            # Include the exception class + message so we can tell an
-            # antivirus-quarantined binary apart from a missing optional
-            # extra or an incomplete installer overwrite.
             logger.warning(
                 "pymobiledevice3.mobile_image_mounter not importable (%s: %s); "
-                "skipping DDI mount — common causes: AV quarantined a bundled file, "
-                "installer didn't fully overwrite an older build, or the "
-                "developer_disk_image package is missing from the bundle",
+                "skipping DDI mount",
                 type(exc).__name__, exc,
             )
             return
@@ -459,40 +480,16 @@ class DeviceManager:
             mount_succeeded = True
         except asyncio.TimeoutError:
             logger.error("DDI mount timed out after 120s for %s", conn.udid)
-            try:
-                from api.websocket import broadcast
-                # Both the legacy `ddi_mount_failed` (kept for API stability)
-                # and the richer `ddi_mount_missing` the frontend uses to
-                # render the "mount DDI yourself" hint toast.
-                payload = {
-                    "udid": conn.udid,
-                    "stage": "personalized",
-                    "reason": "TimeoutError: DDI download/mount timed out after 120s",
-                    "hint_key": "ddi.missing_hint",
-                }
-                await broadcast("ddi_mount_missing", payload)
-                await broadcast("ddi_mount_failed", {
-                    **payload,
-                    "error": payload["reason"],
-                })
-            except Exception:
-                pass
+            await _broadcast_ddi_mount_failure(
+                conn.udid, "personalized",
+                "TimeoutError: DDI download/mount timed out after 120s",
+            )
             raise RuntimeError("DDI mount timed out — check network access to github.com")
         except Exception as exc:
             logger.exception("auto_mount_personalized failed for %s", conn.udid)
-            try:
-                from api.websocket import broadcast
-                reason = f"{type(exc).__name__}: {exc}"
-                payload = {
-                    "udid": conn.udid,
-                    "stage": "personalized",
-                    "reason": reason,
-                    "hint_key": "ddi.missing_hint",
-                }
-                await broadcast("ddi_mount_missing", payload)
-                await broadcast("ddi_mount_failed", {**payload, "error": reason})
-            except Exception:
-                pass
+            await _broadcast_ddi_mount_failure(
+                conn.udid, "personalized", f"{type(exc).__name__}: {exc}",
+            )
             raise
         finally:
             if mount_succeeded:
@@ -558,25 +555,17 @@ class DeviceManager:
             failure_reason = f"{type(exc).__name__}: {exc}"
             logger.warning("Classic DDI auto-mount failed for %s", conn.udid, exc_info=True)
         finally:
-            try:
-                from api.websocket import broadcast
-                if mounted:
+            if mounted:
+                try:
+                    from api.websocket import broadcast
                     await broadcast("ddi_mounted", {"udid": conn.udid})
-                else:
-                    payload = {
-                        "udid": conn.udid,
-                        "stage": "classic",
-                        "reason": failure_reason or "Classic DDI mount failed",
-                        "hint_key": "ddi.missing_hint",
-                    }
-                    await broadcast("ddi_mount_missing", payload)
-                    # Legacy event name kept for API stability.
-                    await broadcast("ddi_mount_failed", {
-                        **payload,
-                        "error": payload["reason"],
-                    })
-            except Exception:
-                pass
+                except Exception:
+                    pass
+            else:
+                await _broadcast_ddi_mount_failure(
+                    conn.udid, "classic",
+                    failure_reason or "Classic DDI mount failed",
+                )
 
     async def _create_dvt_location_service(
         self, conn: _ActiveConnection
