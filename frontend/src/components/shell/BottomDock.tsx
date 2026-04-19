@@ -59,13 +59,20 @@ export default function BottomDock() {
       aria-label="Simulation dock"
     >
       <div
-        className={[
-          'overflow-hidden rounded-[20px] border border-[var(--color-border)]',
-          'bg-[rgba(19,20,22,0.82)] backdrop-blur-[24px] backdrop-saturate-[1.4]',
-          '[-webkit-backdrop-filter:blur(24px)_saturate(1.4)]',
-          'shadow-[var(--shadow-xl),inset_0_1px_0_rgba(255,255,255,0.06)]',
-          'anim-fade-slide-up',
-        ].join(' ')}
+        className="overflow-hidden rounded-[20px] border border-[var(--color-border)] anim-fade-slide-up"
+        // Inline styles — Tailwind v4 was emitting backdrop-blur and
+        // backdrop-saturate as separate `backdrop-filter` declarations
+        // so only the last one survived, leaving the panel unevenly
+        // blended over bright map tiles. Writing both into the same
+        // declaration guarantees the glass treatment the design spec
+        // actually asked for. Opacity bumped 0.82 → 0.88 so the card
+        // stays cohesive against bright tile layers (OSM, Carto).
+        style={{
+          background: 'rgba(19,20,22,0.88)',
+          backdropFilter: 'blur(24px) saturate(1.4)',
+          WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
+          boxShadow: 'var(--shadow-xl), inset 0 1px 0 rgba(255,255,255,0.06)',
+        }}
       >
         {/* panel-body: meta grows, controls auto */}
         <div
