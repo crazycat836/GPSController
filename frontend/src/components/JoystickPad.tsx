@@ -248,6 +248,7 @@ function JoystickPad({
 
   return (
     <div
+      data-fc="map.joystick"
       className="joystick-overlay"
       style={{
         position: 'absolute',

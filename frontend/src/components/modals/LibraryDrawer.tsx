@@ -92,6 +92,7 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
 
   return (
     <Drawer
+      data-fc="drawer.library"
       open={open}
       onClose={onClose}
       title="Library"

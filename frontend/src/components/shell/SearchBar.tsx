@@ -113,7 +113,7 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
   const showDropdown = open || (focused && (validCoord != null || loading))
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} data-fc="topbar.search" className="relative">
       {/* Input */}
       <div
         className={[

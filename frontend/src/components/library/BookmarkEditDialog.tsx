@@ -145,7 +145,7 @@ export default function BookmarkEditDialog(props: Props) {
   const submitLabel = mode === 'edit' ? t('generic.save') : t('generic.add')
 
   return createPortal(
-    <div className="modal-overlay anim-fade-in" onClick={onClose}>
+    <div data-fc="modal.bookmark-edit" className="modal-overlay anim-fade-in" onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"

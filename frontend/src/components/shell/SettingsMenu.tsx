@@ -151,6 +151,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
       {/* Popover */}
       {open && (
         <div
+          data-fc="popover.settings"
           ref={popoverRef}
           className={[
             'fixed top-16 right-3 w-[300px] z-[var(--z-dropdown)] overflow-hidden',
@@ -313,6 +314,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
       {/* Set Initial Position modal */}
       {initialOpen && createPortal(
         <div
+          data-fc="modal.set-initial-position"
           onClick={() => { if (!initialBusy) setInitialOpen(false) }}
           className="fixed inset-0 z-[var(--z-modal)] bg-black/55 backdrop-blur-sm flex items-center justify-center"
         >

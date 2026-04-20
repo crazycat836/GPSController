@@ -77,6 +77,7 @@ function EtaBar({
 
   return (
     <div
+      data-fc="map.eta-bar"
       role="status"
       aria-live="polite"
       className={[

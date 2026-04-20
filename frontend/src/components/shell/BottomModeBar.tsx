@@ -28,6 +28,7 @@ export default function BottomModeBar({ activeMode, onModeChange }: BottomModeBa
 
   return (
     <nav
+      data-fc="bottom.mode-bar"
       aria-label="Simulation modes"
       className={[
         'glass-pill-strong fixed bottom-3 left-1/2 -translate-x-1/2 z-[var(--z-ui)]',

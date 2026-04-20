@@ -86,6 +86,7 @@ export default function DevicesPopover({ anchor, onClose, onOpenManage }: Device
 
   return createPortal(
     <div
+      data-fc="popover.devices"
       ref={panelRef}
       role="dialog"
       aria-label={t('device.add_device')}

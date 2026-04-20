@@ -210,7 +210,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
       >
         Skip to map
       </a>
-      <div className="noise-overlay" aria-hidden />
+      <div data-fc="overlay.noise" className="noise-overlay" aria-hidden />
 
       {/* Full-screen map layer */}
       <div id="map-canvas" className="absolute inset-0">
@@ -289,6 +289,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         {/* Add bookmark dialog */}
         {bm.addBmDialog && createPortal(
           <div
+            data-fc="modal.bookmark-add"
             onClick={(e) => e.stopPropagation()}
             className="anim-scale-in surface-popup"
             style={{

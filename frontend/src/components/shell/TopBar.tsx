@@ -15,6 +15,7 @@ interface TopBarProps {
 export default function TopBar({ leftContent, centerContent, rightContent }: TopBarProps) {
   return (
     <div
+      data-fc="topbar.root"
       className="fixed top-3 left-3 right-3 z-[var(--z-ui)] grid items-center gap-3 pointer-events-none"
       style={{ gridTemplateColumns: '1fr auto 1fr' }}
     >

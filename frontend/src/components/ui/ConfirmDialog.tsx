@@ -51,6 +51,7 @@ export default function ConfirmDialog({
 
   return createPortal(
     <div
+      data-fc="modal.confirm"
       className="modal-overlay anim-fade-in"
       onClick={() => { if (!busy) onCancel() }}
       role="presentation"

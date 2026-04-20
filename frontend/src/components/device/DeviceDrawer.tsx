@@ -173,6 +173,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
   return (
     <>
       <Drawer
+        data-fc="drawer.device"
         open={open}
         onClose={onClose}
         title="Devices"

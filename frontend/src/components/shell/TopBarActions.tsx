@@ -28,7 +28,7 @@ export default function TopBarActions({
   const t = useT()
 
   return (
-    <div className="flex items-center gap-2">
+    <div data-fc="topbar.actions" className="flex items-center gap-2">
       {onFlyToCoordinate && (
         <LocatePcButton onFlyToCoordinate={onFlyToCoordinate} onPcLocated={onPcLocated} />
       )}

@@ -14,7 +14,7 @@ export default function MapControls({ onRecenter, onZoomIn, onZoomOut, canRecent
   const t = useT()
 
   return (
-    <VerticalToolbar variant="compact" className={className}>
+    <VerticalToolbar variant="compact" className={className} data-fc="map.controls">
       <ToolbarButton
         variant="square"
         accent={canRecenter}

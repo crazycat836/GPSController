@@ -2,16 +2,16 @@ import React from 'react'
 
 /* ── Shared container ────────────────────────────────────────────────── */
 
-interface VerticalToolbarProps {
+interface VerticalToolbarProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode
   /** 'spaced' = padded with gaps (ModeToolbar), 'compact' = flush buttons (MapControls) */
   variant?: 'spaced' | 'compact'
-  className?: string
 }
 
-export default function VerticalToolbar({ children, variant = 'spaced', className }: VerticalToolbarProps) {
+export default function VerticalToolbar({ children, variant = 'spaced', className, ...rest }: VerticalToolbarProps) {
   return (
     <div
+      {...rest}
       className={[
         'flex flex-col',
         variant === 'spaced'

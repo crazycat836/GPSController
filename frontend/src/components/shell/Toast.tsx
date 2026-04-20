@@ -14,6 +14,9 @@ interface ToastProps {
    *  near-top banner placement — pass `top` to override the offset. */
   position?: ToastPosition
   top?: string
+  /** `data-fc` debug anchor. Defaults to `map.toast`; wrappers like
+   *  CooldownBadge pass a more specific value (`map.toast.cooldown`). */
+  dataFc?: string
 }
 
 export default function Toast({
@@ -23,6 +26,7 @@ export default function Toast({
   children,
   position = 'top',
   top = 'top-16',
+  dataFc = 'map.toast',
 }: ToastProps) {
   if (!visible) return null
 
@@ -30,6 +34,7 @@ export default function Toast({
 
   return createPortal(
     <div
+      data-fc={dataFc}
       className={`toast-pill toast-pill-${variant} ${posClass}`}
       role="status"
       aria-live="polite"

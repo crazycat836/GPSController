@@ -23,6 +23,7 @@ export default function CooldownBadge() {
       visible
       variant="warning"
       icon={<Timer className="w-4 h-4" />}
+      dataFc="map.toast.cooldown"
     >
       {t('status.cooldown_badge', { t: display })}
     </Toast>

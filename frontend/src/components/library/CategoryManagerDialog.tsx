@@ -74,7 +74,7 @@ export default function CategoryManagerDialog({
   const isDefault = (cat: BookmarkCategory) => cat.name === 'Default' || cat.name === '預設'
 
   return createPortal(
-    <div className="modal-overlay anim-fade-in" onClick={onClose}>
+    <div data-fc="modal.category-manager" className="modal-overlay anim-fade-in" onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"

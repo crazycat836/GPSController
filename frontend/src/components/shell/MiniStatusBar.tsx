@@ -46,6 +46,7 @@ export default function MiniStatusBar() {
 
   return (
     <div
+      data-fc="status.mini-bar"
       // redesign/Home spec: top 76px, left 16px, max-width 260px so the
       // two coord chips below the device pill stretch to the same width.
       className="absolute top-[76px] left-4 z-[var(--z-ui)] flex flex-col items-start gap-2 max-w-[260px]"

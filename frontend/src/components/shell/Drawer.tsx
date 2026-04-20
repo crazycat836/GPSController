@@ -16,6 +16,8 @@ interface DrawerProps {
   width?: string
   /** Optional 34px glass icon buttons rendered to the left of the close button. */
   headerActions?: React.ReactNode
+  /** Debug anchor for DevTools filtering via $$('[data-fc]'). */
+  'data-fc'?: string
   children: React.ReactNode
 }
 
@@ -31,6 +33,7 @@ export default function Drawer({
   side = 'right',
   width = 'w-80',
   headerActions,
+  'data-fc': dataFc,
   children,
 }: DrawerProps) {
   const isLeft = side === 'left'
@@ -64,6 +67,7 @@ export default function Drawer({
 
       {/* Panel */}
       <div
+        data-fc={dataFc}
         ref={panelRef}
         role="dialog"
         aria-modal="true"
