@@ -121,7 +121,7 @@ export default function CategoryManagerDialog({
                       onChange={(e) => setEditingName(e.target.value)}
                       onBlur={() => commitRename(cat.id)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitRename(cat.id)
+                        if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitRename(cat.id)
                         else if (e.key === 'Escape') setEditingId(null)
                       }}
                       style={{ paddingLeft: 8 }}
@@ -170,7 +170,7 @@ export default function CategoryManagerDialog({
             placeholder={t('bm.add_category')}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') commitAdd() }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitAdd() }}
             style={{ paddingLeft: 10 }}
           />
           <button

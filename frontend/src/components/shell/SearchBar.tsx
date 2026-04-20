@@ -130,7 +130,7 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
           onFocus={() => { setFocused(true); if (results.length > 0) setOpen(true) }}
           onBlur={() => setFocused(false)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSubmit()
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSubmit()
             if (e.key === 'Escape') { setOpen(false); inputRef.current?.blur() }
           }}
           placeholder={t('search.unified_placeholder')}

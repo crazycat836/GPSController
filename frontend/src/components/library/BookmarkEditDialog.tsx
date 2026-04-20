@@ -49,6 +49,14 @@ function trySplitLatLng(s: string): [string, string] | null {
   return m ? [m[1], m[2]] : null
 }
 
+// Format a coordinate for display: round to 6 decimals (~11cm at the equator)
+// and strip trailing zeros so float-representation noise like
+// `136.56696999999997` never leaks into the input.
+function formatCoord(n: number): string {
+  if (!Number.isFinite(n)) return ''
+  return n.toFixed(6).replace(/\.?0+$/, '')
+}
+
 // Unified Add / Edit bookmark dialog.
 // - In create mode with a live position, the "Use current position" toggle
 //   is ON by default so the coordinate fields lock to live lat/lng.
@@ -83,16 +91,16 @@ export default function BookmarkEditDialog(props: Props) {
       if (initial) {
         setName(initial.name)
         setUseCurrent(false)
-        setLatStr(String(initial.lat))
-        setLngStr(String(initial.lng))
+        setLatStr(formatCoord(initial.lat))
+        setLngStr(formatCoord(initial.lng))
         setCategoryId(initial.categoryId || firstCategory)
         setNote(initial.note ?? '')
       } else {
         setName('')
         const canUseCurrent = !!currentPosition
         setUseCurrent(canUseCurrent)
-        setLatStr(canUseCurrent ? String(currentPosition!.lat) : '')
-        setLngStr(canUseCurrent ? String(currentPosition!.lng) : '')
+        setLatStr(canUseCurrent ? formatCoord(currentPosition!.lat) : '')
+        setLngStr(canUseCurrent ? formatCoord(currentPosition!.lng) : '')
         setCategoryId(firstCategory)
         setNote('')
       }
@@ -106,8 +114,8 @@ export default function BookmarkEditDialog(props: Props) {
   useEffect(() => {
     if (mode === 'edit') return
     if (useCurrent && currentPosition) {
-      setLatStr(String(currentPosition.lat))
-      setLngStr(String(currentPosition.lng))
+      setLatStr(formatCoord(currentPosition.lat))
+      setLngStr(formatCoord(currentPosition.lng))
     }
   }, [useCurrent, currentPosition, mode])
 
@@ -163,7 +171,7 @@ export default function BookmarkEditDialog(props: Props) {
               value={name}
               placeholder={t('bm.name_placeholder')}
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit() }}
               style={{ paddingLeft: 10 }}
             />
           </label>
@@ -207,7 +215,7 @@ export default function BookmarkEditDialog(props: Props) {
                   if (split) { setLatStr(split[0]); setLngStr(split[1]) }
                   else setLatStr(v)
                 }}
-                onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit() }}
                 style={{ flex: 1, paddingLeft: 10 }}
               />
               <input
@@ -218,7 +226,7 @@ export default function BookmarkEditDialog(props: Props) {
                 disabled={useCurrent}
                 placeholder={t('bm.lng_placeholder')}
                 onChange={(e) => setLngStr(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit() }}
                 style={{ flex: 1, paddingLeft: 10 }}
               />
             </div>

@@ -217,7 +217,7 @@ export default function WaypointList({ mode }: WaypointListProps) {
             placeholder={t('panel.route_name')}
             value={routeName}
             onChange={(e) => setRouteName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') doSaveRoute(); if (e.key === 'Escape') { setSavingMode(false); setRouteName('') } }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) doSaveRoute(); if (e.key === 'Escape') { setSavingMode(false); setRouteName('') } }}
             autoFocus
           />
           <button

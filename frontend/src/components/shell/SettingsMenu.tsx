@@ -337,7 +337,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
                 value={initialLat}
                 onChange={(e) => { setInitialLat(e.target.value); setInitialError(null) }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !initialBusy) handleInitialSave()
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing && !initialBusy) handleInitialSave()
                   if (e.key === 'Escape' && !initialBusy) setInitialOpen(false)
                 }}
                 autoFocus
@@ -354,7 +354,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
                 value={initialLng}
                 onChange={(e) => { setInitialLng(e.target.value); setInitialError(null) }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !initialBusy) handleInitialSave()
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing && !initialBusy) handleInitialSave()
                   if (e.key === 'Escape' && !initialBusy) setInitialOpen(false)
                 }}
                 placeholder="Lng"

@@ -308,7 +308,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
               value={bm.addBmDialog.name}
               onChange={(e) => bm.setAddBmDialog({ ...bm.addBmDialog!, name: e.target.value })}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') bm.submitAddBookmark()
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) bm.submitAddBookmark()
                 if (e.key === 'Escape') bm.setAddBmDialog(null)
               }}
               style={{ width: '100%', marginBottom: 8 }}

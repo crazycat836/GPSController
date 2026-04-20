@@ -312,7 +312,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         onChange={(e) => setInlineEditName(e.target.value)}
         onBlur={() => commitInlineRename(b.id)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') commitInlineRename(b.id)
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitInlineRename(b.id)
           else if (e.key === 'Escape') setInlineEditId(null)
         }}
         onClick={(e) => e.stopPropagation()}

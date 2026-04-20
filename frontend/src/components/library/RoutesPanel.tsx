@@ -119,7 +119,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
             placeholder={t('panel.route_name')}
             value={routeName}
             onChange={(e) => setRouteName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSave() }}
           />
           <button
             type="button"
@@ -160,7 +160,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
                 onChange={(e) => setEditingRouteName(e.target.value)}
                 onBlur={() => commitRename(route.id, route.name)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitRename(route.id, route.name)
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitRename(route.id, route.name)
                   else if (e.key === 'Escape') setEditingRouteId(null)
                 }}
                 onClick={(e) => e.stopPropagation()}
