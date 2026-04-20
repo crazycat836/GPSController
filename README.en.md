@@ -1,6 +1,6 @@
 # GPSController
 
-**iOS Virtual Location Simulator** — a Windows desktop tool that controls an iPhone's GPS over USB or Wi-Fi. Supports Teleport, Navigate, Route Loop, Multi-Stop, Random Walk, and Joystick modes.
+**iOS Virtual Location Simulator** — a cross-platform (Windows / macOS) desktop tool that controls an iPhone's GPS over USB or Wi-Fi. Supports Teleport, Navigate, Route Loop, Multi-Stop, Random Walk, and Joystick modes.
 
 <p align="right">
   <a href="README.md"><img alt="繁體中文" src="https://img.shields.io/badge/繁體中文-gray?style=flat-square"></a>
@@ -57,7 +57,7 @@ Left-click on the map to add points contextually for the active mode.
 
 ### Speed Control
 
-- Three presets: Walking 5 / Running 10 / Driving 40 km/h.
+- Three presets: Walking 10.8 / Running 19.8 / Driving 60 km/h.
 - Custom fixed speed or random range (e.g., 40–80 km/h) with per-leg re-pick for realistic variation.
 - Apply a new speed mid-route — the backend re-interpolates from the current position without stopping.
 

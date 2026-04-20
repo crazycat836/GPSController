@@ -1,6 +1,6 @@
 # GPSController
 
-**iOS 虛擬定位模擬器**,在 Windows 上控制 iPhone 的 GPS 定位,支援直接跳點、導航、路線循環、多點停留、隨機漫步、搖桿操作等模擬模式,可經由 USB 或 WiFi 連線。
+**iOS 虛擬定位模擬器**,在 Windows 與 macOS 上控制 iPhone 的 GPS 定位,支援直接跳點、導航、路線循環、多點停留、隨機漫步、搖桿操作等模擬模式,可經由 USB 或 WiFi 連線。
 
 <p align="right">
   <a href="README.md"><img alt="繁體中文" src="https://img.shields.io/badge/繁體中文-active-2d3748?style=flat-square"></a>
@@ -59,7 +59,7 @@
 
 ### 速度控制
 
-- **預設三檔**:走路 5 / 跑步 10 / 開車 40 km/h
+- **預設三檔**:走路 10.8 / 跑步 19.8 / 開車 60 km/h
 - **自訂固定 / 隨機範圍**:輸入任意 km/h,或 min ~ max 讓後端每段重抽模擬真實路況
 - **運行中即時套用**:導航 / 巡迴 / 多點 / 隨機漫步 / 搖桿進行中可修改速度後按「套用新速度」,從當前位置接續執行
 
@@ -67,7 +67,7 @@
 
 - **ETA 預覽**:Navigate / Loop / Multi-Stop 啟動前顯示規劃距離與預估時間
 - **目的地 reverse geocode**:Navigate 面板自動顯示目的地地址(Nominatim,帶去抖動 + 快取)
-- **座標收藏**:自訂名稱、JSON 匯出 / 匯入(合併不覆蓋)、右鍵複製
+- **收藏**:自訂名稱、分類、JSON 匯出 / 匯入(合併不覆蓋)、批次貼上座標、右鍵複製
 - **GPX 匯入 / 匯出**、**地址搜尋**(Nominatim)、座標格式 DD / DMS / DM
 - **OSRM fallback**:無覆蓋區域自動走密化直線,不再等待逾時
 
@@ -82,7 +82,7 @@
 1. **iTunes for Windows(必裝)**:安裝 [iTunes for Windows (64-bit)](https://secure-appldnld.apple.com/itunes12/047-76416-20260302-fefe4356-211d-4da1-8bc4-058eb36ea803/iTunes64Setup.exe),勿用 Microsoft Store 版本(不相容)。
 2. **信任此電腦**:首次 USB 連接後,iPhone 跳出信任提示時點選 **信任** 並輸入密碼。
 3. **開發者模式(iOS 16+)**:設定 → 隱私權與安全性 → 開發者模式 → 開啟,重啟確認。若選項未顯示請見下方[附錄](#附錄iphone-開啟開發者模式windows-流程)。
-4. **WiFi Tunnel(選用)**:iPhone 與電腦需同一 WiFi 網段;首次需先 USB 配對,之後按 **Start WiFi Tunnel** 後可拔除。
+4. **WiFi Tunnel(選用)**:iPhone 與電腦需同一 WiFi 網段;首次需先 USB 配對,之後按 **啟動 WiFi Tunnel** 後可拔除。
 
 | 連線方式 | 鎖屏影響 | 建議 |
 | --- | --- | --- |
