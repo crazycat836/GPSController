@@ -42,10 +42,10 @@
 | **Navigate** | 從目前位置沿 OSRM 路線步行 / 跑步 / 開車到目的地 |
 | **Route Loop** | 閉路線無限循環,每圈隨機停頓 |
 | **Multi-Stop** | 依序經過多個停靠點,每點可自訂停頓 |
-| **Random Walk** | 在指定半徑內隨機漫遊 |
-| **Joystick** | 以方向 + 力度即時操控,支援 WASD / 方向鍵 |
+| **Random Walk** | 在指定半徑內隨機漫遊,半徑可選 200 m / 500 m / 1 km / 2 km |
+| **Joystick** | 以方向 + 力度即時操控,支援 WASD / 方向鍵,Shift 衝刺 |
 
-左鍵點擊地圖依目前模式自動新增點位(Teleport 設目的地、Navigate 設終點、Loop / Multi-Stop 加入路徑點、Random Walk 設中心)。
+左鍵點擊地圖依目前模式自動新增點位(Teleport 設目的地、Navigate 設終點、Loop / Multi-Stop 加入路徑點、Random Walk 設中心)。Loop / Multi-Stop 可設**圈數上限**,到數後自動停止。
 
 ### 雙裝置群組
 
@@ -67,9 +67,21 @@
 
 - **ETA 預覽**:Navigate / Loop / Multi-Stop 啟動前顯示規劃距離與預估時間
 - **目的地 reverse geocode**:Navigate 面板自動顯示目的地地址(Nominatim,帶去抖動 + 快取)
-- **收藏**:自訂名稱、分類、JSON 匯出 / 匯入(合併不覆蓋)、批次貼上座標、右鍵複製
+- **收藏**:自訂名稱、分類、JSON 匯出 / 匯入(合併不覆蓋)、批次貼上座標(支援 `(lat, lng)` / 全形括號 / `@lat,lng,15z` Google Maps 格式)、右鍵複製
+- **Route library**:WaypointChain 儲存整段多點路線、GPX 匯入 / 匯出、依分類瀏覽
+- **Waypoint 互動**:直接點 chain 上的 stop 飛到該點(保留目前模式);右鍵地圖新增;拖曳重排
 - **GPX 匯入 / 匯出**、**地址搜尋**(Nominatim)、座標格式 DD / DMS / DM
 - **OSRM fallback**:無覆蓋區域自動走密化直線,不再等待逾時
+
+### 輔助工具
+
+- **Locate PC**(定位我的電腦):用瀏覽器 Geolocation API 抓電腦實際座標,在地圖上標一顆獨立 pin
+  - **Fly only** — 只移動地圖鏡頭過去
+  - **Fly & Teleport** — 同時把 iPhone 虛擬 GPS 帶過去(運行中會先確認)
+  - **Refresh** — 重新抓一次位置
+- **清除虛擬定位**:一鍵清掉 iPhone 上的虛擬 GPS override,恢復裝置真實 GPS(雙裝置模式自動同步兩台)
+- **自訂預設畫面**:設定啟動時的地圖中心座標,僅影響地圖視角,不觸發虛擬 GPS
+- **上次位置記憶**:backend 在關機前寫檔,下次開啟前端直接 pre-render 上次座標,idle state 不再空白
 
 **無障礙**: WCAG AA 對比(≥ 4.5:1)、44/36/24 px 分層觸控目標、焦點圈、ARIA dialog/switch/menu 語意及鍵盤導航,符合 iOS HIG 規範。
 

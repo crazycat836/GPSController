@@ -39,10 +39,10 @@ Developer-tested on iOS 26.4.1; community reports span iOS 17–26. iOS 16.x is 
 | **Navigate** | Walk / run / drive along an OSRM route to a destination |
 | **Route Loop** | Loop a closed route indefinitely, with a random pause each lap |
 | **Multi-Stop** | Visit waypoints in order with configurable dwell time |
-| **Random Walk** | Wander randomly within a configurable radius |
-| **Joystick** | Realtime direction + intensity control; WASD / arrow keys supported |
+| **Random Walk** | Wander randomly within a configurable radius (200 m / 500 m / 1 km / 2 km presets) |
+| **Joystick** | Realtime direction + intensity control; WASD / arrow keys, Shift to sprint |
 
-Left-click on the map to add points contextually for the active mode.
+Left-click on the map to add points contextually for the active mode. Loop / Multi-Stop support a **lap limit** that auto-stops once reached.
 
 ### Dual-Device Group Mode
 
@@ -65,8 +65,21 @@ Left-click on the map to add points contextually for the active mode.
 
 - ETA preview shows planned distance and estimated time before you start.
 - Destination reverse-geocoding displays the address label via Nominatim with debouncing and cache.
-- Address search (Nominatim) and bookmark manager with GPX import / export.
+- **Bookmarks**: custom names, categories, JSON import / export (merge, never overwrite), bulk paste (supports `(lat, lng)`, full-width brackets, `@lat,lng,15z` Google Maps format), right-click copy.
+- **Route library**: save full multi-point routes (WaypointChain), GPX import / export, category-filtered browsing.
+- **Waypoint interaction**: click any stop on the chain to fly there (mode preserved); right-click map to add; drag to reorder.
+- Address search (Nominatim) with DD / DMS / DM coordinate parsing.
 - OSRM routing with smart regional fallback — uncovered areas skip the timeout and use a straight-line route instantly.
+
+### Utilities
+
+- **Locate PC**: uses the browser Geolocation API to place a separate pin at your computer's real coordinates.
+  - **Fly only** — pan the map camera there.
+  - **Fly & Teleport** — also bring the iPhone virtual GPS along (confirms if a simulation is running).
+  - **Refresh** — re-fetch the PC location.
+- **Clear virtual location**: wipes the virtual GPS override from the iPhone so the device returns to its real GPS (dual-device mode syncs both phones).
+- **Custom default view**: set the map centre used at launch — affects the viewport only, never the iPhone's GPS.
+- **Last-position recall**: backend persists the final position on shutdown; on next launch the frontend pre-renders it so the idle map isn't empty.
 
 ### Accessibility
 
