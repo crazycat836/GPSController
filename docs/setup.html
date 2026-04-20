@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LocWarp · 安裝與開發者模式教學</title>
-<meta name="description" content="LocWarp 的安裝流程與 iOS 開發者模式啟用完整教學。">
+<title>GPSController · 安裝與開發者模式教學</title>
+<meta name="description" content="GPSController 的安裝流程與 iOS 開發者模式啟用完整教學。">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -14,14 +14,14 @@
 
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="https://haoting.info/locwarpsetup">
-      <b>LocWarp</b>
+    <a class="brand" href="https://github.com/crazycat836/GPSController">
+      <b>GPSController</b>
       <span class="brand-tag">Field Manual</span>
     </a>
     <nav class="topnav" aria-label="Primary">
-      <a href="https://github.com/keezxc1223/locwarp">GitHub</a>
-      <a href="https://github.com/keezxc1223/locwarp/releases">Releases</a>
-      <a class="tn-cta" href="https://github.com/keezxc1223/locwarp/issues">回報問題 &rsaquo;</a>
+      <a href="https://github.com/crazycat836/GPSController">GitHub</a>
+      <a href="https://github.com/crazycat836/GPSController/releases">Releases</a>
+      <a class="tn-cta" href="https://github.com/crazycat836/GPSController/issues">回報問題 &rsaquo;</a>
     </nav>
   </div>
 </header>
@@ -36,7 +36,7 @@
         <span>Rev. 2026.04</span>
         <span>zh-Hant</span>
       </div>
-      <h1 id="title">安裝 LocWarp,<br><i>啟用開發者模式</i></h1>
+      <h1 id="title">安裝 GPSController,<br><i>啟用開發者模式</i></h1>
     </div>
     <aside class="hero-side">
       <p>兩個最常被問到的前置步驟,整理成一頁清單。照順序做,平均 10 分鐘完成。</p>
@@ -53,7 +53,7 @@
     <a href="#install">
       <span class="idx-num">01 /</span>
       <span class="idx-body">
-        <span class="idx-title">怎麼安裝 LocWarp?</span>
+        <span class="idx-title">怎麼安裝 GPSController?</span>
         <span class="idx-sub">3 steps · 前置安裝</span>
       </span>
       <svg class="idx-arrow" width="22" height="14" viewBox="0 0 22 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -79,7 +79,7 @@
         Chapter <b>01.</b>
       </div>
       <div class="chapter-body">
-        <h2>怎麼安裝 LocWarp?</h2>
+        <h2>怎麼安裝 GPSController?</h2>
         <p class="lede">Windows 版需要三個前置步驟,缺一項都會抓不到裝置。先安裝 iTunes 取得驅動、USB 信任配對、最後啟用開發者模式。</p>
       </div>
     </header>
@@ -94,18 +94,18 @@
           <div class="step-kicker">取得 Apple USB driver</div>
         </header>
         <div class="step-body">
-          <p>Windows 沒有內建 Apple 的 USB driver,必須透過 iTunes 一次性安裝裝置驅動,之後 LocWarp 才能透過 USB 與 iPhone 溝通。</p>
+          <p>Windows 沒有內建 Apple 的 USB driver,必須透過 iTunes 一次性安裝裝置驅動,之後 GPSController 才能透過 USB 與 iPhone 溝通。</p>
 
           <div class="note note--danger">
             <div class="note-label">Note <b>· Danger</b></div>
             <div class="note-body">
               <span class="note-title">請勿使用 Microsoft Store 的「Apple Devices」</span>
-              該版本<strong>不相容</strong>,LocWarp 會抓不到裝置。務必安裝下方連結的<strong>傳統桌面版 iTunes</strong>。
+              該版本<strong>不相容</strong>,GPSController 會抓不到裝置。務必安裝下方連結的<strong>傳統桌面版 iTunes</strong>。
             </div>
           </div>
 
           <div class="btn-row">
-            <a class="btn btn-primary" href="https://secure-appldnld.apple.com/itunes12/047-76416-20260302-fefe4356-211d-4da1-8bc4-058eb36ea803/iTunes64Setup.exe">
+            <a class="btn btn-primary" href="https://www.apple.com/itunes/">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
@@ -129,7 +129,7 @@
             <div class="note-label">Prompt <b>· iOS</b></div>
             <div class="note-body">
               <span class="note-title">「要信任這部電腦嗎?」</span>
-              點<strong>信任</strong>,輸入 iPhone 解鎖密碼完成配對。這會在電腦端建立 pair record,後續 LocWarp 就可透過該配對與裝置通訊。
+              點<strong>信任</strong>,輸入 iPhone 解鎖密碼完成配對。這會在電腦端建立 pair record,後續 GPSController 就可透過該配對與裝置通訊。
             </div>
           </div>
 
@@ -307,7 +307,7 @@
           <div class="note note--ok">
             <div class="note-label">End <b>· 大功告成</b></div>
             <div class="note-body">
-              回到 LocWarp 重新連線,首次連線時系統會自動下載並掛載 Developer Disk Image (約 20 MB),之後即可開始使用模擬定位功能。
+              回到 GPSController 重新連線,首次連線時系統會自動下載並掛載 Developer Disk Image (約 20 MB),之後即可開始使用模擬定位功能。
             </div>
           </div>
         </div>
@@ -322,9 +322,9 @@
     <div class="colophon-text">
       <p>本頁感謝社群使用者回饋整理而成。</p>
       <div class="colophon-links">
-        <a href="https://github.com/keezxc1223/locwarp">LocWarp on GitHub</a>
-        <a href="https://github.com/keezxc1223/locwarp/releases">Releases</a>
-        <a href="https://github.com/keezxc1223/locwarp/issues">Issues</a>
+        <a href="https://github.com/crazycat836/GPSController">GPSController on GitHub</a>
+        <a href="https://github.com/crazycat836/GPSController/releases">Releases</a>
+        <a href="https://github.com/crazycat836/GPSController/issues">Issues</a>
       </div>
     </div>
   </section>
