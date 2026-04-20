@@ -71,8 +71,6 @@ interface MapViewProps {
 import { DEVICE_COLORS_HEX as DEVICE_COLORS, DEVICE_LETTERS } from '../lib/constants';
 import { haversineM } from '../lib/geo';
 import MapControls from './shell/MapControls';
-import { useAvatarContext } from '../contexts/AvatarContext';
-import { getPresetSvg } from '../lib/avatars';
 
 function MapView({
   currentPosition,
@@ -129,17 +127,6 @@ function MapView({
   const radiusCircleRef = useRef<L.Circle | null>(null);
 
   const layerMapRef = useRef<Record<string, L.TileLayer>>({});
-  const avatar = useAvatarContext();
-  // Cached inner HTML for the position marker; rebuilt whenever avatar
-  // selection changes. Storing the literal HTML here keeps the marker
-  // update path dead-simple — just `setIcon()` with the new divIcon.
-  const avatarHtml = React.useMemo(() => {
-    if (avatar.current.kind === 'custom' && avatar.customDataUrl) {
-      return `<img src="${avatar.customDataUrl}" alt="" class="pos-avatar-img" width="28" height="28" />`;
-    }
-    const key = avatar.current.kind === 'preset' ? avatar.current.key : 'boy';
-    return `<span class="pos-avatar-icon">${getPresetSvg(key)}</span>`;
-  }, [avatar.current, avatar.customDataUrl]);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
@@ -367,26 +354,21 @@ function MapView({
 
     const latlng: L.LatLngExpression = [currentPosition.lat, currentPosition.lng];
 
-    const makeIcon = () => L.divIcon({
+    const icon = L.divIcon({
       className: 'current-pos-marker',
-      html: `<div data-fc="map.position-marker" class="pulse-stage">
-          <div class="pos-pulse-ring"></div>
-          <div class="pos-pulse-ring pos-pulse-ring-2"></div>
-        </div>
-        <div class="pos-avatar-wrap">${avatarHtml}</div>`,
+      html: `<div data-fc="map.position-marker" class="map-pin-current"></div>`,
       iconSize: [44, 44],
       iconAnchor: [22, 22],
     });
 
     if (currentMarkerRef.current) {
-      // Just move the existing marker — no flicker
       (currentMarkerRef.current as any).setLatLng(latlng);
       (currentMarkerRef.current as any).setTooltipContent(
         `${currentPosition.lat.toFixed(6)}, ${currentPosition.lng.toFixed(6)}`
       );
     } else {
       const marker = L.marker(latlng, {
-        icon: makeIcon(),
+        icon,
         zIndexOffset: 1000,
       }).addTo(map);
 
@@ -411,26 +393,7 @@ function MapView({
       }
     }
     prevPositionRef.current = currentPosition;
-  }, [currentPosition, dualMode, avatarHtml]);
-
-  // Swap the position marker's icon when the user picks a new avatar even
-  // if their coordinate hasn't moved. The dep on avatarHtml in the main
-  // effect handles the *create* path; this one covers the *update* path.
-  useEffect(() => {
-    const marker = currentMarkerRef.current;
-    if (!marker) return;
-    const icon = L.divIcon({
-      className: 'current-pos-marker',
-      html: `<div data-fc="map.position-marker" class="pulse-stage">
-          <div class="pos-pulse-ring"></div>
-          <div class="pos-pulse-ring pos-pulse-ring-2"></div>
-        </div>
-        <div class="pos-avatar-wrap">${avatarHtml}</div>`,
-      iconSize: [44, 44],
-      iconAnchor: [22, 22],
-    });
-    (marker as any).setIcon(icon);
-  }, [avatarHtml]);
+  }, [currentPosition, dualMode]);
 
   // PC geolocation marker — separate from the virtual GPS avatar. Added /
   // updated / removed in response to the LocatePcButton feature so users
@@ -458,11 +421,7 @@ function MapView({
 
     const icon = L.divIcon({
       className: 'pc-pos-marker',
-      html: `<div data-fc="map.pc-marker" class="pulse-stage">
-          <div class="pc-pos-pulse-ring"></div>
-          <div class="pc-pos-pulse-ring pc-pos-pulse-ring-2"></div>
-        </div>
-        <div class="pc-pos-dot"></div>`,
+      html: `<div data-fc="map.pc-marker" class="map-pin-pc"></div>`,
       iconSize: [44, 44],
       iconAnchor: [22, 22],
     });
@@ -501,36 +460,26 @@ function MapView({
     }
 
     if (destination) {
-      const redIcon = L.divIcon({
+      // Flat teardrop — accent stroke over semi-transparent dark fill,
+      // inner ring. Mirrors redesign/Home `.pin.dest-flat` SVG verbatim.
+      const icon = L.divIcon({
         className: 'dest-marker',
-        html: `<svg width="36" height="50" viewBox="0 0 36 50">
-          <defs>
-            <filter id="destShadow" x="-20%" y="-10%" width="140%" height="130%">
-              <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#000" flood-opacity="0.4"/>
-            </filter>
-            <linearGradient id="destGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#ff6b6b"/>
-              <stop offset="100%" stop-color="#e53935"/>
-            </linearGradient>
-          </defs>
-          <ellipse cx="18" cy="47" rx="6" ry="2" fill="#000" opacity="0.2"/>
-          <path d="M18 2C9.7 2 3 8.7 3 17c0 12 15 30 15 30s15-18 15-30C33 8.7 26.3 2 18 2z"
-                fill="url(#destGrad)" filter="url(#destShadow)"/>
-          <circle cx="18" cy="17" r="7" fill="#ffffff" opacity="0.95"/>
-          <svg x="11" y="10" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e53935" stroke-width="2.5">
-            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
-            <circle cx="12" cy="10" r="3"/>
+        html: `<div data-fc="map.dest-marker" class="map-pin-dest">
+          <svg width="28" height="38" viewBox="0 0 28 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 2C8.477 2 4 6.477 4 12c0 7.732 10 24 10 24s10-16.268 10-24c0-5.523-4.477-10-10-10z"
+                  fill="rgba(10,10,12,0.6)" stroke="#6c8cff" stroke-width="2" stroke-linejoin="round"/>
+            <circle cx="14" cy="12" r="4" fill="none" stroke="#6c8cff" stroke-width="2"/>
           </svg>
-        </svg>`,
-        iconSize: [36, 50],
-        iconAnchor: [18, 47],
+        </div>`,
+        iconSize: [28, 38],
+        iconAnchor: [14, 38],
       });
 
       const marker = L.marker([destination.lat, destination.lng], {
-        icon: redIcon,
+        icon,
       }).addTo(map);
 
-      marker.bindTooltip(t('map.destination'), { direction: 'top', offset: [0, -48] });
+      marker.bindTooltip(t('map.destination'), { direction: 'top', offset: [0, -38] });
       destMarkerRef.current = marker;
     }
   }, [destination, dualMode]);
@@ -604,22 +553,29 @@ function MapView({
 
     if (routePath.length > 1) {
       const latlngs: L.LatLngExpression[] = routePath.map((p) => [p.lat, p.lng]);
-      const base = L.polyline(latlngs, {
-        color: '#4285f4',
-        weight: 4,
-        opacity: 0.85,
+      // Wide faint glow (design: stroke-width 0.022, opacity 0.08).
+      // `#6c8cff` === `--color-accent`; hard-coded because Leaflet writes
+      // it to an SVG `stroke` attribute which doesn't resolve CSS vars.
+      const glow = L.polyline(latlngs, {
+        color: '#6c8cff',
+        weight: 12,
+        opacity: 0.08,
+        lineCap: 'round',
+        interactive: false,
       }).addTo(map);
-      polylineRef.current = base;
-      const overlay = L.polyline(latlngs, {
-        color: '#ffffff',
-        weight: 2,
-        opacity: 0.85,
-        dashArray: '10 16',
-        // Animated by route-line.css via className targeting.
+      polylineRef.current = glow;
+      // Thin accent dashed main line (design: stroke-width 0.005,
+      // stroke-dasharray "0.012 0.016" with stroke-linecap round).
+      const main = L.polyline(latlngs, {
+        color: '#6c8cff',
+        weight: 2.5,
+        opacity: 0.95,
+        dashArray: '6 8',
+        lineCap: 'round',
         className: 'route-line-flow',
         interactive: false,
       }).addTo(map);
-      polylineOverlayRef.current = overlay;
+      polylineOverlayRef.current = main;
     }
   }, [routePath, dualMode]);
 
@@ -701,15 +657,15 @@ function MapView({
         if (existing) {
           (existing as any).setLatLng(latlng);
         } else {
+          // Dual-mode letter badge — no pulse ring (single-device pin owns
+          // the pulse language; dual mode needs two distinguishable dots).
           const icon = L.divIcon({
             className: 'current-pos-marker',
-            html: `<div class="pos-pulse-ring" style="border-color:${color};"></div>
-              <div class="pos-pulse-ring pos-pulse-ring-2" style="border-color:${color};"></div>
-              <svg width="44" height="44" viewBox="0 0 44 44" class="pos-icon">
-                <circle cx="22" cy="22" r="13" fill="${color}" opacity="0.95"/>
-                <circle cx="22" cy="22" r="11" fill="none" stroke="#ffffff" stroke-width="2"/>
-                <text x="22" y="26" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700" font-family="system-ui">${letter}</text>
-              </svg>`,
+            html: `<svg width="44" height="44" viewBox="0 0 44 44">
+              <circle cx="22" cy="22" r="13" fill="${color}" opacity="0.95"/>
+              <circle cx="22" cy="22" r="11" fill="none" stroke="#ffffff" stroke-width="2"/>
+              <text x="22" y="26" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700" font-family="system-ui">${letter}</text>
+            </svg>`,
             iconSize: [44, 44],
             iconAnchor: [22, 22],
           });

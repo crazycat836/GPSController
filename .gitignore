@@ -40,3 +40,6 @@ _geoport/
 
 # ── Design references (local only) ──────────────────
 .design-ref/
+
+# ── Idea drafts (local only, not ready to ship) ─────
+docs/ideas/

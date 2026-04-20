@@ -1226,112 +1226,108 @@
   background: #0f1117;
 }
 
-/* Map markers */
-.current-pos-marker, .click-marker, .dest-marker, .waypoint-marker {
+/* ═══════════════════════════════════════════════════════════════
+   Map markers — mirrors redesign/Home.html pins verbatim.
+     .map-pin-current  → 22px accent circle + 3px dark rim + outer
+                         ring glow, pulse ring animated behind.
+     .map-pin-dest     → flat teardrop outline in accent, dark semi-
+                         transparent fill, inner ring. No drop-shadow.
+     .map-pin-pc       → amber sibling of current-pin for host GPS.
+   Leaflet's .divIcon needs the wrapper cleared; pins are absolutely
+   positioned inside a fixed-size 44×44 anchor box.
+   ═══════════════════════════════════════════════════════════════ */
+
+.current-pos-marker,
+.pc-pos-marker,
+.dest-marker,
+.waypoint-marker,
+.click-marker {
   background: none !important;
   border: none !important;
 }
-.pos-icon { position: relative; z-index: 2; }
-/* Avatar container for the current-position marker — centered on the pulse
-   rings with a subtle chromed rim that reads on both light and dark tiles. */
-.pos-avatar-wrap {
+
+.map-pin-current {
   position: absolute;
   top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 34px; height: 34px;
+  width: 22px; height: 22px;
+  margin: -11px 0 0 -11px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #5e8cff, #2b58c8);
-  border: 2px solid rgba(255,255,255,0.92);
-  box-shadow: 0 2px 8px rgba(0, 30, 90, 0.45);
+  background: var(--color-accent);
+  border: 3px solid var(--color-surface-0);
+  box-shadow: 0 0 0 6px var(--color-accent-dim), 0 0 20px var(--color-accent);
+}
+.map-pin-current::after {
+  content: '';
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-accent);
+  opacity: 0;
+  animation: map-pin-pulse 2.5s ease-out infinite;
+}
+@keyframes map-pin-pulse {
+  0%   { opacity: 0.6; transform: scale(0.4); }
+  100% { opacity: 0;   transform: scale(1.4); }
+}
+
+.map-pin-pc {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 18px; height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: var(--color-amber-text);
+  border: 3px solid var(--color-surface-0);
+  box-shadow: 0 0 0 5px var(--color-amber-dim), 0 0 16px var(--color-amber-text);
+}
+.map-pin-pc::after {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-amber-text);
+  opacity: 0;
+  animation: map-pin-pulse 2.5s ease-out infinite;
+}
+
+/* Destination teardrop — stacks the SVG pin atop an optional label.
+   Label styling mirrors `.pin.dest-flat .label`. */
+.map-pin-dest {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  overflow: hidden;
-  z-index: 2;
+  gap: 4px;
+  pointer-events: auto;
 }
-.pos-avatar-wrap .pos-avatar-icon { display: inline-flex; }
-.pos-avatar-wrap svg { width: 22px; height: 22px; }
-.pos-avatar-img {
-  width: 30px; height: 30px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-/* Wrapper for marker pulse rings. Sized to the ring at full scale (128px).
-   The ring animates via transform+opacity only, so there is no per-frame
-   paint damage to contain — `contain: paint` is unnecessary here and was
-   causing a compositor-boundary seam against the old tile-pane filter. */
-.pulse-stage {
-  position: absolute;
-  top: 50%; left: 50%;
-  width: 128px; height: 128px;
-  margin: -64px 0 0 -64px;
-  pointer-events: none;
-  z-index: 0;
+.map-pin-dest svg { display: block; }
+.map-pin-dest .label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--color-text-1);
+  padding: 3px 8px;
+  background: rgba(19, 20, 22, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  white-space: nowrap;
 }
 
-/* Compositor-thread pulse: scale + opacity only, with `will-change` so the
-   ring gets its own GPU layer. This keeps pulse frames from triggering
-   paint work on the map, which was invalidating the backdrop-filter
-   caches on the search bar and BottomModeBar every frame (visible as
-   flicker / shimmer of those glass surfaces). */
-.pos-pulse-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: rgba(66, 133, 244, 0.50);
-  transform: scale(0.0625);
-  animation: pulse-scale 2.5s cubic-bezier(0, 0.5, 0.5, 1) infinite;
-  will-change: transform, opacity;
-  z-index: 1;
-}
-.pos-pulse-ring-2 { animation-delay: 1.25s; }
-
-/* PC geolocation marker — shows where the host computer actually is on
-   the map, distinct from the virtual GPS avatar. Amber palette avoids
-   colliding with the blue current-pos marker when both are visible. */
-.pc-pos-marker, .pc-pos-marker > * { background: none; border: none; }
-.pc-pos-pulse-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: rgba(245, 158, 11, 0.55);
-  transform: scale(0.0625);
-  animation: pulse-scale-pc 2.5s cubic-bezier(0, 0.5, 0.5, 1) infinite;
-  will-change: transform, opacity;
-  z-index: 1;
-}
-.pc-pos-pulse-ring-2 { animation-delay: 1.25s; }
-.pc-pos-dot {
-  position: absolute;
-  top: 50%; left: 50%;
-  width: 14px; height: 14px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #fbbf24, #d97706);
-  border: 2px solid rgba(255,255,255,0.92);
-  box-shadow: 0 2px 6px rgba(80, 40, 0, 0.45);
-  z-index: 2;
-}
-
-.dest-marker svg { animation: marker-drop 0.42s var(--ease-spring); transform-origin: 50% 90%; }
 .waypoint-marker svg { animation: marker-pop 0.28s var(--ease-spring); transform-origin: 50% 90%; }
-
-/* Subway-station waypoint pins: keep the pop-in, just skip the tail from
-   the drop since the shape has its own built-in tail. */
 .waypoint-marker-subway svg { animation: marker-pop 0.32s var(--ease-spring); }
 
-/* Flowing arrow overlay on the route polyline. Uses stroke-dashoffset for
-   GPU-friendly motion; runs on every connected device without taxing the
-   CPU because Leaflet's SVG layer is already compositor-promoted. */
-.route-line-flow {
-  animation: route-flow 1.2s linear infinite;
-}
+/* Route polyline — dashed accent over a faint wide glow. Matches
+   redesign/Home `#route-path-main` + `#route-path-glow`. Dash flow is
+   optional polish; Leaflet animates stroke-dashoffset on SVG layers
+   cheaply since the pane is compositor-promoted. */
+.route-line-flow { animation: route-flow 1.2s linear infinite; }
 @keyframes route-flow {
   from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: -26; }
+  to   { stroke-dashoffset: -24; }
 }
+
 @media (prefers-reduced-motion: reduce) {
+  .map-pin-current::after,
+  .map-pin-pc::after,
   .route-line-flow { animation: none; }
 }
 
@@ -1368,13 +1364,11 @@
   .weather-anim-flash { animation: none; }
 }
 
-/* Leaflet dark theme — no filter on .leaflet-tile-pane. Applying a filter
-   here promotes the whole pane to a compositor layer, and when .pulse-stage
-   (contain: paint) or any backdrop-filter UI carves out a sub-region, the
-   filter is resolved with slightly different precision on each side of the
-   boundary — visible as a vertical color seam ~70px from the current-position
-   marker. The 0.96 / 0.95 adjustment was sub-perceptual anyway; remove it to
-   get uniform tile color across the whole pane. */
+/* Leaflet dark theme — no filter on .leaflet-tile-pane. A tile-pane
+   filter would promote the whole pane to a compositor layer; any
+   backdrop-filter UI or paint-contained marker then resolves the
+   filter with slightly different precision on each side, visible as a
+   vertical color seam near the current-position marker. */
 
 .leaflet-control-attribution {
   background: var(--color-surface-1) !important;
@@ -1438,22 +1432,6 @@
 @keyframes pulse-glow {
   0%, 100% { box-shadow: 0 0 8px rgba(108, 140, 255, 0.2); }
   50% { box-shadow: 0 0 16px rgba(108, 140, 255, 0.4); }
-}
-/* Compositor-only pulse. 0.0625 = 8px / 128px — matches the old base dot
-   size, expanding to the full stage. Opacity fade is linear; timing curve
-   on the transform alone controls the "push out" feel. */
-@keyframes pulse-scale {
-  0%   { transform: scale(0.0625); opacity: 1; }
-  100% { transform: scale(1);      opacity: 0; }
-}
-@keyframes pulse-scale-pc {
-  0%   { transform: scale(0.0625); opacity: 1; }
-  100% { transform: scale(1);      opacity: 0; }
-}
-@keyframes marker-drop {
-  0%   { transform: translateY(-24px); opacity: 0; }
-  60%  { transform: translateY(3px); opacity: 1; }
-  100% { transform: translateY(0); opacity: 1; }
 }
 @keyframes marker-pop {
   0%   { transform: scale(0); opacity: 0; }
@@ -1535,6 +1513,181 @@
 }
 .glass-pill-medium  { border-radius: var(--radius-full); }
 .glass-panel-medium { border-radius: var(--radius-xl); }
+
+/* Live position card — the featured real-time virtual GPS display in
+   the status pair. Mirrors redesign/Home `.live-pos`: accent-tinted
+   dark glass with an accent hairline along the top, animated dot +
+   SIM badge in the eyebrow, big mono LAT/LNG rows, and an empty
+   state for "no position set". State toggles are driven by
+   `data-has-pos` / `data-sim` attributes on the card itself so the
+   card stays self-contained (no body-level coupling). */
+.live-pos {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(108, 140, 255, 0.10) 0%, transparent 55%),
+    rgba(19, 20, 22, 0.86);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow:
+    var(--shadow-md),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(108, 140, 255, 0.08);
+  overflow: hidden;
+  color: var(--color-text-1);
+}
+.live-pos::before {
+  content: '';
+  position: absolute;
+  left: 14px; right: 14px; top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(108, 140, 255, 0.45), transparent);
+}
+
+.live-pos[data-sim="running"] {
+  box-shadow:
+    var(--shadow-md),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(52, 211, 153, 0.2);
+}
+.live-pos[data-sim="running"]::before {
+  background: linear-gradient(90deg, transparent, rgba(52, 211, 153, 0.55), transparent);
+}
+
+.live-pos[data-has-pos="false"] {
+  background: rgba(19, 20, 22, 0.72);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.live-pos[data-has-pos="false"]::before { opacity: 0; }
+
+.lp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.lp-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+.lp-eyebrow .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--color-success-text);
+  animation: lp-dot-pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  flex-shrink: 0;
+}
+.live-pos[data-sim="idle"] .lp-eyebrow .dot,
+.live-pos[data-has-pos="false"] .lp-eyebrow .dot {
+  animation: none;
+  background: var(--color-text-3);
+  box-shadow: none;
+}
+@keyframes lp-dot-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); }
+  70%  { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+
+.lp-sim {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background: var(--color-accent-dim);
+  color: var(--color-accent-strong);
+  border: 1px solid rgba(108, 140, 255, 0.25);
+  margin-left: auto;
+}
+.live-pos[data-has-pos="false"] .lp-sim { opacity: 0.4; }
+
+.lp-copy {
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-3);
+  transition: all var(--duration-fast) var(--ease-out-expo);
+}
+.lp-copy:hover {
+  color: var(--color-accent-strong);
+  background: rgba(108, 140, 255, 0.1);
+}
+.lp-copy.done { color: var(--color-success-text); }
+.live-pos[data-has-pos="false"] .lp-copy {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lp-coords {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lp-coord-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+}
+.lp-coord-row .axis {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-3);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.lp-coord-row .val {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--color-text-1);
+  line-height: 1.1;
+}
+.lp-coord-row .unit {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-3);
+}
+
+/* Empty state — shown when no virtual position is set. */
+.lp-no-pos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--color-text-3);
+  font-size: 12px;
+}
+.lp-no-pos svg {
+  flex-shrink: 0;
+  width: 14px; height: 14px;
+}
+.lp-no-pos .hint strong {
+  display: block;
+  color: var(--color-text-2);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.lp-no-pos .hint span {
+  font-size: 11px;
+  color: var(--color-text-3);
+  line-height: 1.35;
+}
 
 /* Secondary-info chip — lighter blur + subtler border so coord /
    weather rows sit below a device pill without competing. */
