@@ -41,5 +41,11 @@ _geoport/
 # ── Design references (local only) ──────────────────
 .design-ref/
 
+# ── Claude Code — never ship ────────────────────────
+CLAUDE.md
+.claude/
+.playwright-mcp/
+.superpowers/
+
 # ── Idea drafts (local only, not ready to ship) ─────
 docs/ideas/
