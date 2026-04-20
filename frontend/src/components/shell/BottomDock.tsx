@@ -2,7 +2,9 @@ import React, { useMemo } from 'react'
 import {
   Play, Square, Pause, Footprints, Rabbit, Car, ArrowRight,
   Repeat, Star, MapPin, Crosshair, Plus, Dices,
+  Navigation, Route, Shuffle, Gamepad2,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useSimContext, type MoveMode as _MoveMode } from '../../contexts/SimContext'
 import { SimMode, MoveMode } from '../../hooks/useSimulation'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
@@ -54,6 +56,7 @@ export default function BottomDock() {
 
   return (
     <div
+      data-fc="bottom.dock"
       className={[
         'fixed bottom-[72px] left-1/2 -translate-x-1/2 z-[var(--z-ui)]',
         'max-w-[min(920px,calc(100vw-48px))] w-max',
@@ -168,6 +171,17 @@ export default function BottomDock() {
 
 // ─── Eyebrow (mode label with accent bar) ─────────────────────
 
+// Mirror the BottomModeBar icon mapping so the dock header and the mode
+// selector read as the same mode at a glance.
+const modeIconMap: Record<SimMode, LucideIcon> = {
+  [SimMode.Teleport]:   Crosshair,
+  [SimMode.Navigate]:   Navigation,
+  [SimMode.Loop]:       Repeat,
+  [SimMode.MultiStop]:  Route,
+  [SimMode.RandomWalk]: Shuffle,
+  [SimMode.Joystick]:   Gamepad2,
+}
+
 function Eyebrow({ mode, t }: { mode: SimMode; t: ReturnType<typeof useT> }) {
   // Multi-stop gets a warning tint in the design to visually distinguish
   // it from the otherwise-accent eyebrow family.
@@ -182,16 +196,13 @@ function Eyebrow({ mode, t }: { mode: SimMode; t: ReturnType<typeof useT> }) {
     [SimMode.RandomWalk]: 'mode.random_walk',
     [SimMode.Joystick]:   'mode.joystick',
   } as const)[mode]
+  const Icon = modeIconMap[mode]
   return (
     <div
-      className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] mb-2"
+      className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] mb-2"
       style={{ color: accentColor }}
     >
-      <span
-        className="inline-block w-5 h-[1.5px] rounded-[2px]"
-        style={{ background: accentColor }}
-        aria-hidden="true"
-      />
+      <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
       {t(labelKey)}
     </div>
   )
