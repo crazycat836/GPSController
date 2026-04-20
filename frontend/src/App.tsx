@@ -359,7 +359,6 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
           plannedDistanceM={plannedDistanceM}
           plannedEtaSeconds={plannedEtaSeconds}
         />
-        <MiniStatusBar />
         <CooldownBadge />
         <UpdateChecker />
 
@@ -369,7 +368,10 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
         </Toast>
       </div>
 
-      {/* Floating overlay components */}
+      {/* Floating overlay components — siblings of the map container so
+          they read as shell chrome, not map content. */}
+      <MiniStatusBar />
+
       <TopBar
         leftContent={<Brand />}
         centerContent={

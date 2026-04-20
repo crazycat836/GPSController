@@ -36,7 +36,7 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
   ]
 
   const activeCategoryCount = bm.categories.length
-  const libSubtitle = `${bm.bookmarks.length} ${t('panel.bookmarks_count').toLowerCase()} · ${activeCategoryCount} ${t('bm.manage_categories').toLowerCase()}`
+  const libSubtitle = `${t('bm.bookmarks_count_label', { n: bm.bookmarks.length })} · ${t('bm.categories_count', { n: activeCategoryCount })}`
 
   // Tab-aware header icon buttons — matches the design's 3-icon cluster
   // (Import / Export / Close) in the library drawer header.
@@ -95,7 +95,7 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
       data-fc="drawer.library"
       open={open}
       onClose={onClose}
-      title="Library"
+      title={t('panel.library')}
       subtitle={libSubtitle}
       icon={<BookOpen className="w-[18px] h-[18px]" />}
       width="w-[min(480px,100vw)]"

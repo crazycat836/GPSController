@@ -80,6 +80,7 @@ function AvatarPicker({ anchor, onClose }: AvatarPickerProps) {
 
   return createPortal(
     <div
+      data-fc="popover.avatar-picker"
       ref={menuRef}
       role="dialog"
       aria-label={t('avatar.picker_title')}

@@ -6,6 +6,7 @@ import { ICON_SIZE } from '../../lib/icons'
 import { useT } from '../../i18n'
 import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import ConfirmDialog from '../ui/ConfirmDialog'
 
 interface CategoryManagerDialogProps {
   open: boolean
@@ -48,6 +49,7 @@ export default function CategoryManagerDialog({
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<BookmarkCategory | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
 
   useModalDismiss({ open, onDismiss: onClose })
@@ -150,7 +152,7 @@ export default function CategoryManagerDialog({
                       className="kebab-btn"
                       title={t('generic.delete')}
                       aria-label={t('generic.delete')}
-                      onClick={() => void onDelete(cat.id)}
+                      onClick={() => setConfirmDelete(cat)}
                       style={{ color: 'var(--color-danger-text)' }}
                     >
                       <Trash2 width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
@@ -167,7 +169,7 @@ export default function CategoryManagerDialog({
           <input
             type="text"
             className="search-input flex-1"
-            placeholder={t('bm.add_category')}
+            placeholder={t('bm.category_add_placeholder')}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitAdd() }}
@@ -189,6 +191,20 @@ export default function CategoryManagerDialog({
             {t('generic.cancel')}
           </button>
         </div>
+
+        <ConfirmDialog
+          open={!!confirmDelete}
+          title={t('bm.category_delete_title')}
+          description={confirmDelete ? t('bm.category_delete_confirm', { name: confirmDelete.name }) : undefined}
+          confirmLabel={t('generic.delete')}
+          cancelLabel={t('generic.cancel')}
+          tone="danger"
+          onConfirm={async () => {
+            if (confirmDelete) await onDelete(confirmDelete.id)
+            setConfirmDelete(null)
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
       </div>
     </div>,
     document.body,

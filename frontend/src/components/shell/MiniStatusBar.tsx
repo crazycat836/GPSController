@@ -49,13 +49,16 @@ export default function MiniStatusBar() {
       data-fc="status.mini-bar"
       // redesign/Home spec: top 76px, left 16px, max-width 260px so the
       // two coord chips below the device pill stretch to the same width.
-      className="absolute top-[76px] left-4 z-[var(--z-ui)] flex flex-col items-start gap-2 max-w-[260px]"
-      aria-label="Status"
+      // `fixed` (not `absolute`) so the bar positions against the
+      // viewport — it's a shell-level overlay, not a child of the map
+      // container.
+      className="fixed top-[76px] left-4 z-[var(--z-ui)] flex flex-col items-start gap-2 max-w-[260px]"
+      aria-label={t('shell.status_aria')}
     >
       {/* Device pill(s) — placeholder when none connected */}
       {!isConnected ? (
         <div
-          className="status-device-pill inline-flex items-center gap-2.5 h-10 px-4 text-[12px] font-medium"
+          className="glass-pill-medium inline-flex items-center gap-2.5 h-10 px-4 text-[12px] font-medium"
           title={t('status.disconnected')}
         >
           <Smartphone className="w-4 h-4 text-[var(--color-text-3)] shrink-0" />
@@ -78,7 +81,7 @@ export default function MiniStatusBar() {
       {/* Coord chip — lighter weight than device pill, mono for numerics.
           Single-device only (dual-device mode shows coords inline per pill). */}
       {!isDual && currentPos && (
-        <div className="status-coord-chip inline-flex items-center gap-2.5 h-8 px-3 text-[11px] font-mono">
+        <div className="glass-chip w-full justify-start inline-flex items-center gap-2.5 h-8 px-3 text-[11px] font-mono">
           <MapPin className="w-3 h-3 text-[var(--color-text-3)] shrink-0" />
           <span>
             {currentPos.lat.toFixed(5)}°, {currentPos.lng.toFixed(5)}°
@@ -98,7 +101,7 @@ export default function MiniStatusBar() {
 
       {/* Location + weather chip — same lighter treatment as the coord chip */}
       {!isDual && (countryCode || weather) && (
-        <div className="status-coord-chip inline-flex items-center gap-2.5 h-8 px-3 text-[11px]">
+        <div className="glass-chip w-full justify-start inline-flex items-center gap-2.5 h-8 px-3 text-[11px]">
           {countryCode && (
             <>
               <img
@@ -138,7 +141,7 @@ function DevicePill({ dev, letter, color, coord }: DevicePillProps) {
   const isNetwork = dev.connection_type === 'Network'
   return (
     <div
-      className="status-device-pill inline-flex items-center gap-2.5 h-10 pl-2 pr-4 text-[12px] font-medium"
+      className="glass-pill-medium inline-flex items-center gap-2.5 h-10 pl-2 pr-4 text-[12px] font-medium"
       title={dev.name}
     >
       {/* Letter avatar */}

@@ -1,6 +1,7 @@
 import React from 'react'
 import { Plus, X, Repeat, Dices } from 'lucide-react'
 import { haversineM } from '../lib/geo'
+import { useT } from '../i18n'
 
 export interface ChainPoint {
   id: string
@@ -44,6 +45,7 @@ export default function WaypointChain({
   onSelect,
   className,
 }: WaypointChainProps) {
+  const t = useT()
   if (points.length === 0 && !onAdd) return null
 
   return (
@@ -53,7 +55,7 @@ export default function WaypointChain({
         className ?? '',
       ].filter(Boolean).join(' ')}
       role="list"
-      aria-label="Waypoint chain"
+      aria-label={t('chain.aria_label')}
     >
       {points.map((pt, idx) => {
         const prev = idx > 0 ? points[idx - 1] : null
@@ -89,8 +91,8 @@ export default function WaypointChain({
           </React.Fragment>
         )
       })}
-      {onAdd && <AddButton onClick={onAdd} />}
-      {onRandom && <RandomButton onClick={onRandom} />}
+      {onAdd && <AddButton onClick={onAdd} label={t('chain.add_stop')} />}
+      {onRandom && <RandomButton onClick={onRandom} label={t('chain.random_stop')} />}
     </div>
   )
 }
@@ -105,7 +107,8 @@ interface ChipProps {
 }
 
 function Chip({ point, index, kind, onRemove, onSelect, removable }: ChipProps) {
-  const badge = point.label === 'Current location' || point.label === '目前位置'
+  const t = useT()
+  const badge = kind === 'start' || index === 0
     ? 'A'  // start label always uses A regardless of index
     : badgeLetter(index)
 
@@ -166,8 +169,8 @@ function Chip({ point, index, kind, onRemove, onSelect, removable }: ChipProps) 
             'hover:text-[var(--color-danger-text)] hover:bg-[var(--color-danger-dim)]',
             'transition-[opacity,color,background] duration-150',
           ].join(' ')}
-          aria-label="Remove"
-          title="Remove"
+          aria-label={t('chain.remove')}
+          title={t('chain.remove')}
         >
           <X className="w-2.5 h-2.5" strokeWidth={2.5} />
         </button>
@@ -195,11 +198,13 @@ function Connector({ distM }: { distM: number | null }) {
 }
 
 function LoopIndicator({ distM }: { distM: number | null }) {
+  const t = useT()
+  const loopLabel = t('chain.loop')
   const label = distM == null
-    ? 'Loop'
+    ? loopLabel
     : distM >= 1000
-      ? `Loop · ${(distM / 1000).toFixed(1)} km`
-      : `Loop · ${Math.round(distM)} m`
+      ? `${loopLabel} · ${(distM / 1000).toFixed(1)} km`
+      : `${loopLabel} · ${Math.round(distM)} m`
   return (
     <span
       className="shrink-0 inline-flex items-center gap-1.5 h-[34px] px-2.5 rounded-[10px] font-mono text-[10px] font-medium uppercase tracking-[0.04em]"
@@ -208,7 +213,7 @@ function LoopIndicator({ distM }: { distM: number | null }) {
         background: 'rgba(255,182,39,0.08)',
         border: '1px solid rgba(255,182,39,0.2)',
       }}
-      title="Loops back to start"
+      title={t('chain.loop_back_tooltip')}
     >
       <Repeat className="w-3 h-3" />
       {label}
@@ -216,7 +221,7 @@ function LoopIndicator({ distM }: { distM: number | null }) {
   )
 }
 
-function AddButton({ onClick }: { onClick: () => void }) {
+function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <button
       type="button"
@@ -230,17 +235,17 @@ function AddButton({ onClick }: { onClick: () => void }) {
       ].join(' ')}
     >
       <Plus className="w-[11px] h-[11px]" strokeWidth={2.5} />
-      Add stop
+      {label}
     </button>
   )
 }
 
-function RandomButton({ onClick }: { onClick: () => void }) {
+function RandomButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      title="Random stop"
+      title={label}
       className={[
         'shrink-0 inline-flex items-center gap-1.5 h-[34px] px-3 rounded-[10px]',
         'border-[1.5px] border-dashed border-[var(--color-border-strong)]',
@@ -250,7 +255,7 @@ function RandomButton({ onClick }: { onClick: () => void }) {
       ].join(' ')}
     >
       <Dices className="w-[11px] h-[11px]" />
-      Random
+      {label}
     </button>
   )
 }

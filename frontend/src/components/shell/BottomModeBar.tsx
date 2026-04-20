@@ -29,7 +29,7 @@ export default function BottomModeBar({ activeMode, onModeChange }: BottomModeBa
   return (
     <nav
       data-fc="bottom.mode-bar"
-      aria-label="Simulation modes"
+      aria-label={t('shell.modes_aria')}
       className={[
         'glass-pill-strong fixed bottom-3 left-1/2 -translate-x-1/2 z-[var(--z-ui)]',
         'flex items-center gap-1.5 px-1.5 py-1.5',
@@ -49,7 +49,7 @@ export default function BottomModeBar({ activeMode, onModeChange }: BottomModeBa
             title={`${t(labelKey)} (${kbd})`}
             onClick={() => onModeChange(mode)}
             className={[
-              'inline-flex items-center gap-2 h-10 px-3 rounded-full',
+              'inline-flex items-center gap-2 h-11 px-4 rounded-full',
               'text-[13px] font-medium whitespace-nowrap shrink-0',
               'transition-[background,color,box-shadow] duration-150 cursor-pointer',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]',
@@ -58,11 +58,12 @@ export default function BottomModeBar({ activeMode, onModeChange }: BottomModeBa
                 : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)] hover:bg-white/[0.04]',
             ].join(' ')}
           >
-            <Icon className="w-[18px] h-[18px] shrink-0" />
+            <Icon className="w-5 h-5 shrink-0" />
             <span className={active ? '' : 'hidden sm:inline'}>{t(labelKey)}</span>
             {active && (
               <span
-                className="font-mono text-[10px] px-1 py-px rounded bg-black/20 text-black/65"
+                className="font-mono text-[10px] px-1 py-px rounded"
+                style={{ background: 'rgba(0,0,0,0.15)', color: 'rgba(0,0,0,0.6)' }}
                 aria-hidden="true"
               >
                 {kbd}

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import { useT } from '../../i18n'
 import GlassIconButton from '../ui/GlassIconButton'
 
 interface DrawerProps {
@@ -36,6 +37,7 @@ export default function Drawer({
   'data-fc': dataFc,
   children,
 }: DrawerProps) {
+  const t = useT()
   const isLeft = side === 'left'
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -112,7 +114,7 @@ export default function Drawer({
             <GlassIconButton
               ref={closeButtonRef}
               onClick={onClose}
-              label="Close"
+              label={t('panel.close')}
               icon={<X className="w-4 h-4" />}
             />
           </div>

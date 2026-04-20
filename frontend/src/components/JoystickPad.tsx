@@ -293,16 +293,12 @@ function JoystickPad({
         {/* Pad background */}
         <div
           ref={padRef}
-          className="joystick-pad"
+          className="joystick-pad glass-pill-medium"
           style={{
             width: PAD_RADIUS * 2,
             height: PAD_RADIUS * 2,
-            borderRadius: '50%',
-            background: 'rgba(30, 30, 40, 0.75)',
-            border: '2px solid rgba(255,255,255,0.15)',
             position: 'relative',
             cursor: dragging ? 'grabbing' : 'grab',
-            backdropFilter: 'blur(8px)',
           }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
@@ -345,15 +341,12 @@ function JoystickPad({
 
       {/* Info text */}
       <div
+        className="glass-chip"
         style={{
           marginTop: 8,
           textAlign: 'center',
           fontSize: 12,
-          color: 'rgba(255,255,255,0.7)',
-          background: 'rgba(30, 30, 40, 0.65)',
           padding: '4px 12px',
-          borderRadius: 4,
-          backdropFilter: 'blur(4px)',
         }}
       >
         {intensity > 0.01 ? (

@@ -66,9 +66,10 @@ function ActionButton({ icon: Icon, label, shortcut, ...rest }: ActionButtonProp
       {...rest}
       className={[
         'glass-pill w-11 h-11 grid place-items-center',
-        'text-[var(--color-text-1)] hover:bg-[var(--color-surface-hover)]',
+        'text-[var(--color-text-1)]',
+        'hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)]',
         'active:scale-95',
-        'transition-[transform,background] duration-150 cursor-pointer',
+        'transition-[transform,background,border-color] duration-150 cursor-pointer',
         'focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none',
         'disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100',
       ].join(' ')}

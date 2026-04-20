@@ -13,10 +13,10 @@ export default function VerticalToolbar({ children, variant = 'spaced', classNam
     <div
       {...rest}
       className={[
-        'flex flex-col',
+        'flex flex-col glass-panel',
         variant === 'spaced'
-          ? 'gap-1.5 p-2 surface-panel rounded-2xl'
-          : 'surface-panel rounded-xl overflow-hidden',
+          ? 'gap-1.5 p-2'
+          : 'overflow-hidden',
         className,
       ].filter(Boolean).join(' ')}
     >

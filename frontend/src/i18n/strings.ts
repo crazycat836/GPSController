@@ -29,7 +29,7 @@ export const STRINGS = {
   'status.cooldown_active': { zh: '冷卻中', en: 'Cooling down' },
   'status.cooldown_tooltip': { zh: '關閉後瞬移將不觸發冷卻', en: 'When off, teleports skip the cooldown' },
   'status.restore': { zh: '一鍵還原', en: 'Restore' },
-  'status.restore_tooltip': { zh: '清除 iPhone 上的虛擬定位,恢復真實 GPS', en: 'Clear the virtual location and restore real GPS' },
+  'status.restore_tooltip': { zh: '清除 iPhone 上的虛擬定位,還原為真實 GPS', en: 'Clear the virtual location and restore real GPS' },
   'status.restore_success': { zh: '已清除虛擬定位', en: 'Virtual location cleared' },
   'status.restore_failed': { zh: '清除失敗', en: 'Clear failed' },
   'status.restore_in_progress': { zh: '正在清除虛擬定位,請稍候...', en: 'Clearing virtual location, please wait...' },
@@ -45,7 +45,7 @@ export const STRINGS = {
   'status.set_initial_invalid': { zh: '座標格式錯誤,請輸入「緯度, 經度」,範圍 lat ±90 / lng ±180', en: 'Invalid format. Use "lat, lng" with lat in ±90 and lng in ±180.' },
   'status.set_initial_saved': { zh: '已儲存預設畫面:{lat}, {lng} (下次開啟生效)', en: 'Default view saved: {lat}, {lng} (effective next launch)' },
   'status.set_initial_cleared': { zh: '已清除自訂預設畫面,下次開啟回到預設', en: 'Custom default view cleared. Next launch uses the built-in default.' },
-  'status.cooldown_dual_disabled': { zh: '雙裝置模式不支援冷卻保護', en: 'Cooldown protection disabled in dual-device mode' },
+  'status.cooldown_dual_disabled': { zh: '雙裝置模式不支援冷卻保護', en: 'Cooldown not supported in dual-device mode' },
   'status.cooldown_badge': { zh: '冷卻 {t}', en: 'Cooldown {t}' },
 
   // ── Group mode (dual device) ─────────────────
@@ -69,7 +69,7 @@ export const STRINGS = {
   'eta.group_progress': { zh: '平均進度', en: 'Average progress' },
 
   // ── Modes ────────────────────────────────────
-  'mode.teleport': { zh: '瞬間移動', en: 'Teleport' },
+  'mode.teleport': { zh: '瞬移', en: 'Teleport' },
   'mode.navigate': { zh: '導航移動', en: 'Navigate' },
   'mode.loop': { zh: '路線巡迴', en: 'Route Loop' },
   'mode.multi_stop': { zh: '多點導航', en: 'Multi-stop' },
@@ -99,15 +99,16 @@ export const STRINGS = {
   'panel.coord_lng': { zh: '經度', en: 'Longitude' },
   'panel.coord_go': { zh: '前往', en: 'Go' },
   'panel.search': { zh: '搜尋', en: 'Search' },
-  'panel.bookmarks': { zh: '書籤', en: 'Bookmarks' },
+  'panel.bookmarks': { zh: '收藏', en: 'Bookmarks' },
   'panel.routes': { zh: '路線', en: 'Routes' },
   'panel.waypoints': { zh: '路徑點', en: 'Waypoints' },
   'panel.waypoints_hint': { zh: '右鍵地圖添加', en: 'Right-click map to add' },
   'panel.waypoints_radius': { zh: '半徑', en: 'Radius' },
   'panel.waypoints_count': { zh: '數量', en: 'Count' },
   'panel.waypoints_generate': { zh: '隨機產生', en: 'Random' },
-  'panel.waypoints_generate_all': { zh: '全隨機', en: 'All random' },
-  'panel.waypoints_empty': { zh: '在地圖上點擊添加路徑點，或使用上方隨機產生', en: 'Click the map to add waypoints, or use random generate above' },
+  'panel.waypoints_generate_all': { zh: '全部隨機', en: 'All random' },
+  'panel.waypoints_none': { zh: '尚無路徑點', en: 'No waypoints yet' },
+  'panel.waypoints_empty': { zh: '在地圖上點擊新增路徑點,或使用上方的隨機產生', en: 'Click the map to add waypoints, or use random generate above' },
   'panel.waypoints_start_loop': { zh: '開始巡迴', en: 'Start Loop' },
   'panel.waypoints_start_multi': { zh: '開始多點導航', en: 'Start Multi-stop' },
   'panel.waypoints_start_navigate': { zh: '開始導航', en: 'Start Navigate' },
@@ -169,14 +170,14 @@ export const STRINGS = {
   'wifi.port': { zh: 'Port', en: 'Port' },
   'wifi.ip_placeholder': { zh: 'iPhone IP(例如 192.168.0.205)', en: 'iPhone IP (e.g. 192.168.0.205)' },
   'wifi.tunnel_establishing': { zh: '建立 tunnel 中...', en: 'Establishing tunnel...' },
-  'wifi.tunnel_start': { zh: 'Start WiFi Tunnel', en: 'Start Wi-Fi Tunnel' },
-  'wifi.tunnel_stop': { zh: 'Stop Tunnel', en: 'Stop Tunnel' },
-  'wifi.tunnel_active': { zh: 'Active', en: 'Active' },
+  'wifi.tunnel_start': { zh: '啟動 WiFi Tunnel', en: 'Start Wi-Fi Tunnel' },
+  'wifi.tunnel_stop': { zh: '停止 Tunnel', en: 'Stop Tunnel' },
+  'wifi.tunnel_active': { zh: '運作中', en: 'Active' },
   'wifi.tunnel_usb_can_disconnect': { zh: 'USB 可拔除', en: 'USB can be disconnected' },
-  'wifi.tunnel_admin_hint': { zh: '請使用身分管理員開啟 GPSController,必須先通過 USB 信任。', en: 'Run GPSController as Administrator. Device must be paired via USB first.' },
-  'wifi.legacy_connect': { zh: 'Connect', en: 'Connect' },
+  'wifi.tunnel_admin_hint': { zh: '請以系統管理員身分開啟 GPSController,且裝置必須先透過 USB 完成信任。', en: 'Run GPSController as Administrator. The device must be paired via USB first.' },
+  'wifi.legacy_connect': { zh: '連線', en: 'Connect' },
   'wifi.legacy_connecting': { zh: '連線中...', en: 'Connecting...' },
-  'wifi.legacy_hint': { zh: 'iPhone 解鎖並已配對即可直接連線。', en: 'iPhone unlocked and paired, connect directly.' },
+  'wifi.legacy_hint': { zh: '請先解鎖並配對 iPhone,再進行連線。', en: 'Unlock and pair the iPhone, then connect directly.' },
   'wifi.device_not_detected': { zh: '未偵測到裝置,請確認 iPhone 與電腦在同一 WiFi', en: 'Device not detected, ensure iPhone and computer are on the same Wi-Fi' },
   'wifi.detect_failed': { zh: '偵測失敗', en: 'Detection failed' },
 
@@ -211,7 +212,7 @@ export const STRINGS = {
   'locate.error_permission_hint': { zh: '請在網址列鎖頭圖示開啟位置權限', en: 'Enable location via the lock icon next to the URL' },
   'locate.error_unavailable': { zh: '無法取得位置', en: 'Location unavailable' },
   'locate.error_timeout': { zh: '定位逾時,請重試', en: 'Timed out, retry' },
-  'locate.error_insecure': { zh: '需 HTTPS 或 localhost', en: 'Requires HTTPS or localhost' },
+  'locate.error_insecure': { zh: '定位功能需透過 HTTPS 或 localhost 使用', en: 'Location requires HTTPS or localhost' },
   'locate.error_unsupported': { zh: '此瀏覽器不支援定位', en: 'Geolocation not supported here' },
   'locate.confirm_teleport_title': { zh: '定位會中斷目前模擬', en: 'Teleporting will interrupt simulation' },
   'locate.confirm_teleport_body': { zh: '目前狀態:{state}。確定要將虛擬 GPS 傳送到 {lat}, {lng} 嗎?', en: 'Current state: {state}. Teleport virtual GPS to {lat}, {lng}?' },
@@ -268,7 +269,7 @@ export const STRINGS = {
   'teleport.destination': { zh: '目的地', en: 'Destination' },
   'teleport.distance': { zh: '距離', en: 'Distance' },
   'teleport.cooldown_time': { zh: '冷卻時間', en: 'Cooldown Time' },
-  'teleport.move': { zh: '移動', en: 'Move' },
+  'teleport.move': { zh: '瞬移', en: 'Teleport' },
   'teleport.clear': { zh: '清除', en: 'Clear' },
   'teleport.add_destination': { zh: '在地圖上設定目的地', en: 'Add destination on the map' },
   'teleport.no_position': { zh: '尚無目前位置', en: 'No current position' },
@@ -298,7 +299,7 @@ export const STRINGS = {
   'settings.version': { zh: '版本', en: 'Version' },
   'settings.clear_history': { zh: '清除所有紀錄', en: 'Clear all history' },
   'search.unified_placeholder': { zh: '搜尋地址或輸入座標...', en: 'Search address or enter coordinates...' },
-  'search.coord_detected': { zh: '跳到座標', en: 'Jump to coordinates' },
+  'search.coord_detected': { zh: '前往座標', en: 'Go to coordinates' },
   'panel.library': { zh: '收藏座標與路線', en: 'Bookmarks & Routes' },
   'panel.library_drag_hint': { zh: '收藏座標與路線 · 拖曳此處移動', en: 'Bookmarks & Routes · Drag to move' },
   'panel.bookmarks_count': { zh: '座標收藏', en: 'Bookmarks' },
@@ -308,7 +309,7 @@ export const STRINGS = {
   'panel.random_walk_range': { zh: '隨機漫步範圍', en: 'Random walk range' },
   'panel.meters_radius': { zh: '公尺 (半徑)', en: 'meters (radius)' },
   'panel.current_pos': { zh: '目前位置:', en: 'Current position:' },
-  'panel.waypoints_pts': { zh: '個', en: '' },
+  'panel.waypoints_pts': { zh: '個', en: 'pts' },
   'panel.waypoints_remove': { zh: '移除', en: 'Remove' },
   'panel.waypoint_num': { zh: '路徑點 {n}', en: 'Waypoint {n}' },
   'panel.waypoint_start': { zh: '起點', en: 'Start' },
@@ -318,9 +319,9 @@ export const STRINGS = {
 
   // DDI hints (Phase 7 / upstream v0.2.58-adapted) — shown when the
   // auto-mount attempt fails so the user knows to mount DDI manually
-  // via Xcode / 愛思助手 / 3uTools once and retry.
+  // via Xcode / 3uTools / iMazing once and retry.
   'ddi.missing_hint': {
-    zh: 'DDI 掛載失敗。請先用 Xcode、愛思助手或 3uTools 手動掛載開發者磁碟一次,然後重新連線。',
+    zh: 'DDI 掛載失敗。請先透過 Xcode、3uTools 或 iMazing 手動掛載開發者磁碟一次,然後重新連線。',
     en: 'DDI mount failed. Mount the Developer Disk Image once via Xcode / 3uTools / iMazing, then reconnect.',
   },
   'panel.waypoints_running_hint': { zh: '進行中無法重新開始,請先按下方停止', en: 'In progress, press Stop below to restart' },
@@ -333,7 +334,7 @@ export const STRINGS = {
   // ── Toasts extra ─────────────────────────────
   'toast.no_position_random': { zh: '尚未取得目前位置,無法產生隨機路徑點', en: 'No current position, cannot generate random waypoints' },
   'toast.no_destination': { zh: '請先在地圖上點擊設定目的地', en: 'Click the map to set a destination first' },
-  'toast.no_waypoints': { zh: '尚未設定路徑點，請在地圖上點擊添加或使用隨機產生', en: 'No waypoints set, click the map to add, or use random generate' },
+  'toast.no_waypoints': { zh: '尚未設定路徑點,請在地圖上點擊新增或使用隨機產生', en: 'No waypoints set, click the map to add, or use random generate' },
   'toast.pause_countdown': { zh: '到點暫停中 · 剩餘 {n}s', en: 'Paused at waypoint · {n}s left' },
 
   // ── Bookmarks ────────────────────────────────
@@ -342,7 +343,7 @@ export const STRINGS = {
   'bm.bulk_import': { zh: '批次貼上座標', en: 'Bulk paste…' },
   'bulk.title': { zh: '批次貼上座標', en: 'Bulk paste coordinates' },
   'bulk.hint': {
-    zh: '每行一組座標。支援 "lat, lng"、"lat lng 名稱"、括號包起來、@lat,lng,zz 貼自 Google Maps 等格式。',
+    zh: '每行一組座標。支援 "lat, lng"、"lat lng 名稱"、括號包起來、@lat,lng,15z 貼自 Google Maps 等格式。',
     en: 'One coord per line. Accepts "lat, lng", "lat lng Name", brackets, or the Google Maps "@lat,lng,15z" paste.',
   },
   'bulk.placeholder_bookmark': {
@@ -367,7 +368,7 @@ export const STRINGS = {
   'bm.add_custom_tooltip': { zh: '手動輸入經緯度新增收藏', en: 'Add a bookmark by typing latitude / longitude' },
   'bm.lat_placeholder': { zh: '緯度 lat', en: 'Latitude' },
   'bm.lng_placeholder': { zh: '經度 lng', en: 'Longitude' },
-  'bm.latlng_placeholder': { zh: '緯度 或 貼 緯度,經度', en: 'Latitude (or paste "lat, lng")' },
+  'bm.latlng_placeholder': { zh: '緯度,或貼上「緯度, 經度」', en: 'Latitude (or paste "lat, lng")' },
   'bm.manage_categories': { zh: '管理分類', en: 'Manage Categories' },
   'bm.export': { zh: '匯出', en: 'Export' },
   'bm.export_tooltip': { zh: '匯出所有收藏與分類為 JSON', en: 'Export all bookmarks and categories as JSON' },
@@ -394,8 +395,8 @@ export const STRINGS = {
   'update.later': { zh: '稍後提醒', en: 'Later' },
   'bm.edit': { zh: '編輯', en: 'Edit' },
   'bm.move_to': { zh: '移動到:', en: 'Move to:' },
-  'bm.bookmark_actions': { zh: '書籤操作', en: 'Bookmark actions' },
-  'avatar.picker_title': { zh: '地圖釘頭像', en: 'Map Pin Avatar' },
+  'bm.bookmark_actions': { zh: '收藏操作', en: 'Bookmark actions' },
+  'avatar.picker_title': { zh: '地圖定位圖示', en: 'Map Marker Icon' },
   'avatar.picker_tooltip': { zh: '切換地圖上的定位圖示', en: 'Change the marker icon on the map' },
   'avatar.rabbit': { zh: '兔兔', en: 'Rabbit' },
   'avatar.dog': { zh: '小狗', en: 'Dog' },
@@ -424,7 +425,7 @@ export const STRINGS = {
   'bm.has_note': { zh: '有備註', en: 'Has note' },
   'bm.filter_all': { zh: '全部', en: 'All' },
   'bm.bookmark_actions_aria': { zh: '收藏動作', en: 'Bookmark actions' },
-  'bm.category_color': { zh: '分類顏色', en: 'Category' },
+  'bm.category_color': { zh: '分類', en: 'Category' },
   'panel.devices': { zh: '裝置', en: 'Devices' },
   'wifi.rsd_endpoint': { zh: 'RSD 位址', en: 'RSD endpoint' },
 
@@ -466,6 +467,70 @@ export const STRINGS = {
   // ── DDI mount overlay ───────────────────────
   'ddi.mounting_title': { zh: '首次設定裝置中', en: 'Preparing device' },
   'ddi.mounting_hint': { zh: '正在下載並掛載 Developer Disk Image(約 20MB),請保持網路連線,約需 10~30 秒...', en: 'Downloading and mounting the Developer Disk Image (~20MB). Please keep your internet connected. This takes 10–30 seconds...' },
+
+  // ── Shell (aria labels, buttons without visible text) ──
+  'shell.dock_aria': { zh: '模擬控制列', en: 'Simulation dock' },
+  'shell.modes_aria': { zh: '模擬模式切換', en: 'Simulation modes' },
+  'shell.status_aria': { zh: '連線狀態', en: 'Status' },
+  'shell.bookmark_save': { zh: '加入收藏', en: 'Save as bookmark' },
+  'map.zoom_in': { zh: '放大地圖', en: 'Zoom in' },
+  'map.zoom_out': { zh: '縮小地圖', en: 'Zoom out' },
+  'weather.temperature_aria': { zh: '天氣 {t}°C', en: 'Weather {t} degrees Celsius' },
+  'locate.fetch': { zh: '取得位置', en: 'Fetch location' },
+
+  // ── Panel hints (mode-specific subtitle copy) ──
+  'panel.teleport_hint': { zh: '在地圖上按右鍵設定目的地,或在搜尋欄輸入座標或地址。', en: 'Right-click the map to set a destination, or enter coordinates or an address in the search bar.' },
+  'panel.loop_hint': { zh: '依序串連多個路徑點,並在最後一點折返起點循環。', en: 'Connect waypoints in order and loop back to the start.' },
+  'panel.multi_stop_hint': { zh: '依序停靠每個路徑點,完成最後一站即結束。', en: 'Visit each waypoint in order and finish at the last stop.' },
+
+  // ── Waypoint chain (inline chips) ──────────────
+  'chain.aria_label': { zh: '路徑點列表', en: 'Waypoint chain' },
+  'chain.add_stop': { zh: '加入停靠點', en: 'Add stop' },
+  'chain.random_stop': { zh: '隨機停靠點', en: 'Random stop' },
+  'chain.loop': { zh: '循環', en: 'Loop' },
+  'chain.loop_back_tooltip': { zh: '返回起點形成循環', en: 'Loops back to start' },
+  'chain.remove': { zh: '移除', en: 'Remove' },
+
+  // ── ETA ─────────────────────────────────────────
+  'eta.progress_aria': { zh: '進度', en: 'Progress' },
+
+  // ── Bookmarks (new) ────────────────────────────
+  'bm.uncategorized': { zh: '未分類', en: 'Uncategorized' },
+  'bm.categories_count': { zh: '{n} 個分類', en: '{n} categories' },
+  'bm.bookmarks_count_label': { zh: '{n} 筆收藏', en: '{n} bookmarks' },
+  'bm.category_filter_aria': { zh: '分類篩選', en: 'Filter by category' },
+  'bm.delete_title': { zh: '刪除收藏', en: 'Delete bookmark' },
+  'bm.name_label': { zh: '名稱', en: 'Name' },
+  'bm.use_current_position': { zh: '使用目前位置', en: 'Use current position' },
+  'bm.category_add_placeholder': { zh: '輸入新分類名稱', en: 'Enter new category name' },
+  'bm.category_delete_confirm': { zh: '確定刪除分類「{name}」?此分類下的收藏將移至未分類。', en: 'Delete category "{name}"? Bookmarks in this category will move to uncategorized.' },
+  'bm.category_delete_title': { zh: '刪除分類', en: 'Delete category' },
+
+  // ── Routes (new) ───────────────────────────────
+  'route.delete_title': { zh: '刪除路線', en: 'Delete route' },
+  'route.gpx_export': { zh: '匯出為 GPX', en: 'Export as GPX' },
+  'route.actions_aria': { zh: '路線批次動作', en: 'Route bulk actions' },
+  'route.row_actions_aria': { zh: '此路線動作', en: 'Actions for this route' },
+  'route.pts_count': { zh: '{n} 個點', en: '{n} pts' },
+
+  // ── Device drawer (new) ────────────────────────
+  'device.drawer_title': { zh: '裝置管理', en: 'Devices' },
+  'device.popover_aria': { zh: '已配對裝置', en: 'Paired devices' },
+  'device.no_device_hint': { zh: '請透過 USB 連接 iPhone,或於下方「WiFi 無線連線」啟用 Tunnel。', en: 'Connect an iPhone via USB, or enable WiFi Tunnel below.' },
+  'device.tunnel_connected': { zh: 'WiFi Tunnel 已連線', en: 'Wi-Fi tunnel connected' },
+  'device.tunnel_failed': { zh: 'WiFi Tunnel 連線失敗', en: 'Wi-Fi tunnel failed' },
+  'device.unknown_error': { zh: '未知錯誤', en: 'Unknown error' },
+  'device.status_unsupported': { zh: '不支援', en: 'Unsupported' },
+  'device.status_ready': { zh: '待命', en: 'Ready' },
+
+  // ── Settings (new) ─────────────────────────────
+  'settings.language': { zh: '語言', en: 'Language' },
+  'settings.language_aria': { zh: '語言選擇', en: 'Language selection' },
+  'settings.choose_option': { zh: '選擇選項', en: 'Choose option' },
+  'settings.lat_placeholder': { zh: '緯度', en: 'Lat' },
+  'settings.lng_placeholder': { zh: '經度', en: 'Lng' },
+  'settings.cooldown_label': { zh: 'GPS 冷卻', en: 'GPS cooldown' },
+  'settings.toggle_cooldown_aria': { zh: '切換 GPS 冷卻', en: 'Toggle GPS cooldown' },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

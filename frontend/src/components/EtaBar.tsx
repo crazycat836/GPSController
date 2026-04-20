@@ -91,21 +91,16 @@ function EtaBar({
         // marker-pane 600, popup-pane 700). `--z-bar` (200) loses to
         // map-pane in the cascade so the pill renders behind tiles and
         // only flickers into view while Leaflet is mid-zoom.
+        // `glass-pill-medium` = 0.82 alpha / blur 20 / shadow-md — the
+        // dense-alpha pill variant from redesign/Home `.eta` spec. Shares
+        // the dock's 0.82 tone for visual consistency but keeps the
+        // lighter blur + shadow appropriate for a pill.
+        'glass-pill-medium',
         'fixed top-[76px] left-1/2 z-[var(--z-map-ui)]',
-        'border border-[var(--color-border)] rounded-full',
-        'shadow-[var(--shadow-md)]',
         'pl-5 pr-4 py-2.5 flex items-center gap-[18px]',
         'eta-bar-enter',
       ].join(' ')}
-      // Inline backdrop-filter so blur + saturate compose into a
-      // single declaration (Tailwind v4 arbitrary utility split them
-      // into two `backdrop-filter` rules, only the last survived).
-      style={{
-        background: 'rgba(19,20,22,0.88)',
-        backdropFilter: 'blur(20px) saturate(1.3)',
-        WebkitBackdropFilter: 'blur(20px) saturate(1.3)',
-        transformOrigin: 'top center',
-      }}
+      style={{ transformOrigin: 'top center' }}
     >
       {/* ETA — accent mono value */}
       <Stat label={t('eta.eta')} value={formatClock(aggEta)} accent />
@@ -113,7 +108,7 @@ function EtaBar({
       {/* Progress bar (160×4) with gradient fill + glow */}
       <div
         className="w-40 h-1 rounded-[2px] bg-white/[0.08] overflow-hidden relative shrink-0"
-        aria-label="Progress"
+        aria-label={t('eta.progress_aria')}
       >
         <div
           className="absolute inset-y-0 left-0 rounded-[2px] transition-[width] duration-500 ease-out"

@@ -5,7 +5,7 @@ import { MapPin } from 'lucide-react'
 // against any map tile beneath it.
 export default function Brand() {
   return (
-    <div data-fc="topbar.brand" className="glass-pill inline-flex items-center gap-2.5 h-11 pl-2 pr-4">
+    <div data-fc="topbar.brand" className="glass-pill inline-flex items-center gap-2.5 h-11 pl-[14px] pr-4">
       <div
         className="w-[22px] h-[22px] rounded-md grid place-items-center text-[var(--color-surface-0)]"
         style={{

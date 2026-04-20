@@ -37,3 +37,6 @@ Thumbs.db
 S__*.png
 S__*.jpg
 _geoport/
+
+# ── Design references (local only) ──────────────────
+.design-ref/

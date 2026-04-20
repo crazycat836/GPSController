@@ -93,7 +93,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
     },
     {
       id: 'gpx-export',
-      label: t('panel.route_gpx_export_tooltip'),
+      label: t('route.gpx_export'),
       icon: <Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
       onSelect: () => bm.handleGpxExport(route.id),
     },
@@ -131,7 +131,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
             <Save width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
             {t('generic.save')}
           </button>
-          <KebabMenu items={headerMenuItems} ariaLabel={t('panel.routes_count')} />
+          <KebabMenu items={headerMenuItems} ariaLabel={t('route.actions_aria')} />
         </div>
         <div className="seg-row seg-row-compact">
           <span className="text-[10px] text-[var(--color-text-3)]">
@@ -187,13 +187,13 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
                 }
                 meta={
                   <span className="font-mono opacity-75">
-                    {route.waypoints.length} pts
+                    {t('route.pts_count', { n: route.waypoints.length })}
                   </span>
                 }
                 trailing={
                   <KebabMenu
                     items={() => rowMenuItems(route)}
-                    ariaLabel={t('panel.route_load_tooltip')}
+                    ariaLabel={t('route.row_actions_aria')}
                   />
                 }
               />
@@ -204,7 +204,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
 
       <ConfirmDialog
         open={!!confirmDelete}
-        title={t('generic.delete')}
+        title={t('route.delete_title')}
         description={confirmDelete ? t('panel.route_delete_confirm', { name: confirmDelete.name }) : undefined}
         confirmLabel={t('generic.delete')}
         cancelLabel={t('generic.cancel')}

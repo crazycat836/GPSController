@@ -35,14 +35,14 @@ export default function MapControls({ onRecenter, onZoomIn, onZoomOut, canRecent
       <ToolbarButton
         variant="square"
         icon={<span className="text-lg font-light leading-none">+</span>}
-        label="Zoom in"
+        label={t('map.zoom_in')}
         onClick={onZoomIn}
       />
       <ToolbarDivider variant="compact" />
       <ToolbarButton
         variant="square"
         icon={<span className="text-lg font-light leading-none">&minus;</span>}
-        label="Zoom out"
+        label={t('map.zoom_out')}
         onClick={onZoomOut}
       />
     </VerticalToolbar>

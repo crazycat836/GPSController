@@ -82,8 +82,7 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
     }
   }
 
-  // ⌘K to focus. The visual highlight is owned by the CSS focused state
-  // (`.search-bar-focused`), not a one-shot animation.
+  // ⌘K to focus the search input.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -115,12 +114,7 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
   return (
     <div ref={containerRef} data-fc="topbar.search" className="relative">
       {/* Input */}
-      <div
-        className={[
-          'glass-pill flex items-center gap-2.5 px-4 h-11 w-[22rem] transition-[box-shadow,border-color] duration-200',
-          focused ? 'search-bar-focused' : '',
-        ].join(' ')}
-      >
+      <div className="glass-pill flex items-center gap-2.5 px-4 h-11 w-[380px]">
         <Search className="w-[14px] h-[14px] text-[var(--color-text-3)] shrink-0" />
         <input
           ref={inputRef}

@@ -115,7 +115,7 @@ export default function LocatePcButton({ onFlyToCoordinate, onPcLocated }: Locat
       list.push({
         id: 'fetch',
         icon: <Compass className="w-4 h-4" aria-hidden="true" />,
-        label: t('generic.loading'),
+        label: t('locate.fetch'),
         onSelect: () => { void request() },
       })
       return list
@@ -163,9 +163,10 @@ export default function LocatePcButton({ onFlyToCoordinate, onPcLocated }: Locat
       title={label}
       className={[
         'glass-pill w-11 h-11 grid place-items-center relative',
-        'text-[var(--color-text-1)] hover:bg-[var(--color-surface-hover)]',
+        'text-[var(--color-text-1)]',
+        'hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)]',
         'active:scale-95',
-        'transition-[transform,background] duration-150 cursor-pointer',
+        'transition-[transform,background,border-color] duration-150 cursor-pointer',
         'focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] outline-none',
       ].join(' ')}
     >

@@ -89,7 +89,7 @@
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
   --shadow-xl: 0 20px 60px rgba(12, 18, 40, 0.65);
-  --shadow-glow: 0 0 20px rgba(108, 140, 255, 0.2);
+  --shadow-glow: 0 0 24px rgba(108, 140, 255, 0.28);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
   /* ── Radius ─────────────────────────────────────────────────
@@ -266,10 +266,16 @@
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-sm);
 }
+/* Glass popover / modal over the map — heavy alpha for legibility,
+   strong border + large shadow. Matches SettingsMenu & DevicesPopover
+   recipes so all floating popups share one surface. Radius is applied
+   per-element since popovers use 16px and small dropdowns use 12px. */
 .surface-popup {
-  background: var(--color-surface-1);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-lg);
+  background: rgba(19, 20, 24, 0.96);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -973,7 +979,9 @@
 .bookmark-group { margin-bottom: 4px; }
 
 /* ── Toast / notification pill ───────────────────────────────
-   Unified floating notification style for toast, cooldown, pause. */
+   Unified floating notification style for toast, cooldown, pause.
+   Shares the canonical pill-medium glass (0.82 · blur 20 · sat 1.3)
+   and upgrades the shadow to `shadow-lg` for modal-tier presence. */
 .toast-pill {
   position: fixed;
   left: 50%;
@@ -987,13 +995,12 @@
   border-radius: var(--radius-lg);
   font-size: 13px;
   font-weight: 600;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
   box-shadow: var(--shadow-lg);
-  /* Dedicated keyframe that preserves the horizontal translateX(-50%)
-     — the generic fade-slide-down animation used to wipe that out and
-     anchor the toast's left edge at viewport-center, making it read as
-     offset right. */
+  /* Dedicated keyframe preserves the horizontal translateX(-50%) —
+     the generic fade-slide-down would wipe it out and anchor the
+     toast's left edge at viewport-center, making it read as offset. */
   animation: toast-pill-enter 200ms var(--ease-out-expo) both;
 }
 @keyframes toast-pill-enter {
@@ -1028,7 +1035,8 @@
 }
 
 .toast-pill-dark {
-  background: rgba(24, 26, 32, 0.88);
+  background: rgba(19, 20, 22, 0.82);
+  border: 1px solid var(--color-border);
   color: var(--color-text-1);
 }
 .toast-pill-warning {
@@ -1327,20 +1335,6 @@
   .route-line-flow { animation: none; }
 }
 
-/* Search bar focused / "input mode" highlight.
-   Tuned to read against busy map tiles: solid (not tinted) accent border,
-   a thick semi-opaque accent halo, and a wider glow extending into the
-   map. Together these give the bar a clear "active surface" silhouette
-   that doesn't depend on contrast against any single underlying color. */
-.search-bar-focused {
-  border-color: var(--color-accent) !important;
-  box-shadow:
-    0 0 0 1px var(--color-accent),
-    0 0 0 4px color-mix(in srgb, var(--color-accent) 45%, transparent),
-    0 0 28px -2px color-mix(in srgb, var(--color-accent) 60%, transparent),
-    0 6px 18px -4px rgba(0, 0, 0, 0.55);
-}
-
 /* Subtle idle motion for weather-chip glyphs. All animations stay on
    transform/opacity so they run on the compositor and honour reduced-motion. */
 .weather-anim-spin { animation: weather-spin 24s linear infinite; }
@@ -1422,6 +1416,13 @@
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+/* Variant that bakes translateX(-50%) into every frame so a single
+   element can be both viewport-centred (via left: 50%) and animated
+   without stacking transforms on a parent wrapper. Used by BottomDock. */
+@keyframes fade-slide-up-centered {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
 @keyframes fade-slide-down {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -1481,6 +1482,7 @@
 /* Enter animations */
 .anim-fade-in { animation: fade-in var(--duration-enter) var(--ease-out-expo) both; }
 .anim-fade-slide-up { animation: fade-slide-up var(--duration-enter) var(--ease-out-expo) both; }
+.anim-fade-slide-up-centered { animation: fade-slide-up-centered var(--duration-enter) var(--ease-out-expo) both; }
 .anim-fade-slide-down { animation: fade-slide-down var(--duration-enter) var(--ease-out-expo) both; }
 .anim-scale-in { animation: scale-in var(--duration-enter) var(--ease-out-expo) both; }
 .anim-scale-in-tl { animation: scale-in-tl 160ms var(--ease-out-expo) both; }
@@ -1499,63 +1501,63 @@
 
 
 /* ═══════════════════════════════════════════════════════════════
-   Glass pill — translucent floating surface
-   Used by the TopBar (brand / search / actions), status pair, and
-   any pill that floats on top of the map. Matches the redesign/Home
-   aesthetic: rgba(19,20,22,0.72) + backdrop-blur(20px) saturate(1.3).
+   Glass surfaces — unified floating chrome
+   Two canonical recipes, mirroring redesign/Home.html verbatim:
+     • glass-pill / glass-panel        → 0.72 · blur 20 · sat 1.3 · shadow-md
+     • glass-pill-strong / -panel-     → 0.82 · blur 24 · sat 1.4 · shadow-xl + inset hairline
+   `-pill` variants are fully rounded (brand · search · icon buttons ·
+   status chips · mode bar). `-panel` variants keep the same glass but
+   use radius-xl for rectangular surfaces (bottom dock).
    ═══════════════════════════════════════════════════════════════ */
 
-.glass-pill {
+.glass-pill,
+.glass-panel {
   background: rgba(19, 20, 22, 0.72);
   backdrop-filter: blur(20px) saturate(1.3);
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
   box-shadow: var(--shadow-md);
   color: var(--color-text-1);
 }
+.glass-pill  { border-radius: var(--radius-full); }
+.glass-panel { border-radius: var(--radius-xl); }
 
-.glass-pill-strong {
-  background: rgba(19, 20, 22, 0.82);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  box-shadow: var(--shadow-xl), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  color: var(--color-text-1);
-}
-
-/* ─── Status pair variants ──────────────────────────────────
-   The top-left status pair renders two visual weights — a primary
-   `device-pill` (weightier, 0.82 surface + shadow-md) and a
-   secondary `coord-chip` (lighter, 0.72 surface, subtler border,
-   no shadow). Mirroring redesign/Home's `.device-pill` vs
-   `.coord-chip` so the viewer reads the device status as the
-   primary row and the coord/flag/weather rows as supporting info,
-   not three identical chips. */
-.status-device-pill {
+/* Medium weight — denser alpha for small-text legibility (ETA bar /
+   onboarding chip) while keeping the lighter blur + shadow of a pill. */
+.glass-pill-medium,
+.glass-panel-medium {
   background: rgba(19, 20, 22, 0.82);
   backdrop-filter: blur(20px) saturate(1.3);
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
   box-shadow: var(--shadow-md);
   color: var(--color-text-1);
 }
-.status-coord-chip {
+.glass-pill-medium  { border-radius: var(--radius-full); }
+.glass-panel-medium { border-radius: var(--radius-xl); }
+
+/* Secondary-info chip — lighter blur + subtler border so coord /
+   weather rows sit below a device pill without competing. */
+.glass-chip {
   background: rgba(19, 20, 22, 0.72);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-full);
   color: var(--color-text-2);
-  /* Design spec stretches both coord chips to fill the status-pair
-     container so rows 2 and 3 share a width and the stack reads as a
-     single cohesive pair rather than two detached badges. */
-  width: 100%;
-  box-sizing: border-box;
-  justify-content: flex-start;
 }
+
+.glass-pill-strong,
+.glass-panel-strong {
+  background: rgba(19, 20, 22, 0.82);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-xl), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: var(--color-text-1);
+}
+.glass-pill-strong  { border-radius: var(--radius-full); }
+.glass-panel-strong { border-radius: var(--radius-xl); }
 
 
 /* ═══════════════════════════════════════════════════════════════

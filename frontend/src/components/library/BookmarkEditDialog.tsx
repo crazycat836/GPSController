@@ -163,7 +163,7 @@ export default function BookmarkEditDialog(props: Props) {
         <div className="flex flex-col gap-3 mt-2">
           {/* Name */}
           <label className="flex flex-col gap-1.5">
-            <span className="text-[11px] text-[var(--color-text-3)]">{t('bm.name_placeholder')}</span>
+            <span className="text-[11px] text-[var(--color-text-3)]">{t('bm.name_label')}</span>
             <input
               ref={nameRef}
               type="text"
@@ -187,7 +187,7 @@ export default function BookmarkEditDialog(props: Props) {
                 className="accent-[var(--color-accent)]"
               />
               <Crosshair width={ICON_SIZE.sm} height={ICON_SIZE.sm} className="text-[var(--color-text-3)]" />
-              <span>{t('bm.add_here')}</span>
+              <span>{t('bm.use_current_position')}</span>
               {!currentPosition && (
                 <span className="text-[10px] text-[var(--color-danger-text)] ml-auto">
                   {t('bm.no_position')}
@@ -243,7 +243,7 @@ export default function BookmarkEditDialog(props: Props) {
             >
               {categories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
-                  {cat.name === '預設' ? t('bm.default') : cat.name}
+                  {cat.name === '預設' || cat.name === 'Default' ? t('bm.default') : cat.name}
                 </option>
               ))}
             </select>

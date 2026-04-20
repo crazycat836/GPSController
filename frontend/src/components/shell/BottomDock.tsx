@@ -55,121 +55,111 @@ export default function BottomDock() {
   const speedToggleDisabled = sim.mode === SimMode.Teleport || sim.mode === SimMode.Joystick
 
   return (
+    // Single flattened layer: positioning + glass chrome + grid layout
+    // are co-located. Horizontal centring is baked into the
+    // `fade-slide-up-centered` keyframe (every frame carries
+    // `translate(-50%, …)`) so there's no parent wrapper and no
+    // translate-clobbering with the entrance animation.
+    // `glass-panel-strong` supplies the canonical 0.82 glass + radius-xl
+    // matching redesign/Home.html — no inline background/blur/shadow
+    // overrides here so the dock stays in lockstep with the mode bar.
     <div
       data-fc="bottom.dock"
+      aria-label={t('shell.dock_aria')}
       className={[
-        'fixed bottom-[72px] left-1/2 -translate-x-1/2 z-[var(--z-ui)]',
+        'glass-panel-strong',
+        'fixed bottom-[72px] left-1/2 z-[var(--z-ui)]',
         'max-w-[min(920px,calc(100vw-48px))] w-max',
+        'grid items-center gap-8 px-7 py-6',
+        'overflow-hidden',
+        'anim-fade-slide-up-centered',
       ].join(' ')}
-      aria-label="Simulation dock"
+      style={{ gridTemplateColumns: 'minmax(260px,1fr) auto' }}
     >
-      <div
-        className="overflow-hidden rounded-[20px] border border-[var(--color-border)] anim-fade-slide-up"
-        // Inline styles — Tailwind v4 was emitting backdrop-blur and
-        // backdrop-saturate as separate `backdrop-filter` declarations
-        // so only the last one survived, leaving the panel unevenly
-        // blended over bright map tiles. Writing both into the same
-        // declaration guarantees the glass treatment the design spec
-        // actually asked for. Opacity bumped 0.82 → 0.88 so the card
-        // stays cohesive against bright tile layers (OSM, Carto).
-        style={{
-          background: 'rgba(19,20,22,0.88)',
-          backdropFilter: 'blur(24px) saturate(1.4)',
-          WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
-          boxShadow: 'var(--shadow-xl), inset 0 1px 0 rgba(255,255,255,0.06)',
-        }}
-      >
-        {/* panel-body: meta grows, controls auto */}
-        <div
-          className="grid items-center gap-8 px-7 py-6"
-          style={{ gridTemplateColumns: 'minmax(260px,1fr) auto' }}
-        >
-          {/* panel-meta */}
-          <div className="min-w-0 flex flex-col">
-            <Eyebrow mode={sim.mode} t={t} />
-            <div className="text-[22px] font-semibold tracking-[-0.02em] text-[var(--color-text-1)] leading-[1.2] truncate">
-              {ctx.title}
-            </div>
-            <div className="text-[13px] text-[var(--color-text-2)] leading-[1.55] mt-1 max-w-[420px]">
-              {ctx.subtitle}
-            </div>
+      {/* panel-meta */}
+      <div className="min-w-0 flex flex-col">
+        <Eyebrow mode={sim.mode} t={t} />
+        <div className="text-[22px] font-semibold tracking-[-0.02em] text-[var(--color-text-1)] leading-[1.2] truncate">
+          {ctx.title}
+        </div>
+        <div className="text-[13px] text-[var(--color-text-2)] leading-[1.55] mt-1 max-w-[420px]">
+          {ctx.subtitle}
+        </div>
 
-            {/* Mode-specific inline content */}
-            {(sim.mode === SimMode.Teleport || sim.mode === SimMode.Navigate) && (
-              <RouteCard
-                mode={sim.mode}
-                currentPos={currentPos}
-                destPos={destPos}
-                onBookmark={handleAddBookmark}
-                t={t}
-              />
-            )}
+        {/* Mode-specific inline content */}
+        {(sim.mode === SimMode.Teleport || sim.mode === SimMode.Navigate) && (
+          <RouteCard
+            mode={sim.mode}
+            currentPos={currentPos}
+            destPos={destPos}
+            onBookmark={handleAddBookmark}
+            t={t}
+          />
+        )}
 
-            {(sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) && (
-              <div className="mt-3.5">
-                <WaypointChain
-                  points={ctx.chainPoints}
-                  loop={ctx.loop}
-                  onRemove={(id) => {
-                    const i = parseInt(id.replace('wp-', ''), 10)
-                    if (!Number.isNaN(i)) handleRemoveWaypoint(i)
-                  }}
-                  onAdd={() => { /* map right-click handles adding — this is a visual affordance only */ }}
-                  onRandom={handleGenerateRandomWaypoints}
-                />
-              </div>
-            )}
-
-            {sim.mode === SimMode.RandomWalk && (
-              <RadiusRow
-                value={randomWalkRadius}
-                onChange={setRandomWalkRadius}
-                t={t}
-              />
-            )}
-
-            {sim.mode === SimMode.Joystick && <JoyPreview t={t} />}
-          </div>
-
-          {/* panel-controls */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            {/* Speed is irrelevant in Teleport (instant) and Joystick
-                (direction-driven) modes — hide rather than dim so the
-                dock reads cleanly. */}
-            {!speedToggleDisabled && (
-              <SpeedToggle
-                presetActive={presetActive}
-                onPreset={(mode) => {
-                  sim.setMoveMode(mode)
-                  sim.setCustomSpeedKmh(null)
-                  sim.setSpeedMinKmh(null)
-                  sim.setSpeedMaxKmh(null)
-                }}
-                disabled={false}
-                t={t}
-              />
-            )}
-            <ActionGroup
-              mode={sim.mode}
-              isRunning={isRunning}
-              isPaused={isPaused}
-              destPos={destPos}
-              waypointCount={sim.waypoints.length}
-              onStart={handleStart}
-              onStop={handleStop}
-              onPause={handlePause}
-              onResume={handleResume}
-              onTeleport={handleTeleport}
-              t={t}
+        {(sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) && (
+          <div className="mt-3.5">
+            <WaypointChain
+              points={ctx.chainPoints}
+              loop={ctx.loop}
+              onRemove={(id) => {
+                const i = parseInt(id.replace('wp-', ''), 10)
+                if (!Number.isNaN(i)) handleRemoveWaypoint(i)
+              }}
+              onAdd={() => { /* map right-click handles adding — this is a visual affordance only */ }}
+              onRandom={handleGenerateRandomWaypoints}
             />
           </div>
-        </div>
+        )}
+
+        {sim.mode === SimMode.RandomWalk && (
+          <RadiusRow
+            value={randomWalkRadius}
+            onChange={setRandomWalkRadius}
+            t={t}
+          />
+        )}
+
+        {sim.mode === SimMode.Joystick && <JoyPreview t={t} />}
+      </div>
+
+      {/* panel-controls */}
+      <div className="flex items-center gap-2.5 shrink-0">
+        {/* Speed is irrelevant in Teleport (instant) and Joystick
+            (direction-driven) modes — hide rather than dim so the
+            dock reads cleanly. */}
+        {!speedToggleDisabled && (
+          <SpeedToggle
+            presetActive={presetActive}
+            onPreset={(mode) => {
+              sim.setMoveMode(mode)
+              sim.setCustomSpeedKmh(null)
+              sim.setSpeedMinKmh(null)
+              sim.setSpeedMaxKmh(null)
+            }}
+            disabled={false}
+            t={t}
+          />
+        )}
+        <ActionGroup
+          mode={sim.mode}
+          isRunning={isRunning}
+          isPaused={isPaused}
+          destPos={destPos}
+          waypointCount={sim.waypoints.length}
+          onStart={handleStart}
+          onStop={handleStop}
+          onPause={handlePause}
+          onResume={handleResume}
+          onTeleport={handleTeleport}
+          t={t}
+        />
       </div>
     </div>
   )
 }
 
-// ─── Eyebrow (mode label with accent bar) ─────────────────────
+// ─── Eyebrow (mode icon + label) ──────────────────────────────
 
 // Mirror the BottomModeBar icon mapping so the dock header and the mode
 // selector read as the same mode at a glance.
@@ -256,6 +246,7 @@ interface RoutePointProps {
 }
 
 function RoutePoint({ tone, label, coord, placeholder, onBookmark }: RoutePointProps) {
+  const t = useT()
   const empty = !coord
   const icPalette = tone === 'origin'
     ? { bg: 'rgba(52,211,153,0.14)', bd: 'rgba(52,211,153,0.25)', fg: '#6ee5b5' }
@@ -319,8 +310,8 @@ function RoutePoint({ tone, label, coord, placeholder, onBookmark }: RoutePointP
             'hover:text-[#ffb627] hover:bg-[rgba(255,182,39,0.08)]',
             'transition-colors duration-150 cursor-pointer',
           ].join(' ')}
-          aria-label="Save as bookmark"
-          title="Save as bookmark"
+          aria-label={t('shell.bookmark_save')}
+          title={t('shell.bookmark_save')}
         >
           <Star className="w-[13px] h-[13px]" />
         </button>
@@ -525,14 +516,10 @@ function ActionGroup(p: ActionGroupProps) {
     )
   }
 
-  // Running — Stop + Pause/Resume cluster.
+  // Running — Pause/Resume + Stop cluster (design order: Pause first, Stop last).
   if (p.isRunning) {
     return (
       <div className="flex gap-1.5">
-        <ActionBtn tone="danger" onClick={p.onStop}>
-          <Square className="w-[10px] h-[10px]" fill="currentColor" />
-          {p.t('generic.stop')}
-        </ActionBtn>
         {p.isPaused ? (
           <ActionBtn tone="accent" onClick={p.onResume}>
             <Play className="w-3 h-3" fill="currentColor" />
@@ -544,6 +531,10 @@ function ActionGroup(p: ActionGroupProps) {
             {p.t('generic.pause')}
           </ActionBtn>
         )}
+        <ActionBtn tone="danger" onClick={p.onStop}>
+          <Square className="w-[10px] h-[10px]" fill="currentColor" />
+          {p.t('generic.stop')}
+        </ActionBtn>
       </div>
     )
   }
@@ -632,8 +623,7 @@ function buildDockContext(
         title: destPos
           ? `${destPos.lat.toFixed(5)}°N · ${destPos.lng.toFixed(5)}°E`
           : t('teleport.add_destination'),
-        subtitle: t('panel.joystick_hint') // placeholder — use teleport-specific copy below
-          && '在地圖上按右鍵設定目的地,或用搜尋欄輸入座標 / 地址。',
+        subtitle: t('panel.teleport_hint'),
         chainPoints: [], loop: false,
       }
     case SimMode.Navigate: {
@@ -660,9 +650,9 @@ function buildDockContext(
         : ''
       return {
         title: count === 0
-          ? t('panel.waypoints_empty')
+          ? t('panel.waypoints_none')
           : `${t('mode.loop')} · ${count} ${t('panel.pts_short')}${distLabel}`,
-        subtitle: t('pause.loop'),
+        subtitle: count === 0 ? t('panel.waypoints_empty') : t('pause.loop'),
         chainPoints: toChain(wp),
         loop: true,
       }
@@ -675,9 +665,9 @@ function buildDockContext(
         : ''
       return {
         title: count === 0
-          ? t('panel.waypoints_empty')
+          ? t('panel.waypoints_none')
           : `${t('mode.multi_stop')} · ${count} ${t('panel.pts_short')}${distLabel}`,
-        subtitle: t('pause.multi_stop'),
+        subtitle: count === 0 ? t('panel.waypoints_empty') : t('pause.multi_stop'),
         chainPoints: toChain(wp),
         loop: false,
       }

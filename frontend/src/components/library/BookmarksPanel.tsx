@@ -42,7 +42,11 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
 
-  const displayCat = useCallback((name: string) => (name === '預設' ? t('bm.default') : name), [t])
+  const displayCat = useCallback((name: string) => (
+    name === '預設' || name === 'Default' ? t('bm.default') :
+    name === 'Uncategorized' ? t('bm.uncategorized') :
+    name
+  ), [t])
 
   const categoryMap = useMemo(() => {
     const m = new Map<string, BookmarkCategory>()
@@ -466,7 +470,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
           chips={chips}
           activeId={activeCategoryId}
           onChange={setActiveCategoryId}
-          ariaLabel={t('bm.manage_categories')}
+          ariaLabel={t('bm.category_filter_aria')}
           visibleCap={5}
         />
       )}
@@ -591,7 +595,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       {/* Delete confirmation */}
       <ConfirmDialog
         open={!!confirm}
-        title={t('generic.delete')}
+        title={t('bm.delete_title')}
         description={
           confirm?.kind === 'batch'
             ? t('bm.confirm_batch_delete', { n: confirm.ids.length })

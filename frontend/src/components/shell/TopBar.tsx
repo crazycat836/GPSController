@@ -16,7 +16,7 @@ export default function TopBar({ leftContent, centerContent, rightContent }: Top
   return (
     <div
       data-fc="topbar.root"
-      className="fixed top-3 left-3 right-3 z-[var(--z-ui)] grid items-center gap-3 pointer-events-none"
+      className="fixed top-4 left-4 right-4 z-[var(--z-ui)] grid items-center gap-2 pointer-events-none"
       style={{ gridTemplateColumns: '1fr auto 1fr' }}
     >
       <div className="pointer-events-auto flex items-center gap-2 justify-self-start min-w-0">

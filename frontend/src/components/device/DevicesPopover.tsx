@@ -89,13 +89,10 @@ export default function DevicesPopover({ anchor, onClose, onOpenManage }: Device
       data-fc="popover.devices"
       ref={panelRef}
       role="dialog"
-      aria-label={t('device.add_device')}
+      aria-label={t('device.popover_aria')}
       className={[
-        'fixed z-[var(--z-dropdown)] overflow-hidden',
-        'bg-[rgba(19,20,24,0.96)] backdrop-blur-[28px] backdrop-saturate-150',
-        '[-webkit-backdrop-filter:blur(28px)_saturate(1.5)]',
-        'border border-[var(--color-border-strong)] rounded-2xl',
-        'shadow-[0_24px_64px_rgba(0,0,0,0.55),0_2px_8px_rgba(0,0,0,0.3)]',
+        'surface-popup',
+        'fixed z-[var(--z-dropdown)] overflow-hidden rounded-2xl',
         'anim-scale-in-tl',
       ].join(' ')}
       style={{ width, left, top, transformOrigin: 'top right' }}
@@ -111,7 +108,7 @@ export default function DevicesPopover({ anchor, onClose, onOpenManage }: Device
           className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-accent-strong)] hover:text-[var(--color-accent)] transition-colors"
         >
           <SettingsIcon className="w-3 h-3" />
-          {t('bm.manage_categories').replace(t('bm.manage_categories').split(' ')[1] ?? '', 'Manage').trim() || 'Manage'}
+          {t('device.drawer_title')}
         </button>
       </div>
 
@@ -215,10 +212,10 @@ export default function DevicesPopover({ anchor, onClose, onOpenManage }: Device
                     }}
                   />
                   {unsupported
-                    ? 'Unsupported'
+                    ? t('device.status_unsupported')
                     : isSelected
                       ? t('device.chip_state_idle')
-                      : 'Ready'}
+                      : t('device.status_ready')}
                 </span>
               </button>
             )
@@ -265,7 +262,7 @@ export default function DevicesPopover({ anchor, onClose, onOpenManage }: Device
           style={{ background: 'var(--color-accent)', boxShadow: 'var(--shadow-glow)' }}
         >
           <Wifi className="w-3.5 h-3.5" />
-          {t('wifi.section_title')}
+          {t('device.drawer_title')}
         </button>
       </div>
 

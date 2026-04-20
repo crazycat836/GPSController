@@ -9,6 +9,7 @@ import {
   CloudLightning,
 } from 'lucide-react'
 import type { WeatherIcon, WeatherSnapshot } from '../../hooks/useWeather'
+import { useT } from '../../i18n'
 
 interface WeatherChipProps {
   snapshot: WeatherSnapshot | null
@@ -38,17 +39,19 @@ const ICON_MOTION: Record<WeatherIcon, string> = {
 }
 
 export default function WeatherChip({ snapshot, size = 14 }: WeatherChipProps) {
+  const t = useT()
   if (!snapshot) return null
   const Icon = ICON_MAP[snapshot.icon] ?? Cloud
   const motionCls = ICON_MOTION[snapshot.icon] ?? ''
+  const temp = Math.round(snapshot.temperatureC)
   return (
     <span
       className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-2)]"
-      title={`${Math.round(snapshot.temperatureC)}°C`}
-      aria-label={`Weather ${Math.round(snapshot.temperatureC)} degrees Celsius`}
+      title={`${temp}°C`}
+      aria-label={t('weather.temperature_aria', { t: temp })}
     >
       <Icon className={`weather-chip-icon ${motionCls}`} style={{ width: size, height: size }} />
-      <span className="font-mono">{Math.round(snapshot.temperatureC)}°</span>
+      <span className="font-mono">{temp}°</span>
     </span>
   )
 }

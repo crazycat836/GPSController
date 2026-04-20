@@ -109,11 +109,11 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
       await device.startWifiTunnel(tunnelIp.trim(), parseInt(tunnelPort) || DEFAULT_TUNNEL_PORT)
       localStorage.setItem(STORAGE_KEYS.tunnelIp, tunnelIp.trim())
       localStorage.setItem(STORAGE_KEYS.tunnelPort, tunnelPort || String(DEFAULT_TUNNEL_PORT))
-      showToast('Wi-Fi tunnel connected')
+      showToast(t('device.tunnel_connected'))
     } catch (err: unknown) {
-      setTunnelError(err instanceof Error ? err.message : 'Wi-Fi tunnel failed')
+      setTunnelError(err instanceof Error ? err.message : t('device.tunnel_failed'))
     } finally { setTunnelConnecting(false) }
-  }, [tunnelIp, tunnelPort, device, showToast])
+  }, [tunnelIp, tunnelPort, device, showToast, t])
 
   const handleRepair = useCallback(async () => {
     setRepairState('running')
@@ -124,9 +124,9 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
       setRepairMessage(`${res.name || 'iPhone'} (iOS ${res.ios_version})`)
     } catch (err: unknown) {
       setRepairState('failed')
-      setRepairMessage(err instanceof Error ? err.message : 'Unknown error')
+      setRepairMessage(err instanceof Error ? err.message : t('device.unknown_error'))
     }
-  }, [])
+  }, [t])
 
   const closeRepairDialog = useCallback(() => {
     if (repairState !== 'running') setShowRepairConfirm(false)
@@ -176,7 +176,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
         data-fc="drawer.device"
         open={open}
         onClose={onClose}
-        title="Devices"
+        title={t('device.drawer_title')}
         icon={<Smartphone className="w-4 h-4" />}
         side="left"
         width="w-[min(440px,92vw)]"
@@ -194,7 +194,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
             <EmptyState
               icon={<Smartphone width={ICON_SIZE.lg} height={ICON_SIZE.lg} />}
               title={t('device.no_device')}
-              help={t('wifi.tunnel_admin_hint')}
+              help={t('device.no_device_hint')}
             />
           ) : (
             <div className="flex flex-col gap-1.5">
@@ -261,7 +261,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                 let statusLabelColor = 'var(--color-text-3)'
                 if (unsupported) {
                   statusDotColor = 'var(--color-danger)'
-                  statusLabel = 'Unsupported'
+                  statusLabel = t('device.status_unsupported')
                   statusLabelColor = 'var(--color-error-text)'
                 } else if (isSelected) {
                   statusDotColor = 'var(--color-success-text)'
@@ -269,7 +269,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                   statusLabelColor = 'var(--color-success-text)'
                 } else {
                   statusDotColor = 'rgba(255,255,255,0.35)'
-                  statusLabel = 'Ready'
+                  statusLabel = t('device.status_ready')
                   statusLabelColor = 'var(--color-text-3)'
                 }
 
@@ -538,7 +538,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                 )}
               </>
             }
-            confirmLabel={t('wifi.repair_ok')}
+            confirmLabel={t('generic.retry')}
             cancelLabel={t('wifi.repair_cancel')}
             onConfirm={handleRepair}
             onCancel={closeRepairDialog}

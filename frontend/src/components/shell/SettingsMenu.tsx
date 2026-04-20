@@ -136,7 +136,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
     try {
       await api.setInitialPosition(lat, lng)
       setInitialOpen(false)
-      showToast(t('status.set_initial') + ` (${lat.toFixed(5)}, ${lng.toFixed(5)})`)
+      showToast(t('status.set_initial_saved', { lat: lat.toFixed(5), lng: lng.toFixed(5) }))
     } catch (e: unknown) {
       setInitialError(e instanceof Error ? e.message : 'error')
     } finally {
@@ -154,11 +154,9 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
           data-fc="popover.settings"
           ref={popoverRef}
           className={[
+            'surface-popup',
             'fixed top-16 right-3 w-[300px] z-[var(--z-dropdown)] overflow-hidden',
-            'bg-[rgba(19,20,24,0.96)] backdrop-blur-[28px] backdrop-saturate-150',
-            '[-webkit-backdrop-filter:blur(28px)_saturate(1.5)]',
-            'border border-[var(--color-border-strong)] rounded-2xl',
-            'shadow-[0_24px_64px_rgba(0,0,0,0.55),0_2px_8px_rgba(0,0,0,0.3)]',
+            'rounded-2xl',
             'anim-scale-in-tl',
           ].join(' ')}
           style={{ transformOrigin: 'top right' }}
@@ -189,7 +187,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
           <Section label={t('settings.preferences')}>
             <SettingsRow
               icon={<Timer className="w-[14px] h-[14px]" />}
-              label={cooldownEnabled ? t('status.cooldown_enabled') : t('status.cooldown_disabled')}
+              label={t('settings.cooldown_label')}
               disabled={dualDevice}
               title={dualDevice ? t('status.cooldown_dual_disabled') : t('status.cooldown_tooltip')}
               trailing={
@@ -202,7 +200,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
                   <Toggle
                     checked={cooldownEnabled && !dualDevice}
                     onChange={(v) => { if (!dualDevice) handleToggleCooldown(v) }}
-                    ariaLabel="Toggle GPS cooldown"
+                    ariaLabel={t('settings.toggle_cooldown_aria')}
                   />
                 </div>
               }
@@ -210,9 +208,9 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
 
             <ChoiceRow
               icon={<Languages className="w-[14px] h-[14px]" />}
-              label={lang === 'zh' ? '語言' : 'Language'}
+              label={t('settings.language')}
               value={lang === 'zh' ? '中文' : 'English'}
-              ariaLabel="Language / 語言"
+              ariaLabel={t('settings.language_aria')}
               items={[
                 { id: 'zh', label: '中文', onSelect: () => setLang('zh' as Lang) },
                 { id: 'en', label: 'English', onSelect: () => setLang('en' as Lang) },
@@ -343,7 +341,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
                   if (e.key === 'Escape' && !initialBusy) setInitialOpen(false)
                 }}
                 autoFocus
-                placeholder="Lat"
+                placeholder={t('settings.lat_placeholder')}
                 className={[
                   'flex-1 px-3 py-2 rounded-lg font-mono text-sm',
                   'bg-black/30 border border-[var(--color-border)]',
@@ -359,7 +357,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
                   if (e.key === 'Enter' && !e.nativeEvent.isComposing && !initialBusy) handleInitialSave()
                   if (e.key === 'Escape' && !initialBusy) setInitialOpen(false)
                 }}
-                placeholder="Lng"
+                placeholder={t('settings.lng_placeholder')}
                 className={[
                   'flex-1 px-3 py-2 rounded-lg font-mono text-sm',
                   'bg-black/30 border border-[var(--color-border)]',
@@ -477,7 +475,7 @@ function ChoiceRow({ icon, label, value, items, ariaLabel }: ChoiceRowProps) {
   return (
     <KebabMenu
       items={items}
-      ariaLabel={ariaLabel ?? (typeof label === 'string' ? label : 'Choose option')}
+      ariaLabel={ariaLabel ?? (typeof label === 'string' ? label : undefined)}
       align="end"
       trigger={
         <button
