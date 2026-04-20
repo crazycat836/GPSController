@@ -267,6 +267,19 @@ export const STRINGS = {
   'err.tunnel_lost': { zh: 'WiFi Tunnel 連線中斷,請重新建立', en: 'Wi-Fi tunnel dropped, please reconnect' },
   'err.cooldown_active': { zh: '冷卻中,請等待後再跳點', en: 'Cooldown active, wait before teleporting' },
 
+  // ── Start-from-cached confirm dialog ────────
+  // Shown when the user triggers a movement action (navigate / multi-stop /
+  // random-walk) and the only position we have is a rehydrated cache from
+  // persisted settings — the backend engine hasn't been told about it yet.
+  // Moving the device is a real side effect, so we require explicit consent.
+  'sync.confirm.title': { zh: '從上次位置開始？', en: 'Start from last position?' },
+  'sync.confirm.body': {
+    zh: '目前顯示的是上次的位置 ({coord})。繼續會先將裝置跳點到該座標,然後開始此動作。',
+    en: 'The shown pin is the last remembered position ({coord}). Continuing will teleport the device to that coordinate, then start the action.',
+  },
+  'sync.confirm.ok': { zh: '跳點並開始', en: 'Teleport & start' },
+  'sync.confirm.cancel': { zh: '取消', en: 'Cancel' },
+
   // ── Teleport panel ──────────────────────────
   'teleport.route': { zh: '路線', en: 'Route' },
   'teleport.my_location': { zh: '我的位置', en: 'My location' },

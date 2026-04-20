@@ -79,12 +79,18 @@ export default function BookmarkEditDialog(props: Props) {
   const nameRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
   const wasOpenRef = useRef(false)
+  // Edge-detector for the "use current position" toggle. We re-snapshot
+  // from `currentPosition` only on the OFF→ON transition; starts matching
+  // the initial `useCurrent` so the first render after open doesn't
+  // spuriously re-grab the live position.
+  const prevUseCurrentRef = useRef(true)
 
   // Initialize form state once per open transition. We deliberately ignore
   // `currentPosition` / `initial` / `firstCategory` after the dialog is
   // already open — otherwise a live position update mid-edit would clobber
-  // what the user has typed. The "Use current position" toggle's separate
-  // effect below handles live-position sync while the checkbox is on.
+  // what the user has typed. "Use current position" now behaves as a
+  // snapshot (see below): latStr / lngStr are the sole source of truth for
+  // both the rendered input and the submitted value.
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       wasOpenRef.current = true
@@ -95,6 +101,7 @@ export default function BookmarkEditDialog(props: Props) {
         setLngStr(formatCoord(initial.lng))
         setCategoryId(initial.categoryId || firstCategory)
         setNote(initial.note ?? '')
+        prevUseCurrentRef.current = false
       } else {
         setName('')
         const canUseCurrent = !!currentPosition
@@ -103,6 +110,7 @@ export default function BookmarkEditDialog(props: Props) {
         setLngStr(canUseCurrent ? formatCoord(currentPosition!.lng) : '')
         setCategoryId(firstCategory)
         setNote('')
+        prevUseCurrentRef.current = canUseCurrent
       }
       const f = setTimeout(() => nameRef.current?.focus(), 60)
       return () => clearTimeout(f)
@@ -110,17 +118,28 @@ export default function BookmarkEditDialog(props: Props) {
     if (!open) wasOpenRef.current = false
   }, [open, initial, firstCategory, currentPosition])
 
-  // When toggling "Use current position" on, lock the inputs to live pos.
+  // Snapshot — not live-track — the coord when the user toggles
+  // "Use current position" ON. If we tracked live, a running simulation
+  // (WS position_update at ~10Hz) would move the saved coord hundreds of
+  // metres between dialog-open and pressing "Add": the user sees one
+  // coord in the input but a different one lands in the bookmark. Snap
+  // only on the OFF→ON edge; toggling OFF preserves the current text so
+  // the user can hand-edit.
   useEffect(() => {
     if (mode === 'edit') return
-    if (useCurrent && currentPosition) {
+    const wasOn = prevUseCurrentRef.current
+    prevUseCurrentRef.current = useCurrent
+    if (!wasOn && useCurrent && currentPosition) {
       setLatStr(formatCoord(currentPosition.lat))
       setLngStr(formatCoord(currentPosition.lng))
     }
   }, [useCurrent, currentPosition, mode])
 
-  const effectiveLat = useCurrent && currentPosition ? currentPosition.lat : parseFloat(latStr)
-  const effectiveLng = useCurrent && currentPosition ? currentPosition.lng : parseFloat(lngStr)
+  // Single source of truth: whatever is in the (disabled-when-locked)
+  // inputs is what the bookmark gets. `formatCoord` rounds to 6 decimals
+  // (~11cm), which is well beyond a bookmark's useful precision.
+  const effectiveLat = parseFloat(latStr)
+  const effectiveLng = parseFloat(lngStr)
   const latValid = Number.isFinite(effectiveLat) && effectiveLat >= -90 && effectiveLat <= 90
   const lngValid = Number.isFinite(effectiveLng) && effectiveLng >= -180 && effectiveLng <= 180
   const canSubmit = name.trim().length > 0 && latValid && lngValid

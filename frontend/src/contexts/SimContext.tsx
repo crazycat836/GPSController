@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useSimulation, SimMode, MoveMode } from '../hooks/useSimulation'
 import type { WsSubscribe, FanoutOutcome } from '../hooks/useSimulation'
 import { useJoystick } from '../hooks/useJoystick'
@@ -7,6 +7,7 @@ import { DEFAULT_RANDOM_WALK_RADIUS, DEFAULT_WP_GEN_RADIUS } from '../lib/consta
 import { useDeviceContext } from './DeviceContext'
 import { useToastContext } from './ToastContext'
 import { useT } from '../i18n'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 // Re-export for consumers
 export { SimMode, MoveMode }
@@ -106,6 +107,68 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
 
   const [cooldown, setCooldown] = useState(0)
   const [cooldownEnabled, setCooldownEnabled] = useState(false)
+
+  // ── Start-from-cached-position confirmation ────────────────────────
+  // After a server restart the UI rehydrates the last-known position
+  // purely for display; the backend engine is intentionally left idle
+  // so it doesn't stomp on the phone's real GPS. The first movement
+  // action (navigate / multi-stop / random-walk) therefore needs the
+  // user's explicit consent before we teleport. `pendingSync` holds the
+  // action to resume once the user confirms; it's null when no prompt
+  // is active. Using a ref for the callback keeps the promise resolver
+  // stable across re-renders.
+  const pendingSyncRef = useRef<{
+    position: { lat: number; lng: number }
+    resolve: (ok: boolean) => void
+  } | null>(null)
+  const [syncPrompt, setSyncPrompt] = useState<{
+    position: { lat: number; lng: number }
+  } | null>(null)
+
+  // Returns a promise that resolves to true when the user gives consent
+  // (backend is synced), false if they cancel. Resolves true immediately
+  // when no prompt is needed.
+  const confirmStartFromCached = useCallback(async (): Promise<boolean> => {
+    // Already synced this session (live position or a prior teleport) —
+    // no prompt, no side effect.
+    if (sim.backendPositionSynced) return true
+    // No cached position to start from — let the action surface its
+    // own "no position" error; prompting here wouldn't help.
+    if (!sim.currentPosition) return true
+    // Group mode (2+ devices) runs its own preSyncStart across all
+    // engines. Prompting there would need a multi-device teleport path;
+    // single-device is the only case this UX currently covers.
+    const udids = device.connectedDevices.map((d) => d.udid)
+    if (udids.length >= 2) return true
+
+    const position = { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng }
+    return new Promise<boolean>((resolve) => {
+      pendingSyncRef.current = { position, resolve }
+      setSyncPrompt({ position })
+    })
+  }, [sim, device.connectedDevices])
+
+  const handleSyncConfirm = useCallback(async () => {
+    const pending = pendingSyncRef.current
+    if (!pending) return
+    try {
+      await sim.teleport(pending.position.lat, pending.position.lng)
+      pending.resolve(true)
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : t('err.no_position'))
+      pending.resolve(false)
+    } finally {
+      pendingSyncRef.current = null
+      setSyncPrompt(null)
+    }
+  }, [sim, showToast, t])
+
+  const handleSyncCancel = useCallback(() => {
+    const pending = pendingSyncRef.current
+    if (pending) pending.resolve(false)
+    pendingSyncRef.current = null
+    setSyncPrompt(null)
+  }, [])
   const [randomWalkRadius, setRandomWalkRadius] = useState(DEFAULT_RANDOM_WALK_RADIUS)
   const [wpGenRadius, setWpGenRadius] = useState(DEFAULT_WP_GEN_RADIUS)
   const [wpGenCount, setWpGenCount] = useState(5)
@@ -269,12 +332,13 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
         const outcome = await sim.navigateAll(udids, lat, lng)
         showToast(toastForFanout(t, t('mode.navigate'), outcome, device.connectedDevices))
       } else {
+        if (!(await confirmStartFromCached())) return
         await sim.navigate(lat, lng)
       }
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : t('err.no_position'))
     }
-  }, [sim, device, t, showToast])
+  }, [sim, device, t, showToast, confirmStartFromCached])
 
   const handleAddWaypoint = useCallback((lat: number, lng: number) => {
     const nlat = clampLat(lat)
@@ -317,10 +381,11 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
         const outcome = await sim.multiStopAll(udids, route, 0, false)
         showToast(toastForFanout(t, t('mode.multi_stop'), outcome, device.connectedDevices))
       } else {
+        if (!(await confirmStartFromCached())) return
         sim.multiStop(route, 0, false)
       }
     }
-  }, [sim, device, showToast, t])
+  }, [sim, device, showToast, t, confirmStartFromCached])
 
   const handleStart = useCallback(async () => {
     const udids = device.connectedDevices.map((d) => d.udid)
@@ -340,7 +405,11 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
         const outcome = await sim.randomWalkAll(udids, sim.currentPosition, randomWalkRadius)
         showToast(toastForFanout(t, t('mode.random_walk'), outcome, device.connectedDevices))
       } else {
-        sim.randomWalk(sim.currentPosition, randomWalkRadius)
+        if (!(await confirmStartFromCached())) return
+        // Re-read position after the confirm path has resolved — teleport
+        // above updates currentPosition to the confirmed coordinate.
+        const pos = sim.currentPosition
+        if (pos) sim.randomWalk(pos, randomWalkRadius)
       }
     } else if (sim.mode === SimMode.Navigate) {
       const dest = sim.destination
@@ -352,12 +421,13 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
         const outcome = await sim.navigateAll(udids, dest.lat, dest.lng)
         showToast(toastForFanout(t, t('mode.navigate'), outcome, device.connectedDevices))
       } else {
+        if (!(await confirmStartFromCached())) return
         await sim.navigate(dest.lat, dest.lng)
       }
     } else if (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) {
       handleStartWaypointRoute()
     }
-  }, [sim, device, randomWalkRadius, handleStartWaypointRoute, showToast, t])
+  }, [sim, device, randomWalkRadius, handleStartWaypointRoute, showToast, t, confirmStartFromCached])
 
   const handleStop = useCallback(async () => {
     const udids = device.connectedDevices.map((d) => d.udid)
@@ -506,6 +576,17 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
   return (
     <SimContext.Provider value={value}>
       {children}
+      <ConfirmDialog
+        open={syncPrompt != null}
+        title={t('sync.confirm.title')}
+        description={syncPrompt ? t('sync.confirm.body', {
+          coord: `${syncPrompt.position.lat.toFixed(5)}, ${syncPrompt.position.lng.toFixed(5)}`,
+        }) : ''}
+        confirmLabel={t('sync.confirm.ok')}
+        cancelLabel={t('sync.confirm.cancel')}
+        onConfirm={handleSyncConfirm}
+        onCancel={handleSyncCancel}
+      />
     </SimContext.Provider>
   )
 }

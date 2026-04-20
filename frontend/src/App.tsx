@@ -255,6 +255,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
           runtimes={sim.runtimes}
           devices={device.connectedDevices}
           currentPosition={simCtx.currentPos}
+          currentPositionUnsynced={!!simCtx.currentPos && !sim.backendPositionSynced}
           destination={simCtx.destPos}
           waypoints={sim.waypoints.map((w: any, i: number) => ({ ...w, index: i }))}
           routePath={sim.routePath}

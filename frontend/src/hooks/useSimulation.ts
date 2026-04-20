@@ -125,6 +125,14 @@ export function useSimulation(subscribe?: WsSubscribe) {
     speed: 0,
   })
   const [currentPosition, setCurrentPosition] = useState<LatLng | null>(null)
+  // True once the backend engine is known to hold the same position the UI is
+  // showing — i.e. a teleport/navigate/etc. has succeeded this session, an
+  // initial `getStatus()` returned a live position, or a WS position_update
+  // arrived. False immediately after startup when the pin is purely a
+  // rehydrated cache from persisted settings (backend engine is idle to
+  // preserve the phone's real GPS). The UI uses this flag to dim the cached
+  // pin and to prompt before the first movement action.
+  const [backendPositionSynced, setBackendPositionSynced] = useState(false)
   const [destination, setDestination] = useState<LatLng | null>(null)
   const [progress, setProgress] = useState(0)
   const [eta, setEta] = useState<number | null>(null)
@@ -281,6 +289,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
         const { lat, lng } = wsMessage.data
         if (typeof lat === 'number' && typeof lng === 'number') {
           setCurrentPosition({ lat, lng })
+          // Live position means the backend engine is now in sync with the UI.
+          setBackendPositionSynced(true)
         }
         if (wsMessage.data.progress != null) {
           setProgress(wsMessage.data.progress)
@@ -462,6 +472,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
     try {
       const res = await api.teleport(lat, lng)
       setCurrentPosition({ lat, lng })
+      setBackendPositionSynced(true)
       setDestination(null)
       setProgress(0)
       setEta(null)
@@ -634,6 +645,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
       // leave mode as-is; status drives running state
       setStatus({ running: false, paused: false, speed: 0 })
       setCurrentPosition(null)
+      setBackendPositionSynced(false)
       setDestination(null)
       setProgress(0)
       setEta(null)
@@ -677,6 +689,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
       if (res.position) {
         hadLivePosition = true
         setCurrentPosition({ lat: res.position.lat, lng: res.position.lng })
+        setBackendPositionSynced(true)
       }
       if (res.mode) {
         const mapped = stateToMode(res.mode)
@@ -831,6 +844,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
     status,
     currentPosition,
     setCurrentPosition,
+    backendPositionSynced,
+    setBackendPositionSynced,
     destination,
     setDestination,
     progress,

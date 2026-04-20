@@ -36,6 +36,11 @@ import type { DeviceInfo } from '../hooks/useDevice';
 
 interface MapViewProps {
   currentPosition: Position | null;
+  /** When true, renders the current-position pin in a "cached / not yet live"
+   *  style (dashed outline, no pulse, no glow). Set while the frontend has
+   *  rehydrated a last-known position from persisted settings but the
+   *  backend engine has not yet been told about it this session. */
+  currentPositionUnsynced?: boolean;
   destination: Position | null;
   waypoints: Waypoint[];
   routePath: Position[];
@@ -74,6 +79,7 @@ import MapControls from './shell/MapControls';
 
 function MapView({
   currentPosition,
+  currentPositionUnsynced = false,
   destination,
   waypoints,
   routePath,
@@ -354,15 +360,21 @@ function MapView({
 
     const latlng: L.LatLngExpression = [currentPosition.lat, currentPosition.lng];
 
+    const pinClasses = currentPositionUnsynced
+      ? 'map-pin-current map-pin-current--unsynced'
+      : 'map-pin-current';
     const icon = L.divIcon({
       className: 'current-pos-marker',
-      html: `<div data-fc="map.position-marker" class="map-pin-current"></div>`,
+      html: `<div data-fc="map.position-marker" class="${pinClasses}"></div>`,
       iconSize: [44, 44],
       iconAnchor: [22, 22],
     });
 
     if (currentMarkerRef.current) {
       (currentMarkerRef.current as any).setLatLng(latlng);
+      // Swap the icon so the pin reflects the current synced/unsynced state
+      // without recreating the Leaflet marker (preserves tooltip binding).
+      (currentMarkerRef.current as any).setIcon(icon);
       (currentMarkerRef.current as any).setTooltipContent(
         `${currentPosition.lat.toFixed(6)}, ${currentPosition.lng.toFixed(6)}`
       );
@@ -393,7 +405,7 @@ function MapView({
       }
     }
     prevPositionRef.current = currentPosition;
-  }, [currentPosition, dualMode]);
+  }, [currentPosition, currentPositionUnsynced, dualMode]);
 
   // PC geolocation marker — separate from the virtual GPS avatar. Added /
   // updated / removed in response to the LocatePcButton feature so users

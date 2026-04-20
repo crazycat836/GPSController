@@ -362,7 +362,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
           </span>
         )}
         <span className="font-mono truncate">
-          {b.lat.toFixed(4)}°, {b.lng.toFixed(4)}°
+          {b.lat.toFixed(6)}°, {b.lng.toFixed(6)}°
         </span>
         {b.country_code && (
           <>
