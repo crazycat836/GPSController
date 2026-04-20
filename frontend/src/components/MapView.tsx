@@ -309,7 +309,7 @@ function MapView({
   }, []);
 
   // Update current position marker — move existing marker instead of recreating.
-  // When currentPosition becomes null (e.g. after 一鍵還原) remove the marker.
+  // When currentPosition becomes null (e.g. after Settings → 清除虛擬定位) remove the marker.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
