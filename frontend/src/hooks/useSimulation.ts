@@ -673,7 +673,9 @@ export function useSimulation(subscribe?: WsSubscribe) {
     if (initialFetched.current) return
     initialFetched.current = true
     api.getStatus().then((res) => {
+      let hadLivePosition = false
       if (res.position) {
+        hadLivePosition = true
         setCurrentPosition({ lat: res.position.lat, lng: res.position.lng })
       }
       if (res.mode) {
@@ -686,6 +688,18 @@ export function useSimulation(subscribe?: WsSubscribe) {
           paused: !!res.paused,
           speed: res.speed ?? 0,
         })
+      }
+      // Fallback: on a fresh server restart the engine is intentionally
+      // left idle (no position pushed to the iPhone). Rehydrate the last
+      // known position from persisted settings so the pin shows up
+      // immediately instead of the empty "尚未取得目前位置" state. A real
+      // position_update from the device supersedes this automatically.
+      if (!hadLivePosition) {
+        api.getLastDevicePosition().then(({ position }) => {
+          if (position) {
+            setCurrentPosition((prev) => prev ?? { lat: position.lat, lng: position.lng })
+          }
+        }).catch(() => { /* ignore — just start empty */ })
       }
     }).catch(() => {
       // backend may not be running yet

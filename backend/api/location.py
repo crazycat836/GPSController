@@ -475,3 +475,17 @@ async def set_initial_position(req: _InitialPosRequest):
         app_state._initial_map_position = {"lat": float(req.lat), "lng": float(req.lng)}
     app_state.save_settings()
     return {"position": app_state._initial_map_position}
+
+
+@router.get("/last-device-position", tags=["settings"])
+async def get_last_device_position():
+    """Last position the device was at before the previous shutdown / crash.
+
+    Used by the frontend on startup to pre-render the current-position pin
+    instead of the empty "尚未取得目前位置" state. Returning this does NOT
+    push the coordinate to the iPhone — the simulation engine stays idle
+    until the user explicitly teleports / navigates (preserves the phone's
+    real GPS on connect).
+    """
+    from main import app_state
+    return {"position": app_state._last_position}

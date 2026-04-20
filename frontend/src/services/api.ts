@@ -265,6 +265,11 @@ export const getInitialPosition = () =>
 export const setInitialPosition = (lat: number | null, lng: number | null) =>
   request<{ position: { lat: number; lng: number } | null }>('PUT', '/api/location/settings/initial-position', { lat, lng })
 
+// Last device position before the previous shutdown — used to pre-render
+// the current-position pin on startup without pushing anything to the iPhone.
+export const getLastDevicePosition = () =>
+  request<{ position: { lat: number; lng: number } | null }>('GET', '/api/location/last-device-position')
+
 export const openLog = () => request<{ status: string; path: string }>('POST', '/api/system/open-log')
 export const openLogFolder = () => request<{ status: string; path: string }>('POST', '/api/system/open-log-folder')
 

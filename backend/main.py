@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -95,6 +96,10 @@ class AppState:
         # User-chosen initial map center (persisted between launches). When
         # None, the frontend falls back to a hardcoded default.
         self._initial_map_position: dict | None = None
+        # Throttle disk writes for high-frequency position_update events
+        # (~10 Hz during navigation) — persist at most once every 2s.
+        self._last_save_time: float = 0.0
+        self._save_interval: float = 2.0
         self._load_settings()
 
     def _load_settings(self):
@@ -133,6 +138,13 @@ class AppState:
 
     def update_last_position(self, lat: float, lng: float):
         self._last_position = {"lat": lat, "lng": lng}
+        # Throttled persistence so the position survives a server crash /
+        # restart. Without this, save_settings() only runs on graceful
+        # shutdown and any teleport / navigation state is lost.
+        now = time.monotonic()
+        if now - self._last_save_time >= self._save_interval:
+            self._last_save_time = now
+            self.save_settings()
 
     @property
     def simulation_engine(self):
