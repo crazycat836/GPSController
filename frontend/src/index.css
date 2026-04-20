@@ -1249,36 +1249,32 @@
   border-radius: 50%;
   object-fit: cover;
 }
-/* Paint-containment wrapper for marker pulse rings. Keeps the box-shadow
-   spread's paint damage inside this box so any backdrop-filter UI above
-   the map (search bar, BottomDock, popovers) never has to re-sample in
-   response to pulse animation frames.
-
-   Stage size must fit the ring at max spread — 8px base + 60px spread on
-   each side = 128px minimum; 140 leaves a 6px safety margin. `contain:
-   paint` implies `overflow: clip`, so undersizing will chop the halo. */
+/* Wrapper for marker pulse rings. Sized to the ring at full scale (128px).
+   The ring animates via transform+opacity only, so there is no per-frame
+   paint damage to contain — `contain: paint` is unnecessary here and was
+   causing a compositor-boundary seam against the old tile-pane filter. */
 .pulse-stage {
   position: absolute;
   top: 50%; left: 50%;
-  width: 140px; height: 140px;
-  margin: -70px 0 0 -70px;
-  contain: paint;
+  width: 128px; height: 128px;
+  margin: -64px 0 0 -64px;
   pointer-events: none;
   z-index: 0;
 }
 
-/* Animated via box-shadow spread instead of transform: scale. Paint-only
-   properties don't promote the element to its own compositor layer, and
-   the .pulse-stage ancestor contains the paint damage — together these
-   keep backdrop-filter'd UI stable while the ring animates. */
+/* Compositor-thread pulse: scale + opacity only, with `will-change` so the
+   ring gets its own GPU layer. This keeps pulse frames from triggering
+   paint work on the map, which was invalidating the backdrop-filter
+   caches on the search bar and BottomModeBar every frame (visible as
+   flicker / shimmer of those glass surfaces). */
 .pos-pulse-ring {
   position: absolute;
-  top: 50%; left: 50%;
-  width: 8px; height: 8px;
-  margin: -4px 0 0 -4px;
+  inset: 0;
   border-radius: 50%;
-  background: transparent;
-  animation: pulse-shadow 2.5s cubic-bezier(0, 0.5, 0.5, 1) infinite;
+  background: rgba(66, 133, 244, 0.50);
+  transform: scale(0.0625);
+  animation: pulse-scale 2.5s cubic-bezier(0, 0.5, 0.5, 1) infinite;
+  will-change: transform, opacity;
   z-index: 1;
 }
 .pos-pulse-ring-2 { animation-delay: 1.25s; }
@@ -1289,12 +1285,12 @@
 .pc-pos-marker, .pc-pos-marker > * { background: none; border: none; }
 .pc-pos-pulse-ring {
   position: absolute;
-  top: 50%; left: 50%;
-  width: 8px; height: 8px;
-  margin: -4px 0 0 -4px;
+  inset: 0;
   border-radius: 50%;
-  background: transparent;
-  animation: pulse-shadow-pc 2.5s cubic-bezier(0, 0.5, 0.5, 1) infinite;
+  background: rgba(245, 158, 11, 0.55);
+  transform: scale(0.0625);
+  animation: pulse-scale-pc 2.5s cubic-bezier(0, 0.5, 0.5, 1) infinite;
+  will-change: transform, opacity;
   z-index: 1;
 }
 .pc-pos-pulse-ring-2 { animation-delay: 1.25s; }
@@ -1378,8 +1374,13 @@
   .weather-anim-flash { animation: none; }
 }
 
-/* Leaflet dark theme */
-.leaflet-tile-pane { filter: brightness(0.96) saturate(0.95); }
+/* Leaflet dark theme — no filter on .leaflet-tile-pane. Applying a filter
+   here promotes the whole pane to a compositor layer, and when .pulse-stage
+   (contain: paint) or any backdrop-filter UI carves out a sub-region, the
+   filter is resolved with slightly different precision on each side of the
+   boundary — visible as a vertical color seam ~70px from the current-position
+   marker. The 0.96 / 0.95 adjustment was sub-perceptual anyway; remove it to
+   get uniform tile color across the whole pane. */
 
 .leaflet-control-attribution {
   background: var(--color-surface-1) !important;
@@ -1437,13 +1438,16 @@
   0%, 100% { box-shadow: 0 0 8px rgba(108, 140, 255, 0.2); }
   50% { box-shadow: 0 0 16px rgba(108, 140, 255, 0.4); }
 }
-@keyframes pulse-shadow {
-  0%   { box-shadow: 0 0 0 0    rgba(66, 133, 244, 0.50); }
-  100% { box-shadow: 0 0 0 60px rgba(66, 133, 244, 0.00); }
+/* Compositor-only pulse. 0.0625 = 8px / 128px — matches the old base dot
+   size, expanding to the full stage. Opacity fade is linear; timing curve
+   on the transform alone controls the "push out" feel. */
+@keyframes pulse-scale {
+  0%   { transform: scale(0.0625); opacity: 1; }
+  100% { transform: scale(1);      opacity: 0; }
 }
-@keyframes pulse-shadow-pc {
-  0%   { box-shadow: 0 0 0 0    rgba(245, 158, 11, 0.55); }
-  100% { box-shadow: 0 0 0 60px rgba(245, 158, 11, 0.00); }
+@keyframes pulse-scale-pc {
+  0%   { transform: scale(0.0625); opacity: 1; }
+  100% { transform: scale(1);      opacity: 0; }
 }
 @keyframes marker-drop {
   0%   { transform: translateY(-24px); opacity: 0; }

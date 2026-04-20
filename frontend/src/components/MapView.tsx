@@ -202,33 +202,74 @@ function MapView({
     // Tile layers — three base maps with localStorage persistence.
     // Electron main hooks a compliant User-Agent for tile hosts
     // (see electron/main.js), otherwise tile.osm.org returns HTTP 418.
+    // NOTE: do NOT enable `detectRetina` here. On retina displays Leaflet
+    // bumps the tile URL zoom by +1 (via zoomOffset), which is applied
+    // AFTER `maxNativeZoom` clamping — so OSM (max z=19) ends up requesting
+    // z=20 at any display zoom past 18, all 404, and the dark container
+    // background (#0f1117) shows through as a fully black map. CARTO's
+    // `{r}` URL placeholder already handles retina via @2x tiles without
+    // this side effect.
+    // Neutral placeholder (warm gray 256x256 SVG) for tiles that ultimately
+    // fail to load. Without it, the dark .leaflet-container background bleeds
+    // through failed <img> slots as solid black squares.
+    const TILE_PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#d4d0c8"/></svg>'
+    );
     const baseOpts: L.TileLayerOptions = {
       updateWhenIdle: false,
       updateWhenZooming: true,
       keepBuffer: 4,
       crossOrigin: true,
-      detectRetina: true,
+      errorTileUrl: TILE_PLACEHOLDER,
     };
+    // Use maxNativeZoom to cap real tile requests at each host's supported
+    // zoom, while letting Leaflet upscale those tiles past that cap. This
+    // prevents black/missing tiles at extreme zoom where servers 404 — the
+    // .leaflet-container dark background (#0f1117) would otherwise bleed
+    // through as solid black squares.
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       subdomains: 'abc',
-      maxZoom: 19,
+      maxNativeZoom: 19,
+      maxZoom: 21,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       ...baseOpts,
     });
     const cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd',
-      maxZoom: 20,
+      maxNativeZoom: 20,
+      maxZoom: 22,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
       ...baseOpts,
     });
     const esriLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
+      maxNativeZoom: 19,
+      maxZoom: 21,
       attribution: '&copy; <a href="https://www.esri.com/">Esri</a>',
       ...baseOpts,
     });
 
     const layers: Record<string, L.TileLayer> = { osm: osmLayer, carto: cartoLayer, esri: esriLayer };
     layerMapRef.current = layers;
+
+    // Transient failures at high zoom (OSM 418/429 on rate limits, CDN cache
+    // misses, flaky network) are common. Retry each failed tile once with a
+    // cache-busted URL; if that also fails, Leaflet renders TILE_PLACEHOLDER.
+    const attachTileRetry = (layer: L.TileLayer) => {
+      layer.on('tileerror', (e: L.TileErrorEvent) => {
+        const img = e.tile as HTMLImageElement | undefined;
+        const coords = e.coords;
+        if (!img || !coords || img.dataset.retried === '1') return;
+        img.dataset.retried = '1';
+        const url = layer.getTileUrl(coords);
+        if (!url) return;
+        const sep = url.includes('?') ? '&' : '?';
+        setTimeout(() => { img.src = `${url}${sep}_r=${Date.now()}`; }, 450);
+      });
+    };
+    attachTileRetry(osmLayer);
+    attachTileRetry(cartoLayer);
+    attachTileRetry(esriLayer);
+
     const activeLayer = layers[layerKey] || osmLayer;
     activeLayer.addTo(map);
 
@@ -328,7 +369,7 @@ function MapView({
 
     const makeIcon = () => L.divIcon({
       className: 'current-pos-marker',
-      html: `<div class="pulse-stage">
+      html: `<div data-fc="map.position-marker" class="pulse-stage">
           <div class="pos-pulse-ring"></div>
           <div class="pos-pulse-ring pos-pulse-ring-2"></div>
         </div>
@@ -380,7 +421,7 @@ function MapView({
     if (!marker) return;
     const icon = L.divIcon({
       className: 'current-pos-marker',
-      html: `<div class="pulse-stage">
+      html: `<div data-fc="map.position-marker" class="pulse-stage">
           <div class="pos-pulse-ring"></div>
           <div class="pos-pulse-ring pos-pulse-ring-2"></div>
         </div>
@@ -417,7 +458,7 @@ function MapView({
 
     const icon = L.divIcon({
       className: 'pc-pos-marker',
-      html: `<div class="pulse-stage">
+      html: `<div data-fc="map.pc-marker" class="pulse-stage">
           <div class="pc-pos-pulse-ring"></div>
           <div class="pc-pos-pulse-ring pc-pos-pulse-ring-2"></div>
         </div>
@@ -853,6 +894,7 @@ function MapView({
 
       {contextMenu.visible && (
         <div
+          data-fc="map.context-menu"
           ref={contextMenuRef}
           className="context-menu anim-scale-in-tl"
           style={{
