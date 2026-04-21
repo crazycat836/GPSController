@@ -1,18 +1,29 @@
 /* ═══════════════════════════════════════════════════════════════
    Glass surfaces — unified floating chrome
-   Two canonical recipes, mirroring redesign/Home.html verbatim:
-     • glass-pill / glass-panel        → 0.72 · blur 20 · sat 1.3 · shadow-md
-     • glass-pill-strong / -panel-     → 0.82 · blur 24 · sat 1.4 · shadow-xl + inset hairline
+   Two canonical recipes:
+     • glass-pill / glass-panel        → 0.92 alpha · shadow-md
+     • glass-pill-strong / -panel-     → 0.94 alpha · shadow-xl + inset hairline
    `-pill` variants are fully rounded (brand · search · icon buttons ·
-   status chips · mode bar). `-panel` variants keep the same glass but
+   status chips · mode bar). `-panel` variants keep the same tone but
    use radius-xl for rectangular surfaces (bottom dock).
+
+   NOTE: These surfaces are deliberately solid (no backdrop-filter).
+   Chromium has a fundamental tile-boundary artifact when sampling a
+   tiled backdrop (our Leaflet map) through a blur kernel on elements
+   wider than ~256px: adjacent GPU compositor tiles resolve the filter
+   with slightly different precision, producing a visible vertical
+   color seam across SearchBar, BottomDock, and BottomModeBar. We
+   exhausted the standard workarounds (saturate removal, mix-blend-mode
+   removal, clip-path, layer promotion via translateZ / will-change,
+   pseudo-element architecture) — none of them moves the seam because
+   the artifact is in the backdrop sampling, not the element. Solid
+   high-alpha backgrounds at 0.92/0.94 keep the floating-chrome reading
+   without exposing the sampling path. Safari was unaffected either way.
    ═══════════════════════════════════════════════════════════════ */
 
 .glass-pill,
 .glass-panel {
-  background: rgba(19, 20, 22, 0.72);
-  backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  background: rgba(19, 20, 22, 0.92);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-md);
   color: var(--color-text-1);
@@ -20,13 +31,13 @@
 .glass-pill  { border-radius: var(--radius-full); }
 .glass-panel { border-radius: var(--radius-xl); }
 
-/* Medium weight — denser alpha for small-text legibility (ETA bar /
-   onboarding chip) while keeping the lighter blur + shadow of a pill. */
+/* Medium weight — same alpha as base (solid already), kept as a named
+   recipe for components that historically used the denser variant
+   (ETA bar / device pills / joystick pad) so their semantics stay
+   stable even though alpha now matches base. */
 .glass-pill-medium,
 .glass-panel-medium {
-  background: rgba(19, 20, 22, 0.82);
-  backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  background: rgba(19, 20, 22, 0.92);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-md);
   color: var(--color-text-1);
@@ -35,12 +46,11 @@
 .glass-panel-medium { border-radius: var(--radius-xl); }
 
 /* Live position card — the featured real-time virtual GPS display in
-   the status pair. Mirrors redesign/Home `.live-pos`: accent-tinted
-   dark glass with an accent hairline along the top, animated dot +
-   SIM badge in the eyebrow, big mono LAT/LNG rows, and an empty
-   state for "no position set". State toggles are driven by
-   `data-has-pos` / `data-sim` attributes on the card itself so the
-   card stays self-contained (no body-level coupling). */
+   the status pair. Accent-tinted dark surface with an accent hairline
+   along the top, animated dot + SIM badge in the eyebrow, big mono
+   LAT/LNG rows, and an empty state for "no position set". State
+   toggles are driven by `data-has-pos` / `data-sim` attributes on the
+   card itself so the card stays self-contained (no body-level coupling). */
 .live-pos {
   position: relative;
   width: 100%;
@@ -48,9 +58,7 @@
   padding: 12px 14px;
   background:
     radial-gradient(120% 140% at 0% 0%, rgba(108, 140, 255, 0.10) 0%, transparent 55%),
-    rgba(19, 20, 22, 0.86);
-  backdrop-filter: blur(22px) saturate(1.4);
-  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+    rgba(19, 20, 22, 0.95);
   border: 1px solid var(--color-border);
   border-radius: 16px;
   box-shadow:
@@ -79,7 +87,7 @@
 }
 
 .live-pos[data-has-pos="false"] {
-  background: rgba(19, 20, 22, 0.72);
+  background: rgba(19, 20, 22, 0.92);
   box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 .live-pos[data-has-pos="false"]::before { opacity: 0; }
@@ -209,12 +217,10 @@
   line-height: 1.35;
 }
 
-/* Secondary-info chip — lighter blur + subtler border so coord /
-   weather rows sit below a device pill without competing. */
+/* Secondary-info chip — subtler border so coord / weather rows sit
+   below a device pill without competing. */
 .glass-chip {
-  background: rgba(19, 20, 22, 0.72);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(19, 20, 22, 0.92);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-full);
   color: var(--color-text-2);
@@ -222,14 +228,10 @@
 
 .glass-pill-strong,
 .glass-panel-strong {
-  background: rgba(19, 20, 22, 0.82);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  background: rgba(19, 20, 22, 0.94);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-xl), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   color: var(--color-text-1);
 }
 .glass-pill-strong  { border-radius: var(--radius-full); }
 .glass-panel-strong { border-radius: var(--radius-xl); }
-
-

@@ -4,7 +4,9 @@
 
 GPSController is a dark-mode-native desktop tool UI built for an Electron + React + Leaflet map application. The canvas is a near-black surface (`#0a0a0c`) designed to let the map take visual priority while floating control panels, toolbars, and status indicators sit on top as translucent overlays. The overall feel is a compact, tool-dense cockpit — closer to a desktop IDE sidebar than a marketing page.
 
-The design language draws from iOS-style segmented controls (`.seg-*` system) layered on dark surfaces, with translucent backdrop-blurred panels floating over the map. Information density is high: body text defaults to 13px, and most UI operates in the 11–13px range with weight shifts (500 → 600) providing hierarchy rather than size contrast.
+The design language draws from iOS-style segmented controls (`.seg-*` system) layered on dark surfaces, with solid high-alpha dark panels floating over the map. Information density is high: body text defaults to 13px, and most UI operates in the 11–13px range with weight shifts (500 → 600) providing hierarchy rather than size contrast.
+
+> **Note on glass surfaces.** The primary floating chrome (`.glass-pill`, `.glass-panel`, variants) is rendered as solid `rgba(19, 20, 22, 0.92–0.94)` dark fills rather than `backdrop-filter: blur()`. Chromium has a fundamental tile-boundary artifact when sampling a tiled backdrop (the Leaflet map) through a blur kernel on elements wider than ~256px: adjacent GPU compositor tiles resolve the filter with slightly different precision, producing a visible vertical color seam across every wide surface (SearchBar, BottomDock, BottomModeBar). None of the standard workarounds (`saturate()` removal, `clip-path`, layer promotion via `translateZ` / `will-change`, pseudo-element architecture) moves the seam because it originates in the backdrop sampling path, not the element. Safari is unaffected. Solid 0.92+ alpha keeps the floating-chrome reading without exposing the sampling path. `backdrop-filter` is still used on small, short-lived elements (`.modal-overlay`, `.toast-pill`, `.map-pin-dest .label`) where the seam is either invisible or not perceptible.
 
 The color system is almost entirely achromatic — dark backgrounds with white/gray text — punctuated by a single accent: a cool blue (`#6c8cff`) used for active states, focus rings, and CTAs. Semantic colors (success teal, danger red, warning yellow) appear only in status contexts. A subtle noise texture overlay (`opacity: 0.035`) adds film-grain atmosphere to the dark canvas.
 
@@ -15,7 +17,7 @@ The color system is almost entirely achromatic — dark backgrounds with white/g
 - Weight-driven hierarchy: 400 (reading), 500 (labels), 600 (emphasis/CTA)
 - Single accent blue `#6c8cff` — the only chromatic color in the UI chrome
 - Semi-transparent white borders (`rgba(255,255,255,0.05)` to `rgba(255,255,255,0.12)`)
-- Backdrop-blurred floating panels over a full-screen map
+- Solid high-alpha dark panels floating over a full-screen map (see note on glass surfaces above)
 - iOS-style segmented control system (`.seg-*`) as the primary component pattern
 - 4px base spacing grid
 
@@ -376,11 +378,11 @@ All z-index values are defined as CSS custom properties for consistency:
 | Recessed (1) | `surface-1` bg + subtle border | Status bar, panel chrome |
 | Default (2) | `surface-2` bg + standard border + `shadow-sm` | Buttons, inputs, cards |
 | Elevated (3) | `surface-3` bg + standard border + `shadow-md` | Segment groups, floating panels |
-| Floating (4) | Backdrop blur + `shadow-lg` | Toasts, context menus, joystick |
+| Floating (4) | High-alpha dark fill (0.92–0.94) + `shadow-lg` | Floating glass chrome, context menus, joystick (`.toast-pill` and `.modal-overlay` retain backdrop-blur — see §1 note) |
 | Modal (5) | `shadow-xl` + `shadow-inset` | Modal dialogs |
 | Overlay | `--color-overlay` backdrop | Modal backgrounds |
 
-**Elevation philosophy**: On dark surfaces, depth is communicated through background luminance stepping (`0a → 13 → 1a → 22 → 28`) combined with border opacity (`0.05 → 0.08 → 0.12`). Shadows serve as secondary depth cues. Backdrop-filter blur adds a frosted-glass effect to floating elements. The `--shadow-inset` token provides a top-edge highlight for glass-like panels.
+**Elevation philosophy**: On dark surfaces, depth is communicated through background luminance stepping (`0a → 13 → 1a → 22 → 28`) combined with border opacity (`0.05 → 0.08 → 0.12`). Shadows serve as secondary depth cues. High-alpha dark fills (0.92+) give floating glass chrome its weight without exposing the Chrome backdrop-filter seam (see §1). The `--shadow-inset` token provides a top-edge highlight for glass-like panels.
 
 ## 8. Motion & Animation
 
@@ -504,7 +506,7 @@ GPSController uses **Tailwind CSS v4** via the Vite plugin (`@tailwindcss/vite`)
 - Use the segment system (`.seg-*`) for control panels and grouped settings
 - Use weight shifts (400 → 500 → 600) for hierarchy rather than large size jumps
 - Use semi-transparent white borders on dark surfaces
-- Use backdrop-filter blur for floating elements over the map
+- Use solid 0.92+ alpha dark fills (not `backdrop-filter: blur`) for wide floating chrome over the map — see §1 note on Chrome seam
 - Use `--ease-out-expo` as the default transition easing
 - Use `--duration-*` tokens for animation/transition timing
 - Use `--z-*` tokens for all z-index values
