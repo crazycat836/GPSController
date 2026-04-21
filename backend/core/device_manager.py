@@ -343,7 +343,19 @@ class DeviceManager:
     # ------------------------------------------------------------------
 
     async def disconnect(self, udid: str) -> None:
-        """Tear down the connection and clean up resources for *udid*."""
+        """Tear down the connection and clean up resources for *udid*.
+
+        The five close steps below log WARN with a single-line summary
+        instead of logger.exception, because this cleanup path runs both
+        for user-initiated disconnects (where failures are genuinely
+        unexpected) *and* for device-lost cleanup after a dead tunnel
+        (where EOF/ConnectionReset/TimeoutError on every close is the
+        expected outcome — the OS sockets are already gone). Dumping
+        five full tracebacks per device-lost event produced ~150 lines
+        of noise that masked real errors; the single-line summary
+        preserves "which step and which exception class" for diagnostics
+        without the ceremony. If a future maintainer needs full stacks,
+        raise the logger to DEBUG."""
         async with self._lock:
             conn = self._connections.pop(udid, None)
 
@@ -355,29 +367,29 @@ class DeviceManager:
         if conn.location_service is not None:
             try:
                 await conn.location_service.clear()
-            except Exception:
-                logger.exception("Error clearing location on disconnect for %s", udid)
+            except Exception as exc:
+                logger.warning("Error clearing location on disconnect for %s: %s", udid, exc)
 
         # Shut down the DVT provider if it was opened.
         if conn.dvt_provider is not None:
             try:
                 await conn.dvt_provider.__aexit__(None, None, None)
-            except Exception:
-                logger.exception("Error closing DvtProvider for %s", udid)
+            except Exception as exc:
+                logger.warning("Error closing DvtProvider for %s: %s", udid, exc)
 
         # Close RSD.
         if conn.rsd is not None:
             try:
                 await conn.rsd.close()
-            except Exception:
-                logger.exception("Error closing RSD for %s", udid)
+            except Exception as exc:
+                logger.warning("Error closing RSD for %s: %s", udid, exc)
 
         # Close tunnel context.
         if conn.tunnel_context is not None:
             try:
                 await conn.tunnel_context.__aexit__(None, None, None)
-            except Exception:
-                logger.exception("Error closing tunnel for %s", udid)
+            except Exception as exc:
+                logger.warning("Error closing tunnel for %s: %s", udid, exc)
 
         # Close tunnel proxy. CoreDeviceTunnelProxy.close() is an async
         # coroutine in current pymobiledevice3; without await it logs a
@@ -386,8 +398,8 @@ class DeviceManager:
         if conn.tunnel_proxy is not None:
             try:
                 await conn.tunnel_proxy.close()
-            except Exception:
-                logger.exception("Error closing tunnel proxy for %s", udid)
+            except Exception as exc:
+                logger.warning("Error closing tunnel proxy for %s: %s", udid, exc)
 
         logger.info("Disconnected device %s", udid)
 
