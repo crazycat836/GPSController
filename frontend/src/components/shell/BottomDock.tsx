@@ -359,7 +359,7 @@ function RadiusRow({
               ].join(' ')}
               style={active ? {
                 background: 'var(--color-accent-dim)',
-                boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
+                boxShadow: 'var(--shadow-avatar-ring-subtle)',
               } : undefined}
             >
               {label}
@@ -388,7 +388,7 @@ function JoyPreview({ t }: { t: ReturnType<typeof useT> }) {
         style={{
           background: 'var(--gradient-joystick-base)',
           border: '1px solid var(--color-border-strong)',
-          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.4), inset 0 -1px 1px rgba(255,255,255,0.05)',
+          boxShadow: 'var(--shadow-joystick-base)',
         }}
         aria-hidden="true"
       >
@@ -396,7 +396,7 @@ function JoyPreview({ t }: { t: ReturnType<typeof useT> }) {
           className="absolute inset-[14px] rounded-full"
           style={{
             background: 'var(--gradient-joystick-knob)',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.08)',
+            boxShadow: 'var(--shadow-joystick-knob)',
           }}
         />
         <span
@@ -562,10 +562,10 @@ interface ActionBtnProps {
 
 function ActionBtn({ tone, onClick, disabled, children }: ActionBtnProps) {
   const palette = tone === 'danger'
-    ? { bg: 'rgba(255,71,87,0.14)', border: '1px solid rgba(255,71,87,0.35)', color: '#ff8b95', hover: 'rgba(255,71,87,0.22)' }
+    ? { bg: 'var(--color-danger-dim)', border: '1px solid rgba(255,71,87,0.35)', color: 'var(--color-danger-text)', hover: 'rgba(255,71,87,0.22)' }
     : tone === 'ghost'
       ? { bg: 'var(--color-surface-ghost)', border: '1px solid var(--color-border)', color: 'var(--color-text-1)', hover: 'rgba(255,255,255,0.08)' }
-      : { bg: 'var(--color-accent)', border: 'none', color: '#0a0a0c', hover: 'var(--color-accent-hover)' }
+      : { bg: 'var(--color-accent)', border: 'none', color: 'var(--color-surface-0)', hover: 'var(--color-accent-hover)' }
 
   return (
     <button

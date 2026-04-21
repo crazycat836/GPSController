@@ -899,7 +899,7 @@ function MapView({
               boxSizing: 'border-box',
               width: '100%',
               padding: '8px 16px 6px',
-              color: '#9ac0ff',
+              color: 'var(--color-accent-strong)',
               fontSize: 12,
               fontFamily: 'monospace',
               display: 'flex',
@@ -976,7 +976,7 @@ function MapView({
             </>
           ) : (
             <div
-              style={{ ...contextMenuItemStyle, color: '#ff6b6b', cursor: 'not-allowed', opacity: 0.75 }}
+              style={{ ...contextMenuItemStyle, color: 'var(--color-danger-text)', cursor: 'not-allowed', opacity: 0.75 }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
                 <circle cx="12" cy="12" r="10" />
@@ -1035,7 +1035,7 @@ function MapView({
           {/* 6. Add waypoint (only when in a route mode). */}
           {showWaypointOption && onAddWaypoint && (
             <>
-              <div style={{ height: 1, background: '#444', margin: '4px 0' }} />
+              <div style={{ height: 1, background: 'var(--color-border-strong)', margin: '4px 0' }} />
               <div
                 className="context-menu-item"
                 style={contextMenuItemStyle}
@@ -1066,7 +1066,7 @@ function MapView({
 const contextMenuItemStyle: React.CSSProperties = {
   padding: '8px 16px',
   cursor: 'pointer',
-  color: '#e0e0e0',
+  color: 'var(--color-text-1)',
   fontSize: 13,
   display: 'flex',
   alignItems: 'center',
@@ -1074,7 +1074,7 @@ const contextMenuItemStyle: React.CSSProperties = {
 };
 
 function highlightItem(e: React.MouseEvent<HTMLDivElement>) {
-  (e.currentTarget as HTMLDivElement).style.background = '#3a3a3e';
+  (e.currentTarget as HTMLDivElement).style.background = 'var(--color-surface-hover)';
 }
 
 function unhighlightItem(e: React.MouseEvent<HTMLDivElement>) {

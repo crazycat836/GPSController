@@ -114,9 +114,9 @@ function Chip({ point, index, kind, onRemove, onSelect, removable }: ChipProps) 
 
   const badgeStyle = {
     start: {
-      background: 'rgba(52,211,153,0.15)',
-      borderColor: 'rgba(52,211,153,0.35)',
-      color: '#6ee5b5',
+      background: 'var(--color-origin-dim)',
+      borderColor: 'var(--color-origin-border)',
+      color: 'var(--color-origin-text)',
     },
     accent: {
       background: 'rgba(108,140,255,0.15)',
@@ -124,9 +124,9 @@ function Chip({ point, index, kind, onRemove, onSelect, removable }: ChipProps) 
       color: 'var(--color-accent-strong)',
     },
     loop: {
-      background: 'rgba(255,182,39,0.15)',
-      borderColor: 'rgba(255,182,39,0.35)',
-      color: '#ffd37a',
+      background: 'var(--color-loop-dim)',
+      borderColor: 'var(--color-loop-border)',
+      color: 'var(--color-loop-text)',
     },
   }[kind]
 
@@ -209,9 +209,9 @@ function LoopIndicator({ distM }: { distM: number | null }) {
     <span
       className="shrink-0 inline-flex items-center gap-1.5 h-[34px] px-2.5 rounded-[10px] font-mono text-[10px] font-medium uppercase tracking-[0.04em]"
       style={{
-        color: '#ffd37a',
-        background: 'rgba(255,182,39,0.08)',
-        border: '1px solid rgba(255,182,39,0.2)',
+        color: 'var(--color-loop-text)',
+        background: 'var(--color-loop-dim-subtle)',
+        border: '1px solid var(--color-loop-border-subtle)',
       }}
       title={t('chain.loop_back_tooltip')}
     >

@@ -652,7 +652,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
           ].join(' ')}
           style={{
             background: 'var(--color-accent)',
-            color: '#ffffff',
+            color: 'white',
             boxShadow: 'var(--shadow-glow)',
           }}
         >

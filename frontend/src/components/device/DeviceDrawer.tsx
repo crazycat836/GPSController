@@ -229,7 +229,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                     className="w-9 h-9 rounded-[10px] grid place-items-center shrink-0 text-white font-semibold text-[14px]"
                     style={{
                       background: avatarColor,
-                      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1)',
+                      boxShadow: 'var(--shadow-avatar-ring)',
                     }}
                     aria-hidden="true"
                   >

@@ -90,7 +90,7 @@ function DevicePill({ dev, letter, color, coord }: DevicePillProps) {
         style={{
           background: color,
           color: 'var(--color-surface-0)',
-          boxShadow: 'inset 0 0 0 2px rgba(0,0,0,0.15)',
+          boxShadow: 'var(--shadow-avatar-ring-dark)',
         }}
         aria-hidden="true"
       >

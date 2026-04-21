@@ -96,7 +96,7 @@ function AvatarPicker({ anchor, onClose }: AvatarPickerProps) {
         border: '1px solid var(--color-border-strong)',
         borderRadius: 12,
         padding: 12,
-        boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
+        boxShadow: 'var(--shadow-lg)',
         color: 'var(--color-text-1)',
       }}
     >

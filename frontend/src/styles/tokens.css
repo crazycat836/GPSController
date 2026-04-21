@@ -74,6 +74,31 @@
   --gradient-joystick-base: radial-gradient(circle at 30% 30%, #2a2e38, #14161c);
   --gradient-joystick-knob: linear-gradient(145deg, #3a3f4a, #1e2128);
 
+  /* ── Decorative shadows ─────────────────────────────────────
+     One-off inset/drop shadows used by specific chrome elements.
+     Avatar ring: white hairline that keeps a rounded avatar from
+     bleeding into an accent-tinted surface. Joystick pair: inset
+     well on the base + soft outer lift on the knob. */
+  --shadow-avatar-ring: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  --shadow-avatar-ring-subtle: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-avatar-ring-dark: inset 0 0 0 2px rgba(0, 0, 0, 0.15);
+  --shadow-joystick-base: inset 0 2px 4px rgba(0, 0, 0, 0.4), inset 0 -1px 1px rgba(255, 255, 255, 0.05);
+  --shadow-joystick-knob: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.08);
+
+  /* ── Waypoint-chain semantic tones ──────────────────────────
+     Origin (start) + Loop indicator palette. Distinct from the
+     accent/success/warning scales because they convey "route
+     semantics" — keeping them named by role makes WaypointChain
+     and anywhere else that mirrors this palette self-documenting. */
+  --color-origin-text: #6ee5b5;
+  --color-origin-dim: rgba(52, 211, 153, 0.14);
+  --color-origin-border: rgba(52, 211, 153, 0.35);
+  --color-loop-text: #ffd37a;
+  --color-loop-dim: rgba(255, 182, 39, 0.15);
+  --color-loop-dim-subtle: rgba(255, 182, 39, 0.08);
+  --color-loop-border: rgba(255, 182, 39, 0.35);
+  --color-loop-border-subtle: rgba(255, 182, 39, 0.2);
+
   /* Category colors (bookmarks) */
   --color-cat-default: #4285f4;
   --color-cat-home: #4caf50;

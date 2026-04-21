@@ -166,7 +166,7 @@ export default function DevicesPopover({ anchor, onClose, onOpenManage }: Device
                       background: isNetwork
                         ? 'linear-gradient(135deg, #4ecdc4, #2aa39b)'
                         : 'linear-gradient(135deg, #3a7cff, #1e50d4)',
-                      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1)',
+                      boxShadow: 'var(--shadow-avatar-ring)',
                     }}
                     aria-hidden="true"
                   >
