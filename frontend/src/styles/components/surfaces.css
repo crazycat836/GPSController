@@ -1,0 +1,57 @@
+/* ═══════════════════════════════════════════════════════════════
+   Surface Utilities
+   Pre-composed surface treatments for floating UI elements.
+   ═══════════════════════════════════════════════════════════════ */
+
+.surface-panel {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+}
+.surface-control {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+/* Glass popover / modal over the map — heavy alpha for legibility,
+   strong border + large shadow. Matches SettingsMenu & DevicesPopover
+   recipes so all floating popups share one surface. Radius is applied
+   per-element since popovers use 16px and small dropdowns use 12px. */
+.surface-popup {
+  background: rgba(19, 20, 24, 0.96);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   StatusPill — shared shell for MiniStatusBar, DeviceChip, and
+   future status-bar family members. Keeps height/padding/radius/
+   typography/surface treatment in one place so two pills on the
+   same screen never drift out of sync.
+   ───────────────────────────────────────────────────────────── */
+.status-pill {
+  height: 36px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+  color: var(--color-text-1);
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.status-pill-interactive {
+  cursor: context-menu;
+}
+.status-pill-interactive:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+

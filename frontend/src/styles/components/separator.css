@@ -1,0 +1,18 @@
+/* ═══════════════════════════════════════════════════════════════
+   Separator
+   Vertical / horizontal dividers between items.
+   ═══════════════════════════════════════════════════════════════ */
+
+.separator-v {
+  width: 1px;
+  height: 14px;
+  background: var(--color-border-strong);
+  flex-shrink: 0;
+}
+.separator-h {
+  height: 1px;
+  background: var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+

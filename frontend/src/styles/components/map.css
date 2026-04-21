@@ -1,0 +1,207 @@
+/* ═══════════════════════════════════════════════════════════════
+   Map — container, markers, Leaflet dark overrides
+   ═══════════════════════════════════════════════════════════════ */
+
+.map-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.leaflet-container {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  background: #0f1117;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Map markers — mirrors redesign/Home.html pins verbatim.
+     .map-pin-current  → 22px accent circle + 3px dark rim + outer
+                         ring glow, pulse ring animated behind.
+     .map-pin-dest     → flat teardrop outline in accent, dark semi-
+                         transparent fill, inner ring. No drop-shadow.
+     .map-pin-pc       → amber sibling of current-pin for host GPS.
+   Leaflet's .divIcon needs the wrapper cleared; pins are absolutely
+   positioned inside a fixed-size 44×44 anchor box.
+   ═══════════════════════════════════════════════════════════════ */
+
+.current-pos-marker,
+.pc-pos-marker,
+.dest-marker,
+.waypoint-marker,
+.click-marker {
+  background: none !important;
+  border: none !important;
+}
+
+.map-pin-current {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 22px; height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 3px solid var(--color-surface-0);
+  box-shadow: 0 0 0 6px var(--color-accent-dim), 0 0 20px var(--color-accent);
+}
+.map-pin-current::after {
+  content: '';
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-accent);
+  opacity: 0;
+  animation: map-pin-pulse 2.5s ease-out infinite;
+}
+
+/* Unsynced variant: the pin is a rehydrated cache from persisted settings,
+   not a live position pushed to the device. Drop the solid fill + glow +
+   pulse ring so the marker visually reads as "remembered, not live". */
+.map-pin-current--unsynced {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(10, 10, 12, 0.6);
+  opacity: 0.85;
+}
+.map-pin-current--unsynced::after {
+  animation: none;
+  opacity: 0;
+}
+@keyframes map-pin-pulse {
+  0%   { opacity: 0.6; transform: scale(0.4); }
+  100% { opacity: 0;   transform: scale(1.4); }
+}
+
+.map-pin-pc {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 18px; height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: var(--color-amber-text);
+  border: 3px solid var(--color-surface-0);
+  box-shadow: 0 0 0 5px var(--color-amber-dim), 0 0 16px var(--color-amber-text);
+}
+.map-pin-pc::after {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-amber-text);
+  opacity: 0;
+  animation: map-pin-pulse 2.5s ease-out infinite;
+}
+
+/* Destination teardrop — stacks the SVG pin atop an optional label.
+   Label styling mirrors `.pin.dest-flat .label`. */
+.map-pin-dest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: auto;
+}
+.map-pin-dest svg { display: block; }
+.map-pin-dest .label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--color-text-1);
+  padding: 3px 8px;
+  background: rgba(19, 20, 22, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.waypoint-marker svg { animation: marker-pop 0.28s var(--ease-spring); transform-origin: 50% 90%; }
+.waypoint-marker-subway svg { animation: marker-pop 0.32s var(--ease-spring); }
+
+/* Route polyline — dashed accent over a faint wide glow. Matches
+   redesign/Home `#route-path-main` + `#route-path-glow`. Dash flow is
+   optional polish; Leaflet animates stroke-dashoffset on SVG layers
+   cheaply since the pane is compositor-promoted. */
+.route-line-flow { animation: route-flow 1.2s linear infinite; }
+@keyframes route-flow {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -24; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-pin-current::after,
+  .map-pin-pc::after,
+  .route-line-flow { animation: none; }
+}
+
+/* Subtle idle motion for weather-chip glyphs. All animations stay on
+   transform/opacity so they run on the compositor and honour reduced-motion. */
+.weather-anim-spin { animation: weather-spin 24s linear infinite; }
+.weather-anim-spin-slow { animation: weather-spin 60s linear infinite; }
+.weather-anim-drift { animation: weather-drift 4s ease-in-out infinite; }
+.weather-anim-bob { animation: weather-bob 1.8s ease-in-out infinite; }
+.weather-anim-flash { animation: weather-flash 2.4s ease-in-out infinite; }
+
+@keyframes weather-spin {
+  from { transform: rotate(0); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes weather-drift {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(1.5px); }
+}
+@keyframes weather-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(1.5px); }
+}
+@keyframes weather-flash {
+  0%, 60%, 100% { opacity: 1; }
+  30%, 70%      { opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weather-anim-spin,
+  .weather-anim-spin-slow,
+  .weather-anim-drift,
+  .weather-anim-bob,
+  .weather-anim-flash { animation: none; }
+}
+
+/* Leaflet dark theme — no filter on .leaflet-tile-pane. A tile-pane
+   filter would promote the whole pane to a compositor layer; any
+   backdrop-filter UI or paint-contained marker then resolves the
+   filter with slightly different precision on each side, visible as a
+   vertical color seam near the current-position marker. */
+
+.leaflet-control-attribution {
+  background: var(--color-surface-1) !important;
+  color: var(--color-text-3) !important;
+  font-size: 10px !important;
+}
+.leaflet-control-attribution a { color: var(--color-text-2) !important; }
+
+.leaflet-popup-content-wrapper {
+  background: var(--color-surface-1) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-md) !important;
+  padding: 0 !important;
+}
+.leaflet-popup-content { margin: 0 !important; color: var(--color-text-1) !important; font-size: 12px !important; }
+.leaflet-popup-tip { background: var(--color-surface-1) !important; border: 1px solid var(--color-border) !important; }
+.leaflet-popup-close-button { color: var(--color-text-3) !important; }
+.leaflet-popup-close-button:hover { color: var(--color-text-1) !important; }
+
+/* Noise texture overlay */
+.noise-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  z-index: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+

@@ -1,0 +1,50 @@
+/* ═══════════════════════════════════════════════════════════════
+   Modal / Dialog
+   Reusable overlay + dialog surface for all modals.
+   ═══════════════════════════════════════════════════════════════ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--color-overlay);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-dialog {
+  width: 360px;
+  background: rgba(26, 29, 39, 0.96);
+  border: 1px solid rgba(108, 140, 255, 0.25);
+  border-radius: var(--radius-md);
+  padding: 22px;
+  color: var(--color-text-1);
+  box-shadow: var(--shadow-xl);
+  font-size: var(--text-base);
+  animation: scale-in var(--duration-enter) var(--ease-out-expo) both;
+}
+
+.modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.modal-body {
+  font-size: var(--text-sm);
+  opacity: 0.75;
+  margin-bottom: 12px;
+  line-height: var(--leading-normal);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+

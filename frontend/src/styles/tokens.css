@@ -1,0 +1,184 @@
+/* ═══════════════════════════════════════════════════════════════
+   GPSController Design System
+   Single source of truth for all design tokens.
+   Tailwind v4 generates utility classes from @theme values.
+   ═══════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Surfaces ───────────────────────────────────────────────
+     Layered dark backgrounds. Each step is one elevation higher.
+     surface-0 = app canvas, surface-3 = highest floating layer. */
+  --color-surface-0: #0a0a0c;
+  --color-surface-1: #131416;
+  --color-surface-2: #1a1b20;
+  --color-surface-3: #222328;
+  --color-surface-hover: #282a31;
+
+  /* ── Accent ─────────────────────────────────────────────────
+     Primary blue. Used for active states, focus rings, CTAs.
+     `--color-accent-strong` is the lighter variant required for
+     legible text on accent-dim backgrounds (WCAG AA at small sizes). */
+  --color-accent: #6c8cff;
+  --color-accent-hover: #8aa3ff;
+  --color-accent-strong: #a8bdff;
+  --color-accent-dim: rgba(108, 140, 255, 0.12);
+  --color-accent-glow: rgba(108, 140, 255, 0.25);
+
+  /* ── Semantic ───────────────────────────────────────────────
+     Signal colors for status, feedback, alerts.
+     `*-text` variants are tuned for >=4.5:1 contrast on dark surfaces.
+     Use `--color-*-text` when rendering inline status text;
+     reserve the base color for icons, borders, and large display chrome. */
+  --color-success: #4ecdc4;
+  --color-success-dim: rgba(78, 205, 196, 0.15);
+  --color-success-text: #34d399;
+  --color-danger: #ff4757;
+  --color-danger-dim: rgba(255, 71, 87, 0.15);
+  --color-danger-text: #ff8585;
+  --color-error-text: #f87171;
+  --color-warning: #ffd93d;
+  --color-warning-dim: rgba(255, 217, 61, 0.15);
+  --color-warning-text: #ffc107;
+  --color-amber-text: #fbbf24;
+  --color-amber-dim: rgba(251, 191, 36, 0.15);
+
+  /* ── Device ─────────────────────────────────────────────────
+     Per-device identification colors for multi-device mode.
+     Also used on map markers, ETA bar, status indicators. */
+  --color-device-a: #4285f4;
+  --color-device-b: #ff9800;
+  --color-device-c: #4ecdc4;
+  --color-device-d: #e040fb;
+
+  /* Device status dot colors */
+  --color-device-idle: #4ecdc4;
+  --color-device-paused: #ffb627;
+  --color-device-error: #ff6b6b;
+
+  /* Category colors (bookmarks) */
+  --color-cat-default: #4285f4;
+  --color-cat-home: #4caf50;
+  --color-cat-work: #ff9800;
+
+  /* ── Text ───────────────────────────────────────────────────
+     Three tiers: primary → secondary → muted.
+     Never use raw white — always pick a tier.
+     `text-3` raised from #555869 → #7a7e94 to clear WCAG AA (4.5:1)
+     on `surface-0`/`surface-1`. Acceptable for placeholders/disabled. */
+  --color-text-1: #e8eaf0;
+  --color-text-2: #8b8fa3;
+  --color-text-3: #7a7e94;
+
+  /* ── Border ─────────────────────────────────────────────────
+     White-alpha borders for dark surfaces. */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-subtle: rgba(255, 255, 255, 0.05);
+  --color-border-strong: rgba(255, 255, 255, 0.12);
+  --color-border-focus: rgba(108, 140, 255, 0.4);
+
+  /* ── Overlay ────────────────────────────────────────────────
+     Modal backdrops and scrim layers. */
+  --color-overlay: rgba(8, 10, 20, 0.55);
+  --color-overlay-heavy: rgba(20, 22, 32, 0.85);
+
+  /* ── Shadows ────────────────────────────────────────────────
+     Cool-tinted shadows that feel native to the dark UI. */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --shadow-xl: 0 20px 60px rgba(12, 18, 40, 0.65);
+  --shadow-glow: 0 0 24px rgba(108, 140, 255, 0.28);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  /* ── Radius ─────────────────────────────────────────────────
+     Consistent rounding scale. */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* ── Spacing ────────────────────────────────────────────────
+     4px base grid. Use these for padding, gaps, margins.
+     Prefer gap-* Tailwind utilities that map to these. */
+  --spacing-0_5: 2px;
+  --spacing-1: 4px;
+  --spacing-1_5: 6px;
+  --spacing-2: 8px;
+  --spacing-2_5: 10px;
+  --spacing-3: 12px;
+  --spacing-3_5: 14px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-7: 28px;
+  --spacing-8: 32px;
+  --spacing-9: 36px;
+  --spacing-10: 40px;
+  --spacing-12: 48px;
+  --spacing-14: 56px;
+  --spacing-16: 64px;
+
+  /* ── Typography ─────────────────────────────────────────────
+     Font sizes with corresponding line heights. */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+
+  /* ── Line Heights ───────────────────────────────────────────
+     Named line-height values for typographic control. */
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* ── Letter Spacing ─────────────────────────────────────────
+     Tracking adjustments — tighter at display sizes. */
+  --tracking-tight: -0.02em;
+  --tracking-normal: -0.005em;
+  --tracking-wide: 0.08em;
+
+  /* ── Control Heights ────────────────────────────────────────
+     sm = compact, md = default, lg = primary CTA. */
+  --control-sm: 32px;
+  --control-md: 38px;
+  --control-lg: 44px;
+
+  /* ── Z-Index Scale ──────────────────────────────────────────
+     Structured elevation layers. Never use ad-hoc z values. */
+  --z-base: 0;
+  --z-map-ui: 1000;
+  --z-bar: 200;
+  --z-ui: 400;
+  --z-float: 500;
+  --z-dropdown: 600;
+  --z-drawer: 700;
+  --z-overlay: 800;
+  --z-modal: 900;
+  --z-toast: 950;
+
+  /* ── Duration ───────────────────────────────────────────────
+     Named durations for consistent motion timing. */
+  --duration-fast: 80ms;
+  --duration-normal: 140ms;
+  --duration-slow: 200ms;
+  --duration-enter: 200ms;
+  --duration-exit: 150ms;
+
+  /* ── Easing ─────────────────────────────────────────────────
+     Named curves for consistent motion. */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Font ───────────────────────────────────────────────────  */
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
+}
+
+
