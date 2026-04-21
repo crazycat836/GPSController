@@ -55,6 +55,25 @@
   --color-device-paused: #ffb627;
   --color-device-error: #ff6b6b;
 
+  /* ── Waypoint markers ───────────────────────────────────────
+     Start/end ring + inner fill used by MapView waypoint SVG.
+     Hex mirrored in `lib/constants.ts` (MARKER_HEX) for use in
+     Leaflet SVG attributes that cannot resolve var(). */
+  --color-marker-start: #43a047;
+  --color-marker-start-inner: #2e7d32;
+  --color-marker-end: #fb8c00;
+  --color-marker-end-inner: #ef6c00;
+
+  /* ── Extra surfaces ─────────────────────────────────────────
+     Ghost tint for lightly-recessed blocks on top of surface-1
+     (BottomDock rows, inline hint strips). */
+  --color-surface-ghost: rgba(255, 255, 255, 0.04);
+
+  /* ── Decorative gradients ───────────────────────────────────
+     Joystick base (radial well) and knob (diagonal highlight). */
+  --gradient-joystick-base: radial-gradient(circle at 30% 30%, #2a2e38, #14161c);
+  --gradient-joystick-knob: linear-gradient(145deg, #3a3f4a, #1e2128);
+
   /* Category colors (bookmarks) */
   --color-cat-default: #4285f4;
   --color-cat-home: #4caf50;

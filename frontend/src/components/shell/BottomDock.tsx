@@ -251,7 +251,7 @@ function RoutePoint({ tone, label, coord, placeholder, onBookmark }: RoutePointP
   const icPalette = tone === 'origin'
     ? { bg: 'rgba(52,211,153,0.14)', bd: 'rgba(52,211,153,0.25)', fg: '#6ee5b5' }
     : empty
-      ? { bg: 'rgba(255,255,255,0.04)', bd: 'var(--color-border-strong)', fg: 'var(--color-text-3)' }
+      ? { bg: 'var(--color-surface-ghost)', bd: 'var(--color-border-strong)', fg: 'var(--color-text-3)' }
       : { bg: 'rgba(108,140,255,0.14)', bd: 'rgba(108,140,255,0.25)', fg: 'var(--color-accent-strong)' }
 
   return (
@@ -339,7 +339,7 @@ function RadiusRow({
       </span>
       <div
         className="flex gap-1 p-[3px] rounded-[10px] border border-[var(--color-border)]"
-        style={{ background: 'rgba(255,255,255,0.04)' }}
+        style={{ background: 'var(--color-surface-ghost)' }}
       >
         {RADIUS_PRESETS.map((r) => {
           const active = r === value
@@ -386,7 +386,7 @@ function JoyPreview({ t }: { t: ReturnType<typeof useT> }) {
       <div
         className="w-[84px] h-[84px] shrink-0 rounded-full relative"
         style={{
-          background: 'radial-gradient(circle at 30% 30%, #2a2e38, #14161c)',
+          background: 'var(--gradient-joystick-base)',
           border: '1px solid var(--color-border-strong)',
           boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.4), inset 0 -1px 1px rgba(255,255,255,0.05)',
         }}
@@ -395,7 +395,7 @@ function JoyPreview({ t }: { t: ReturnType<typeof useT> }) {
         <span
           className="absolute inset-[14px] rounded-full"
           style={{
-            background: 'linear-gradient(145deg, #3a3f4a, #1e2128)',
+            background: 'var(--gradient-joystick-knob)',
             boxShadow: '0 4px 12px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.08)',
           }}
         />
@@ -453,7 +453,7 @@ function SpeedToggle({ presetActive, onPreset, disabled, t }: SpeedToggleProps) 
         'flex gap-0.5 p-[3px] h-11 rounded-xl border border-[var(--color-border)]',
         disabled ? 'opacity-40 pointer-events-none' : '',
       ].join(' ')}
-      style={{ background: 'rgba(255,255,255,0.04)' }}
+      style={{ background: 'var(--color-surface-ghost)' }}
     >
       {SPEED_PRESETS.map(({ mode, Icon, labelKey, value }) => {
         const on = presetActive(mode)
@@ -564,7 +564,7 @@ function ActionBtn({ tone, onClick, disabled, children }: ActionBtnProps) {
   const palette = tone === 'danger'
     ? { bg: 'rgba(255,71,87,0.14)', border: '1px solid rgba(255,71,87,0.35)', color: '#ff8b95', hover: 'rgba(255,71,87,0.22)' }
     : tone === 'ghost'
-      ? { bg: 'rgba(255,255,255,0.04)', border: '1px solid var(--color-border)', color: 'var(--color-text-1)', hover: 'rgba(255,255,255,0.08)' }
+      ? { bg: 'var(--color-surface-ghost)', border: '1px solid var(--color-border)', color: 'var(--color-text-1)', hover: 'rgba(255,255,255,0.08)' }
       : { bg: 'var(--color-accent)', border: 'none', color: '#0a0a0c', hover: 'var(--color-accent-hover)' }
 
   return (

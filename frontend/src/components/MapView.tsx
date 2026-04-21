@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import { useT } from '../i18n';
 import { getInitialPosition, reverseGeocode } from '../services/api';
+import { MARKER_HEX, ACCENT_HEX, DEVICE_COLORS_HEX } from '../lib/constants';
 import L from 'leaflet';
 
 interface Position {
@@ -479,8 +480,8 @@ function MapView({
         html: `<div data-fc="map.dest-marker" class="map-pin-dest">
           <svg width="28" height="38" viewBox="0 0 28 38" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M14 2C8.477 2 4 6.477 4 12c0 7.732 10 24 10 24s10-16.268 10-24c0-5.523-4.477-10-10-10z"
-                  fill="rgba(10,10,12,0.6)" stroke="#6c8cff" stroke-width="2" stroke-linejoin="round"/>
-            <circle cx="14" cy="12" r="4" fill="none" stroke="#6c8cff" stroke-width="2"/>
+                  fill="rgba(10,10,12,0.6)" stroke="${ACCENT_HEX}" stroke-width="2" stroke-linejoin="round"/>
+            <circle cx="14" cy="12" r="4" fill="none" stroke="${ACCENT_HEX}" stroke-width="2"/>
           </svg>
         </div>`,
         iconSize: [28, 38],
@@ -518,8 +519,8 @@ function MapView({
       // downward tail + soft ground shadow. Palette keeps the start/way
       // contrast but drops the heavy gradient pin body for a flatter,
       // more modern look.
-      const ringFill = isStart ? '#43a047' : '#fb8c00';
-      const innerFill = isStart ? '#2e7d32' : '#ef6c00';
+      const ringFill = isStart ? MARKER_HEX.start : MARKER_HEX.end;
+      const innerFill = isStart ? MARKER_HEX.startInner : MARKER_HEX.endInner;
       const textFill = '#ffffff';
       const wpIcon = L.divIcon({
         className: 'waypoint-marker waypoint-marker-subway',
@@ -566,10 +567,10 @@ function MapView({
     if (routePath.length > 1) {
       const latlngs: L.LatLngExpression[] = routePath.map((p) => [p.lat, p.lng]);
       // Wide faint glow (design: stroke-width 0.022, opacity 0.08).
-      // `#6c8cff` === `--color-accent`; hard-coded because Leaflet writes
-      // it to an SVG `stroke` attribute which doesn't resolve CSS vars.
+      // ACCENT_HEX mirrors `--color-accent`; Leaflet writes it to an SVG
+      // `stroke` attribute which doesn't resolve CSS vars.
       const glow = L.polyline(latlngs, {
-        color: '#6c8cff',
+        color: ACCENT_HEX,
         weight: 12,
         opacity: 0.08,
         lineCap: 'round',
@@ -579,7 +580,7 @@ function MapView({
       // Thin accent dashed main line (design: stroke-width 0.005,
       // stroke-dasharray "0.012 0.016" with stroke-linecap round).
       const main = L.polyline(latlngs, {
-        color: '#6c8cff',
+        color: ACCENT_HEX,
         weight: 2.5,
         opacity: 0.95,
         dashArray: '6 8',
@@ -610,10 +611,10 @@ function MapView({
         [currentPosition.lat, currentPosition.lng],
         {
           radius: randomWalkRadius,
-          color: '#4285f4',
+          color: DEVICE_COLORS_HEX[0],
           weight: 2,
           opacity: 0.6,
-          fillColor: '#4285f4',
+          fillColor: DEVICE_COLORS_HEX[0],
           fillOpacity: 0.08,
           dashArray: '6, 6',
         }

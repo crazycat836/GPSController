@@ -84,6 +84,31 @@ The color system is almost entirely achromatic — dark backgrounds with white/g
 | `--color-cat-home` | `#4caf50` | Home bookmark category |
 | `--color-cat-work` | `#ff9800` | Work bookmark category |
 
+### Waypoint markers
+Used by MapView's waypoint SVG icons. Hex is mirrored in `lib/constants.ts`
+(`MARKER_HEX`) because Leaflet writes these into SVG attributes which
+cannot resolve `var()`.
+
+| Token | Value | Role |
+|-------|-------|------|
+| `--color-marker-start` | `#43a047` | Start marker ring |
+| `--color-marker-start-inner` | `#2e7d32` | Start marker inner fill |
+| `--color-marker-end` | `#fb8c00` | End marker ring |
+| `--color-marker-end-inner` | `#ef6c00` | End marker inner fill |
+
+### Extra surfaces
+| Token | Value | Role |
+|-------|-------|------|
+| `--color-surface-ghost` | `rgba(255,255,255,0.04)` | Lightly-recessed tint over `surface-1` (BottomDock rows, inline hint strips) |
+
+### Decorative gradients
+Reserved for specific chrome elements; do not use for generic panels.
+
+| Token | Value | Role |
+|-------|-------|------|
+| `--gradient-joystick-base` | `radial-gradient(circle at 30% 30%, #2a2e38, #14161c)` | Joystick decorative base (BottomDock) |
+| `--gradient-joystick-knob` | `linear-gradient(145deg, #3a3f4a, #1e2128)` | Joystick decorative knob (BottomDock) |
+
 ### Border
 | Token | Value | Role |
 |-------|-------|------|
