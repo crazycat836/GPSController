@@ -390,10 +390,10 @@ export function useSimulation(subscribe?: WsSubscribe) {
         break
       }
       case 'device_disconnected': {
-        const isEn = typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEYS.lang) === 'en'
-        setError(isEn
-          ? 'Device disconnected (USB unplugged or tunnel died), please reconnect USB'
-          : '裝置連線中斷(USB 拔除或 Tunnel 死亡),請重新插上 USB')
+        // User-facing notice is a toast fired by App.tsx off device.lostUdids
+        // (canonical Toast per DESIGN.md §4). The legacy ErrorBanner path was
+        // removed: banner isn't in DESIGN.md and DeviceChip's "已斷線" pill
+        // already persists the state until reconnect.
         setStatus((prev) => ({ ...prev, running: false, paused: false }))
         break
       }
