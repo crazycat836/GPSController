@@ -208,14 +208,29 @@ class SimulationEngine:
     async def _run_handler(self, coro, label: str) -> None:
         """Run a simulation handler coroutine with uniform cleanup.
         Any exception or cancellation forces the engine back to IDLE and
-        notifies the frontend, preventing UI desync after a crash / drop."""
+        notifies the frontend, preventing UI desync after a crash / drop.
+        DeviceLostError is re-raised (after cleanup) so api.location._spawn()
+        can translate it into a device_disconnected broadcast — otherwise
+        the frontend never learns the tunnel died."""
         self._active_task = asyncio.create_task(coro)
+        device_lost: DeviceLostError | None = None
         try:
             await self._active_task
         except asyncio.CancelledError:
             logger.info("%s cancelled", label)
-        except Exception:
+        except DeviceLostError as exc:
+            logger.warning("%s aborted: device lost (%s)", label, exc)
+            device_lost = exc
+        except Exception as exc:
             logger.exception("%s failed unexpectedly", label)
+            # Walk the cause chain — DeviceLostError is often re-raised
+            # wrapped (e.g. from pymobiledevice3 timeouts).
+            cause: BaseException | None = exc
+            while cause is not None:
+                if isinstance(cause, DeviceLostError):
+                    device_lost = cause
+                    break
+                cause = cause.__cause__
         finally:
             self._active_task = None
             # Force state back to IDLE if a handler crashed / was cancelled
@@ -226,6 +241,8 @@ class SimulationEngine:
                     await self._emit("state_change", {"state": self.state.value})
                 except Exception:
                     logger.exception("Failed to emit idle state_change after %s", label)
+        if device_lost is not None:
+            raise device_lost
 
     async def navigate(
         self, dest: Coordinate, mode: MovementMode,
