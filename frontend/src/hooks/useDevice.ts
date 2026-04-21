@@ -33,6 +33,12 @@ export type WsSubscribe = (fn: (m: WsMessage) => void) => () => void
 export function useDevice(subscribe?: WsSubscribe) {
   const [devices, setDevices] = useState<DeviceInfo[]>([])
   const [connectedDevice, setConnectedDevice] = useState<DeviceInfo | null>(null)
+  // UDIDs that were connected and then lost involuntarily (DVT reconnect
+  // exhausted, USB unplug, WiFi tunnel died). Used by DeviceDrawer to
+  // distinguish "just disconnected" from "never connected / Ready" — both
+  // share is_connected=false but the former deserves a red "已斷線" pill.
+  // Cleared when the UDID reappears connected, or on a fresh scan.
+  const [lostUdids, setLostUdids] = useState<Set<string>>(() => new Set())
 
   // React to real-time device state broadcasts via the subscribe callback.
   // See useWebSocket.ts for the rationale vs the old useState pattern.
@@ -44,12 +50,25 @@ export function useDevice(subscribe?: WsSubscribe) {
         // fall back to clearing all for legacy single-device disconnect events.
         const udid = msg.data?.udid
         const udids: string[] = Array.isArray(msg.data?.udids) ? msg.data.udids : (udid ? [udid] : [])
+        const reason: string | undefined = msg.data?.reason
+        const involuntary = reason !== 'user' // user-initiated disconnects don't warrant a "lost" pill
         if (udids.length === 0) {
           setConnectedDevice(null)
-          setDevices((prev) => prev.map((d) => ({ ...d, is_connected: false })))
+          setDevices((prev) => {
+            if (involuntary) {
+              const prevConnected = prev.filter((d) => d.is_connected).map((d) => d.udid)
+              if (prevConnected.length > 0) {
+                setLostUdids((s) => { const n = new Set(s); prevConnected.forEach((u) => n.add(u)); return n })
+              }
+            }
+            return prev.map((d) => ({ ...d, is_connected: false }))
+          })
         } else {
           setDevices((prev) => prev.map((d) => udids.includes(d.udid) ? { ...d, is_connected: false } : d))
           setConnectedDevice((prev) => (prev && udids.includes(prev.udid)) ? null : prev)
+          if (involuntary) {
+            setLostUdids((s) => { const n = new Set(s); udids.forEach((u) => n.add(u)); return n })
+          }
         }
         // Re-fetch so the sidebar list and metadata stay in sync with the
         // backend (otherwise the left device panel can show a stale empty
@@ -65,6 +84,7 @@ export function useDevice(subscribe?: WsSubscribe) {
           const udid = msg.data?.udid
           const match = udid ? list.find((d) => d.udid === udid && d.is_connected) : null
           setConnectedDevice((prev) => prev ?? match ?? list.find((d) => d.is_connected) ?? null)
+          if (udid) setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
         }).catch(() => {})
       } else if (msg.type === 'device_reconnected') {
         listDevices().then((list) => {
@@ -72,6 +92,7 @@ export function useDevice(subscribe?: WsSubscribe) {
           const udid = msg.data?.udid
           const match = udid ? list.find((d) => d.udid === udid) : null
           setConnectedDevice(match ?? list.find((d) => d.is_connected) ?? null)
+          if (udid) setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
         }).catch(() => {})
       }
     })
@@ -121,6 +142,7 @@ export function useDevice(subscribe?: WsSubscribe) {
         setDevices(list)
         const active = list.find((d) => d.udid === udid) ?? null
         setConnectedDevice(active)
+        setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
         return active
       } catch (err) {
         console.error('Failed to connect device:', err)
@@ -247,5 +269,6 @@ export function useDevice(subscribe?: WsSubscribe) {
     connectWifi, scanWifi, wifiScanning, wifiDevices,
     startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
     connectedDevices, primaryDevice,
+    lostUdids,
   }
 }

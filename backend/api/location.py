@@ -235,6 +235,26 @@ async def teleport(req: TeleportRequest):
     return {"status": "ok", "lat": req.lat, "lng": req.lng}
 
 
+async def _guard(coro):
+    """Run an awaitable and translate DeviceLostError into the same
+    broadcast + HTTP 503 flow `teleport` uses. Use on any route whose
+    engine call can touch the device (location_service.set/clear),
+    i.e. stop/restore/pause/resume/joystick/apply-speed."""
+    try:
+        return await coro
+    except HTTPException:
+        raise
+    except DeviceLostError as exc:
+        raise (await _handle_device_lost(exc))
+    except Exception as exc:
+        cause = exc
+        while cause is not None:
+            if isinstance(cause, DeviceLostError):
+                raise (await _handle_device_lost(cause))
+            cause = cause.__cause__
+        raise
+
+
 # Module-level background task set to keep strong references to fire-and-forget
 # tasks. Without this, asyncio only keeps weak refs and Python can GC a task
 # mid-execution (documented asyncio footgun). Tasks self-remove on completion.
@@ -249,11 +269,24 @@ def _spawn(coro):
     def _on_done(t):
         _bg_tasks.discard(t)
         exc = t.exception()
-        if exc is not None:
-            import logging as _logging
-            _logging.getLogger("gpscontroller").exception(
-                "background task crashed: %s", exc, exc_info=exc
-            )
+        if exc is None:
+            return
+        # Walk __cause__ chain — DeviceLostError is often re-raised wrapped.
+        # Trigger the same cleanup teleport already does so the frontend
+        # gets device_disconnected instead of a silently-dead engine.
+        cause = exc
+        while cause is not None:
+            if isinstance(cause, DeviceLostError):
+                import asyncio as _asyncio
+                cleanup = _asyncio.create_task(_handle_device_lost(cause))
+                _bg_tasks.add(cleanup)
+                cleanup.add_done_callback(lambda t: _bg_tasks.discard(t))
+                return
+            cause = cause.__cause__
+        import logging as _logging
+        _logging.getLogger("gpscontroller").exception(
+            "background task crashed: %s", exc, exc_info=exc
+        )
 
     task.add_done_callback(_on_done)
     return task
@@ -322,7 +355,9 @@ async def random_walk(req: RandomWalkRequest):
 async def joystick_start(req: JoystickStartRequest):
     engine = await _engine(getattr(req, "udid", None) if 'req' in dir() else None)
     try:
-        await engine.joystick_start(req.mode)
+        await _guard(engine.joystick_start(req.mode))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"status": "started", "mode": req.mode}
@@ -331,28 +366,28 @@ async def joystick_start(req: JoystickStartRequest):
 @router.post("/joystick/stop")
 async def joystick_stop(udid: str | None = None):
     engine = await _engine(udid)
-    await engine.joystick_stop()
+    await _guard(engine.joystick_stop())
     return {"status": "stopped"}
 
 
 @router.post("/pause")
 async def pause(udid: str | None = None):
     engine = await _engine(udid)
-    await engine.pause()
+    await _guard(engine.pause())
     return {"status": "paused"}
 
 
 @router.post("/resume")
 async def resume(udid: str | None = None):
     engine = await _engine(udid)
-    await engine.resume()
+    await _guard(engine.resume())
     return {"status": "resumed"}
 
 
 @router.post("/restore")
 async def restore(udid: str | None = None):
     engine = await _engine(udid)
-    await engine.restore()
+    await _guard(engine.restore())
     return {"status": "restored"}
 
 
@@ -362,7 +397,7 @@ async def stop_movement(udid: str | None = None):
     Keeps the device at its last reported position instead of restoring
     real GPS. restore() is a separate endpoint for that."""
     engine = await _engine(udid)
-    await engine.stop()
+    await _guard(engine.stop())
     return {"status": "stopped"}
 
 
@@ -371,7 +406,7 @@ async def stop_simulation(udid: str | None = None):
     """Legacy endpoint: stop + restore. Kept for backwards compatibility,
     prefer /stop (movement only) or /restore (clear location)."""
     engine = await _engine(udid)
-    await engine.restore()
+    await _guard(engine.restore())
     return {"status": "stopped"}
 
 

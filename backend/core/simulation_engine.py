@@ -17,6 +17,7 @@ from models.schemas import (
     SimulationStatus,
 )
 from services.interpolator import RouteInterpolator
+from services.location_service import DeviceLostError
 from services.route_service import RouteService
 from config import SPEED_PROFILES, SpeedProfile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
 
@@ -676,6 +677,11 @@ class SimulationEngine:
                         )
                         await asyncio.sleep(0.5 * (attempt + 1))
                     except asyncio.CancelledError:
+                        raise
+                    except DeviceLostError:
+                        # Bubble up so api.location._spawn() can broadcast
+                        # device_disconnected. Silently swallowing here left
+                        # the frontend showing "connected" after a lost tunnel.
                         raise
                     except Exception:
                         logger.exception("Unexpected error pushing position")

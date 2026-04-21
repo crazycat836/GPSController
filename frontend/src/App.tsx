@@ -174,6 +174,19 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
     if (wsConnected) device.scan()
   }, [wsConnected])
 
+  // Toast when a device is lost involuntarily (DVT exhausted, USB unplugged,
+  // WiFi tunnel died). Fires whenever `lostUdids` grows — the set itself is
+  // cleared when the device reappears, so the user only sees this on the
+  // transition into lost state, not while it stays lost.
+  const prevLostCount = useRef(0)
+  useEffect(() => {
+    const size = device.lostUdids.size
+    if (size > prevLostCount.current) {
+      toast.showToast(t('toast.device_lost'), 4000)
+    }
+    prevLostCount.current = size
+  }, [device.lostUdids, toast, t])
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

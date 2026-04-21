@@ -67,7 +67,9 @@ export const STRINGS = {
   'device.chip_state_running': { zh: '模擬中', en: 'Running' },
   'device.chip_state_paused': { zh: '暫停', en: 'Paused' },
   'device.chip_state_error': { zh: '錯誤', en: 'Error' },
+  'device.chip_state_reconnecting': { zh: '重連中', en: 'Reconnecting' },
   'device.chip_state_disconnected': { zh: '已斷線', en: 'Disconnected' },
+  'toast.device_lost': { zh: '裝置連線中斷,請重新插上 USB', en: 'Device connection lost. Please reconnect USB.' },
 
   // ── ETA group ────────────────────────────────
   'eta.group_progress': { zh: '平均進度', en: 'Average progress' },

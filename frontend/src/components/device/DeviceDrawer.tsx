@@ -259,9 +259,14 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                 let statusDotColor = 'var(--color-text-3)'
                 let statusLabel: string = t('device.chip_state_idle')
                 let statusLabelColor = 'var(--color-text-3)'
+                const isLost = device.lostUdids.has(d.udid) && !d.is_connected
                 if (unsupported) {
                   statusDotColor = 'var(--color-danger)'
                   statusLabel = t('device.status_unsupported')
+                  statusLabelColor = 'var(--color-error-text)'
+                } else if (isLost) {
+                  statusDotColor = 'var(--color-danger)'
+                  statusLabel = t('device.chip_state_disconnected')
                   statusLabelColor = 'var(--color-error-text)'
                 } else if (isSelected) {
                   statusDotColor = 'var(--color-success-text)'

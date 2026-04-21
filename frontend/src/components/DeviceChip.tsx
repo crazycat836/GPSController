@@ -16,10 +16,11 @@ interface Props {
   onEnableDev?: () => void
 }
 
-function stateKind(state?: string): 'idle' | 'running' | 'paused' | 'error' | 'disconnected' {
+function stateKind(state?: string): 'idle' | 'running' | 'reconnecting' | 'paused' | 'error' | 'disconnected' {
   if (!state) return 'idle'
   if (state === 'paused') return 'paused'
   if (state === 'disconnected') return 'disconnected'
+  if (state === 'reconnecting') return 'reconnecting'
   if (state === 'idle') return 'idle'
   return 'running'
 }
@@ -32,6 +33,7 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
   const dotColor = {
     idle: 'var(--color-device-idle)',
     running: 'var(--color-accent)',
+    reconnecting: 'var(--color-device-paused)',
     paused: 'var(--color-device-paused)',
     error: 'var(--color-device-error)',
     disconnected: 'var(--color-device-error)',
@@ -40,6 +42,7 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
   const label = {
     idle: t('device.chip_state_idle'),
     running: t('device.chip_state_running'),
+    reconnecting: t('device.chip_state_reconnecting'),
     paused: t('device.chip_state_paused'),
     error: t('device.chip_state_error'),
     disconnected: t('device.chip_state_disconnected'),
@@ -86,8 +89,12 @@ export function DeviceChip({ letter, device, runtime, onDisconnect, onRestoreOne
             className="w-2 h-2 rounded-full shrink-0"
             style={{
               background: dotColor,
-              boxShadow: kind === 'running' ? `0 0 6px ${dotColor}` : 'none',
-              animation: kind === 'running' ? 'chip-pulse 1.6s ease-in-out infinite' : undefined,
+              boxShadow: (kind === 'running' || kind === 'reconnecting') ? `0 0 6px ${dotColor}` : 'none',
+              animation: kind === 'running'
+                ? 'chip-pulse 1.6s ease-in-out infinite'
+                : kind === 'reconnecting'
+                  ? 'chip-pulse 2.4s ease-in-out infinite'
+                  : undefined,
             }}
           />
           <span className="font-semibold" style={{ color: accent }}>{letter}</span>
