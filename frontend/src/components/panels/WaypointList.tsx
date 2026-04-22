@@ -237,7 +237,7 @@ export default function WaypointList({ mode }: WaypointListProps) {
       ) : (
         <>
           <button
-            className="p-2.5 rounded-md text-[var(--color-text-3)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-dim)] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            className="p-2.5 rounded-md text-[var(--color-text-3)] hover:text-[var(--color-accent-strong)] hover:bg-[var(--color-accent-dim)] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
             onClick={() => setSavingMode(true)}
             disabled={points.length === 0}
             title={t('route.quick_save')}
@@ -246,7 +246,7 @@ export default function WaypointList({ mode }: WaypointListProps) {
           </button>
           <div ref={loadRef} style={{ position: 'relative' }}>
             <button
-              className="p-2.5 rounded-md text-[var(--color-text-3)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-dim)] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-2.5 rounded-md text-[var(--color-text-3)] hover:text-[var(--color-accent-strong)] hover:bg-[var(--color-accent-dim)] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
               onClick={() => setLoadOpen((prev) => !prev)}
               disabled={typedRoutes.length === 0}
               title={t('route.quick_load')}

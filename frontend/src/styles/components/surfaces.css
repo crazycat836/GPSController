@@ -16,11 +16,12 @@
 /* Glass popover / modal over the map — heavy alpha for legibility,
    strong border + large shadow. Matches SettingsMenu & DevicesPopover
    recipes so all floating popups share one surface. Radius is applied
-   per-element since popovers use 16px and small dropdowns use 12px. */
+   per-element since popovers use 16px and small dropdowns use 12px.
+   Per DESIGN.md §1 we do NOT backdrop-filter: blur() over the map — the
+   Chrome GPU tile-boundary seam reappears on any wide / full-height
+   panel. Solid high-alpha fill matches the `glass-panel` approach. */
 .surface-popup {
   background: rgba(19, 20, 24, 0.96);
-  backdrop-filter: blur(28px) saturate(1.5);
-  -webkit-backdrop-filter: blur(28px) saturate(1.5);
   border: 1px solid var(--color-border-strong);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
 }

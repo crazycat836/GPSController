@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { AVATAR_PRESETS, DEFAULT_AVATAR_KEY, type AvatarPresetKey } from '../lib/avatars'
+import { STORAGE_KEYS } from '../lib/storage-keys'
 
 export type AvatarKind = { kind: 'preset'; key: AvatarPresetKey } | { kind: 'custom' }
 
@@ -17,8 +18,8 @@ interface AvatarContextValue {
 
 const AvatarContext = createContext<AvatarContextValue | null>(null)
 
-const LS_KEY_SELECTION = 'gpsController.avatarSelection'
-const LS_KEY_CUSTOM = 'gpsController.avatarCustom'
+const LS_KEY_SELECTION = STORAGE_KEYS.avatarSelection
+const LS_KEY_CUSTOM = STORAGE_KEYS.avatarCustom
 const CUSTOM_MAX_BYTES = 512 * 1024 // guard against storing multi-MB PNGs
 
 function loadSelection(): AvatarKind {

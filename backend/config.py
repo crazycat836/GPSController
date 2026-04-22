@@ -7,6 +7,10 @@ DATA_DIR.mkdir(exist_ok=True)
 SETTINGS_FILE = DATA_DIR / "settings.json"
 BOOKMARKS_FILE = DATA_DIR / "bookmarks.json"
 ROUTES_FILE = DATA_DIR / "routes.json"
+# Session-scoped token used by the renderer to authenticate every REST
+# and WebSocket call. Regenerated on each backend startup and written
+# with mode 0600 so only the current user can read it.
+TOKEN_FILE = DATA_DIR / "token"
 
 # OSRM
 OSRM_BASE_URL = "https://router.project-osrm.org"
@@ -87,5 +91,7 @@ RECONNECT_MAX_RETRIES = 30
 DEFAULT_LOCATION = {"lat": 25.0375, "lng": 121.5637}
 
 # Server
-API_HOST = "0.0.0.0"
+# Bind to loopback only — this is a local desktop app. Exposing the API on
+# 0.0.0.0 lets any LAN peer drive the simulator without authentication.
+API_HOST = "127.0.0.1"
 API_PORT = 8777

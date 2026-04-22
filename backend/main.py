@@ -1,20 +1,24 @@
 import asyncio
 import json
 import logging
+import os
+import secrets
 import time
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from config import API_HOST, API_PORT, SETTINGS_FILE, DEFAULT_LOCATION
+from config import API_HOST, API_PORT, SETTINGS_FILE, TOKEN_FILE, DEFAULT_LOCATION
 from core.device_manager import DeviceManager
 from services.cooldown import CooldownTimer
 from services.bookmarks import BookmarkManager
 from services.coord_format import CoordinateFormatter
+from version import __version__
 
 # Migrate legacy ~/.locwarp → ~/.gpscontroller if needed
 _old_data_dir = Path.home() / ".locwarp"
@@ -75,6 +79,39 @@ class _OptionsFilter(logging.Filter):
         return '"OPTIONS ' not in msg
 
 logging.getLogger("uvicorn.access").addFilter(_OptionsFilter())
+
+
+# Session auth token. Generated once per backend process (see lifespan)
+# and required on every /api/* request via X-GPS-Token header; WebSocket
+# auth frame validates against the same value. Set to "" when running
+# with GPSCONTROLLER_DEV_NOAUTH=1 for local dev convenience.
+API_TOKEN: str = ""
+
+
+def _is_auth_disabled() -> bool:
+    return os.environ.get("GPSCONTROLLER_DEV_NOAUTH") == "1"
+
+
+# Paths that don't require the token. Docs + health check stay open so
+# the Electron shell can `GET /docs` to decide the backend is up.
+_AUTH_EXEMPT_PATHS = frozenset({
+    "/",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+    "/docs/oauth2-redirect",
+})
+
+
+def _write_token_file(token: str) -> None:
+    """Write the session token to ~/.gpscontroller/token, mode 0600."""
+    TOKEN_FILE.write_text(token, encoding="utf-8")
+    try:
+        os.chmod(TOKEN_FILE, 0o600)
+    except OSError:
+        # Windows does not honour chmod in the POSIX sense; ACLs on
+        # the user profile directory still prevent cross-user reads.
+        pass
 
 
 class AppState:
@@ -386,10 +423,15 @@ async def _usbmux_presence_watchdog():
         await asyncio.sleep(1.0)
         try:
             dm = app_state.device_manager
-            connected = {
-                udid for udid, conn in dm._connections.items()
-                if getattr(conn, "connection_type", "USB") == "USB"
-            }
+            # Snapshot under the lock. Without this, a concurrent
+            # connect()/disconnect() that mutates `_connections` from
+            # another task can raise `dictionary changed size during
+            # iteration` or hand us a use-after-free connection object.
+            async with dm._lock:
+                connected = {
+                    udid for udid, conn in dm._connections.items()
+                    if getattr(conn, "connection_type", "USB") == "USB"
+                }
 
             try:
                 raw = await list_devices()
@@ -447,7 +489,7 @@ async def _usbmux_presence_watchdog():
 
             now = time.monotonic()
             for udid in new_udids:
-                if len(dm._connections) >= MAX_DEVICES:
+                if dm.connected_count >= MAX_DEVICES:
                     break
                 last = last_reconnect_attempt.get(udid, 0.0)
                 if now - last < reconnect_cooldown:
@@ -491,7 +533,30 @@ async def _usbmux_presence_watchdog():
 async def lifespan(application: FastAPI):
     import asyncio
     from api.websocket import broadcast
+    global API_TOKEN
+
     # ── Startup ──
+    if _is_auth_disabled():
+        API_TOKEN = ""
+        # Remove any stale token file so dev-mode frontends can't
+        # accidentally pick up a value from a previous packaged run.
+        try:
+            TOKEN_FILE.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logger.exception("Failed to remove stale token file")
+        logger.warning(
+            "Auth DISABLED (GPSCONTROLLER_DEV_NOAUTH=1) — API reachable without X-GPS-Token",
+        )
+    else:
+        API_TOKEN = secrets.token_urlsafe(32)
+        try:
+            _write_token_file(API_TOKEN)
+            logger.info("Session token written to %s", TOKEN_FILE)
+        except OSError:
+            logger.exception("Failed to write token file; renderer will not be able to auth")
+
     logger.info("GPSController starting — scanning for devices…")
     try:
         devices = await app_state.device_manager.discover_devices()
@@ -541,15 +606,51 @@ async def lifespan(application: FastAPI):
 
 # ── FastAPI app ───────────────────────────────────────────
 
-app = FastAPI(title="GPSController", version="0.7.0", description="iOS Virtual Location Simulator", lifespan=lifespan)
+app = FastAPI(title="GPSController", version=__version__, description="iOS Virtual Location Simulator", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class _TokenAuthMiddleware(BaseHTTPMiddleware):
+    """Gate every request by an `X-GPS-Token` header.
+
+    Exempts a small set of health / docs paths so the Electron shell can
+    probe the backend before it has read the token file. When
+    GPSCONTROLLER_DEV_NOAUTH=1 is set, or a WebSocket upgrade is being
+    negotiated (auth is then enforced via the first WS frame — see
+    api/websocket.py), the middleware short-circuits and lets the request
+    through.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        if _is_auth_disabled():
+            return await call_next(request)
+        path = request.url.path
+        if path in _AUTH_EXEMPT_PATHS:
+            return await call_next(request)
+        # WebSocket connects arrive as ASGI "websocket" scope; HTTP
+        # middleware still sees them on the way up. Let ws paths through
+        # so the router-level WebSocket handler can require the auth
+        # frame itself.
+        if request.scope.get("type") == "websocket":
+            return await call_next(request)
+        supplied = request.headers.get("x-gps-token", "")
+        if not API_TOKEN or not secrets.compare_digest(supplied, API_TOKEN):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                {"detail": {"code": "unauthorized", "message": "Missing or invalid X-GPS-Token"}},
+                status_code=401,
+            )
+        return await call_next(request)
+
+
+app.add_middleware(_TokenAuthMiddleware)
 
 # Register routers
 from api.device import router as device_router
@@ -573,7 +674,7 @@ app.include_router(ws_router)
 async def root():
     return {
         "name": "GPSController",
-        "version": "0.1.0",
+        "version": __version__,
         "status": "running",
         "initial_position": app_state.get_initial_position(),
     }

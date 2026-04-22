@@ -163,9 +163,7 @@ export default function DevicesPopover({ anchor, onClose, onOpenManage }: Device
                   <span
                     className="w-9 h-9 rounded-[10px] grid place-items-center text-white font-semibold text-[14px]"
                     style={{
-                      background: isNetwork
-                        ? 'linear-gradient(135deg, #4ecdc4, #2aa39b)'
-                        : 'linear-gradient(135deg, #3a7cff, #1e50d4)',
+                      background: `var(${isNetwork ? '--gradient-device-network' : '--gradient-device-usb'})`,
                       boxShadow: 'var(--shadow-avatar-ring)',
                     }}
                     aria-hidden="true"

@@ -78,9 +78,10 @@ export default function Drawer({
           'fixed inset-y-0 z-[var(--z-drawer)]',
           isLeft ? 'left-0' : 'right-0',
           width,
-          // Deep-glass surface — matches redesign/Home library drawer.
-          'bg-[rgba(15,16,20,0.96)] backdrop-blur-[28px] backdrop-saturate-150',
-          '[-webkit-backdrop-filter:blur(28px)_saturate(1.5)]',
+          // Solid deep-glass surface. Per DESIGN.md §1 no backdrop-filter
+          // on full-height panels — Chrome reveals a tile-boundary seam
+          // between blurred and unblurred regions of the map.
+          'bg-[rgba(15,16,20,0.98)]',
           isLeft
             ? 'border-r border-[var(--color-border-strong)] shadow-[16px_0_48px_rgba(0,0,0,0.5)]'
             : 'border-l border-[var(--color-border-strong)] shadow-[-16px_0_48px_rgba(0,0,0,0.5)]',

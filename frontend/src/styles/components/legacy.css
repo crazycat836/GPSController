@@ -227,13 +227,13 @@
 .device-status.device-disconnected { border-color: var(--color-border); }
 
 /* ── ETA bar ────────────────────────────────────────────────── */
+/* Per DESIGN.md §1 no backdrop-filter on full-width bars over the map;
+   solid high-alpha fill avoids the Chrome GPU tile-boundary seam. */
 .eta-bar {
   position: absolute;
   top: 0; left: 0; right: 0;
   z-index: var(--z-bar);
-  background: rgba(26, 29, 39, 0.92);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(26, 29, 39, 0.96);
   padding: 8px 16px;
   display: flex;
   align-items: center;
@@ -257,9 +257,10 @@
 .joystick-pad {
   width: 140px; height: 140px;
   border-radius: 50%;
-  background: rgba(26, 29, 39, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  /* ≤256px element — blur is permitted by DESIGN.md §1, but the live
+     joystick uses inline JSX styles anyway; keep the legacy class as a
+     solid fill for parity. */
+  background: rgba(26, 29, 39, 0.94);
   border: 2px solid var(--color-border);
   position: relative;
   cursor: grab;

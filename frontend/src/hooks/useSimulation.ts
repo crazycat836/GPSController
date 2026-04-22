@@ -3,6 +3,10 @@ import * as api from '../services/api'
 import { STORAGE_KEYS } from '../lib/storage-keys'
 import type { WsMessage } from './useWebSocket'
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
 export enum SimMode {
   Teleport = 'teleport',
   Navigate = 'navigate',
@@ -233,9 +237,9 @@ export function useSimulation(subscribe?: WsSubscribe) {
     if (!subscribe) return
     return subscribe((wsMessage) => {
     // ── Group mode: mirror per-device state into `runtimes` map ────────
-    const udid: string | undefined = wsMessage.data?.udid
+    const udid: string | undefined = (wsMessage.data as any)?.udid
     if (udid) {
-      const d = wsMessage.data
+      const d = (wsMessage.data) as any
       switch (wsMessage.type) {
         case 'position_update': {
           // Only include a key when the incoming payload carries it,
@@ -286,22 +290,23 @@ export function useSimulation(subscribe?: WsSubscribe) {
     }
     switch (wsMessage.type) {
       case 'position_update': {
-        const { lat, lng } = wsMessage.data
+        const { lat, lng } = (wsMessage.data as any)
         if (typeof lat === 'number' && typeof lng === 'number') {
           setCurrentPosition({ lat, lng })
           // Live position means the backend engine is now in sync with the UI.
           setBackendPositionSynced(true)
         }
-        if (wsMessage.data.progress != null) {
-          setProgress(wsMessage.data.progress)
+        const _pu = wsMessage.data as any
+        if (_pu.progress != null) {
+          setProgress(_pu.progress)
         }
         {
-          const etaVal = wsMessage.data.eta_seconds ?? wsMessage.data.eta
+          const etaVal = _pu.eta_seconds ?? _pu.eta
           if (etaVal != null) setEta(etaVal)
         }
         {
-          const dr = wsMessage.data.distance_remaining
-          const dt = wsMessage.data.distance_traveled
+          const dr = _pu.distance_remaining
+          const dt = _pu.distance_traveled
           if (dr != null || dt != null) {
             setStatus((prev) => ({
               ...prev,
@@ -313,7 +318,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         break
       }
       case 'simulation_state': {
-        const d = wsMessage.data
+        const d = (wsMessage.data) as any
         setStatus({
           running: !!d.running,
           paused: !!d.paused,
@@ -341,7 +346,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         break
       }
       case 'waypoint_progress': {
-        const d = wsMessage.data
+        const d = (wsMessage.data) as any
         if (d && typeof d.current_index === 'number') {
           setWaypointProgress({
             current: d.current_index,
@@ -352,7 +357,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         break
       }
       case 'lap_complete': {
-        const d = wsMessage.data
+        const d = (wsMessage.data) as any
         if (d && typeof d.lap === 'number') {
           setLapProgress({
             current: d.lap,
@@ -374,7 +379,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         // Auto-mount failed. The SimContext observer will surface a
         // single hint toast so the user knows what to do next.
         setDdiMounting(false)
-        const d = wsMessage.data ?? {}
+        const d = (wsMessage.data ?? {}) as any
         setDdiMissing({
           reason: typeof d.reason === 'string' ? d.reason : 'unknown',
           stage: typeof d.stage === 'string' ? d.stage : undefined,
@@ -405,7 +410,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
       }
       case 'pause_countdown':
       case 'random_walk_pause': {
-        const dur = wsMessage.data?.duration_seconds
+        const dur = (wsMessage.data as any)?.duration_seconds
         if (typeof dur === 'number' && dur > 0) {
           setPauseEndAt(Date.now() + dur * 1000)
         }
@@ -417,14 +422,14 @@ export function useSimulation(subscribe?: WsSubscribe) {
         break
       }
       case 'route_path': {
-        const pts = wsMessage.data?.coords
+        const pts = (wsMessage.data as any)?.coords
         if (Array.isArray(pts)) {
           setRoutePath(pts.map((p: any) => ({ lat: p.lat ?? p[0], lng: p.lng ?? p[1] })))
         }
         break
       }
       case 'state_change': {
-        const st = wsMessage.data?.state
+        const st = (wsMessage.data as any)?.state
         if (st === 'idle' || st === 'disconnected') {
           setStatus((prev) => ({ ...prev, running: false, paused: false, state: st }))
           setRoutePath([])
@@ -438,7 +443,7 @@ export function useSimulation(subscribe?: WsSubscribe) {
         break
       }
       case 'simulation_error': {
-        setError(wsMessage.data?.message ?? 'Simulation error')
+        setError((wsMessage.data as any)?.message ?? 'Simulation error')
         break
       }
     }
@@ -477,8 +482,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
       setProgress(0)
       setEta(null)
       return res
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -494,8 +499,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
         setStatus((prev) => ({ ...prev, running: true, paused: false }))
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
-      } catch (err: any) {
-        setError(err.message)
+      } catch (err: unknown) {
+        setError(errorMessage(err))
         throw err
       }
     },
@@ -517,8 +522,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
         setStatus((prev) => ({ ...prev, running: true, paused: false }))
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
-      } catch (err: any) {
-        setError(err.message)
+      } catch (err: unknown) {
+        setError(errorMessage(err))
         throw err
       }
     },
@@ -537,8 +542,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
         setStatus((prev) => ({ ...prev, running: true, paused: false }))
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
-      } catch (err: any) {
-        setError(err.message)
+      } catch (err: unknown) {
+        setError(errorMessage(err))
         throw err
       }
     },
@@ -555,8 +560,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
         setStatus((prev) => ({ ...prev, running: true, paused: false }))
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
-      } catch (err: any) {
-        setError(err.message)
+      } catch (err: unknown) {
+        setError(errorMessage(err))
         throw err
       }
     },
@@ -570,8 +575,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
       const res = await api.joystickStart(moveMode)
       setStatus((prev) => ({ ...prev, running: true, paused: false }))
       return res
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(errorMessage(err))
       throw err
     }
   }, [moveMode])
@@ -583,8 +588,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
       // leave mode as-is; status drives running state
       setStatus((prev) => ({ ...prev, running: false, paused: false }))
       return res
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -595,8 +600,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
       const res = await api.pauseSim()
       setStatus((prev) => ({ ...prev, paused: true }))
       return res
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -607,8 +612,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
       const res = await api.resumeSim()
       setStatus((prev) => ({ ...prev, paused: false }))
       return res
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -632,8 +637,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
       // lingering destination pin after Stop was a reported UX bug.
       setDestination(null)
       return res
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -655,8 +660,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
       setLapProgress(null)
       setEffectiveSpeed(null)
       return res
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -673,8 +678,8 @@ export function useSimulation(subscribe?: WsSubscribe) {
       // ones the route originally started with.
       setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
       return res
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(errorMessage(err))
       throw err
     }
   }, [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh])

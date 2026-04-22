@@ -49,10 +49,12 @@ export function ToolbarButton({
 }: ToolbarButtonProps) {
   const isToggle = active !== undefined
 
+  // Active state uses accent-strong on accent-dim for WCAG AA contrast
+  // (DESIGN.md §2 & §8a: accent-on-accent-dim fails 4.5:1).
   const colorClass = active
-    ? 'bg-[var(--color-accent-dim)] text-[var(--color-accent)] shadow-[0_0_12px_rgba(108,140,255,0.25)]'
+    ? 'bg-[var(--color-accent-dim)] text-[var(--color-accent-strong)] shadow-[0_0_12px_rgba(108,140,255,0.25)]'
     : accent
-      ? 'text-[var(--color-accent)] hover:bg-[var(--color-surface-hover)]'
+      ? 'text-[var(--color-accent-strong)] hover:bg-[var(--color-surface-hover)]'
       : variant === 'round'
         ? 'text-[var(--color-text-2)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-1)]'
         : 'text-[var(--color-text-1)] hover:bg-[var(--color-surface-hover)]'

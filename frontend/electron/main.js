@@ -1,7 +1,27 @@
 const { app, BrowserWindow, Menu, shell } = require('electron')
 const path = require('path')
+const os = require('os')
+const fs = require('fs')
 const { spawn } = require('child_process')
 const http = require('http')
+
+// Single source of truth for the app version — same file Electron already
+// consumes for `app.getVersion()` / auto-updater metadata.
+const APP_VERSION = require('../package.json').version
+
+// Session token written by the backend on startup. See backend/config.py
+// TOKEN_FILE and backend/main.py lifespan. We read it lazily (after the
+// backend is up) so the value we inject into the renderer is the fresh
+// one for this run, not a stale file from a previous crash.
+const TOKEN_FILE = path.join(os.homedir(), '.gpscontroller', 'token')
+
+function readSessionToken() {
+  try {
+    return fs.readFileSync(TOKEN_FILE, 'utf8').trim()
+  } catch {
+    return ''
+  }
+}
 
 // Strip the default "File Edit View Window Help" menubar — GPSController has its
 // own in-window controls and the native menu only adds noise on Windows.
@@ -88,13 +108,18 @@ async function createWindow() {
         const u = new URL(details.url)
         if (OSM_HOSTS.includes(u.hostname)) {
           details.requestHeaders['User-Agent'] =
-            'GPSController/0.1.49 (+https://github.com/keezxc1223/gpscontroller)'
+            `GPSController/${APP_VERSION} (+https://github.com/keezxc1223/gpscontroller)`
           details.requestHeaders['Referer'] = 'https://github.com/keezxc1223/gpscontroller'
         }
       } catch {}
       cb({ requestHeaders: details.requestHeaders })
     })
   } catch (e) { console.error('[electron] UA hook failed:', e) }
+
+  // Backend writes the token before accepting any HTTP request, and
+  // `waitForBackend()` polls /docs until that succeeds — so by the time
+  // we reach here the token file is on disk. In dev mode it's empty.
+  const sessionToken = readSessionToken()
 
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -107,19 +132,39 @@ async function createWindow() {
     backgroundColor: '#0f1117',
     show: false,
     webPreferences: {
+      // Chromium's OS-level sandbox: required for a defence-in-depth
+      // posture even with contextIsolation on. Forces the preload to
+      // run in the isolated world without `node:*` access.
+      sandbox: true,
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+      // Pass the version + session token down so preload.js can expose
+      // them to the renderer without filesystem access (sandbox blocks
+      // node:fs). The token is regenerated each backend run so leaking
+      // the argv post-hoc yields nothing the renderer couldn't read.
+      additionalArguments: [
+        `--gps-version=${APP_VERSION}`,
+        `--gps-token=${sessionToken}`,
+      ],
     },
   })
   // Show the window once the first frame is painted. Combined with
   // backgroundColor above, this eliminates the blank/white boot state.
   mainWindow.once('ready-to-show', () => { mainWindow.show() })
 
-  // Open target="_blank" / external links in the user's default browser
+  // Open target="_blank" / external links in the user's default browser.
+  // Only `https:` URLs are forwarded to the OS; `http:`, `file:`,
+  // `javascript:`, and any custom scheme are blocked. Parsing failure is
+  // also treated as deny so a malformed URL can't slip through.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      shell.openExternal(url)
-      return { action: 'deny' }
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol === 'https:') {
+        shell.openExternal(url)
+      }
+    } catch {
+      // Malformed URL — ignore.
     }
     return { action: 'deny' }
   })

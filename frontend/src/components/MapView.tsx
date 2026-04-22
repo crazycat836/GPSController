@@ -530,7 +530,7 @@ function MapView({
           <circle cx="18" cy="16" r="14" fill="#ffffff" opacity="0.96"/>
           <circle cx="18" cy="16" r="14" fill="none" stroke="${ringFill}" stroke-width="4"/>
           <circle cx="18" cy="16" r="9" fill="${innerFill}"/>
-          <text x="18" y="20" text-anchor="middle" fill="${textFill}" font-size="12" font-weight="700" font-family="system-ui">${label}</text>
+          <text x="18" y="20" text-anchor="middle" fill="${textFill}" font-size="12" font-weight="600" font-family="system-ui">${label}</text>
         </svg>`,
         iconSize: [36, 42],
         iconAnchor: [18, 39],
@@ -677,7 +677,7 @@ function MapView({
             html: `<svg width="44" height="44" viewBox="0 0 44 44">
               <circle cx="22" cy="22" r="13" fill="${color}" opacity="0.95"/>
               <circle cx="22" cy="22" r="11" fill="none" stroke="#ffffff" stroke-width="2"/>
-              <text x="22" y="26" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700" font-family="system-ui">${letter}</text>
+              <text x="22" y="26" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="600" font-family="system-ui">${letter}</text>
             </svg>`,
             iconSize: [44, 44],
             iconAnchor: [22, 22],
@@ -782,7 +782,7 @@ function MapView({
             <ellipse cx="18" cy="47" rx="6" ry="2" fill="#000" opacity="0.2"/>
             <path d="M18 2C9.7 2 3 8.7 3 17c0 12 15 30 15 30s15-18 15-30C33 8.7 26.3 2 18 2z" fill="${color}"/>
             <circle cx="18" cy="17" r="7" fill="#ffffff" opacity="0.95"/>
-            <text x="18" y="21" text-anchor="middle" fill="${color}" font-size="11" font-weight="700" font-family="system-ui">${letter}</text>
+            <text x="18" y="21" text-anchor="middle" fill="${color}" font-size="11" font-weight="600" font-family="system-ui">${letter}</text>
           </svg>`,
           iconSize: [36, 50],
           iconAnchor: [18, 47],

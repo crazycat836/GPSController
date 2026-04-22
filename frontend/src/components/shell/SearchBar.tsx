@@ -170,9 +170,9 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
           )}
 
           {/* Address results */}
-          {results.map((r, i) => (
+          {results.map((r) => (
             <button
-              key={i}
+              key={`${r.lat.toFixed(6)}_${r.lng.toFixed(6)}_${r.name}`}
               onClick={() => handleSelect(r.lat, r.lng)}
               className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
             >

@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
@@ -118,6 +119,13 @@ class DeviceManager:
         await dm.disconnect(devices[0].udid)
     """
 
+    # `/api/device/list` is hot-path: the frontend re-fetches on every WS
+    # broadcast and multiple clients (Electron + stray browser tabs in dev)
+    # multiply the load. A short TTL around usbmux enumeration coalesces
+    # concurrent callers into one round-trip. Device metadata doesn't
+    # change at sub-second timescales so this is invisible to the UI.
+    _DISCOVER_TTL = 0.5
+
     def __init__(self) -> None:
         self._connections: Dict[str, _ActiveConnection] = {}
         self._lock = asyncio.Lock()
@@ -125,6 +133,9 @@ class DeviceManager:
         # parallel connects on a fresh machine race to write the same DDI
         # cache path and corrupt each other.
         self._ddi_mount_lock = asyncio.Lock()
+        self._discover_cache: list[DeviceInfo] | None = None
+        self._discover_cache_at: float = 0.0
+        self._discover_inflight: asyncio.Task[list[DeviceInfo]] | None = None
 
     # ------------------------------------------------------------------
     # Discovery
@@ -140,22 +151,69 @@ class DeviceManager:
 
         Returns a list of ``DeviceInfo`` objects with basic identification
         data.  This does **not** establish a persistent connection.
+
+        Results are cached for ``_DISCOVER_TTL`` seconds and concurrent
+        callers share a single in-flight enumeration.
         """
+        now = time.monotonic()
+        if (
+            self._discover_cache is not None
+            and (now - self._discover_cache_at) < self._DISCOVER_TTL
+        ):
+            return self._discover_cache
+
+        inflight = self._discover_inflight
+        if inflight is not None and not inflight.done():
+            # asyncio.shield() keeps the enumeration task running even if
+            # *this* caller's await gets cancelled. Without shield, a
+            # cancelled caller would also cancel the shared task and the
+            # next caller would have to restart enumeration from scratch.
+            # If the in-flight task raised, fall through and retry rather
+            # than propagating a stale failure.
+            try:
+                return await asyncio.shield(inflight)
+            except Exception:
+                pass
+
+        task = asyncio.create_task(self._discover_devices_uncached())
+        self._discover_inflight = task
+        try:
+            try:
+                result = await task
+            except Exception:
+                # Do NOT cache on error — a transient usbmux failure would
+                # otherwise hand every caller an empty list for the full
+                # TTL and mask the real error. Return [] for this caller;
+                # the next one pays for a fresh enumeration immediately.
+                return []
+            self._discover_cache = result
+            self._discover_cache_at = time.monotonic()
+            return result
+        finally:
+            if self._discover_inflight is task:
+                self._discover_inflight = None
+
+    async def _discover_devices_uncached(self) -> list[DeviceInfo]:
         devices: list[DeviceInfo] = []
         seen_udids: set[str] = set()
 
-        try:
-            raw_devices = await list_devices()
-        except Exception:
-            logger.exception("Failed to list usbmux devices")
-            return devices
+        # Let usbmux failures propagate — the public ``discover_devices``
+        # wrapper catches them so we don't poison the cache with an empty
+        # list on transient errors.
+        raw_devices = await list_devices()
 
-        # Surface the raw count at INFO so "nothing plugged in" vs "device
-        # present but enumeration failed" is obvious in the backend log.
-        logger.info(
-            "discover_devices: usbmux returned %d raw entr%s",
-            len(raw_devices), "y" if len(raw_devices) == 1 else "ies",
-        )
+        # "Nothing plugged in" is genuinely useful at INFO because it tells
+        # ops "enumeration ran, there are no devices" — distinct from a
+        # silent enumeration failure. The per-device line below stays at
+        # DEBUG since it would otherwise repeat on every /api/device/list
+        # poll.
+        if not raw_devices:
+            logger.info("discover_devices: usbmux returned 0 raw entries")
+        else:
+            logger.debug(
+                "discover_devices: usbmux returned %d raw entr%s",
+                len(raw_devices), "y" if len(raw_devices) == 1 else "ies",
+            )
 
         for raw in raw_devices:
             try:
@@ -213,7 +271,9 @@ class DeviceManager:
                     and info.developer_mode_enabled is False
                 )
                 devices.append(info)
-                logger.info(
+                # DEBUG — see discover_devices() for rationale. This line
+                # would otherwise repeat once per device per poll.
+                logger.debug(
                     "  device %s '%s' iOS %s via %s (connected=%s)",
                     info.udid, info.name, info.ios_version, conn_type, info.is_connected,
                 )
@@ -221,6 +281,13 @@ class DeviceManager:
                 logger.exception("Failed to query device %s", getattr(raw, "serial", "?"))
 
         return devices
+
+    def _invalidate_discover_cache(self) -> None:
+        """Call after any mutation to ``_connections`` so the next
+        ``discover_devices()`` reflects the new state without waiting
+        for TTL expiry."""
+        self._discover_cache = None
+        self._discover_cache_at = 0.0
 
     # ------------------------------------------------------------------
     # Connection
@@ -280,6 +347,7 @@ class DeviceManager:
 
         async with self._lock:
             self._connections[udid] = conn
+        self._invalidate_discover_cache()
 
         logger.info("Connected to %s (iOS %s) via %s", udid, ios_version_str, connection_type)
 
@@ -362,6 +430,7 @@ class DeviceManager:
         if conn is None:
             logger.warning("Disconnect requested for unknown device %s", udid)
             return
+        self._invalidate_discover_cache()
 
         # Clear any active location simulation first.
         if conn.location_service is not None:
@@ -713,6 +782,7 @@ class DeviceManager:
 
         async with self._lock:
             self._connections[udid] = conn
+        self._invalidate_discover_cache()
 
         logger.info("WiFi tunnel connected to %s (iOS %s)", udid, ios_version_str)
 
@@ -796,9 +866,23 @@ class DeviceManager:
         """Return the UDIDs of all currently connected devices."""
         return list(self._connections.keys())
 
+    @property
+    def connected_count(self) -> int:
+        """Return the number of currently connected devices."""
+        return len(self._connections)
+
     def is_connected(self, udid: str) -> bool:
         """Check whether a device is currently connected."""
         return udid in self._connections
+
+    def udids_by_connection_type(self, connection_type: str) -> list[str]:
+        """Return UDIDs whose connection matches ``connection_type``
+        (e.g. ``'Network'`` or ``'USB'``). Preferred over reaching into
+        ``_connections`` from the API layer."""
+        return [
+            udid for udid, conn in self._connections.items()
+            if getattr(conn, "connection_type", "") == connection_type
+        ]
 
     def get_connection_type(self, udid: str) -> str:
         """Return ``'USB'`` or ``'Network'`` for a connected device."""

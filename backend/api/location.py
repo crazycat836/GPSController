@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from services.location_service import DeviceLostError
 
@@ -44,7 +44,8 @@ async def _engine(udid: str | None = None):
     dm = app_state.device_manager
 
     # Pick a target UDID — requested udid first, then already-connected, then any discoverable device.
-    target_udid = udid or next(iter(dm._connections.keys()), None)
+    connected = dm.connected_udids
+    target_udid = udid or (connected[0] if connected else None)
     if target_udid is None:
         import asyncio as _asyncio
         for attempt in range(10):
@@ -110,7 +111,7 @@ async def _handle_device_lost(exc: Exception) -> "HTTPException":
     _log = _logging.getLogger("gpscontroller")
 
     dm = app_state.device_manager
-    lost_udids = list(dm._connections.keys())
+    lost_udids = dm.connected_udids
     for udid in lost_udids:
         try:
             await dm.disconnect(udid)
@@ -168,7 +169,7 @@ async def apply_speed(req: ApplySpeedRequest):
     _move_along_route loop re-interpolates from the current position
     with the new speed; already-completed progress is kept."""
     from config import resolve_speed_profile
-    engine = await _engine(getattr(req, "udid", None) if 'req' in dir() else None)
+    engine = await _engine(req.udid)
     profile = resolve_speed_profile(
         req.mode.value,
         speed_kmh=req.speed_kmh,
@@ -187,7 +188,7 @@ async def apply_speed(req: ApplySpeedRequest):
 
 @router.post("/teleport")
 async def teleport(req: TeleportRequest):
-    engine = await _engine(getattr(req, "udid", None) if 'req' in dir() else None)
+    engine = await _engine(req.udid)
     cooldown = _cooldown()
 
     # Group mode (2+ engines): bypass cooldown entirely. The UI also locks the
@@ -294,7 +295,7 @@ def _spawn(coro):
 
 @router.post("/navigate")
 async def navigate(req: NavigateRequest):
-    engine = await _engine(getattr(req, "udid", None) if 'req' in dir() else None)
+    engine = await _engine(req.udid)
     if engine.current_position is None:
         raise HTTPException(
             status_code=400,
@@ -311,7 +312,7 @@ async def navigate(req: NavigateRequest):
 
 @router.post("/loop")
 async def loop(req: LoopRequest):
-    engine = await _engine(getattr(req, "udid", None) if 'req' in dir() else None)
+    engine = await _engine(req.udid)
     _spawn(engine.start_loop(
         req.waypoints, req.mode,
         speed_kmh=req.speed_kmh,
@@ -325,7 +326,7 @@ async def loop(req: LoopRequest):
 
 @router.post("/multistop")
 async def multi_stop(req: MultiStopRequest):
-    engine = await _engine(getattr(req, "udid", None) if 'req' in dir() else None)
+    engine = await _engine(req.udid)
     _spawn(engine.multi_stop(
         req.waypoints, req.mode, req.stop_duration, req.loop,
         speed_kmh=req.speed_kmh,
@@ -339,7 +340,7 @@ async def multi_stop(req: MultiStopRequest):
 
 @router.post("/randomwalk")
 async def random_walk(req: RandomWalkRequest):
-    engine = await _engine(getattr(req, "udid", None) if 'req' in dir() else None)
+    engine = await _engine(req.udid)
     _spawn(engine.random_walk(
         req.center, req.radius_m, req.mode,
         speed_kmh=req.speed_kmh,
@@ -353,7 +354,7 @@ async def random_walk(req: RandomWalkRequest):
 
 @router.post("/joystick/start")
 async def joystick_start(req: JoystickStartRequest):
-    engine = await _engine(getattr(req, "udid", None) if 'req' in dir() else None)
+    engine = await _engine(req.udid)
     try:
         await _guard(engine.joystick_start(req.mode))
     except HTTPException:
@@ -482,8 +483,8 @@ async def set_coord_format(req: CoordFormatRequest):
 # --- Initial map position (persisted in settings.json) ---
 
 class _InitialPosRequest(BaseModel):
-    lat: float | None = None
-    lng: float | None = None
+    lat: float | None = Field(default=None, ge=-90.0, le=90.0)
+    lng: float | None = Field(default=None, ge=-180.0, le=180.0)
 
 
 @router.get("/settings/initial-position", tags=["settings"])

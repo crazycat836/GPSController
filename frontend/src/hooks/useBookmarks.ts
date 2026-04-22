@@ -1,6 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import * as api from '../services/api'
 
+const _IS_DEV = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true
+function devLog(...args: unknown[]): void {
+  if (_IS_DEV) {
+    // eslint-disable-next-line no-console
+    console.error(...args)
+  }
+}
+
 export interface Bookmark {
   id: string
   name: string
@@ -39,7 +47,7 @@ export function useBookmarks() {
       setBookmarks(Array.isArray(bms) ? bms : bms.bookmarks ?? [])
       setCategories(Array.isArray(cats) ? cats : [])
     } catch (err) {
-      console.error('Failed to load bookmarks:', err)
+      devLog('Failed to load bookmarks:', err)
     } finally {
       if (mountedRef.current) setLoading(false)
     }

@@ -86,7 +86,7 @@ function DevicePill({ dev, letter, color, coord }: DevicePillProps) {
       title={dev.name}
     >
       <span
-        className="w-6 h-6 rounded-full grid place-items-center text-[11px] font-bold"
+        className="w-6 h-6 rounded-full grid place-items-center text-[11px] font-semibold"
         style={{
           background: color,
           color: 'var(--color-surface-0)',

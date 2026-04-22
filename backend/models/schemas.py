@@ -58,26 +58,37 @@ class TeleportRequest(BaseModel):
     udid: str | None = None
 
 
+# Input bounds shared across movement-mode requests. Upper bounds are
+# deliberately loose — fast enough for a car, not so fast that a typo
+# produces divide-by-near-zero tick math. Waypoint and pause limits exist
+# to prevent accidental memory / CPU blow-ups.
+_SPEED_BOUNDS = {"ge": 0.1, "le": 500.0}
+_RADIUS_BOUNDS = {"ge": 10.0, "le": 50_000.0}
+_PAUSE_BOUNDS = {"ge": 0.0, "le": 3600.0}
+_MAX_WAYPOINTS = 500
+_MAX_STOP_DURATION = 86_400  # 24 h
+
+
 class NavigateRequest(BaseModel):
     lat: float = Field(ge=-90.0, le=90.0)
     lng: float = Field(ge=-180.0, le=180.0)
     mode: MovementMode = MovementMode.WALKING
-    speed_kmh: float | None = None
-    speed_min_kmh: float | None = None
-    speed_max_kmh: float | None = None
+    speed_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
+    speed_min_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
+    speed_max_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
     straight_line: bool = False
     udid: str | None = None
 
 
 class LoopRequest(BaseModel):
-    waypoints: list[Coordinate]
+    waypoints: list[Coordinate] = Field(min_length=1, max_length=_MAX_WAYPOINTS)
     mode: MovementMode = MovementMode.WALKING
-    speed_kmh: float | None = None
-    speed_min_kmh: float | None = None
-    speed_max_kmh: float | None = None
+    speed_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
+    speed_min_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
+    speed_max_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
     pause_enabled: bool = True
-    pause_min: float = 5.0
-    pause_max: float = 20.0
+    pause_min: float = Field(default=5.0, **_PAUSE_BOUNDS)
+    pause_max: float = Field(default=20.0, **_PAUSE_BOUNDS)
     straight_line: bool = False
     udid: str | None = None
     # None / 0 = run forever (user stops manually). Positive = auto-stop
@@ -87,16 +98,16 @@ class LoopRequest(BaseModel):
 
 
 class MultiStopRequest(BaseModel):
-    waypoints: list[Coordinate]
+    waypoints: list[Coordinate] = Field(min_length=1, max_length=_MAX_WAYPOINTS)
     mode: MovementMode = MovementMode.WALKING
-    stop_duration: int = 0
+    stop_duration: int = Field(default=0, ge=0, le=_MAX_STOP_DURATION)
     loop: bool = False
-    speed_kmh: float | None = None
-    speed_min_kmh: float | None = None
-    speed_max_kmh: float | None = None
+    speed_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
+    speed_min_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
+    speed_max_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
     pause_enabled: bool = True
-    pause_min: float = 5.0
-    pause_max: float = 20.0
+    pause_min: float = Field(default=5.0, **_PAUSE_BOUNDS)
+    pause_max: float = Field(default=20.0, **_PAUSE_BOUNDS)
     straight_line: bool = False
     udid: str | None = None
     # Only meaningful when `loop=True`; otherwise the route runs once
@@ -106,14 +117,14 @@ class MultiStopRequest(BaseModel):
 
 class RandomWalkRequest(BaseModel):
     center: Coordinate
-    radius_m: float = 500.0
+    radius_m: float = Field(default=500.0, **_RADIUS_BOUNDS)
     mode: MovementMode = MovementMode.WALKING
-    speed_kmh: float | None = None
-    speed_min_kmh: float | None = None
-    speed_max_kmh: float | None = None
+    speed_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
+    speed_min_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
+    speed_max_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
     pause_enabled: bool = True
-    pause_min: float = 5.0
-    pause_max: float = 20.0
+    pause_min: float = Field(default=5.0, **_PAUSE_BOUNDS)
+    pause_max: float = Field(default=20.0, **_PAUSE_BOUNDS)
     straight_line: bool = False
     udid: str | None = None
     # Dual-device group mode: both devices pass the same seed so they pick
@@ -123,7 +134,7 @@ class RandomWalkRequest(BaseModel):
 
 class JoystickStartRequest(BaseModel):
     mode: MovementMode = MovementMode.WALKING
-    speed_kmh: float | None = None
+    speed_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
     udid: str | None = None
 
 
@@ -159,27 +170,27 @@ class RoutePlanRequest(BaseModel):
 
 class SavedRoute(BaseModel):
     id: str = ""
-    name: str
-    waypoints: list[Coordinate]
-    profile: str = "walking"
+    name: str = Field(max_length=512)
+    waypoints: list[Coordinate] = Field(min_length=1, max_length=_MAX_WAYPOINTS)
+    profile: str = Field(default="walking", max_length=32)
     created_at: str = ""
 
 
 # ── Bookmarks ─────────────────────────────────────────────
 class BookmarkCategory(BaseModel):
     id: str = ""
-    name: str
-    color: str = "#6c8cff"
+    name: str = Field(max_length=128)
+    color: str = Field(default="#6c8cff", max_length=32)
     sort_order: int = 0
     created_at: str = ""
 
 
 class Bookmark(BaseModel):
     id: str = ""
-    name: str
-    lat: float
-    lng: float
-    address: str = ""
+    name: str = Field(max_length=512)
+    lat: float = Field(ge=-90.0, le=90.0)
+    lng: float = Field(ge=-180.0, le=180.0)
+    address: str = Field(default="", max_length=1024)
     category_id: str = "default"
     created_at: str = ""
     last_used_at: str = ""

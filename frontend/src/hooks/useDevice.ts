@@ -7,6 +7,19 @@ import {
 } from '../services/api'
 import type { WsMessage } from './useWebSocket'
 
+// Only log to the DevTools console in dev builds; production (packaged
+// Electron) has no attached console and these would add noise if anyone
+// ever attached one. Uses console.warn so informational "scan failed /
+// connect failed" lines don't light up red + trigger the DevTools error
+// overlay — they're recoverable, not faults.
+const _IS_DEV = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true
+function devLog(...args: unknown[]): void {
+  if (_IS_DEV) {
+    // eslint-disable-next-line no-console
+    console.warn(...args)
+  }
+}
+
 export interface DeviceInfo {
   udid: string
   name: string
@@ -30,6 +43,25 @@ export interface WifiScanResult {
 
 export type WsSubscribe = (fn: (m: WsMessage) => void) => () => void
 
+function deviceListEqual(a: readonly DeviceInfo[], b: readonly DeviceInfo[]): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]
+    const y = b[i]
+    if (
+      x.udid !== y.udid ||
+      x.name !== y.name ||
+      x.ios_version !== y.ios_version ||
+      x.connection_type !== y.connection_type ||
+      x.is_connected !== y.is_connected ||
+      x.developer_mode_enabled !== y.developer_mode_enabled ||
+      x.can_reveal_developer_mode !== y.can_reveal_developer_mode
+    ) return false
+  }
+  return true
+}
+
 export function useDevice(subscribe?: WsSubscribe) {
   const [devices, setDevices] = useState<DeviceInfo[]>([])
   const [connectedDevice, setConnectedDevice] = useState<DeviceInfo | null>(null)
@@ -42,15 +74,24 @@ export function useDevice(subscribe?: WsSubscribe) {
 
   // React to real-time device state broadcasts via the subscribe callback.
   // See useWebSocket.ts for the rationale vs the old useState pattern.
+  //
+  // We update `devices` from the broadcast payload directly rather than
+  // re-fetching /api/device/list. Every event that reaches this handler
+  // already carries the udid + (for connect) name / ios_version /
+  // connection_type, which is enough to keep the list in sync. An
+  // earlier revision re-fetched after every event; in dev with multiple
+  // WS clients that produced dozens of /api/device/list requests per
+  // second. If a field we don't receive here is needed (e.g.
+  // developer_mode_enabled), fetch it lazily at the point of use.
   useEffect(() => {
     if (!subscribe) return
     return subscribe((msg) => {
       if (msg.type === 'device_disconnected') {
         // Group mode: only mark the specific udid disconnected when provided;
         // fall back to clearing all for legacy single-device disconnect events.
-        const udid = msg.data?.udid
-        const udids: string[] = Array.isArray(msg.data?.udids) ? msg.data.udids : (udid ? [udid] : [])
-        const reason: string | undefined = msg.data?.reason
+        const udid = (msg.data as any)?.udid
+        const udids: string[] = Array.isArray((msg.data as any)?.udids) ? (msg.data as any).udids : (udid ? [udid] : [])
+        const reason: string | undefined = (msg.data as any)?.reason
         const involuntary = reason !== 'user' // user-initiated disconnects don't warrant a "lost" pill
         if (udids.length === 0) {
           setConnectedDevice(null)
@@ -70,30 +111,66 @@ export function useDevice(subscribe?: WsSubscribe) {
             setLostUdids((s) => { const n = new Set(s); udids.forEach((u) => n.add(u)); return n })
           }
         }
-        // Re-fetch so the sidebar list and metadata stay in sync with the
-        // backend (otherwise the left device panel can show a stale empty
-        // state while a remaining device is still connected).
-        listDevices().then((list) => { setDevices(list) }).catch(() => {})
       } else if (msg.type === 'device_connected') {
-        // Re-fetch list so the newly-connected device appears with correct metadata.
-        listDevices().then((list) => {
-          setDevices(list)
-          // If nothing is currently set as the active device, promote the
-          // newly-connected one so the bottom panel switches off NODEVICE
-          // without the user having to press the USB button.
-          const udid = msg.data?.udid
-          const match = udid ? list.find((d) => d.udid === udid && d.is_connected) : null
-          setConnectedDevice((prev) => prev ?? match ?? list.find((d) => d.is_connected) ?? null)
-          if (udid) setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
-        }).catch(() => {})
+        const data = (msg.data as any) ?? {}
+        const udid: string | undefined = data.udid
+        if (!udid) return
+        const incoming: DeviceInfo = {
+          udid,
+          name: data.name ?? '',
+          ios_version: data.ios_version ?? '',
+          connection_type: data.connection_type ?? 'USB',
+          is_connected: true,
+        }
+        // `merged` holds the post-update entry for this udid; we thread
+        // the same reference into both `devices` and `connectedDevice`
+        // so consumers can't observe a split where one has
+        // `developer_mode_*` fields and the other doesn't.
+        let merged: DeviceInfo = incoming
+        setDevices((prev) => {
+          const idx = prev.findIndex((d) => d.udid === udid)
+          if (idx === -1) {
+            merged = incoming
+            return [...prev, incoming]
+          }
+          const existing = prev[idx]
+          // Short-circuit: if every visible field already matches, keep
+          // the existing reference so downstream useMemo / render trees
+          // don't invalidate on a no-op re-broadcast.
+          if (
+            existing.is_connected &&
+            existing.name === incoming.name &&
+            existing.ios_version === incoming.ios_version &&
+            existing.connection_type === incoming.connection_type
+          ) {
+            merged = existing
+            return prev
+          }
+          // Preserve developer_mode_* fields we may already have cached
+          // from an earlier scan — they aren't in the broadcast payload.
+          merged = { ...existing, ...incoming }
+          const next = prev.slice()
+          next[idx] = merged
+          return next
+        })
+        setConnectedDevice((prev) => prev ?? merged)
+        setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
       } else if (msg.type === 'device_reconnected') {
-        listDevices().then((list) => {
-          setDevices(list)
-          const udid = msg.data?.udid
-          const match = udid ? list.find((d) => d.udid === udid) : null
-          setConnectedDevice(match ?? list.find((d) => d.is_connected) ?? null)
-          if (udid) setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
-        }).catch(() => {})
+        const udid: string | undefined = (msg.data as any)?.udid
+        if (!udid) return
+        setDevices((prev) => {
+          const idx = prev.findIndex((d) => d.udid === udid)
+          if (idx === -1) return prev
+          if (prev[idx].is_connected) return prev
+          const next = prev.slice()
+          next[idx] = { ...prev[idx], is_connected: true }
+          return next
+        })
+        setConnectedDevice((prev) => {
+          if (prev && prev.udid === udid) return { ...prev, is_connected: true }
+          return prev
+        })
+        setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
       }
     })
   }, [subscribe])
@@ -106,7 +183,11 @@ export function useDevice(subscribe?: WsSubscribe) {
     try {
       const result = await listDevices()
       const list: DeviceInfo[] = Array.isArray(result) ? result : []
-      setDevices(list)
+      // Skip the setState when every visible field matches — avoids
+      // handing downstream useMemo/useEffect a new array reference for
+      // no reason (a fresh `list` from `await listDevices()` is always
+      // a distinct reference even when contents are identical).
+      setDevices((prev) => deviceListEqual(prev, list) ? prev : list)
       const active = list.find((d) => d.is_connected) ?? null
       if (active) {
         setConnectedDevice(active)
@@ -116,7 +197,7 @@ export function useDevice(subscribe?: WsSubscribe) {
           await connectDevice(list[0].udid)
           const refreshed = await listDevices()
           const rList: DeviceInfo[] = Array.isArray(refreshed) ? refreshed : []
-          setDevices(rList)
+          setDevices((prev) => deviceListEqual(prev, rList) ? prev : rList)
           setConnectedDevice(rList.find((d) => d.udid === list[0].udid) ?? list[0])
         } catch {
           setConnectedDevice(null)
@@ -126,7 +207,7 @@ export function useDevice(subscribe?: WsSubscribe) {
       }
       return list
     } catch (err) {
-      console.error('Failed to scan devices:', err)
+      devLog('Failed to scan devices:', err)
       return []
     } finally {
       setScanning(false)
@@ -139,13 +220,13 @@ export function useDevice(subscribe?: WsSubscribe) {
         await connectDevice(udid)
         const refreshed = await listDevices()
         const list: DeviceInfo[] = Array.isArray(refreshed) ? refreshed : []
-        setDevices(list)
+        setDevices((prev) => deviceListEqual(prev, list) ? prev : list)
         const active = list.find((d) => d.udid === udid) ?? null
         setConnectedDevice(active)
         setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
         return active
       } catch (err) {
-        console.error('Failed to connect device:', err)
+        devLog('Failed to connect device:', err)
         throw err
       }
     },
@@ -158,10 +239,10 @@ export function useDevice(subscribe?: WsSubscribe) {
         await disconnectDevice(udid)
         const refreshed = await listDevices()
         const list: DeviceInfo[] = Array.isArray(refreshed) ? refreshed : []
-        setDevices(list)
+        setDevices((prev) => deviceListEqual(prev, list) ? prev : list)
         setConnectedDevice(null)
       } catch (err) {
-        console.error('Failed to disconnect device:', err)
+        devLog('Failed to disconnect device:', err)
         throw err
       }
     },
@@ -186,7 +267,7 @@ export function useDevice(subscribe?: WsSubscribe) {
         })
         return info
       } catch (err) {
-        console.error('WiFi connect failed:', err)
+        devLog('WiFi connect failed:', err)
         throw err
       }
     },
@@ -201,7 +282,7 @@ export function useDevice(subscribe?: WsSubscribe) {
       setWifiDevices(list)
       return list
     } catch (err) {
-      console.error('WiFi scan failed:', err)
+      devLog('WiFi scan failed:', err)
       return []
     } finally {
       setWifiScanning(false)
@@ -229,7 +310,7 @@ export function useDevice(subscribe?: WsSubscribe) {
         setTunnelStatus({ running: true, rsd_address: res.rsd_address, rsd_port: res.rsd_port })
         return info
       } catch (err) {
-        console.error('WiFi tunnel failed:', err)
+        devLog('WiFi tunnel failed:', err)
         throw err
       }
     },
@@ -252,7 +333,7 @@ export function useDevice(subscribe?: WsSubscribe) {
       await wifiTunnelStop()
       setTunnelStatus({ running: false })
     } catch (err) {
-      console.error('Failed to stop tunnel:', err)
+      devLog('Failed to stop tunnel:', err)
     }
   }, [])
 
@@ -264,11 +345,25 @@ export function useDevice(subscribe?: WsSubscribe) {
   const connectedDevices = useMemo(() => devices.filter((d) => d.is_connected), [devices])
   const primaryDevice: DeviceInfo | null = connectedDevices[0] ?? connectedDevice ?? null
 
-  return {
-    devices, connectedDevice, scanning, scan, connect, disconnect,
-    connectWifi, scanWifi, wifiScanning, wifiDevices,
-    startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
-    connectedDevices, primaryDevice,
-    lostUdids,
-  }
+  // Stabilise the return object identity so consumers (DeviceContext
+  // provider, App.tsx effect deps, useDeviceContext()) only re-run when
+  // a listed value actually changes. Without this memo the Provider
+  // value is a fresh object every render, and including `device` in
+  // any useEffect dep array produces an infinite re-render loop.
+  return useMemo(
+    () => ({
+      devices, connectedDevice, scanning, scan, connect, disconnect,
+      connectWifi, scanWifi, wifiScanning, wifiDevices,
+      startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
+      connectedDevices, primaryDevice,
+      lostUdids,
+    }),
+    [
+      devices, connectedDevice, scanning, scan, connect, disconnect,
+      connectWifi, scanWifi, wifiScanning, wifiDevices,
+      startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
+      connectedDevices, primaryDevice,
+      lostUdids,
+    ],
+  )
 }

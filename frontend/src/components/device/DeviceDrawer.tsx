@@ -208,9 +208,7 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                 // pre-assigned letter; falls back to first char of name for
                 // overflow past Z.
                 const letter = idx < 26 ? String.fromCharCode(65 + idx) : (d.name?.[0] ?? '•')
-                const avatarColor = isNetwork
-                  ? 'linear-gradient(135deg, #4ecdc4, #2aa39b)'
-                  : 'linear-gradient(135deg, #3a7cff, #1e50d4)'
+                const avatarColor = `var(${isNetwork ? '--gradient-device-network' : '--gradient-device-usb'})`
 
                 const leading = unsupported ? (
                   <span

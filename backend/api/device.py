@@ -1,9 +1,29 @@
+import ipaddress
+
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from models.schemas import DeviceInfo
 
 router = APIRouter(prefix="/api/device", tags=["device"])
+
+
+def _validate_local_ip(value: str) -> str:
+    """Reject non-IP strings and addresses outside the loopback / RFC1918 /
+    link-local ranges. The tunnel endpoints should only ever reach an
+    iPhone on the same LAN — anything else points at SSRF.
+    """
+    try:
+        addr = ipaddress.ip_address(value)
+    except ValueError as exc:
+        raise ValueError("invalid IP address") from exc
+    if not (
+        addr.is_loopback
+        or addr.is_private
+        or addr.is_link_local
+    ):
+        raise ValueError("address must be loopback / private / link-local")
+    return str(addr)
 
 
 def _dm():
@@ -33,7 +53,12 @@ async def wifi_scan():
 
 class WifiTunnelConnectRequest(BaseModel):
     rsd_address: str
-    rsd_port: int
+    rsd_port: int = Field(ge=1, le=65535)
+
+    @field_validator("rsd_address")
+    @classmethod
+    def _check_rsd_address(cls, v: str) -> str:
+        return _validate_local_ip(v)
 
 
 @router.post("/wifi/tunnel")
@@ -44,7 +69,7 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
     dm = _dm()
     # Max 2 devices (group mode). connect_wifi_tunnel may reconnect an existing udid;
     # we can only cheaply check the pre-state here.
-    if len(dm._connections) >= 2:
+    if dm.connected_count >= 2:
         raise HTTPException(
             status_code=409,
             detail={"code": "max_devices_reached", "message": "已連接最多 2 台裝置"},
@@ -275,8 +300,13 @@ async def wifi_repair():
 
 class WifiTunnelStartRequest(BaseModel):
     ip: str
-    port: int = 49152
+    port: int = Field(default=49152, ge=1, le=65535)
     udid: str | None = None
+
+    @field_validator("ip")
+    @classmethod
+    def _check_ip(cls, v: str) -> str:
+        return _validate_local_ip(v)
 
 
 def _get_primary_local_ip() -> str | None:
@@ -391,10 +421,7 @@ async def _cleanup_wifi_connections() -> list[str]:
     dm = _dm()
     udids: list[str] = []
     try:
-        udids = [
-            udid for udid, conn in list(dm._connections.items())
-            if getattr(conn, "connection_type", "") == "Network"
-        ]
+        udids = dm.udids_by_connection_type("Network")
         # Stop engine tasks *before* tearing down the transport. A running
         # Navigate / RandomWalk loop would otherwise keep emitting events
         # against a dead RSD and spam "arrived at destination" log noise.
@@ -485,8 +512,7 @@ async def wifi_tunnel_start(req: WifiTunnelStartRequest):
         resolved_udid = req.udid
         if not resolved_udid:
             try:
-                dm = _dm()
-                conns = list(dm._connections.keys())
+                conns = _dm().connected_udids
                 if conns:
                     resolved_udid = conns[0]
             except (RuntimeError, AttributeError):
@@ -616,7 +642,7 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
 
     # Connect through the tunnel
     dm = _dm()
-    if len(dm._connections) >= 2:
+    if dm.connected_count >= 2:
         raise HTTPException(
             status_code=409,
             detail={"code": "max_devices_reached", "message": "已連接最多 2 台裝置"},
@@ -646,7 +672,7 @@ async def connect_device(udid: str):
     from core.device_manager import UnsupportedIosVersionError
     dm = _dm()
     # Max 2 devices (group mode). Allow re-connect of an already-connected udid.
-    if udid not in dm._connections and len(dm._connections) >= 2:
+    if not dm.is_connected(udid) and dm.connected_count >= 2:
         raise HTTPException(
             status_code=409,
             detail={"code": "max_devices_reached", "message": "已連接最多 2 台裝置"},
@@ -722,6 +748,10 @@ async def device_info(udid: str):
 @router.post("/{udid}/amfi/reveal-developer-mode")
 async def amfi_reveal_developer_mode(udid: str):
     dm = _dm()
+    # AMFI reads several fields off the live Connection (ios_version,
+    # connection_type); keep the private read here — abstracting it
+    # would require exposing the Connection type, which belongs to a
+    # later refactor pass.
     conn = dm._connections.get(udid)
     if conn is None:
         raise HTTPException(

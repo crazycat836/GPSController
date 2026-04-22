@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import urllib.parse
@@ -18,6 +19,11 @@ router = APIRouter(prefix="/api/route", tags=["route"])
 
 route_service = RouteService()
 gpx_service = GpxService()
+
+# Reject GPX uploads larger than this before loading into memory. 10 MiB
+# holds a long multi-day trace at 1 Hz; anything larger is either an
+# accidental directory export or a DoS payload.
+_MAX_GPX_BYTES = 10 * 1024 * 1024
 
 
 def _load_saved_routes() -> dict[str, SavedRoute]:
@@ -40,6 +46,9 @@ def _persist_saved_routes() -> None:
 
 
 _saved_routes: dict[str, SavedRoute] = _load_saved_routes()
+# Serialise all mutations (and the persist fsync) so concurrent writes
+# can't interleave and corrupt the JSON file.
+_saved_routes_lock = asyncio.Lock()
 
 
 @router.post("/plan")
@@ -59,37 +68,40 @@ async def list_saved():
 async def save_route(route: SavedRoute):
     route.id = str(uuid.uuid4())
     route.created_at = datetime.now(timezone.utc).isoformat()
-    _saved_routes[route.id] = route
-    _persist_saved_routes()
+    async with _saved_routes_lock:
+        _saved_routes[route.id] = route
+        _persist_saved_routes()
     return route
 
 
 @router.delete("/saved/{route_id}")
 async def delete_saved(route_id: str):
-    if route_id not in _saved_routes:
-        raise HTTPException(status_code=404, detail="Route not found")
-    del _saved_routes[route_id]
-    _persist_saved_routes()
+    async with _saved_routes_lock:
+        if route_id not in _saved_routes:
+            raise HTTPException(status_code=404, detail="Route not found")
+        del _saved_routes[route_id]
+        _persist_saved_routes()
     return {"status": "deleted"}
 
 
-from pydantic import BaseModel as _BM
+from pydantic import BaseModel as _BM, Field as _Field
 
 
 class _RouteRenameRequest(_BM):
-    name: str
+    name: str = _Field(max_length=512)
 
 
 @router.patch("/saved/{route_id}")
 async def rename_saved(route_id: str, req: _RouteRenameRequest):
-    if route_id not in _saved_routes:
-        raise HTTPException(status_code=404, detail="Route not found")
     name = req.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail={"code": "invalid_name", "message": "路線名稱不可為空"})
-    _saved_routes[route_id].name = name
-    _persist_saved_routes()
-    return _saved_routes[route_id]
+    async with _saved_routes_lock:
+        if route_id not in _saved_routes:
+            raise HTTPException(status_code=404, detail="Route not found")
+        _saved_routes[route_id].name = name
+        _persist_saved_routes()
+        return _saved_routes[route_id]
 
 
 @router.get("/saved/export")
@@ -104,26 +116,40 @@ async def export_all_saved_routes():
 
 
 class _RouteImportBody(_BM):
-    routes: list[SavedRoute]
+    routes: list[SavedRoute] = _Field(max_length=1000)
 
 
 @router.post("/saved/import")
 async def import_all_saved_routes(body: _RouteImportBody):
     """Merge imported routes into saved. Imports get fresh ids so they never collide."""
     imported = 0
-    for r in body.routes:
-        r.id = str(uuid.uuid4())
-        r.created_at = datetime.now(timezone.utc).isoformat()
-        _saved_routes[r.id] = r
-        imported += 1
-    if imported:
-        _persist_saved_routes()
+    async with _saved_routes_lock:
+        for r in body.routes:
+            r.id = str(uuid.uuid4())
+            r.created_at = datetime.now(timezone.utc).isoformat()
+            _saved_routes[r.id] = r
+            imported += 1
+        if imported:
+            _persist_saved_routes()
     return {"imported": imported}
 
 
 @router.post("/gpx/import")
 async def import_gpx(file: UploadFile = File(...)):
-    content = await file.read()
+    # Reject oversized uploads before `await file.read()` loads the whole
+    # body into memory. `file.size` is populated when the client sent a
+    # Content-Length; fall back to a bounded-chunk read otherwise.
+    if file.size is not None and file.size > _MAX_GPX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={"code": "gpx_too_large", "message": f"GPX exceeds {_MAX_GPX_BYTES // (1024 * 1024)} MiB limit"},
+        )
+    content = await file.read(_MAX_GPX_BYTES + 1)
+    if len(content) > _MAX_GPX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={"code": "gpx_too_large", "message": f"GPX exceeds {_MAX_GPX_BYTES // (1024 * 1024)} MiB limit"},
+        )
     text = content.decode("utf-8")
     coords = gpx_service.parse_gpx(text)
     # Strip the .gpx extension from the filename so the rename input
@@ -138,8 +164,9 @@ async def import_gpx(file: UploadFile = File(...)):
         profile="walking",
         created_at=datetime.now(timezone.utc).isoformat(),
     )
-    _saved_routes[route.id] = route
-    _persist_saved_routes()
+    async with _saved_routes_lock:
+        _saved_routes[route.id] = route
+        _persist_saved_routes()
     return {"status": "imported", "id": route.id, "points": len(coords)}
 
 

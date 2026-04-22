@@ -268,6 +268,7 @@ export const STRINGS = {
   'err.no_position': { zh: '尚未取得目前位置,請先跳點到一個座標', en: 'No current position, teleport to a coordinate first' },
   'err.tunnel_lost': { zh: 'WiFi Tunnel 連線中斷,請重新建立', en: 'Wi-Fi tunnel dropped, please reconnect' },
   'err.cooldown_active': { zh: '冷卻中,請等待後再跳點', en: 'Cooldown active, wait before teleporting' },
+  'err.teleport_failed': { zh: '跳點失敗', en: 'Teleport failed' },
 
   // ── Start-from-cached confirm dialog ────────
   // Shown when the user triggers a movement action (navigate / multi-stop /

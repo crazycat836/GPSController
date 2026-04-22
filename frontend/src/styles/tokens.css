@@ -103,6 +103,15 @@
   --color-cat-default: #4285f4;
   --color-cat-home: #4caf50;
   --color-cat-work: #ff9800;
+  --color-cat-favorites: #e91e63;
+  --color-cat-custom: #9c27b0;
+
+  /* Device-card gradients — rendered as radial/linear gradients on the
+     DevicesPopover & DeviceDrawer cards so the surface reads as a
+     per-connection-type badge. Solid stops match --color-device-a / -c
+     but are kept as named tokens so the UI swap happens in one place. */
+  --gradient-device-usb: linear-gradient(135deg, #3a7cff, #1e50d4);
+  --gradient-device-network: linear-gradient(135deg, #4ecdc4, #2aa39b);
 
   /* ── Text ───────────────────────────────────────────────────
      Three tiers: primary → secondary → muted.

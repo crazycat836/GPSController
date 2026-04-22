@@ -22,8 +22,8 @@ const FIXED_COLORS: Record<string, string> = {
   Default: 'var(--color-cat-default)',
   Home: 'var(--color-cat-home)',
   Work: 'var(--color-cat-work)',
-  Favorites: '#e91e63',
-  Custom: '#9c27b0',
+  Favorites: 'var(--color-cat-favorites)',
+  Custom: 'var(--color-cat-custom)',
 }
 export function getCategoryColor(name: string): string {
   if (FIXED_COLORS[name]) return FIXED_COLORS[name]

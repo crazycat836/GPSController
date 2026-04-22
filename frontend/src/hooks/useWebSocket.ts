@@ -3,7 +3,11 @@ import { WS_BASE } from '../lib/constants'
 
 export interface WsMessage {
   type: string
-  data: any
+  // Intentionally `unknown` — callers must narrow the payload via
+  // a type-guard or equivalent check before reading fields. The server
+  // emits ~24 event types (see backend/api/websocket.py); there is no
+  // single shape that fits them all.
+  data: unknown
 }
 
 const WS_URL = WS_BASE
@@ -51,6 +55,19 @@ export function useWebSocket() {
           ws.close()
           return
         }
+        // Send the auth frame first. In dev mode the token is an empty
+        // string and the backend shortcuts the check; in packaged mode
+        // the preload bridge injects the value read from the token file.
+        const injected = (globalThis as unknown as {
+          gpsController?: { token?: string }
+        }).gpsController?.token
+        const token = typeof injected === 'string' ? injected : ''
+        try {
+          ws.send(JSON.stringify({ type: 'auth', token }))
+        } catch {
+          // If the auth frame can't be sent the socket will close shortly
+          // anyway; scheduleReconnect() handles the retry.
+        }
         setConnected(true)
         reconnectDelay.current = RECONNECT_INTERVAL
       }
@@ -95,7 +112,7 @@ export function useWebSocket() {
     }, reconnectDelay.current)
   }, [connect, cleanup])
 
-  const sendMessage = useCallback((type: string, data: any = {}) => {
+  const sendMessage = useCallback((type: string, data: Record<string, unknown> = {}) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type, data }))
     }

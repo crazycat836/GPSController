@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import secrets
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -8,6 +9,13 @@ from models.schemas import JoystickInput
 
 router = APIRouter(tags=["websocket"])
 logger = logging.getLogger(__name__)
+
+# Close codes we use for auth failures. 4001 is in the app-specific
+# range (4000-4999) and distinct from the standard codes, so the
+# renderer can distinguish "auth failed, stop reconnecting" from a
+# generic disconnect.
+_WS_AUTH_FAIL_CODE = 4001
+_WS_AUTH_TIMEOUT_SECONDS = 5.0
 
 # Active WebSocket connections
 _connections: list[WebSocket] = []
@@ -43,9 +51,40 @@ async def _send_initial_state(ws: WebSocket) -> None:
     await ws.send_text(json.dumps({"type": "cooldown_update", "data": cd}))
 
 
+async def _require_auth_frame(ws: WebSocket) -> bool:
+    """Consume the first incoming frame and validate the session token.
+
+    Returns True if the client is authenticated (or auth is disabled in
+    dev mode) and the socket should remain open. Returns False after
+    closing the socket with 4001 on any failure.
+    """
+    import main as _main
+    if _main._is_auth_disabled():
+        return True
+    try:
+        raw = await asyncio.wait_for(ws.receive_text(), timeout=_WS_AUTH_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        await ws.close(code=_WS_AUTH_FAIL_CODE, reason="auth timeout")
+        return False
+    except WebSocketDisconnect:
+        return False
+    try:
+        msg = json.loads(raw)
+    except json.JSONDecodeError:
+        await ws.close(code=_WS_AUTH_FAIL_CODE, reason="bad auth frame")
+        return False
+    supplied = msg.get("token", "") if msg.get("type") == "auth" else ""
+    if not _main.API_TOKEN or not secrets.compare_digest(str(supplied), _main.API_TOKEN):
+        await ws.close(code=_WS_AUTH_FAIL_CODE, reason="auth rejected")
+        return False
+    return True
+
+
 @router.websocket("/ws/status")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
+    if not await _require_auth_frame(ws):
+        return
     _connections.append(ws)
     logger.info("WebSocket client connected (%d total)", len(_connections))
 

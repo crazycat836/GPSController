@@ -3,6 +3,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Content Security Policy — enforced in the Electron renderer. The connect
+    hosts mirror the set of APIs the frontend contacts directly: the local
+    backend (HTTP + WS), GitHub (UpdateChecker release poll), and Open-Meteo
+    (useWeather). OSM / CARTO / ArcGIS tiles + flagcdn flags are img-src.
+    'unsafe-inline' on style-src is required for React inline `style`
+    attributes and the boot splash <style> block in this file; inline
+    scripts are disallowed (the splash script lives at /boot.js).
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data: blob: https:;
+    connect-src 'self' http://127.0.0.1:8777 ws://127.0.0.1:8777 https://api.github.com https://api.open-meteo.com;
+    frame-src 'none';
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none';
+  " />
   <title>GPSController</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -52,20 +73,8 @@
   </div>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
-  <script>
-    // Hide the boot splash as soon as React has painted something into #root.
-    const obs = new MutationObserver(() => {
-      const root = document.getElementById('root');
-      if (root && root.childElementCount > 0) {
-        const boot = document.getElementById('boot');
-        if (boot) {
-          boot.classList.add('hide');
-          setTimeout(() => boot.remove(), 400);
-        }
-        obs.disconnect();
-      }
-    });
-    obs.observe(document.getElementById('root'), { childList: true, subtree: true });
-  </script>
+  <!-- Boot splash dismissal — kept in a separate file so CSP can forbid
+       inline scripts. See frontend/public/boot.js. -->
+  <script src="/boot.js"></script>
 </body>
 </html>

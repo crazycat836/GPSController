@@ -3,6 +3,7 @@ GPSController 一鍵啟動器
 雙擊此檔案即可啟動 GPSController
 """
 
+import json
 import subprocess
 import sys
 import os
@@ -20,6 +21,18 @@ FRONTEND = os.path.join(ROOT, "frontend")
 
 BACKEND_PORT = 8777
 FRONTEND_PORT = 5173
+
+
+def _app_version() -> str:
+    """Read the canonical version from frontend/package.json."""
+    try:
+        with open(os.path.join(FRONTEND, "package.json"), encoding="utf-8") as f:
+            return json.load(f).get("version", "0.0.0")
+    except (OSError, ValueError):
+        return "0.0.0"
+
+
+APP_VERSION = _app_version()
 
 procs = []
 
@@ -52,7 +65,7 @@ def _box_border(left: str, fill: str, right: str, inner_width: int = BOX_WIDTH) 
 def print_banner():
     print()
     print(_box_border("╔", "═", "╗"))
-    print(_box_line("   GPSController — iOS 虛擬定位模擬器 v0.7.0"))
+    print(_box_line(f"   GPSController — iOS 虛擬定位模擬器 v{APP_VERSION}"))
     print(_box_border("╚", "═", "╝"))
     print()
 
@@ -152,9 +165,16 @@ def start_backend():
         kill_port(BACKEND_PORT)
         time.sleep(1)
 
+    # Dev mode: disable the session token check so `vite dev` on port 5173
+    # (no Electron preload to inject the token) can call the backend.
+    # Packaged Electron builds always run with auth enabled.
+    env = dict(os.environ)
+    env.setdefault("GPSCONTROLLER_DEV_NOAUTH", "1")
+
     p = subprocess.Popen(
         [sys.executable, "main.py"],
         cwd=BACKEND,
+        env=env,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
     )
     procs.append(p)

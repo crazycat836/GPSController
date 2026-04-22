@@ -114,11 +114,25 @@ function formatError(detail: unknown, fallback: string): string {
   return fallback
 }
 
+/**
+ * Read the session auth token. In the packaged Electron build the token
+ * is injected into the renderer via `contextBridge` (see
+ * frontend/electron/preload.js). In Vite dev mode the backend is
+ * expected to run with GPSCONTROLLER_DEV_NOAUTH=1 so no token is
+ * required — empty string is fine.
+ */
+function getAuthToken(): string {
+  const injected = (globalThis as unknown as {
+    gpsController?: { token?: string }
+  }).gpsController?.token
+  return typeof injected === 'string' ? injected : ''
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const opts: RequestInit = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = getAuthToken()
+  if (token) headers['X-GPS-Token'] = token
+  const opts: RequestInit = { method, headers }
   if (body !== undefined) opts.body = JSON.stringify(body)
   const res = await fetchWithRetry(`${API}${path}`, opts)
   if (!res.ok) {
@@ -301,7 +315,10 @@ export const renameRoute = (id: string, name: string) => request<SavedRoute>('PA
 export async function importGpx(file: File): Promise<{ status: string; id: string; points: number }> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch(`${API}/api/route/gpx/import`, { method: 'POST', body: form })
+  const token = getAuthToken()
+  const headers: Record<string, string> = {}
+  if (token) headers['X-GPS-Token'] = token
+  const res = await fetch(`${API}/api/route/gpx/import`, { method: 'POST', body: form, headers })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(formatError(err.detail, res.statusText))

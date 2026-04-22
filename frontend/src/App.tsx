@@ -169,9 +169,30 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
     try { localStorage.setItem(STORAGE_KEYS.tileLayer, key) } catch {}
   }, [])
 
-  // Auto-scan on WebSocket connect
+  // Auto-scan on WebSocket connect, debounced.
+  //
+  // `device` is intentionally NOT a dependency: `device.scan()` mutates
+  // state that feeds into the memoized context value, which would then
+  // invalidate this effect and re-fire it, producing an infinite
+  // `/api/device/list` loop. We only care about the rising edge of
+  // `wsConnected`. `device.scan` itself is a stable `useCallback(…, [])`
+  // so reading it through the closure is safe.
+  //
+  // Debounce: StrictMode double-mount and dev-mode HMR can toggle
+  // `wsConnected` several times within a few hundred ms. Trailing 200ms
+  // collapses those into one scan per settled connect.
+  const wsScanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (wsConnected) device.scan()
+    if (!wsConnected) return
+    if (wsScanTimer.current) clearTimeout(wsScanTimer.current)
+    wsScanTimer.current = setTimeout(() => { device.scan() }, 200)
+    return () => {
+      if (wsScanTimer.current) {
+        clearTimeout(wsScanTimer.current)
+        wsScanTimer.current = null
+      }
+    }
   }, [wsConnected])
 
   // Toast when a device is lost involuntarily (DVT exhausted, USB unplugged,

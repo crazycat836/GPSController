@@ -286,7 +286,7 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
         break
       case SimMode.Loop:
       case SimMode.MultiStop:
-        sim.setWaypoints((prev: any[]) => {
+        sim.setWaypoints((prev) => {
           if (prev.length === 0 && sim.currentPosition) {
             return [
               { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng },
@@ -314,12 +314,16 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
     const lat = clampLat(latIn)
     const lng = normalizeLng(lngIn)
     const udids = device.connectedDevices.map((d) => d.udid)
-    if (udids.length >= 2) {
-      sim.setCurrentPosition({ lat, lng })
-      const outcome = await sim.teleportAll(udids, lat, lng)
-      showToast(toastForFanout(t, t('mode.teleport'), outcome, device.connectedDevices))
-    } else {
-      sim.teleport(lat, lng)
+    try {
+      if (udids.length >= 2) {
+        sim.setCurrentPosition({ lat, lng })
+        const outcome = await sim.teleportAll(udids, lat, lng)
+        showToast(toastForFanout(t, t('mode.teleport'), outcome, device.connectedDevices))
+      } else {
+        await sim.teleport(lat, lng)
+      }
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : t('err.teleport_failed'))
     }
   }, [sim, device, t, showToast])
 
@@ -343,7 +347,7 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
   const handleAddWaypoint = useCallback((lat: number, lng: number) => {
     const nlat = clampLat(lat)
     const nlng = normalizeLng(lng)
-    sim.setWaypoints((prev: any[]) => {
+    sim.setWaypoints((prev) => {
       if (prev.length === 0 && sim.currentPosition) {
         return [
           { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng },
@@ -359,7 +363,7 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
   }, [sim])
 
   const handleRemoveWaypoint = useCallback((index: number) => {
-    sim.setWaypoints((prev: any[]) => prev.filter((_: any, i: number) => i !== index))
+    sim.setWaypoints((prev) => prev.filter((_, i) => i !== index))
   }, [sim])
 
   const handleStartWaypointRoute = useCallback(async () => {
@@ -501,11 +505,12 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
     if (!subscribe) return
     return subscribe((msg) => {
       if (msg.type !== 'cooldown_update') return
-      const d = msg.data
+      const d = msg.data as { remaining_seconds?: number; enabled?: boolean }
       const next = d.remaining_seconds ?? 0
       setCooldown((prev) => Math.round(prev) === Math.round(next) ? prev : next)
       if (typeof d.enabled === 'boolean') {
-        setCooldownEnabled((prev) => prev === d.enabled ? prev : d.enabled)
+        const nextEnabled = d.enabled
+        setCooldownEnabled((prev) => prev === nextEnabled ? prev : nextEnabled)
       }
     })
   }, [subscribe])
@@ -536,7 +541,10 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
   const isRunning = sim.status.running
   const isPaused = sim.status.paused
 
-  const value: SimContextValue = {
+  // Memoize so every SimProvider render doesn't hand consumers a new
+  // object reference (would force every `useSimContext()` user to re-render
+  // regardless of which field actually changed).
+  const value = useMemo<SimContextValue>(() => ({
     sim,
     joystick,
     randomWalkRadius,
@@ -571,7 +579,42 @@ export function SimProvider({ subscribe, sendMessage, children }: SimProviderPro
     currentPos,
     destPos,
     speed,
-  }
+  }), [
+    sim,
+    joystick,
+    randomWalkRadius,
+    setRandomWalkRadius,
+    wpGenRadius,
+    setWpGenRadius,
+    wpGenCount,
+    setWpGenCount,
+    cooldown,
+    cooldownEnabled,
+    handleSetTeleportDest,
+    handleClearTeleportDest,
+    handleTeleport,
+    handleNavigate,
+    handleStart,
+    handleStop,
+    handlePause,
+    handleResume,
+    handleRestore,
+    handleApplySpeed,
+    handleToggleCooldown,
+    handleAddWaypoint,
+    handleClearWaypoints,
+    handleRemoveWaypoint,
+    handleGenerateRandomWaypoints,
+    handleGenerateAllRandom,
+    handleOpenLog,
+    handleMapClick,
+    displaySpeed,
+    isRunning,
+    isPaused,
+    currentPos,
+    destPos,
+    speed,
+  ])
 
   return (
     <SimContext.Provider value={value}>
