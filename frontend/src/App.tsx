@@ -10,6 +10,7 @@ import { haversineM, polylineDistanceM } from './lib/geo'
 // Context providers
 import { ToastProvider, useToastContext } from './contexts/ToastContext'
 import { DeviceProvider, useDeviceContext } from './contexts/DeviceContext'
+import { ConnectionHealthProvider } from './contexts/ConnectionHealthContext'
 import { SimProvider, useSimContext, SPEED_MAP } from './contexts/SimContext'
 import { BookmarkProvider, useBookmarkContext } from './contexts/BookmarkContext'
 import { AvatarProvider } from './contexts/AvatarContext'
@@ -44,19 +45,25 @@ import DeviceDrawer from './components/device/DeviceDrawer'
 import DevicesPopover from './components/device/DevicesPopover'
 import LibraryDrawer from './components/modals/LibraryDrawer'
 
-// Root component — just providers
+// Root component — just providers.
+// ConnectionHealthProvider nests inside DeviceProvider so it can read
+// device state, and above SimProvider so sim consumers can disable
+// actions via `useConnectionHealth().canOperate` without duplicating
+// the health derivation.
 function App() {
   const ws = useWebSocket()
   return (
     <ToastProvider>
       <DeviceProvider subscribe={ws.subscribe}>
-        <SimProvider subscribe={ws.subscribe} sendMessage={ws.sendMessage}>
-          <BookmarkProvider>
-            <AvatarProvider>
-              <AppShell wsConnected={ws.connected} />
-            </AvatarProvider>
-          </BookmarkProvider>
-        </SimProvider>
+        <ConnectionHealthProvider wsConnected={ws.connected}>
+          <SimProvider subscribe={ws.subscribe} sendMessage={ws.sendMessage}>
+            <BookmarkProvider>
+              <AvatarProvider>
+                <AppShell wsConnected={ws.connected} />
+              </AvatarProvider>
+            </BookmarkProvider>
+          </SimProvider>
+        </ConnectionHealthProvider>
       </DeviceProvider>
     </ToastProvider>
   )
