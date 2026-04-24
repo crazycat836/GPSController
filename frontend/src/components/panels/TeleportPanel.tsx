@@ -1,5 +1,6 @@
 import { Locate, Clock } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
+import { useConnectionHealth } from '../../contexts/ConnectionHealthContext'
 import { useT } from '../../i18n'
 import { haversineM } from '../../lib/geo'
 import { predictCooldown, formatCooldown } from '../../lib/cooldown'
@@ -13,6 +14,7 @@ export default function TeleportPanel() {
     handleTeleport,
     handleClearTeleportDest,
   } = useSimContext()
+  const { canOperate } = useConnectionHealth()
   const t = useT()
   const points = useOriginDestPoints(currentPos, destPos)
 
@@ -58,11 +60,13 @@ export default function TeleportPanel() {
         </div>
       </div>
 
-      {/* Move / Clear buttons */}
+      {/* Move / Clear buttons. Move is gated on both a destination
+          and backend readiness — Clear only cares about the dest. */}
       <div className="flex gap-2">
         <button
           onClick={handleMove}
-          disabled={!destPos}
+          disabled={!destPos || !canOperate}
+          title={!canOperate ? t('conn.not_ready_tooltip') : undefined}
           className="seg-cta seg-cta-accent flex-1"
         >
           {t('teleport.move')}

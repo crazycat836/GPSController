@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react'
 import { Copy, Check, Smartphone, Usb, Wifi, MapPinOff } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
+import { useConnectionHealth } from '../../contexts/ConnectionHealthContext'
 import { useI18n, useT } from '../../i18n'
 import { useReverseGeocode } from '../../hooks/useReverseGeocode'
 import { useWeather } from '../../hooks/useWeather'
@@ -20,11 +21,17 @@ export default function MiniStatusBar() {
   const { lang } = useI18n()
   const { currentPos, isRunning } = useSimContext()
   const device = useDeviceContext()
+  const health = useConnectionHealth()
   const { countryCode, country } = useReverseGeocode(currentPos, lang, { paused: isRunning })
   const weather = useWeather(currentPos, { paused: isRunning })
 
   const isDual = device.connectedDevices.length >= 2
   const isConnected = device.connectedDevices.length > 0
+  // Device state we render is only as fresh as the WS stream. When the
+  // transport is down, we still show the last-known pill (so the user
+  // isn't yanked out of context on a flap) — but dimmed and annotated
+  // so they don't act on it.
+  const isStale = health.device === 'stale'
 
   return (
     <div
@@ -45,9 +52,9 @@ export default function MiniStatusBar() {
           <span className="text-[var(--color-text-2)]">{t('device.no_device')}</span>
         </div>
       ) : isDual ? (
-        <DualDevicePills devices={device.connectedDevices.slice(0, 2)} />
+        <DualDevicePills devices={device.connectedDevices.slice(0, 2)} stale={isStale} />
       ) : (
-        <DevicePill dev={device.connectedDevices[0]} letter={DEVICE_LETTERS[0]} color={DEVICE_COLORS[0]} />
+        <DevicePill dev={device.connectedDevices[0]} letter={DEVICE_LETTERS[0]} color={DEVICE_COLORS[0]} stale={isStale} />
       )}
 
       {/* Live-position card — suppressed in dual-device mode because
@@ -75,15 +82,19 @@ interface DevicePillProps {
   letter: typeof DEVICE_LETTERS[number]
   color: string
   coord?: { lat: number; lng: number } | null
+  stale?: boolean
 }
 
-function DevicePill({ dev, letter, color, coord }: DevicePillProps) {
+function DevicePill({ dev, letter, color, coord, stale }: DevicePillProps) {
+  const t = useT()
   if (!dev) return null
   const isNetwork = dev.connection_type === 'Network'
   return (
     <div
-      className="glass-pill-medium inline-flex items-center gap-2.5 h-10 pl-2 pr-4 text-[12px] font-medium"
-      title={dev.name}
+      className="glass-pill-medium inline-flex items-center gap-2.5 h-10 pl-2 pr-4 text-[12px] font-medium transition-opacity"
+      title={stale ? `${dev.name} · ${t('conn.stale_tooltip')}` : dev.name}
+      data-stale={stale ? 'true' : undefined}
+      style={stale ? { opacity: 0.55 } : undefined}
     >
       <span
         className="w-6 h-6 rounded-full grid place-items-center text-[11px] font-semibold"
@@ -121,7 +132,7 @@ function DevicePill({ dev, letter, color, coord }: DevicePillProps) {
   )
 }
 
-function DualDevicePills({ devices }: { devices: DeviceInfo[] }) {
+function DualDevicePills({ devices, stale }: { devices: DeviceInfo[]; stale?: boolean }) {
   const { sim } = useSimContext()
   return (
     <>
@@ -132,6 +143,7 @@ function DualDevicePills({ devices }: { devices: DeviceInfo[] }) {
           letter={DEVICE_LETTERS[i]}
           color={DEVICE_COLORS[i]}
           coord={sim.runtimes[dev.udid]?.currentPos ?? null}
+          stale={stale}
         />
       ))}
     </>

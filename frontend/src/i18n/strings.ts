@@ -72,6 +72,13 @@ export const STRINGS = {
   'device.chip_state_disconnected': { zh: '已斷線', en: 'Disconnected' },
   'toast.device_lost': { zh: '裝置連線中斷,請重新插上 USB', en: 'Device connection lost. Please reconnect USB.' },
 
+  // ── Connection health (banner + stale visuals) ───────────
+  'conn.ws_reconnecting': { zh: '與背景服務連線中…', en: 'Reconnecting to backend…' },
+  'conn.ws_offline': { zh: '背景服務無回應', en: 'Backend unreachable' },
+  'conn.ws_offline_hint': { zh: '請確認 App 未被關閉,或重新啟動程式', en: 'Check that the app is still running, or restart it' },
+  'conn.stale_tooltip': { zh: '狀態可能不是最新的', en: 'Status may be stale' },
+  'conn.not_ready_tooltip': { zh: '背景服務未就緒,無法執行', en: 'Backend not ready; action unavailable' },
+
   // ── ETA group ────────────────────────────────
   'eta.group_progress': { zh: '平均進度', en: 'Average progress' },
 

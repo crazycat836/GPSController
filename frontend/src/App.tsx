@@ -30,7 +30,11 @@ import MiniStatusBar from './components/shell/MiniStatusBar'
 import TopBarActions from './components/shell/TopBarActions'
 import SettingsMenu from './components/shell/SettingsMenu'
 import CooldownBadge from './components/shell/CooldownBadge'
+import ConnectionStatusBanner from './components/shell/ConnectionStatusBanner'
 import Toast from './components/shell/Toast'
+
+// Contexts consumed inside AppShell
+import { useConnectionHealth } from './contexts/ConnectionHealthContext'
 
 // Panels
 import TeleportPanel from './components/panels/TeleportPanel'
@@ -110,6 +114,7 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
   const device = useDeviceContext()
   const simCtx = useSimContext()
   const bm = useBookmarkContext()
+  const health = useConnectionHealth()
   const { sim, joystick, handlePause, handleResume } = simCtx
 
   // Static preview for the ETA bar before simulation starts.
@@ -414,10 +419,12 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
           they read as shell chrome, not map content. */}
       <MiniStatusBar />
 
+      <ConnectionStatusBanner />
+
       <TopBar
         leftContent={<Brand />}
         centerContent={
-          <SearchBar onTeleport={handleTeleportOrStage} deviceConnected={device.connectedDevice !== null} />
+          <SearchBar onTeleport={handleTeleportOrStage} deviceConnected={health.canOperate} />
         }
         rightContent={
           <TopBarActions
