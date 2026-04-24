@@ -30,6 +30,36 @@ logger = logging.getLogger(__name__)
 _BACKUP_KEEP = 5
 
 
+def _sudo_target() -> tuple[int, int] | None:
+    """Return (uid, gid) to chown back to when running under sudo.
+
+    None when not effectively root, or SUDO_UID/SUDO_GID not set (plain
+    root login), so non-sudo deployments are a no-op.
+    """
+    if os.geteuid() != 0:
+        return None
+    try:
+        return int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"])
+    except (KeyError, ValueError):
+        return None
+
+
+def _chown_back(path: Path) -> None:
+    """If running under sudo, chown *path* back to the invoking user.
+
+    Otherwise `sudo python3 start.py` writes runtime files as root into
+    the invoker's home directory, and the invoker later can't read them
+    without re-escalating.
+    """
+    target = _sudo_target()
+    if target is None:
+        return
+    try:
+        os.chown(path, *target)
+    except OSError as exc:
+        logger.warning("chown %s -> %s failed: %s", path.name, target, exc)
+
+
 def safe_load_json(path: Path) -> Any | None:
     """Load JSON from *path*.
 
@@ -61,7 +91,10 @@ def safe_write_json(path: Path, payload: Any, *, indent: int = 2) -> bool:
     """
     tmp_path: Path | None = None
     try:
+        parent_existed = path.parent.exists()
         path.parent.mkdir(parents=True, exist_ok=True)
+        if not parent_existed:
+            _chown_back(path.parent)
         body = json.dumps(payload, ensure_ascii=False, indent=indent)
         fd = tempfile.NamedTemporaryFile(
             mode="w",
@@ -79,6 +112,7 @@ def safe_write_json(path: Path, payload: Any, *, indent: int = 2) -> bool:
         finally:
             fd.close()
         tmp_path.replace(path)
+        _chown_back(path)
         return True
     except Exception as exc:
         logger.error("failed to write %s: %s", path.name, exc)
