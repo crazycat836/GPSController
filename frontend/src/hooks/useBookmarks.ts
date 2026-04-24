@@ -9,21 +9,33 @@ function devLog(...args: unknown[]): void {
   }
 }
 
+// Dual-axis model:
+//   place_id — single "where" (富士山, 寺廟, default)
+//   tags     — multi "what"  (掃描器, 菇, 花)
 export interface Bookmark {
   id: string
   name: string
   lat: number
   lng: number
-  category_id?: string
+  place_id: string
+  tags: string[]
   note?: string
   created_at?: string
+  last_used_at?: string
   // Auto-filled by the backend on create/update via reverse geocoding.
   // Empty string for legacy rows until /backfill-flags runs.
   country_code?: string
   country?: string
 }
 
-export interface BookmarkCategory {
+export interface BookmarkPlace {
+  id: string
+  name: string
+  color?: string
+  sort_order?: number
+}
+
+export interface BookmarkTag {
   id: string
   name: string
   color?: string
@@ -32,20 +44,26 @@ export interface BookmarkCategory {
 
 export function useBookmarks() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
-  const [categories, setCategories] = useState<BookmarkCategory[]>([])
+  const [places, setPlaces] = useState<BookmarkPlace[]>([])
+  const [tags, setTags] = useState<BookmarkTag[]>([])
   const [loading, setLoading] = useState(false)
   const mountedRef = useRef(true)
 
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const [bms, cats] = await Promise.all([
+      const [store, ps, ts] = await Promise.all([
         api.getBookmarks(),
-        api.getCategories(),
+        api.getPlaces(),
+        api.getTags(),
       ])
       if (!mountedRef.current) return
-      setBookmarks(Array.isArray(bms) ? bms : bms.bookmarks ?? [])
-      setCategories(Array.isArray(cats) ? cats : [])
+      // /api/bookmarks now returns the full store envelope; older shape
+      // support kept only for resilience against transient stale backends.
+      const bms = Array.isArray(store) ? store : store.bookmarks ?? []
+      setBookmarks(bms)
+      setPlaces(Array.isArray(ps) ? ps : [])
+      setTags(Array.isArray(ts) ? ts : [])
     } catch (err) {
       devLog('Failed to load bookmarks:', err)
     } finally {
@@ -55,9 +73,6 @@ export function useBookmarks() {
 
   const backfilledRef = useRef(false)
 
-  // Load on mount. After the first fetch, lazily enrich legacy rows that
-  // were created before country_code/country existed — runs at most once
-  // per session so we don't hammer Nominatim.
   useEffect(() => {
     mountedRef.current = true
     refresh()
@@ -66,6 +81,8 @@ export function useBookmarks() {
     }
   }, [refresh])
 
+  // Lazily enrich legacy rows that were created before country_code/country
+  // existed. Runs at most once per session so we don't hammer Nominatim.
   useEffect(() => {
     if (backfilledRef.current) return
     if (loading) return
@@ -83,6 +100,7 @@ export function useBookmarks() {
       })
   }, [bookmarks, loading, refresh])
 
+  // ── Bookmark mutations ────────────────────────────────
   const createBookmark = useCallback(
     async (bm: Omit<Bookmark, 'id'>) => {
       const created = await api.createBookmark(bm)
@@ -92,24 +110,18 @@ export function useBookmarks() {
     [refresh],
   )
 
-  const deleteBookmark = useCallback(
-    async (id: string) => {
-      await api.deleteBookmark(id)
-      setBookmarks((prev) => prev.filter((b) => b.id !== id))
-    },
-    [],
-  )
+  const deleteBookmark = useCallback(async (id: string) => {
+    await api.deleteBookmark(id)
+    setBookmarks((prev) => prev.filter((b) => b.id !== id))
+  }, [])
 
-  const deleteBookmarksBatch = useCallback(
-    async (ids: string[]) => {
-      if (ids.length === 0) return 0
-      const res = await api.deleteBookmarksBatch(ids)
-      const doomed = new Set(ids)
-      setBookmarks((prev) => prev.filter((b) => !doomed.has(b.id)))
-      return res?.deleted ?? ids.length
-    },
-    [],
-  )
+  const deleteBookmarksBatch = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return 0
+    const res = await api.deleteBookmarksBatch(ids)
+    const doomed = new Set(ids)
+    setBookmarks((prev) => prev.filter((b) => !doomed.has(b.id)))
+    return res?.deleted ?? ids.length
+  }, [])
 
   const backfillFlags = useCallback(async () => {
     try {
@@ -133,42 +145,95 @@ export function useBookmarks() {
   )
 
   const moveBookmarks = useCallback(
-    async (ids: string[], categoryId: string) => {
-      await api.moveBookmarks(ids, categoryId)
+    async (ids: string[], placeId: string) => {
+      await api.moveBookmarks(ids, placeId)
       await refresh()
     },
     [refresh],
   )
 
-  const createCategory = useCallback(
-    async (cat: Omit<BookmarkCategory, 'id'>) => {
-      const created = await api.createCategory(cat)
+  const tagBookmarks = useCallback(
+    async (ids: string[], add: string[] = [], remove: string[] = []) => {
+      await api.tagBookmarks(ids, add, remove)
+      await refresh()
+    },
+    [refresh],
+  )
+
+  // ── Place mutations ───────────────────────────────────
+  const createPlace = useCallback(
+    async (place: Omit<BookmarkPlace, 'id'>) => {
+      const created = await api.createPlace(place)
       await refresh()
       return created
     },
     [refresh],
   )
 
-  const deleteCategory = useCallback(
+  const deletePlace = useCallback(
     async (id: string) => {
-      await api.deleteCategory(id)
+      await api.deletePlace(id)
       await refresh()
     },
     [refresh],
   )
 
-  const updateCategory = useCallback(
-    async (id: string, data: Partial<BookmarkCategory>) => {
-      const updated = await api.updateCategory(id, data)
+  const updatePlace = useCallback(
+    async (id: string, data: Partial<BookmarkPlace>) => {
+      const updated = await api.updatePlace(id, data)
       await refresh()
       return updated
     },
     [refresh],
   )
 
+  const reorderPlaces = useCallback(
+    async (orderedIds: string[]) => {
+      await api.reorderPlaces(orderedIds)
+      await refresh()
+    },
+    [refresh],
+  )
+
+  // ── Tag mutations ─────────────────────────────────────
+  const createTag = useCallback(
+    async (tag: Omit<BookmarkTag, 'id'>) => {
+      const created = await api.createTag(tag)
+      await refresh()
+      return created
+    },
+    [refresh],
+  )
+
+  const deleteTag = useCallback(
+    async (id: string) => {
+      await api.deleteTag(id)
+      await refresh()
+    },
+    [refresh],
+  )
+
+  const updateTag = useCallback(
+    async (id: string, data: Partial<BookmarkTag>) => {
+      const updated = await api.updateTag(id, data)
+      await refresh()
+      return updated
+    },
+    [refresh],
+  )
+
+  const reorderTags = useCallback(
+    async (orderedIds: string[]) => {
+      await api.reorderTags(orderedIds)
+      await refresh()
+    },
+    [refresh],
+  )
+
   return {
     bookmarks,
-    categories,
+    places,
+    tags,
     loading,
     createBookmark,
     updateBookmark,
@@ -176,9 +241,15 @@ export function useBookmarks() {
     deleteBookmarksBatch,
     backfillFlags,
     moveBookmarks,
-    createCategory,
-    deleteCategory,
-    updateCategory,
+    tagBookmarks,
+    createPlace,
+    updatePlace,
+    deletePlace,
+    reorderPlaces,
+    createTag,
+    updateTag,
+    deleteTag,
+    reorderTags,
     refresh,
   }
 }

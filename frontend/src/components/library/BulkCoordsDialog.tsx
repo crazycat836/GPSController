@@ -10,14 +10,14 @@ export type BulkMode = 'bookmarks' | 'waypoints'
 
 interface BulkCoordsDialogProps {
   open: boolean
-  /** `bookmarks` mode shows the category picker + "Name" hint; `waypoints`
+  /** `bookmarks` mode shows the place picker + "Name" hint; `waypoints`
    *  hides both and the confirmed list flows into the active route. */
   mode: BulkMode
   onCancel: () => void
   /** Called with the parsed list when the user hits Import. Async so
    *  callers can fan out to createBookmark / setWaypoints without
    *  closing the dialog prematurely. */
-  onConfirm: (items: ParsedCoord[], categoryId?: string) => Promise<void> | void
+  onConfirm: (items: ParsedCoord[], placeId?: string) => Promise<void> | void
 }
 
 /**
@@ -29,10 +29,10 @@ interface BulkCoordsDialogProps {
  */
 export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: BulkCoordsDialogProps) {
   const t = useT()
-  const { categories } = useBookmarkContext()
+  const { places } = useBookmarkContext()
 
   const [text, setText] = useState('')
-  const [categoryId, setCategoryId] = useState<string>('default')
+  const [placeId, setPlaceId] = useState<string>('default')
   const [busy, setBusy] = useState(false)
   const [errorsOpen, setErrorsOpen] = useState(false)
 
@@ -64,7 +64,7 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
     if (parsed.ok.length === 0 || busy) return
     setBusy(true)
     try {
-      await onConfirm(parsed.ok, mode === 'bookmarks' ? categoryId : undefined)
+      await onConfirm(parsed.ok, mode === 'bookmarks' ? placeId : undefined)
     } finally {
       setBusy(false)
     }
@@ -159,10 +159,10 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
           )}
           {mode === 'bookmarks' && (
             <label className="text-[12px] flex items-center gap-2">
-              <span className="text-[var(--color-text-3)] shrink-0">{t('bulk.category_label')}</span>
+              <span className="text-[var(--color-text-3)] shrink-0">{t('bm.place_label')}</span>
               <select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
+                value={placeId}
+                onChange={(e) => setPlaceId(e.target.value)}
                 disabled={busy}
                 className="flex-1"
                 style={{
@@ -174,8 +174,8 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
                   fontSize: 12,
                 }}
               >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                {places.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </label>

@@ -1,11 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import {
   Plus, Bookmark as BookmarkIcon, Pencil, Trash2, Copy,
-  FolderInput, Layers, Check, X, ClipboardList, StickyNote,
-  ClipboardPaste,
+  FolderInput, Layers, Tag as TagIconLucide, Check, X, ClipboardList, StickyNote,
+  ClipboardPaste, Clock, ListTree,
 } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
-import type { Bookmark, BookmarkCategory } from '../../hooks/useBookmarks'
+import type { Bookmark, BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
 import ListRow from '../ui/ListRow'
@@ -15,7 +15,8 @@ import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
 import EmptyState from '../ui/EmptyState'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import BookmarkEditDialog, { type BookmarkEditValues } from './BookmarkEditDialog'
-import CategoryManagerDialog, { getCategoryColor } from './CategoryManagerDialog'
+import PlaceManagerDialog, { getPlaceColor } from './PlaceManagerDialog'
+import TagManagerDialog, { getTagColor } from './TagManagerDialog'
 import BulkCoordsDialog from './BulkCoordsDialog'
 
 interface BookmarksPanelProps {
@@ -24,103 +25,141 @@ interface BookmarksPanelProps {
 }
 
 const ALL_ID = '__all__' as const
+type SortMode = 'recent' | 'by_place'
 
 export default function BookmarksPanel({ onBookmarkClick, currentPosition }: BookmarksPanelProps) {
   const t = useT()
   const bm = useBookmarkContext()
-  const { bookmarks, categories } = bm
+  const { bookmarks, places, tags } = bm
 
   const [search, setSearch] = useState('')
-  const [activeCategoryId, setActiveCategoryId] = useState<string>(ALL_ID)
+  const [activePlaceId, setActivePlaceId] = useState<string>(ALL_ID)
+  const [activeTagIds, setActiveTagIds] = useState<Set<string>>(new Set())
+  const [sortMode, setSortMode] = useState<SortMode>('by_place')
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<{ mode: 'create' | 'edit'; bookmark?: Bookmark } | null>(null)
-  const [categoryMgrOpen, setCategoryMgrOpen] = useState(false)
+  const [placeMgrOpen, setPlaceMgrOpen] = useState(false)
+  const [tagMgrOpen, setTagMgrOpen] = useState(false)
   const [confirm, setConfirm] = useState<null | { kind: 'single'; id: string; name: string } | { kind: 'batch'; ids: string[] }>(null)
   const [inlineEditId, setInlineEditId] = useState<string | null>(null)
   const [inlineEditName, setInlineEditName] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
 
-  const displayCat = useCallback((name: string) => (
+  const displayPlace = useCallback((name: string) => (
     name === '預設' || name === 'Default' ? t('bm.default') :
     name === 'Uncategorized' ? t('bm.uncategorized') :
     name
   ), [t])
 
-  const categoryMap = useMemo(() => {
-    const m = new Map<string, BookmarkCategory>()
-    categories.forEach((c) => m.set(c.id, c))
+  const placeMap = useMemo(() => {
+    const m = new Map<string, BookmarkPlace>()
+    places.forEach((p) => m.set(p.id, p))
     return m
-  }, [categories])
+  }, [places])
 
-  // Filtering: search first (flat), then category chip.
+  const tagMap = useMemo(() => {
+    const m = new Map<string, BookmarkTag>()
+    tags.forEach((tg) => m.set(tg.id, tg))
+    return m
+  }, [tags])
+
+  // ─── Filtering pipeline ─────────────────────────────
+  // Order: search → place chip → tag chips (AND across selected tags).
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     const searching = q.length > 0
     return bookmarks.filter((b) => {
-      const cat = categoryMap.get(b.category_id || '')
-      const catName = cat?.name || ''
+      const place = placeMap.get(b.place_id || '')
+      const placeName = place?.name || ''
       if (searching) {
         const name = (b.name ?? '').toLowerCase()
-        const catLower = catName.toLowerCase()
+        const placeLower = placeName.toLowerCase()
         const coord = `${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}`
-        return name.includes(q) || catLower.includes(q) || coord.includes(q)
+        const tagHit = (b.tags ?? []).some((id) => {
+          const tg = tagMap.get(id)
+          return tg ? tg.name.toLowerCase().includes(q) : false
+        })
+        if (!(name.includes(q) || placeLower.includes(q) || coord.includes(q) || tagHit)) {
+          return false
+        }
+      } else if (activePlaceId !== ALL_ID && b.place_id !== activePlaceId) {
+        return false
       }
-      if (activeCategoryId === ALL_ID) return true
-      return b.category_id === activeCategoryId
+      if (activeTagIds.size > 0) {
+        const bookmarkTags = new Set(b.tags ?? [])
+        for (const t of activeTagIds) {
+          if (!bookmarkTags.has(t)) return false
+        }
+      }
+      return true
     })
-  }, [bookmarks, search, activeCategoryId, categoryMap])
+  }, [bookmarks, search, activePlaceId, activeTagIds, placeMap, tagMap])
 
-  // Sections for the "All" chip view — design/Home renders library as
-  // grouped sections (Pinned / Recents / …). We group by category so
-  // users see structure without needing new backend fields.
+  // Sections grouping (only when sort=by_place + no search + chip="All" + no tag filter).
   const sections = useMemo(() => {
     const searching = search.trim().length > 0
-    if (searching || activeCategoryId !== ALL_ID) return null
+    if (sortMode !== 'by_place') return null
+    if (searching || activePlaceId !== ALL_ID) return null
+    if (activeTagIds.size > 0) return null
     const buckets = new Map<string, Bookmark[]>()
     for (const b of filtered) {
-      const key = b.category_id || '__uncategorized__'
+      const key = b.place_id || '__uncategorized__'
       if (!buckets.has(key)) buckets.set(key, [])
       buckets.get(key)!.push(b)
     }
-    const ordered = categories
-      .map((c) => ({
-        id: c.id,
-        label: displayCat(c.name),
-        list: buckets.get(c.id) ?? [],
+    const ordered = places
+      .map((p) => ({
+        id: p.id,
+        label: displayPlace(p.name),
+        list: buckets.get(p.id) ?? [],
       }))
       .filter((s) => s.list.length > 0)
     const orphans = buckets.get('__uncategorized__')
     if (orphans && orphans.length > 0) {
-      ordered.push({ id: '__uncategorized__', label: displayCat('Uncategorized'), list: orphans })
+      ordered.push({ id: '__uncategorized__', label: displayPlace('Uncategorized'), list: orphans })
     }
     return ordered
-  }, [filtered, activeCategoryId, search, categories, displayCat])
+  }, [filtered, activePlaceId, activeTagIds, search, sortMode, places, displayPlace])
 
-  // Match by coordinate to flag the currently-loaded bookmark — mirrors
-  // the design's `.bm.active` left accent bar. Float epsilon accounts
-  // for round-trip through SimContext (stores as number, not string).
+  // Flat list with recent-first sorting when `sortMode === 'recent'` or any
+  // filter is active. Uses `last_used_at` (ISO string) desc with `created_at`
+  // fallback so never-used bookmarks still sort consistently.
+  const flatList = useMemo(() => {
+    if (sections) return null
+    if (sortMode === 'recent') {
+      return [...filtered].sort((a, b) => {
+        const ka = a.last_used_at || a.created_at || ''
+        const kb = b.last_used_at || b.created_at || ''
+        if (ka === kb) return 0
+        return ka < kb ? 1 : -1
+      })
+    }
+    return filtered
+  }, [filtered, sortMode, sections])
+
+  // Match by coordinate to flag the currently-loaded bookmark.
   const isBookmarkActive = useCallback((b: Bookmark): boolean => {
     if (!currentPosition) return false
     return Math.abs(b.lat - currentPosition.lat) < 1e-5
       && Math.abs(b.lng - currentPosition.lng) < 1e-5
   }, [currentPosition])
 
-  const chips = useMemo<Chip<string>[]>(() => {
+  const placeChips = useMemo<Chip<string>[]>(() => {
     const list: Chip<string>[] = [{ id: ALL_ID, label: t('bm.filter_all'), count: bookmarks.length }]
-    for (const cat of categories) {
+    for (const place of places) {
       list.push({
-        id: cat.id,
-        label: displayCat(cat.name),
-        color: getCategoryColor(cat.name),
-        count: bookmarks.filter((b) => b.category_id === cat.id).length,
+        id: place.id,
+        label: displayPlace(place.name),
+        color: getPlaceColor(place.name),
+        count: bookmarks.filter((b) => b.place_id === place.id).length,
       })
     }
     return list
-  }, [bookmarks, categories, displayCat])
+  }, [bookmarks, places, displayPlace, t])
 
-  // ─── Selection mode ─────────────────────────────────────────
+  // ─── Selection mode ─────────────────────────────────
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -134,13 +173,23 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     setSelectedIds(new Set())
   }, [])
 
-  // ─── Mutations ──────────────────────────────────────────────
+  const toggleTagFilter = useCallback((tagId: string) => {
+    setActiveTagIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(tagId)) next.delete(tagId)
+      else next.add(tagId)
+      return next
+    })
+  }, [])
+
+  // ─── Mutations ──────────────────────────────────────
   const handleCreate = useCallback((values: BookmarkEditValues) => {
     void bm.createBookmark({
       name: values.name,
       lat: values.lat,
       lng: values.lng,
-      category_id: values.categoryId,
+      place_id: values.placeId,
+      tags: values.tagIds,
       note: values.note,
     })
     setEditing(null)
@@ -151,7 +200,8 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       name: values.name,
       lat: values.lat,
       lng: values.lng,
-      category_id: values.categoryId,
+      place_id: values.placeId,
+      tags: values.tagIds,
       note: values.note,
     })
     setEditing(null)
@@ -201,7 +251,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     setInlineEditId(null)
   }, [inlineEditName, bookmarks, bm])
 
-  // ─── Header kebab items ─────────────────────────────────────
+  // ─── Header kebab items ─────────────────────────────
   const headerMenuItems: KebabMenuItem[] = useMemo(() => [
     {
       id: 'custom',
@@ -224,11 +274,9 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         else setSelectionMode(true)
       },
     },
-    // Import / Export moved to the Drawer's headerActions slot.
-    // Manage categories moved to the fixed footer button.
   ], [t, selectionMode, exitSelection])
 
-  // ─── Row kebab builder ──────────────────────────────────────
+  // ─── Row kebab ──────────────────────────────────────
   const rowMenuItems = useCallback((b: Bookmark): KebabMenuItem[] => {
     const items: KebabMenuItem[] = [
       {
@@ -251,37 +299,39 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         onSelect: () => confirmDeleteOne(b),
       },
     ]
-    const others = categories.filter((c) => c.id !== b.category_id)
+    const others = places.filter((p) => p.id !== b.place_id)
     if (others.length > 0) {
       items.push({ id: 'move-section', kind: 'section', label: t('bm.move_to') })
-      others.forEach((cat) => {
+      others.forEach((place) => {
         items.push({
-          id: `move-${cat.id}`,
-          label: displayCat(cat.name),
+          id: `move-${place.id}`,
+          label: displayPlace(place.name),
           icon: <FolderInput width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
-          colorDot: getCategoryColor(cat.name),
-          onSelect: () => void bm.updateBookmark(b.id, { category_id: cat.id }),
+          colorDot: getPlaceColor(place.name),
+          onSelect: () => void bm.updateBookmark(b.id, { place_id: place.id }),
         })
       })
     }
     return items
-  }, [t, categories, bm, handleCopy, confirmDeleteOne, displayCat])
+  }, [t, places, bm, handleCopy, confirmDeleteOne, displayPlace])
 
-  // ─── Render ─────────────────────────────────────────────────
+  // ─── Render ─────────────────────────────────────────
   const searching = search.trim().length > 0
+  const anyFilter = searching || activePlaceId !== ALL_ID || activeTagIds.size > 0
 
-  // Shared row renderer — used by both the flat filtered view and the
-  // sectioned (chip="All") grouped view, so both paths stay in lockstep.
   const renderBookmarkRow = (b: Bookmark) => {
-    const cat = categoryMap.get(b.category_id || '')
-    const catName = cat?.name || ''
-    const catColor = cat ? getCategoryColor(catName) : 'var(--color-text-3)'
+    const place = placeMap.get(b.place_id || '')
+    const placeName = place?.name || ''
+    const placeColor = place ? getPlaceColor(placeName) : 'var(--color-text-3)'
     const checked = selectedIds.has(b.id)
     const isInlineEditing = inlineEditId === b.id
     const isActive = isBookmarkActive(b)
+    const bookmarkTags = (b.tags ?? [])
+      .map((id) => tagMap.get(id))
+      .filter((tg): tg is BookmarkTag => !!tg)
 
-    // Gradient icon tile per category, derived from the redesign/Home
-    // library rows. Selection mode swaps the tile for a checkbox.
+    // Gradient icon tile coloured by the bookmark's place. Selection mode
+    // swaps the tile for a checkbox.
     const leading = selectionMode ? (
       <span
         aria-hidden="true"
@@ -298,9 +348,9 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         aria-hidden="true"
         className="w-9 h-9 rounded-[10px] grid place-items-center shrink-0"
         style={{
-          background: `linear-gradient(135deg, color-mix(in srgb, ${catColor} 22%, transparent), color-mix(in srgb, ${catColor} 6%, transparent))`,
-          border: `1px solid color-mix(in srgb, ${catColor} 32%, transparent)`,
-          color: catColor,
+          background: `linear-gradient(135deg, color-mix(in srgb, ${placeColor} 22%, transparent), color-mix(in srgb, ${placeColor} 6%, transparent))`,
+          border: `1px solid color-mix(in srgb, ${placeColor} 32%, transparent)`,
+          color: placeColor,
         }}
       >
         <BookmarkIcon width={ICON_SIZE.md} height={ICON_SIZE.md} strokeWidth={2} />
@@ -342,8 +392,8 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     )
 
     const subtitleNode = (
-      <span className="inline-flex items-center gap-1.5 min-w-0">
-        {cat && (
+      <span className="inline-flex items-center gap-1.5 min-w-0 flex-wrap">
+        {place && (
           <span
             className="inline-block uppercase"
             style={{
@@ -358,9 +408,26 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
               lineHeight: 1.4,
             }}
           >
-            {displayCat(catName)}
+            {displayPlace(placeName)}
           </span>
         )}
+        {bookmarkTags.map((tag) => (
+          <span
+            key={tag.id}
+            style={{
+              padding: '1px 6px',
+              background: `color-mix(in srgb, ${getTagColor(tag)} 22%, transparent)`,
+              borderRadius: '3px',
+              fontSize: '10px',
+              color: 'var(--color-text-1)',
+              fontWeight: 500,
+              lineHeight: 1.4,
+              border: `1px solid color-mix(in srgb, ${getTagColor(tag)} 40%, transparent)`,
+            }}
+          >
+            {tag.name}
+          </span>
+        ))}
         <span className="font-mono truncate">
           {b.lat.toFixed(6)}°, {b.lng.toFixed(6)}°
         </span>
@@ -405,8 +472,6 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
 
     return (
       <div key={b.id} className="relative">
-        {/* Design's .bm.active left accent bar — rendered only when the
-            bookmark's coords match the current simulated position. */}
         {isActive && (
           <span
             aria-hidden="true"
@@ -449,9 +514,6 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
 
   return (
     <div className="relative flex flex-col gap-3 p-4 pb-[92px]">
-      {/* Top row: search occupies main width, kebab tucks to the right.
-          Primary Add CTA lives in the fixed footer at panel bottom
-          (matches redesign/Home library structure). */}
       <div className="flex items-center gap-2">
         <div className="flex-1 min-w-0">
           <SearchField
@@ -464,15 +526,85 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         <KebabMenu items={headerMenuItems} ariaLabel={t('bm.bookmark_actions_aria')} />
       </div>
 
-      {/* Category chip filter — hidden while searching */}
-      {!searching && categories.length > 0 && (
+      {/* Place chip filter — hidden while searching. Primary axis. */}
+      {!searching && places.length > 0 && (
         <ChipFilterBar
-          chips={chips}
-          activeId={activeCategoryId}
-          onChange={setActiveCategoryId}
-          ariaLabel={t('bm.category_filter_aria')}
+          chips={placeChips}
+          activeId={activePlaceId}
+          onChange={setActivePlaceId}
+          ariaLabel={t('bm.place_filter_aria')}
           visibleCap={5}
         />
+      )}
+
+      {/* Tag chip filter — secondary axis, multi-select, AND. Hidden while
+          searching (search already looks inside tag names). */}
+      {!searching && tags.length > 0 && (
+        <div
+          role="toolbar"
+          aria-label={t('bm.tag_filter_aria')}
+          className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin"
+          style={{ paddingBottom: 2 }}
+        >
+          <TagIconLucide width={12} height={12} className="text-[var(--color-text-3)] shrink-0" />
+          {tags.map((tag) => {
+            const selected = activeTagIds.has(tag.id)
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => toggleTagFilter(tag.id)}
+                aria-pressed={selected}
+                style={{
+                  fontSize: 10.5,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  border: '1px solid var(--color-border)',
+                  background: selected ? getTagColor(tag) : 'transparent',
+                  color: selected ? '#fff' : 'var(--color-text-2)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  transition: 'all var(--duration-fast, 150ms) ease',
+                }}
+              >
+                {tag.name}
+              </button>
+            )
+          })}
+          {activeTagIds.size > 0 && (
+            <button
+              type="button"
+              onClick={() => setActiveTagIds(new Set())}
+              className="kebab-btn"
+              aria-label={t('bm.search_clear')}
+              title={t('bm.search_clear')}
+              style={{ flexShrink: 0 }}
+            >
+              <X width={12} height={12} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Sort toggle. `by_place` preserves the sectioned view when no filter
+          is applied; `recent` always flattens the list. Hidden for empty. */}
+      {bookmarks.length > 0 && !searching && (
+        <div className="flex items-center gap-1 text-[11px]">
+          <span className="text-[var(--color-text-3)] mr-1">{t('generic.sort')}:</span>
+          <SortChip
+            active={sortMode === 'by_place'}
+            onClick={() => setSortMode('by_place')}
+            icon={<ListTree width={12} height={12} />}
+            label={t('bm.sort_by_place')}
+          />
+          <SortChip
+            active={sortMode === 'recent'}
+            onClick={() => setSortMode('recent')}
+            icon={<Clock width={12} height={12} />}
+            label={t('bm.sort_recent')}
+          />
+        </div>
       )}
 
       {/* Batch bar */}
@@ -508,7 +640,6 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         </div>
       )}
 
-      {/* List — sectioned when chip is "All" (no search), flat otherwise. */}
       {bookmarks.length === 0 ? (
         <EmptyState
           icon={<BookmarkIcon width={ICON_SIZE.lg} height={ICON_SIZE.lg} />}
@@ -518,7 +649,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={<BookmarkIcon width={ICON_SIZE.lg} height={ICON_SIZE.lg} />}
-          title={searching ? t('bm.search_no_results') : t('bm.blank')}
+          title={anyFilter ? t('bm.search_no_results') : t('bm.blank')}
         />
       ) : sections ? (
         <div className="flex flex-col gap-4">
@@ -538,9 +669,10 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {filtered.map((b) => renderBookmarkRow(b))}
+          {(flatList ?? filtered).map((b) => renderBookmarkRow(b))}
         </div>
       )}
+
       {/* Edit dialog (create + edit share one component) */}
       {editing && (
         editing.mode === 'create' ? (
@@ -548,7 +680,8 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
             open
             mode="create"
             currentPosition={currentPosition}
-            categories={categories}
+            places={places}
+            tags={tags}
             onClose={() => setEditing(null)}
             onSubmit={handleCreate}
           />
@@ -557,13 +690,15 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
             open
             mode="edit"
             currentPosition={currentPosition}
-            categories={categories}
+            places={places}
+            tags={tags}
             initial={{
               id: editing.bookmark.id,
               name: editing.bookmark.name,
               lat: editing.bookmark.lat,
               lng: editing.bookmark.lng,
-              categoryId: editing.bookmark.category_id || categories[0]?.id || 'default',
+              placeId: editing.bookmark.place_id || places[0]?.id || 'default',
+              tagIds: [...(editing.bookmark.tags ?? [])],
               note: editing.bookmark.note,
             }}
             onClose={() => setEditing(null)}
@@ -572,27 +707,34 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         ) : null
       )}
 
-      {/* Category manager */}
-      <CategoryManagerDialog
-        open={categoryMgrOpen}
-        onClose={() => setCategoryMgrOpen(false)}
-        categories={categories}
-        onAdd={async (name) => { await bm.createCategory({ name }) }}
-        onDelete={(id) => bm.deleteCategory(id)}
+      <PlaceManagerDialog
+        open={placeMgrOpen}
+        onClose={() => setPlaceMgrOpen(false)}
+        places={places}
+        onAdd={async (name) => { await bm.createPlace({ name }) }}
+        onDelete={(id) => bm.deletePlace(id)}
+        onRename={async (id, name) => { await bm.updatePlace(id, { name }) }}
+        onReorder={(ids) => bm.reorderPlaces(ids)}
       />
 
-      {/* Bulk import via pasted coords (v0.2.52) */}
+      <TagManagerDialog
+        open={tagMgrOpen}
+        onClose={() => setTagMgrOpen(false)}
+        tags={tags}
+        onRename={async (id, name) => { await bm.updateTag(id, { name }) }}
+        onReorder={(ids) => bm.reorderTags(ids)}
+      />
+
       <BulkCoordsDialog
         open={bulkOpen}
         mode="bookmarks"
         onCancel={() => setBulkOpen(false)}
-        onConfirm={async (items, categoryId) => {
-          await bm.createBookmarksBulk(items, categoryId)
+        onConfirm={async (items, placeId) => {
+          await bm.createBookmarksBulk(items, placeId)
           setBulkOpen(false)
         }}
       />
 
-      {/* Delete confirmation */}
       <ConfirmDialog
         open={!!confirm}
         title={t('bm.delete_title')}
@@ -610,33 +752,48 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         onCancel={() => setConfirm(null)}
       />
 
-      {/* Fixed footer — primary Add CTA + Manage-categories ghost.
-          Mirrors the redesign/Home .lib-footer: absolute at the bottom
-          of the scroll area with a gradient fade so list content
-          doesn't collide with the buttons. */}
+      {/* Fixed footer — manage-places + manage-tags + primary Add CTA. */}
       <div
-        className="sticky bottom-0 left-0 right-0 -mx-4 px-4 pt-4 pb-4 flex gap-2.5 items-center"
+        className="sticky bottom-0 left-0 right-0 -mx-4 px-4 pt-4 pb-4 flex gap-2 items-center"
         style={{
           background: 'linear-gradient(180deg, rgba(15,16,20,0) 0%, rgba(15,16,20,0.96) 30%)',
         }}
       >
         <button
           type="button"
-          onClick={() => setCategoryMgrOpen(true)}
+          onClick={() => setPlaceMgrOpen(true)}
           disabled={selectionMode}
           className={[
-            'inline-flex items-center justify-center gap-2 h-11 px-4 rounded-[12px]',
-            'text-[13px] font-semibold shrink-0',
+            'inline-flex items-center justify-center gap-1.5 h-11 px-3 rounded-[12px]',
+            'text-[12px] font-semibold shrink-0',
             'bg-white/[0.04] border border-[var(--color-border)]',
             'hover:bg-white/[0.08]',
             'disabled:opacity-40 disabled:cursor-not-allowed',
             'transition-colors duration-150 cursor-pointer',
           ].join(' ')}
           style={{ color: 'var(--color-text-1)' }}
-          title={t('bm.manage_categories')}
+          title={t('bm.manage_places')}
         >
           <Layers width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-          <span>{t('bm.manage_categories')}</span>
+          <span>{t('bm.manage_places')}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTagMgrOpen(true)}
+          disabled={selectionMode}
+          className={[
+            'inline-flex items-center justify-center gap-1.5 h-11 px-3 rounded-[12px]',
+            'text-[12px] font-semibold shrink-0',
+            'bg-white/[0.04] border border-[var(--color-border)]',
+            'hover:bg-white/[0.08]',
+            'disabled:opacity-40 disabled:cursor-not-allowed',
+            'transition-colors duration-150 cursor-pointer',
+          ].join(' ')}
+          style={{ color: 'var(--color-text-1)' }}
+          title={t('bm.manage_tags')}
+        >
+          <TagIconLucide width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
+          <span>{t('bm.manage_tags')}</span>
         </button>
         <button
           type="button"
@@ -665,8 +822,6 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
 }
 
 // ─── Hover-reveal quick action button ──────────────────────────────
-// Matches the redesign/Home .bm-actions button: 28px rounded-7 tile
-// that fades in on row hover and red-tints when `danger`.
 
 interface HoverActionProps {
   onClick: (e: React.MouseEvent) => void
@@ -695,6 +850,37 @@ function HoverAction({ onClick, label, danger, children }: HoverActionProps) {
       ].join(' ')}
     >
       {children}
+    </button>
+  )
+}
+
+interface SortChipProps {
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+}
+
+function SortChip({ active, onClick, icon, label }: SortChipProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className="inline-flex items-center gap-1"
+      style={{
+        padding: '2px 8px',
+        borderRadius: 999,
+        border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
+        background: active ? 'color-mix(in srgb, var(--color-accent) 20%, transparent)' : 'transparent',
+        color: active ? 'var(--color-text-1)' : 'var(--color-text-3)',
+        fontSize: 10.5,
+        cursor: 'pointer',
+        transition: 'all var(--duration-fast, 150ms) ease',
+      }}
+    >
+      {icon}
+      {label}
     </button>
   )
 }

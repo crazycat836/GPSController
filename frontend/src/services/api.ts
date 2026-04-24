@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage-keys'
 import { API_BASE, DEFAULT_TUNNEL_PORT } from '../lib/constants'
-import type { Bookmark, BookmarkCategory } from '../hooks/useBookmarks'
+import type { Bookmark, BookmarkPlace, BookmarkTag } from '../hooks/useBookmarks'
 import type { DeviceInfo } from '../hooks/useDevice'
 
 // ─── Shared response shapes ─────────────────────────────────
@@ -24,7 +24,8 @@ export interface SavedRoute {
 
 /** Store envelope returned by `/api/bookmarks`. */
 export interface BookmarkStore {
-  categories: BookmarkCategory[]
+  places: BookmarkPlace[]
+  tags: BookmarkTag[]
   bookmarks: Bookmark[]
 }
 
@@ -264,12 +265,30 @@ export const deleteBookmarksBatch = (ids: string[]) =>
   request<{ deleted: number; requested: number }>('POST', '/api/bookmarks/batch-delete', { ids })
 export const backfillBookmarkFlags = () =>
   request<{ filled: number }>('POST', '/api/bookmarks/backfill-flags')
-export const moveBookmarks = (ids: string[], catId: string) =>
-  request<{ moved: number }>('POST', '/api/bookmarks/move', { bookmark_ids: ids, target_category_id: catId })
-export const getCategories = () => request<BookmarkCategory[]>('GET', '/api/bookmarks/categories')
-export const createCategory = (cat: Omit<BookmarkCategory, 'id'>) => request<BookmarkCategory>('POST', '/api/bookmarks/categories', cat)
-export const updateCategory = (id: string, cat: Partial<BookmarkCategory>) => request<BookmarkCategory>('PUT', `/api/bookmarks/categories/${id}`, cat)
-export const deleteCategory = (id: string) => request<StatusResponse>('DELETE', `/api/bookmarks/categories/${id}`)
+export const moveBookmarks = (ids: string[], placeId: string) =>
+  request<{ moved: number }>('POST', '/api/bookmarks/move', { bookmark_ids: ids, target_place_id: placeId })
+export const tagBookmarks = (ids: string[], add: string[] = [], remove: string[] = []) =>
+  request<{ tagged: number }>('POST', '/api/bookmarks/tag', {
+    bookmark_ids: ids,
+    tag_ids_add: add,
+    tag_ids_remove: remove,
+  })
+
+// Places (single-axis, "where")
+export const getPlaces = () => request<BookmarkPlace[]>('GET', '/api/bookmarks/places')
+export const createPlace = (p: Omit<BookmarkPlace, 'id'>) => request<BookmarkPlace>('POST', '/api/bookmarks/places', p)
+export const updatePlace = (id: string, p: Partial<BookmarkPlace>) => request<BookmarkPlace>('PUT', `/api/bookmarks/places/${id}`, p)
+export const deletePlace = (id: string) => request<StatusResponse>('DELETE', `/api/bookmarks/places/${id}`)
+export const reorderPlaces = (orderedIds: string[]) =>
+  request<{ reordered: number }>('POST', '/api/bookmarks/places/reorder', { ordered_ids: orderedIds })
+
+// Tags (multi-axis, "what")
+export const getTags = () => request<BookmarkTag[]>('GET', '/api/bookmarks/tags')
+export const createTag = (t: Omit<BookmarkTag, 'id'>) => request<BookmarkTag>('POST', '/api/bookmarks/tags', t)
+export const updateTag = (id: string, t: Partial<BookmarkTag>) => request<BookmarkTag>('PUT', `/api/bookmarks/tags/${id}`, t)
+export const deleteTag = (id: string) => request<StatusResponse>('DELETE', `/api/bookmarks/tags/${id}`)
+export const reorderTags = (orderedIds: string[]) =>
+  request<{ reordered: number }>('POST', '/api/bookmarks/tags/reorder', { ordered_ids: orderedIds })
 
 export const bookmarksExportUrl = () => `${API}/api/bookmarks/export`
 export const importBookmarks = (data: BookmarkStore) => request<{ imported: number }>('POST', '/api/bookmarks/import', data)

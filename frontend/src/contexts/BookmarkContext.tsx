@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import { useBookmarks, type Bookmark, type BookmarkCategory } from '../hooks/useBookmarks'
+import { useBookmarks, type Bookmark, type BookmarkPlace, type BookmarkTag } from '../hooks/useBookmarks'
 import * as api from '../services/api'
 import type { SavedRoute } from '../services/api'
 import { useToastContext } from './ToastContext'
@@ -9,23 +9,32 @@ interface AddBmDialog {
   lat: number
   lng: number
   name: string
-  category: string
+  place: string
 }
 
 interface BookmarkContextValue {
   // From useBookmarks
   bookmarks: Bookmark[]
-  categories: BookmarkCategory[]
+  places: BookmarkPlace[]
+  tags: BookmarkTag[]
   createBookmark: (bm: Omit<Bookmark, 'id'>) => Promise<Bookmark>
   createBookmarksBulk: (
     items: Array<{ lat: number; lng: number; name?: string }>,
-    categoryId?: string,
+    placeId?: string,
   ) => Promise<{ created: number; failed: number }>
   updateBookmark: (id: string, data: Partial<Bookmark>) => Promise<Bookmark>
   deleteBookmark: (id: string) => Promise<void>
   deleteBookmarksBatch: (ids: string[]) => Promise<number>
-  createCategory: (cat: Omit<BookmarkCategory, 'id'>) => Promise<BookmarkCategory>
-  deleteCategory: (id: string) => Promise<void>
+  moveBookmarks: (ids: string[], placeId: string) => Promise<void>
+  tagBookmarks: (ids: string[], add?: string[], remove?: string[]) => Promise<void>
+  createPlace: (place: Omit<BookmarkPlace, 'id'>) => Promise<BookmarkPlace>
+  updatePlace: (id: string, data: Partial<BookmarkPlace>) => Promise<BookmarkPlace>
+  deletePlace: (id: string) => Promise<void>
+  reorderPlaces: (orderedIds: string[]) => Promise<void>
+  createTag: (tag: Omit<BookmarkTag, 'id'>) => Promise<BookmarkTag>
+  updateTag: (id: string, data: Partial<BookmarkTag>) => Promise<BookmarkTag>
+  deleteTag: (id: string) => Promise<void>
+  reorderTags: (orderedIds: string[]) => Promise<void>
   refresh: () => Promise<void>
 
   // Add bookmark dialog
@@ -64,7 +73,6 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([])
   const [addBmDialog, setAddBmDialog] = useState<AddBmDialog | null>(null)
 
-  // Load saved routes on mount
   useEffect(() => {
     api.getSavedRoutes().then(setSavedRoutes).catch(() => {})
   }, [])
@@ -74,18 +82,19 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
       lat,
       lng,
       name: '',
-      category: bm.categories[0]?.name || t('bm.default'),
+      place: bm.places[0]?.name || t('bm.default'),
     })
-  }, [bm.categories, t])
+  }, [bm.places, t])
 
   const submitAddBookmark = useCallback(() => {
     if (!addBmDialog || !addBmDialog.name.trim()) return
-    const cat = bm.categories.find((c) => c.name === addBmDialog.category)
+    const place = bm.places.find((p) => p.name === addBmDialog.place)
     bm.createBookmark({
       name: addBmDialog.name.trim(),
       lat: addBmDialog.lat,
       lng: addBmDialog.lng,
-      category_id: cat?.id || 'default',
+      place_id: place?.id || 'default',
+      tags: [],
     })
     setAddBmDialog(null)
   }, [addBmDialog, bm])
@@ -192,24 +201,23 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
   const createBookmarksBulk = useCallback(
     async (
       items: Array<{ lat: number; lng: number; name?: string }>,
-      categoryId?: string,
+      placeId?: string,
     ): Promise<{ created: number; failed: number }> => {
       if (items.length === 0) return { created: 0, failed: 0 }
-      const targetCat = (categoryId && bm.categories.some((c) => c.id === categoryId))
-        ? categoryId
+      const targetPlace = (placeId && bm.places.some((p) => p.id === placeId))
+        ? placeId
         : 'default'
       const defaultName = t('bm.default_name')
       // Call `api.createBookmark` directly (not `bm.createBookmark`) so
       // each POST doesn't trigger its own `refresh()` — a 50-row
-      // import would otherwise fire 50 full GET /bookmarks round-trips
-      // on top of the 50 creates. One refresh after everything settles
-      // is enough to sync local state.
+      // import would otherwise fire 50 full GET /bookmarks round-trips.
       const results = await Promise.allSettled(
         items.map((it, idx) => api.createBookmark({
           name: (it.name || '').trim() || `${defaultName} ${idx + 1}`,
           lat: it.lat,
           lng: it.lng,
-          category_id: targetCat,
+          place_id: targetPlace,
+          tags: [],
         })),
       )
       let created = 0
@@ -230,14 +238,23 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
 
   const value: BookmarkContextValue = {
     bookmarks: bm.bookmarks,
-    categories: bm.categories,
+    places: bm.places,
+    tags: bm.tags,
     createBookmark: bm.createBookmark,
     createBookmarksBulk,
     updateBookmark: bm.updateBookmark,
     deleteBookmark: bm.deleteBookmark,
     deleteBookmarksBatch: bm.deleteBookmarksBatch,
-    createCategory: bm.createCategory,
-    deleteCategory: bm.deleteCategory,
+    moveBookmarks: bm.moveBookmarks,
+    tagBookmarks: bm.tagBookmarks,
+    createPlace: bm.createPlace,
+    updatePlace: bm.updatePlace,
+    deletePlace: bm.deletePlace,
+    reorderPlaces: bm.reorderPlaces,
+    createTag: bm.createTag,
+    updateTag: bm.updateTag,
+    deleteTag: bm.deleteTag,
+    reorderTags: bm.reorderTags,
     refresh: bm.refresh,
 
     addBmDialog,

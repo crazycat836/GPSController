@@ -350,16 +350,16 @@ function AppShell({ wsConnected }: { wsConnected: boolean }) {
               style={{ width: '100%', marginBottom: 8 }}
             />
             <select
-              value={bm.addBmDialog.category}
-              onChange={(e) => bm.setAddBmDialog({ ...bm.addBmDialog!, category: e.target.value })}
+              value={bm.addBmDialog.place}
+              onChange={(e) => bm.setAddBmDialog({ ...bm.addBmDialog!, place: e.target.value })}
               style={{
                 width: '100%', marginBottom: 10, padding: '6px 8px',
                 background: 'var(--color-surface-2)', color: 'var(--color-text-1)', border: '1px solid var(--color-border)',
                 borderRadius: 4, fontSize: 12,
               }}
             >
-              {bm.categories.map((c) => (
-                <option key={c.id} value={c.name}>{c.name}</option>
+              {bm.places.map((p) => (
+                <option key={p.id} value={p.name}>{p.name}</option>
               ))}
             </select>
             <div style={{ display: 'flex', gap: 6 }}>

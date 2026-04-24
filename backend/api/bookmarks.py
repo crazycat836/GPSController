@@ -4,7 +4,14 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from models.schemas import Bookmark, BookmarkCategory, BookmarkMoveRequest
+from models.schemas import (
+    Bookmark,
+    BookmarkMoveRequest,
+    BookmarkPlace,
+    BookmarkTag,
+    BookmarkTagRequest,
+    ReorderRequest,
+)
 from services.geocoding import GeocodingService
 
 router = APIRouter(prefix="/api/bookmarks", tags=["bookmarks"])
@@ -38,7 +45,8 @@ async def _resolve_country(lat: float, lng: float) -> tuple[str, str]:
 async def list_bookmarks():
     bm = _bm()
     return {
-        "categories": [c.model_dump() for c in bm.list_categories()],
+        "places": [p.model_dump() for p in bm.list_places()],
+        "tags": [t.model_dump() for t in bm.list_tags()],
         "bookmarks": [b.model_dump() for b in bm.list_bookmarks()],
     }
 
@@ -47,9 +55,6 @@ async def list_bookmarks():
 async def create_bookmark(bookmark: Bookmark):
     bm = _bm()
     # Auto-fill the country flag metadata when the client didn't supply it.
-    # We run the reverse-geocode even if `address` was already provided so
-    # the flag fields match the stored lat/lng rather than relying on stale
-    # address strings.
     country_code = bookmark.country_code
     country = bookmark.country
     if not country_code:
@@ -59,7 +64,8 @@ async def create_bookmark(bookmark: Bookmark):
         lat=bookmark.lat,
         lng=bookmark.lng,
         address=bookmark.address,
-        category_id=bookmark.category_id,
+        place_id=bookmark.place_id,
+        tags=list(bookmark.tags),
         country_code=country_code,
         country=country,
     )
@@ -68,8 +74,6 @@ async def create_bookmark(bookmark: Bookmark):
 @router.put("/{bookmark_id}", response_model=Bookmark)
 async def update_bookmark(bookmark_id: str, bookmark: Bookmark):
     bm = _bm()
-    # Re-resolve the flag whenever lat/lng changed or no flag is on file.
-    # Clients can still force-override by supplying country_code explicitly.
     country_code = bookmark.country_code
     country = bookmark.country
     if not country_code:
@@ -80,7 +84,8 @@ async def update_bookmark(bookmark_id: str, bookmark: Bookmark):
         lat=bookmark.lat,
         lng=bookmark.lng,
         address=bookmark.address,
-        category_id=bookmark.category_id,
+        place_id=bookmark.place_id,
+        tags=list(bookmark.tags),
         country_code=country_code,
         country=country,
     )
@@ -114,15 +119,21 @@ async def delete_bookmarks_batch(req: BatchDeleteRequest):
 @router.post("/move")
 async def move_bookmarks(req: BookmarkMoveRequest):
     bm = _bm()
-    count = bm.move_bookmarks(req.bookmark_ids, req.target_category_id)
+    count = bm.move_bookmarks(req.bookmark_ids, req.target_place_id)
     return {"moved": count}
+
+
+@router.post("/tag")
+async def tag_bookmarks(req: BookmarkTagRequest):
+    bm = _bm()
+    count = bm.tag_bookmarks(req.bookmark_ids, req.tag_ids_add, req.tag_ids_remove)
+    return {"tagged": count}
 
 
 @router.post("/backfill-flags")
 async def backfill_flags():
     """Reverse-geocode and fill country_code/country for any bookmark that
-    lacks them. Safe to re-run: already-populated entries are skipped. The
-    frontend can kick this off once on first load to enrich legacy records."""
+    lacks them. Safe to re-run: already-populated entries are skipped."""
     bm = _bm()
     filled = 0
     for b in bm.list_bookmarks():
@@ -135,37 +146,72 @@ async def backfill_flags():
     return {"filled": filled}
 
 
-# ── Categories ────────────────────────────────────────────
+# ── Places ────────────────────────────────────────────────
 
-@router.get("/categories", response_model=list[BookmarkCategory])
-async def list_categories():
-    bm = _bm()
-    return bm.list_categories()
-
-
-@router.post("/categories", response_model=BookmarkCategory)
-async def create_category(cat: BookmarkCategory):
-    bm = _bm()
-    return bm.create_category(name=cat.name, color=cat.color)
+@router.get("/places", response_model=list[BookmarkPlace])
+async def list_places():
+    return _bm().list_places()
 
 
-@router.put("/categories/{cat_id}", response_model=BookmarkCategory)
-async def update_category(cat_id: str, cat: BookmarkCategory):
-    bm = _bm()
-    updated = bm.update_category(cat_id, name=cat.name, color=cat.color)
+@router.post("/places", response_model=BookmarkPlace)
+async def create_place(place: BookmarkPlace):
+    return _bm().create_place(name=place.name, color=place.color)
+
+
+@router.put("/places/{place_id}", response_model=BookmarkPlace)
+async def update_place(place_id: str, place: BookmarkPlace):
+    updated = _bm().update_place(place_id, name=place.name, color=place.color)
     if not updated:
-        raise HTTPException(status_code=404, detail="Category not found")
+        raise HTTPException(status_code=404, detail="Place not found")
     return updated
 
 
-@router.delete("/categories/{cat_id}")
-async def delete_category(cat_id: str):
-    bm = _bm()
-    if cat_id == "default":
-        raise HTTPException(status_code=400, detail="Cannot delete default category")
-    if not bm.delete_category(cat_id):
-        raise HTTPException(status_code=404, detail="Category not found")
+@router.delete("/places/{place_id}")
+async def delete_place(place_id: str):
+    if place_id == "default":
+        raise HTTPException(status_code=400, detail="Cannot delete default place")
+    if not _bm().delete_place(place_id):
+        raise HTTPException(status_code=404, detail="Place not found")
     return {"status": "deleted"}
+
+
+@router.post("/places/reorder")
+async def reorder_places(req: ReorderRequest):
+    changed = _bm().reorder_places(req.ordered_ids)
+    return {"reordered": changed}
+
+
+# ── Tags ──────────────────────────────────────────────────
+
+@router.get("/tags", response_model=list[BookmarkTag])
+async def list_tags():
+    return _bm().list_tags()
+
+
+@router.post("/tags", response_model=BookmarkTag)
+async def create_tag(tag: BookmarkTag):
+    return _bm().create_tag(name=tag.name, color=tag.color)
+
+
+@router.put("/tags/{tag_id}", response_model=BookmarkTag)
+async def update_tag(tag_id: str, tag: BookmarkTag):
+    updated = _bm().update_tag(tag_id, name=tag.name, color=tag.color)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return updated
+
+
+@router.delete("/tags/{tag_id}")
+async def delete_tag(tag_id: str):
+    if not _bm().delete_tag(tag_id):
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return {"status": "deleted"}
+
+
+@router.post("/tags/reorder")
+async def reorder_tags(req: ReorderRequest):
+    changed = _bm().reorder_tags(req.ordered_ids)
+    return {"reordered": changed}
 
 
 # ── Import / Export ───────────────────────────────────────

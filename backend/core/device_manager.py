@@ -436,6 +436,14 @@ class DeviceManager:
         if conn.location_service is not None:
             try:
                 await conn.location_service.clear()
+                # stopLocationSimulation is declared `expects_reply=False`
+                # in pymobiledevice3, so clear() returns as soon as the DTX
+                # message is queued — iOS has not necessarily processed it
+                # yet. Without this flush window, the teardown below rips
+                # out the DVT channel / RSD / tunnel before the stop
+                # reaches the device, so the phone keeps the last simulated
+                # coordinate even though our log says "cleared".
+                await asyncio.sleep(0.3)
             except Exception as exc:
                 logger.warning("Error clearing location on disconnect for %s: %s", udid, exc)
 

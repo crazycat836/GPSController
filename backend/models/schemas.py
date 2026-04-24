@@ -177,10 +177,23 @@ class SavedRoute(BaseModel):
 
 
 # ── Bookmarks ─────────────────────────────────────────────
-class BookmarkCategory(BaseModel):
+# Data model is dual-axis:
+#   * place_id (single) — "where": e.g. 富士山, 寺廟, default (未分類)
+#   * tags (multi)      — "what": e.g. 掃描器, 菇, 花
+# v0 stores had a single `category_id`; the migration in
+# backend/services/bookmarks.py splits those into place/tag at load time.
+class BookmarkPlace(BaseModel):
     id: str = ""
     name: str = Field(max_length=128)
     color: str = Field(default="#6c8cff", max_length=32)
+    sort_order: int = 0
+    created_at: str = ""
+
+
+class BookmarkTag(BaseModel):
+    id: str = ""
+    name: str = Field(max_length=128)
+    color: str = Field(default="#A855F7", max_length=32)
     sort_order: int = 0
     created_at: str = ""
 
@@ -191,7 +204,8 @@ class Bookmark(BaseModel):
     lat: float = Field(ge=-90.0, le=90.0)
     lng: float = Field(ge=-180.0, le=180.0)
     address: str = Field(default="", max_length=1024)
-    category_id: str = "default"
+    place_id: str = "default"
+    tags: list[str] = Field(default_factory=list)
     created_at: str = ""
     last_used_at: str = ""
     # Populated by the backend when the bookmark is first created or edited.
@@ -204,11 +218,28 @@ class Bookmark(BaseModel):
 
 class BookmarkMoveRequest(BaseModel):
     bookmark_ids: list[str]
-    target_category_id: str
+    target_place_id: str
+
+
+class BookmarkTagRequest(BaseModel):
+    bookmark_ids: list[str]
+    tag_ids_add: list[str] = Field(default_factory=list)
+    tag_ids_remove: list[str] = Field(default_factory=list)
+
+
+class ReorderRequest(BaseModel):
+    ordered_ids: list[str]
+
+
+# Bumped to 1 when the single-category schema was split into place + tags.
+# The on-disk JSON gets re-written with this value after _migrate_v0_to_v1.
+BOOKMARK_STORE_VERSION = 1
 
 
 class BookmarkStore(BaseModel):
-    categories: list[BookmarkCategory] = []
+    version: int = 0
+    places: list[BookmarkPlace] = []
+    tags: list[BookmarkTag] = []
     bookmarks: list[Bookmark] = []
 
 

@@ -35,8 +35,7 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
     { id: 'routes', label: t('panel.routes_count'), count: savedRoutes.length },
   ]
 
-  const activeCategoryCount = bm.categories.length
-  const libSubtitle = `${t('bm.bookmarks_count_label', { n: bm.bookmarks.length })} · ${t('bm.categories_count', { n: activeCategoryCount })}`
+  const libSubtitle = `${t('bm.bookmarks_count_label', { n: bm.bookmarks.length })} · ${t('bm.places_count', { n: bm.places.length })} · ${t('bm.tags_count', { n: bm.tags.length })}`
 
   // Tab-aware header icon buttons — matches the design's 3-icon cluster
   // (Import / Export / Close) in the library drawer header.

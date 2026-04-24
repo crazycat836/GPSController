@@ -1,4 +1,12 @@
-"""Bookmark and category management with JSON file persistence."""
+"""Bookmark, place, and tag management with JSON file persistence.
+
+Data model is dual-axis:
+  * place_id (single) — "where": e.g. 富士山, 寺廟, default (未分類)
+  * tags (multi)      — "what": e.g. 掃描器, 菇, 花
+
+v0 stores had a single `category_id`; on load we migrate those dicts to the
+new shape via :func:`_migrate_v0_to_v1` before handing them to Pydantic.
+"""
 
 from __future__ import annotations
 
@@ -9,34 +17,134 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from config import BOOKMARKS_FILE
-from models.schemas import Bookmark, BookmarkCategory, BookmarkStore
+from models.schemas import (
+    BOOKMARK_STORE_VERSION,
+    Bookmark,
+    BookmarkPlace,
+    BookmarkStore,
+    BookmarkTag,
+)
 from services.json_safe import safe_load_json, safe_write_json
 
 logger = logging.getLogger(__name__)
+
+
+# (id, name, color, sort_order). Stable ids so _ensure_presets can idempotently
+# detect whether a preset is already in a loaded store.
+_PRESET_PLACES: tuple[tuple[str, str, str, int], ...] = (
+    ("default", "預設", "#6c8cff", 0),
+)
+
+_PRESET_TAGS: tuple[tuple[str, str, str, int], ...] = (
+    ("preset_scanner",  "掃描器", "#4A90E2", 0),
+    ("preset_mushroom", "菇",     "#A855F7", 1),
+    ("preset_flower",   "花",     "#EC4899", 2),
+)
+
+# Old `category_id` values that should become tags after migration. Anything
+# not in this set (including "default" and user-created categories like
+# "寺廟" / "富士山") becomes a place.
+_PRESET_TAG_IDS = {pid for pid, *_ in _PRESET_TAGS}
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class BookmarkManager:
-    """CRUD manager for bookmarks and categories.
+def _build_preset_places() -> list[BookmarkPlace]:
+    now = _now_iso()
+    return [
+        BookmarkPlace(id=pid, name=name, color=color, sort_order=order, created_at=now)
+        for pid, name, color, order in _PRESET_PLACES
+    ]
 
-    State is persisted to :data:`BOOKMARKS_FILE` (JSON) on every write
-    operation.
+
+def _build_preset_tags() -> list[BookmarkTag]:
+    now = _now_iso()
+    return [
+        BookmarkTag(id=pid, name=name, color=color, sort_order=order, created_at=now)
+        for pid, name, color, order in _PRESET_TAGS
+    ]
+
+
+def _migrate_v0_to_v1(raw: dict) -> tuple[dict, bool]:
+    """Transform a v0 bookmark store dict into v1 shape.
+
+    v0: ``{categories: [...], bookmarks: [{category_id, ...}]}``
+    v1: ``{version: 1, places: [...], tags: [...], bookmarks: [{place_id, tags, ...}]}``
+
+    Preset tag-like categories (ids in :data:`_PRESET_TAG_IDS`) become tags;
+    every other category — including user-created ones like 寺廟 / 富士山 /
+    隱藏 — becomes a place. The "default" place is always kept as the
+    fallback for bookmarks whose old category was migrated to a tag.
+
+    Returns ``(new_raw, did_migrate)`` — ``did_migrate=True`` means the dict
+    was re-shaped and the caller should write the file back to disk.
+    """
+    version = raw.get("version", 0)
+    if version >= BOOKMARK_STORE_VERSION:
+        return raw, False
+
+    old_categories = raw.get("categories", []) or []
+    places: list[dict] = []
+    tags: list[dict] = []
+    for cat in old_categories:
+        cid = cat.get("id", "")
+        if cid in _PRESET_TAG_IDS:
+            tags.append(cat)
+        else:
+            places.append(cat)
+
+    # Pre-compute the set of surviving place ids so orphaned bookmarks
+    # collapse to default instead of dangling.
+    place_ids = {p.get("id", "") for p in places}
+    place_ids.add("default")
+
+    old_bookmarks = raw.get("bookmarks", []) or []
+    new_bookmarks: list[dict] = []
+    for bm in old_bookmarks:
+        new_bm = dict(bm)
+        old_cat = new_bm.pop("category_id", "default") or "default"
+        if old_cat in _PRESET_TAG_IDS:
+            # The bookmark was in a tag-like category — hoist to default place
+            # and stamp the tag on it.
+            new_bm["place_id"] = "default"
+            existing_tags = list(new_bm.get("tags", []) or [])
+            if old_cat not in existing_tags:
+                existing_tags.append(old_cat)
+            new_bm["tags"] = existing_tags
+        else:
+            new_bm["place_id"] = old_cat if old_cat in place_ids else "default"
+            new_bm.setdefault("tags", [])
+        new_bookmarks.append(new_bm)
+
+    logger.info(
+        "Migrated bookmark store v0→v1: %d places, %d tags, %d bookmarks",
+        len(places), len(tags), len(new_bookmarks),
+    )
+
+    return (
+        {
+            "version": BOOKMARK_STORE_VERSION,
+            "places": places,
+            "tags": tags,
+            "bookmarks": new_bookmarks,
+        },
+        True,
+    )
+
+
+class BookmarkManager:
+    """CRUD manager for bookmarks, places, and tags.
+
+    State is persisted to :data:`BOOKMARKS_FILE` (JSON) on every write.
     """
 
     def __init__(self) -> None:
         self.store = BookmarkStore(
-            categories=[
-                BookmarkCategory(
-                    id="default",
-                    name="預設",
-                    color="#6c8cff",
-                    sort_order=0,
-                    created_at=_now_iso(),
-                )
-            ],
+            version=BOOKMARK_STORE_VERSION,
+            places=_build_preset_places(),
+            tags=_build_preset_tags(),
             bookmarks=[],
         )
         self._load()
@@ -48,23 +156,55 @@ class BookmarkManager:
     def _load(self) -> None:
         """Load bookmarks from the JSON file, if it exists.
 
-        Uses :func:`safe_load_json` so a corrupt file is quarantined to a
-        timestamped ``.bak-*`` sibling rather than wiped on the next
-        successful write.
+        Migrates v0 stores to v1 at the raw-dict level before Pydantic
+        validation so we don't lose data to the stricter schema.
         """
         data = safe_load_json(Path(BOOKMARKS_FILE))
         if data is None:
             logger.info("No bookmark file (or unreadable); using defaults")
             return
+        migrated = False
         try:
+            data, migrated = _migrate_v0_to_v1(data)
             self.store = BookmarkStore(**data)
             logger.info(
-                "Loaded %d bookmarks in %d categories",
+                "Loaded %d bookmarks across %d places, %d tags",
                 len(self.store.bookmarks),
-                len(self.store.categories),
+                len(self.store.places),
+                len(self.store.tags),
             )
+            backfilled = self._ensure_presets()
+            if migrated or backfilled:
+                self._save()
         except Exception as exc:
             logger.warning("Bookmark payload failed schema validation: %s", exc)
+
+    def _ensure_presets(self) -> bool:
+        """Append any missing preset places/tags. Idempotent by id."""
+        added = False
+        now = _now_iso()
+
+        place_ids = {p.id for p in self.store.places}
+        for pid, name, color, order in _PRESET_PLACES:
+            if pid in place_ids:
+                continue
+            self.store.places.append(
+                BookmarkPlace(id=pid, name=name, color=color, sort_order=order, created_at=now)
+            )
+            added = True
+
+        tag_ids = {t.id for t in self.store.tags}
+        for pid, name, color, order in _PRESET_TAGS:
+            if pid in tag_ids:
+                continue
+            self.store.tags.append(
+                BookmarkTag(id=pid, name=name, color=color, sort_order=order, created_at=now)
+            )
+            added = True
+
+        if added:
+            logger.info("Backfilled missing preset places/tags")
+        return added
 
     def _save(self) -> None:
         """Persist the current store to disk atomically."""
@@ -72,71 +212,139 @@ class BookmarkManager:
         safe_write_json(Path(BOOKMARKS_FILE), payload)
 
     # ------------------------------------------------------------------
-    # Categories
+    # Places
     # ------------------------------------------------------------------
 
-    def create_category(
-        self,
-        name: str,
-        color: str = "#6c8cff",
-    ) -> BookmarkCategory:
-        """Create and return a new category."""
-        max_order = max((c.sort_order for c in self.store.categories), default=-1)
-        cat = BookmarkCategory(
+    def create_place(self, name: str, color: str = "#6c8cff") -> BookmarkPlace:
+        max_order = max((p.sort_order for p in self.store.places), default=-1)
+        place = BookmarkPlace(
             id=str(uuid.uuid4()),
             name=name,
             color=color,
             sort_order=max_order + 1,
             created_at=_now_iso(),
         )
-        self.store.categories.append(cat)
+        self.store.places.append(place)
         self._save()
-        return cat
+        return place
 
-    def update_category(
+    def update_place(
         self,
-        cat_id: str,
+        place_id: str,
         name: str | None = None,
         color: str | None = None,
-    ) -> BookmarkCategory | None:
-        """Update a category's name or colour. Returns ``None`` if not found."""
-        cat = self._find_category(cat_id)
-        if cat is None:
+    ) -> BookmarkPlace | None:
+        place = self._find_place(place_id)
+        if place is None:
             return None
         if name is not None:
-            cat.name = name
+            place.name = name
         if color is not None:
-            cat.color = color
+            place.color = color
         self._save()
-        return cat
+        return place
 
-    def delete_category(self, cat_id: str) -> bool:
-        """Delete a category and move its bookmarks to *default*.
-
-        The *default* category cannot be deleted.
-        """
-        if cat_id == "default":
-            logger.warning("Cannot delete the default category")
+    def delete_place(self, place_id: str) -> bool:
+        """Delete a place; bookmarks pointing at it fall back to *default*."""
+        if place_id == "default":
+            logger.warning("Cannot delete the default place")
+            return False
+        if self._find_place(place_id) is None:
             return False
 
-        cat = self._find_category(cat_id)
-        if cat is None:
-            return False
-
-        # Move orphaned bookmarks
         for bm in self.store.bookmarks:
-            if bm.category_id == cat_id:
-                bm.category_id = "default"
+            if bm.place_id == place_id:
+                bm.place_id = "default"
 
-        self.store.categories = [c for c in self.store.categories if c.id != cat_id]
+        self.store.places = [p for p in self.store.places if p.id != place_id]
         self._save()
         return True
 
-    def list_categories(self) -> list[BookmarkCategory]:
-        return sorted(self.store.categories, key=lambda c: c.sort_order)
+    def list_places(self) -> list[BookmarkPlace]:
+        return sorted(self.store.places, key=lambda p: p.sort_order)
 
-    def _find_category(self, cat_id: str) -> BookmarkCategory | None:
-        return next((c for c in self.store.categories if c.id == cat_id), None)
+    def reorder_places(self, ordered_ids: list[str]) -> int:
+        """Rewrite sort_order to match the given id sequence. Unknown ids are
+        ignored. Returns number of places whose sort_order actually changed."""
+        id_to_order = {pid: i for i, pid in enumerate(ordered_ids)}
+        changed = 0
+        for place in self.store.places:
+            new_order = id_to_order.get(place.id)
+            if new_order is None:
+                continue
+            if place.sort_order != new_order:
+                place.sort_order = new_order
+                changed += 1
+        if changed:
+            self._save()
+        return changed
+
+    def _find_place(self, place_id: str) -> BookmarkPlace | None:
+        return next((p for p in self.store.places if p.id == place_id), None)
+
+    # ------------------------------------------------------------------
+    # Tags
+    # ------------------------------------------------------------------
+
+    def create_tag(self, name: str, color: str = "#A855F7") -> BookmarkTag:
+        max_order = max((t.sort_order for t in self.store.tags), default=-1)
+        tag = BookmarkTag(
+            id=str(uuid.uuid4()),
+            name=name,
+            color=color,
+            sort_order=max_order + 1,
+            created_at=_now_iso(),
+        )
+        self.store.tags.append(tag)
+        self._save()
+        return tag
+
+    def update_tag(
+        self,
+        tag_id: str,
+        name: str | None = None,
+        color: str | None = None,
+    ) -> BookmarkTag | None:
+        tag = self._find_tag(tag_id)
+        if tag is None:
+            return None
+        if name is not None:
+            tag.name = name
+        if color is not None:
+            tag.color = color
+        self._save()
+        return tag
+
+    def delete_tag(self, tag_id: str) -> bool:
+        """Delete a tag. Also strips it from every bookmark's tags list."""
+        if self._find_tag(tag_id) is None:
+            return False
+        for bm in self.store.bookmarks:
+            if tag_id in bm.tags:
+                bm.tags = [t for t in bm.tags if t != tag_id]
+        self.store.tags = [t for t in self.store.tags if t.id != tag_id]
+        self._save()
+        return True
+
+    def list_tags(self) -> list[BookmarkTag]:
+        return sorted(self.store.tags, key=lambda t: t.sort_order)
+
+    def reorder_tags(self, ordered_ids: list[str]) -> int:
+        id_to_order = {tid: i for i, tid in enumerate(ordered_ids)}
+        changed = 0
+        for tag in self.store.tags:
+            new_order = id_to_order.get(tag.id)
+            if new_order is None:
+                continue
+            if tag.sort_order != new_order:
+                tag.sort_order = new_order
+                changed += 1
+        if changed:
+            self._save()
+        return changed
+
+    def _find_tag(self, tag_id: str) -> BookmarkTag | None:
+        return next((t for t in self.store.tags if t.id == tag_id), None)
 
     # ------------------------------------------------------------------
     # Bookmarks
@@ -148,14 +356,16 @@ class BookmarkManager:
         lat: float,
         lng: float,
         address: str = "",
-        category_id: str = "default",
+        place_id: str = "default",
+        tags: list[str] | None = None,
         country_code: str = "",
         country: str = "",
     ) -> Bookmark:
-        """Create a new bookmark."""
-        # Validate category
-        if self._find_category(category_id) is None:
-            category_id = "default"
+        if self._find_place(place_id) is None:
+            place_id = "default"
+
+        known_tag_ids = {t.id for t in self.store.tags}
+        cleaned_tags = [t for t in (tags or []) if t in known_tag_ids]
 
         now = _now_iso()
         bm = Bookmark(
@@ -164,7 +374,8 @@ class BookmarkManager:
             lat=lat,
             lng=lng,
             address=address,
-            category_id=category_id,
+            place_id=place_id,
+            tags=cleaned_tags,
             created_at=now,
             last_used_at=now,
             country_code=country_code,
@@ -175,24 +386,28 @@ class BookmarkManager:
         return bm
 
     def update_bookmark(self, bm_id: str, **kwargs: object) -> Bookmark | None:
-        """Update a bookmark's fields. Returns ``None`` if not found."""
         bm = self._find_bookmark(bm_id)
         if bm is None:
             return None
 
         allowed = {
-            "name", "lat", "lng", "address", "category_id", "last_used_at",
-            "country_code", "country",
+            "name", "lat", "lng", "address", "place_id", "tags",
+            "last_used_at", "country_code", "country",
         }
         for key, value in kwargs.items():
-            if key in allowed and value is not None:
-                setattr(bm, key, value)
+            if key not in allowed or value is None:
+                continue
+            if key == "place_id" and self._find_place(str(value)) is None:
+                continue  # reject unknown place silently; keep current value
+            if key == "tags":
+                known = {t.id for t in self.store.tags}
+                value = [t for t in value if t in known]  # type: ignore[union-attr]
+            setattr(bm, key, value)
 
         self._save()
         return bm
 
     def delete_bookmark(self, bm_id: str) -> bool:
-        """Delete a bookmark by ID."""
         before = len(self.store.bookmarks)
         self.store.bookmarks = [b for b in self.store.bookmarks if b.id != bm_id]
         if len(self.store.bookmarks) < before:
@@ -201,9 +416,6 @@ class BookmarkManager:
         return False
 
     def delete_bookmarks(self, bm_ids: list[str]) -> int:
-        """Delete multiple bookmarks by ID. Returns the number actually
-        removed. Unknown IDs are silently ignored — the caller just gets a
-        count of real deletions."""
         if not bm_ids:
             return 0
         ids = set(bm_ids)
@@ -217,29 +429,59 @@ class BookmarkManager:
     def list_bookmarks(self) -> list[Bookmark]:
         return list(self.store.bookmarks)
 
-    def move_bookmarks(
-        self,
-        bookmark_ids: list[str],
-        target_category_id: str,
-    ) -> int:
-        """Move multiple bookmarks to *target_category_id*.
+    def move_bookmarks(self, bookmark_ids: list[str], target_place_id: str) -> int:
+        """Move multiple bookmarks to *target_place_id*.
 
         Returns the number of bookmarks actually moved.
         """
-        if self._find_category(target_category_id) is None:
-            logger.warning("Target category %s does not exist", target_category_id)
+        if self._find_place(target_place_id) is None:
+            logger.warning("Target place %s does not exist", target_place_id)
             return 0
 
         moved = 0
         ids_set = set(bookmark_ids)
         for bm in self.store.bookmarks:
-            if bm.id in ids_set and bm.category_id != target_category_id:
-                bm.category_id = target_category_id
+            if bm.id in ids_set and bm.place_id != target_place_id:
+                bm.place_id = target_place_id
                 moved += 1
 
         if moved:
             self._save()
         return moved
+
+    def tag_bookmarks(
+        self,
+        bookmark_ids: list[str],
+        tag_ids_add: list[str] | None = None,
+        tag_ids_remove: list[str] | None = None,
+    ) -> int:
+        """Apply tag diffs to the given bookmarks. Unknown tag ids are ignored
+        (never silently created). Returns the number of bookmarks whose tag
+        list actually changed."""
+        if not bookmark_ids:
+            return 0
+
+        known = {t.id for t in self.store.tags}
+        add = [t for t in (tag_ids_add or []) if t in known]
+        remove_set = set(tag_ids_remove or [])
+        ids_set = set(bookmark_ids)
+
+        changed = 0
+        for bm in self.store.bookmarks:
+            if bm.id not in ids_set:
+                continue
+            before = list(bm.tags)
+            after = [t for t in before if t not in remove_set]
+            for t in add:
+                if t not in after:
+                    after.append(t)
+            if after != before:
+                bm.tags = after
+                changed += 1
+
+        if changed:
+            self._save()
+        return changed
 
     def _find_bookmark(self, bm_id: str) -> Bookmark | None:
         return next((b for b in self.store.bookmarks if b.id == bm_id), None)
@@ -249,38 +491,48 @@ class BookmarkManager:
     # ------------------------------------------------------------------
 
     def export_json(self) -> str:
-        """Serialise the entire store to a JSON string."""
         return self.store.model_dump_json(indent=2)
 
     def import_json(self, data: str) -> int:
-        """Import bookmarks (and optionally categories) from a JSON string.
+        """Import bookmarks (and places/tags) from a JSON string.
 
-        Merges into the existing store -- duplicates by ID are skipped.
+        Accepts both v0 (`categories` + `category_id`) and v1 payloads — v0
+        blobs are run through the same migration as on-disk loads. Merges
+        by ID; duplicates are skipped.
 
         Returns the number of bookmarks imported.
         """
         try:
-            incoming = BookmarkStore(**json.loads(data))
+            raw = json.loads(data)
+            raw, _ = _migrate_v0_to_v1(raw)
+            incoming = BookmarkStore(**raw)
         except Exception as exc:
             logger.error("Invalid bookmark JSON: %s", exc)
             return 0
 
-        existing_cat_ids = {c.id for c in self.store.categories}
-        for cat in incoming.categories:
-            if cat.id not in existing_cat_ids:
-                self.store.categories.append(cat)
-                existing_cat_ids.add(cat.id)
+        existing_place_ids = {p.id for p in self.store.places}
+        for place in incoming.places:
+            if place.id not in existing_place_ids:
+                self.store.places.append(place)
+                existing_place_ids.add(place.id)
+
+        existing_tag_ids = {t.id for t in self.store.tags}
+        for tag in incoming.tags:
+            if tag.id not in existing_tag_ids:
+                self.store.tags.append(tag)
+                existing_tag_ids.add(tag.id)
 
         existing_bm_ids = {b.id for b in self.store.bookmarks}
         imported = 0
         for bm in incoming.bookmarks:
-            if bm.id not in existing_bm_ids:
-                # Ensure the bookmark's category exists
-                if bm.category_id not in existing_cat_ids:
-                    bm.category_id = "default"
-                self.store.bookmarks.append(bm)
-                existing_bm_ids.add(bm.id)
-                imported += 1
+            if bm.id in existing_bm_ids:
+                continue
+            if bm.place_id not in existing_place_ids:
+                bm.place_id = "default"
+            bm.tags = [t for t in bm.tags if t in existing_tag_ids]
+            self.store.bookmarks.append(bm)
+            existing_bm_ids.add(bm.id)
+            imported += 1
 
         if imported:
             self._save()

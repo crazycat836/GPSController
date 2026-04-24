@@ -57,7 +57,7 @@ export default function LocatePcButton({ onFlyToCoordinate, onPcLocated }: Locat
       return
     }
     onFlyToCoordinate(coord.lat, coord.lng, LOCATE_ZOOM)
-    onPcLocated?.({ lat: coord.lat, lng: coord.lng })
+    onPcLocated?.(null)
     simCtx.handleTeleport(coord.lat, coord.lng)
   }, [coord, needsConfirm, onFlyToCoordinate, onPcLocated, simCtx])
 
@@ -71,7 +71,7 @@ export default function LocatePcButton({ onFlyToCoordinate, onPcLocated }: Locat
     if (!pendingTeleport) return
     const { lat, lng } = pendingTeleport
     onFlyToCoordinate(lat, lng, LOCATE_ZOOM)
-    onPcLocated?.({ lat, lng })
+    onPcLocated?.(null)
     simCtx.handleTeleport(lat, lng)
     setPendingTeleport(null)
   }, [pendingTeleport, onFlyToCoordinate, onPcLocated, simCtx])

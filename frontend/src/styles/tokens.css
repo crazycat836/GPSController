@@ -105,6 +105,9 @@
   --color-cat-work: #ff9800;
   --color-cat-favorites: #e91e63;
   --color-cat-custom: #9c27b0;
+  --color-cat-scanner: #4A90E2;
+  --color-cat-mushroom: #A855F7;
+  --color-cat-flower: #EC4899;
 
   /* Device-card gradients — rendered as radial/linear gradients on the
      DevicesPopover & DeviceDrawer cards so the surface reads as a

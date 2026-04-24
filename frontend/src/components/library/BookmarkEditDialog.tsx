@@ -3,7 +3,7 @@ import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { createPortal } from 'react-dom'
 import { MapPin, Crosshair } from 'lucide-react'
-import type { BookmarkCategory } from '../../hooks/useBookmarks'
+import type { BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
 import { ICON_SIZE } from '../../lib/icons'
 import { useT } from '../../i18n'
 
@@ -11,7 +11,8 @@ export interface BookmarkEditValues {
   name: string
   lat: number
   lng: number
-  categoryId: string
+  placeId: string
+  tagIds: string[]
   note?: string
 }
 
@@ -19,7 +20,8 @@ interface BaseProps {
   open: boolean
   onClose: () => void
   onSubmit: (values: BookmarkEditValues) => void
-  categories: readonly BookmarkCategory[]
+  places: readonly BookmarkPlace[]
+  tags: readonly BookmarkTag[]
   /** Current live position (if available); enables "Use current position". */
   currentPosition: { lat: number; lng: number } | null
 }
@@ -36,7 +38,8 @@ interface EditProps extends BaseProps {
     name: string
     lat: number
     lng: number
-    categoryId: string
+    placeId: string
+    tagIds: string[]
     note?: string
   }
 }
@@ -49,9 +52,8 @@ function trySplitLatLng(s: string): [string, string] | null {
   return m ? [m[1], m[2]] : null
 }
 
-// Format a coordinate for display: round to 6 decimals (~11cm at the equator)
-// and strip trailing zeros so float-representation noise like
-// `136.56696999999997` never leaks into the input.
+// Round to 6 decimals (~11cm at the equator) and strip trailing zeros so
+// float-representation noise like `136.56696999999997` never leaks in.
 function formatCoord(n: number): string {
   if (!Number.isFinite(n)) return ''
   return n.toFixed(6).replace(/\.?0+$/, '')
@@ -62,35 +64,33 @@ function formatCoord(n: number): string {
 //   is ON by default so the coordinate fields lock to live lat/lng.
 // - Toggle OFF to hand-type custom coords.
 // - In edit mode the toggle is hidden; user always edits explicit coords.
+// - Dual-axis taxonomy: one "place" (where) + many "tags" (what).
 export default function BookmarkEditDialog(props: Props) {
   const t = useT()
-  const { open, onClose, onSubmit, categories, currentPosition, mode } = props
+  const { open, onClose, onSubmit, places, tags, currentPosition, mode } = props
   const initial = (mode === 'edit' ? props.initial : undefined)
 
-  const firstCategory = categories[0]?.id ?? 'default'
+  const firstPlace = places[0]?.id ?? 'default'
 
   const [name, setName] = useState('')
   const [useCurrent, setUseCurrent] = useState(true)
   const [latStr, setLatStr] = useState('')
   const [lngStr, setLngStr] = useState('')
-  const [categoryId, setCategoryId] = useState<string>(firstCategory)
+  const [placeId, setPlaceId] = useState<string>(firstPlace)
+  const [tagIds, setTagIds] = useState<string[]>([])
   const [note, setNote] = useState('')
 
   const nameRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
   const wasOpenRef = useRef(false)
-  // Edge-detector for the "use current position" toggle. We re-snapshot
-  // from `currentPosition` only on the OFF→ON transition; starts matching
-  // the initial `useCurrent` so the first render after open doesn't
-  // spuriously re-grab the live position.
+  // Edge-detector for the "use current position" toggle. Re-snapshot from
+  // `currentPosition` only on the OFF→ON transition.
   const prevUseCurrentRef = useRef(true)
 
-  // Initialize form state once per open transition. We deliberately ignore
-  // `currentPosition` / `initial` / `firstCategory` after the dialog is
+  // Initialize form state once per open transition. Deliberately ignore
+  // `currentPosition` / `initial` / `firstPlace` after the dialog is
   // already open — otherwise a live position update mid-edit would clobber
-  // what the user has typed. "Use current position" now behaves as a
-  // snapshot (see below): latStr / lngStr are the sole source of truth for
-  // both the rendered input and the submitted value.
+  // what the user has typed.
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       wasOpenRef.current = true
@@ -99,7 +99,8 @@ export default function BookmarkEditDialog(props: Props) {
         setUseCurrent(false)
         setLatStr(formatCoord(initial.lat))
         setLngStr(formatCoord(initial.lng))
-        setCategoryId(initial.categoryId || firstCategory)
+        setPlaceId(initial.placeId || firstPlace)
+        setTagIds([...initial.tagIds])
         setNote(initial.note ?? '')
         prevUseCurrentRef.current = false
       } else {
@@ -108,7 +109,8 @@ export default function BookmarkEditDialog(props: Props) {
         setUseCurrent(canUseCurrent)
         setLatStr(canUseCurrent ? formatCoord(currentPosition!.lat) : '')
         setLngStr(canUseCurrent ? formatCoord(currentPosition!.lng) : '')
-        setCategoryId(firstCategory)
+        setPlaceId(firstPlace)
+        setTagIds([])
         setNote('')
         prevUseCurrentRef.current = canUseCurrent
       }
@@ -116,15 +118,12 @@ export default function BookmarkEditDialog(props: Props) {
       return () => clearTimeout(f)
     }
     if (!open) wasOpenRef.current = false
-  }, [open, initial, firstCategory, currentPosition])
+  }, [open, initial, firstPlace, currentPosition])
 
   // Snapshot — not live-track — the coord when the user toggles
   // "Use current position" ON. If we tracked live, a running simulation
   // (WS position_update at ~10Hz) would move the saved coord hundreds of
-  // metres between dialog-open and pressing "Add": the user sees one
-  // coord in the input but a different one lands in the bookmark. Snap
-  // only on the OFF→ON edge; toggling OFF preserves the current text so
-  // the user can hand-edit.
+  // metres between dialog-open and pressing "Add".
   useEffect(() => {
     if (mode === 'edit') return
     const wasOn = prevUseCurrentRef.current
@@ -135,14 +134,17 @@ export default function BookmarkEditDialog(props: Props) {
     }
   }, [useCurrent, currentPosition, mode])
 
-  // Single source of truth: whatever is in the (disabled-when-locked)
-  // inputs is what the bookmark gets. `formatCoord` rounds to 6 decimals
-  // (~11cm), which is well beyond a bookmark's useful precision.
   const effectiveLat = parseFloat(latStr)
   const effectiveLng = parseFloat(lngStr)
   const latValid = Number.isFinite(effectiveLat) && effectiveLat >= -90 && effectiveLat <= 90
   const lngValid = Number.isFinite(effectiveLng) && effectiveLng >= -180 && effectiveLng <= 180
   const canSubmit = name.trim().length > 0 && latValid && lngValid
+
+  const toggleTag = useCallback((tagId: string) => {
+    setTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId],
+    )
+  }, [])
 
   const submit = useCallback(() => {
     if (!canSubmit) return
@@ -150,10 +152,11 @@ export default function BookmarkEditDialog(props: Props) {
       name: name.trim(),
       lat: effectiveLat,
       lng: effectiveLng,
-      categoryId,
+      placeId,
+      tagIds,
       note: note.trim() || undefined,
     })
-  }, [canSubmit, name, effectiveLat, effectiveLng, categoryId, note, onSubmit])
+  }, [canSubmit, name, effectiveLat, effectiveLng, placeId, tagIds, note, onSubmit])
 
   useModalDismiss({ open, onDismiss: onClose })
   useFocusTrap(dialogRef, open)
@@ -171,7 +174,7 @@ export default function BookmarkEditDialog(props: Props) {
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}
         className="modal-dialog anim-scale-in"
-        style={{ width: 360 }}
+        style={{ width: 380 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-title flex items-center gap-2">
@@ -251,22 +254,56 @@ export default function BookmarkEditDialog(props: Props) {
             </div>
           </div>
 
-          {/* Category */}
+          {/* Place — single-axis "where" */}
           <label className="flex flex-col gap-1.5">
-            <span className="text-[11px] text-[var(--color-text-3)]">{t('bm.category_color')}</span>
+            <span className="text-[11px] text-[var(--color-text-3)]">{t('bm.place_label')}</span>
             <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              value={placeId}
+              onChange={(e) => setPlaceId(e.target.value)}
               className="search-input"
               style={{ paddingLeft: 10 }}
             >
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name === '預設' || cat.name === 'Default' ? t('bm.default') : cat.name}
+              {places.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name === '預設' || p.name === 'Default' ? t('bm.default') : p.name}
                 </option>
               ))}
             </select>
           </label>
+
+          {/* Tags — multi-axis "what" */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] text-[var(--color-text-3)]">{t('bm.tags_label')}</span>
+            <div className="flex flex-wrap gap-1.5">
+              {tags.length === 0 && (
+                <span className="text-[11px] text-[var(--color-text-3)] italic">—</span>
+              )}
+              {tags.map((tag) => {
+                const selected = tagIds.includes(tag.id)
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => toggleTag(tag.id)}
+                    className="tag-chip"
+                    data-selected={selected ? 'true' : 'false'}
+                    style={{
+                      fontSize: 11,
+                      padding: '3px 10px',
+                      borderRadius: 999,
+                      border: '1px solid var(--color-border)',
+                      background: selected ? (tag.color || 'var(--color-accent)') : 'transparent',
+                      color: selected ? '#fff' : 'var(--color-text-2)',
+                      cursor: 'pointer',
+                      transition: 'all var(--duration-fast, 150ms) ease',
+                    }}
+                  >
+                    {tag.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
           {/* Note — optional */}
           <label className="flex flex-col gap-1.5">
