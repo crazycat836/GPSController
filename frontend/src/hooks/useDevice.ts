@@ -178,8 +178,12 @@ export function useDevice(subscribe?: WsSubscribe) {
   const [wifiScanning, setWifiScanning] = useState(false)
   const [wifiDevices, setWifiDevices] = useState<WifiScanResult[]>([])
 
-  const scan = useCallback(async () => {
-    setScanning(true)
+  const scan = useCallback(async (opts?: { poll?: boolean }) => {
+    // Background polling path: silent (no spinner), and never triggers
+    // auto-connect — polling is pure observation so the UI reflects
+    // reality when WS events are missed.
+    const isPoll = opts?.poll === true
+    if (!isPoll) setScanning(true)
     try {
       const result = await listDevices()
       const list: DeviceInfo[] = Array.isArray(result) ? result : []
@@ -191,8 +195,8 @@ export function useDevice(subscribe?: WsSubscribe) {
       const active = list.find((d) => d.is_connected) ?? null
       if (active) {
         setConnectedDevice(active)
-      } else if (list.length === 1) {
-        // Auto-connect when exactly one device is found
+      } else if (!isPoll && list.length === 1) {
+        // Auto-connect when exactly one device is found (manual scan only)
         try {
           await connectDevice(list[0].udid)
           const refreshed = await listDevices()
@@ -210,9 +214,49 @@ export function useDevice(subscribe?: WsSubscribe) {
       devLog('Failed to scan devices:', err)
       return []
     } finally {
-      setScanning(false)
+      if (!isPoll) setScanning(false)
     }
   }, [])
+
+  // 30s background poll while the tab is visible, and an immediate
+  // catch-up scan on hidden→visible transition. Belt-and-suspenders
+  // for missed WS events (DVT tunnel drops, backend restart during
+  // sleep, etc.) — without this, stale "connected" state persists
+  // until the user tries to send a command.
+  useEffect(() => {
+    const POLL_INTERVAL_MS = 30_000
+    let timer: ReturnType<typeof setInterval> | null = null
+    const startPolling = () => {
+      if (timer != null) return
+      timer = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          scan({ poll: true }).catch(() => { /* logged inside scan */ })
+        }
+      }, POLL_INTERVAL_MS)
+    }
+    const stopPolling = () => {
+      if (timer != null) {
+        clearInterval(timer)
+        timer = null
+      }
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        scan({ poll: true }).catch(() => {})
+        startPolling()
+      } else {
+        stopPolling()
+      }
+    }
+    if (document.visibilityState === 'visible') {
+      startPolling()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      stopPolling()
+    }
+  }, [scan])
 
   const connect = useCallback(
     async (udid: string) => {
