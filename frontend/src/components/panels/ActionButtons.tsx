@@ -1,7 +1,7 @@
 import React from 'react'
 import { Play, Square, Pause } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
-import { useConnectionHealth } from '../../contexts/ConnectionHealthContext'
+import { useDisabledByConnection } from '../../hooks/useDisabledByConnection'
 import { useT } from '../../i18n'
 
 interface ActionButtonsProps {
@@ -17,7 +17,7 @@ interface ActionButtonsProps {
 
 export default function ActionButtons({ canStart = true, trailing }: ActionButtonsProps = {}) {
   const { handleStart, handleStop, handlePause, handleResume, isRunning, isPaused } = useSimContext()
-  const { canOperate } = useConnectionHealth()
+  const conn = useDisabledByConnection()
   const t = useT()
 
   // Start gates on BOTH a panel-local precondition (canStart) AND the
@@ -25,15 +25,13 @@ export default function ActionButtons({ canStart = true, trailing }: ActionButto
   // is already running, the user should still be able to attempt to
   // halt it even if WS flaps — the HTTP call may still succeed.
   if (!isRunning) {
-    const startDisabled = !canStart || !canOperate
-    const startTitle = !canOperate ? t('conn.not_ready_tooltip') : undefined
     return (
       <div className="flex gap-2 mt-1">
         <button
           className="seg-cta seg-cta-accent flex-1"
           onClick={handleStart}
-          disabled={startDisabled}
-          title={startTitle}
+          disabled={!canStart || conn.disabled}
+          title={conn.title}
         >
           <Play size={14} fill="currentColor" />
           {t('generic.start')}

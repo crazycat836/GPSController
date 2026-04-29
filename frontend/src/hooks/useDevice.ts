@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { DEFAULT_TUNNEL_PORT } from '../lib/constants'
 import {
   listDevices, connectDevice, disconnectDevice,
@@ -43,6 +43,76 @@ export interface WifiScanResult {
 
 export type WsSubscribe = (fn: (m: WsMessage) => void) => () => void
 
+// Discriminated union of every WS event this hook reacts to. `WsMessage`
+// itself is intentionally `unknown`-typed (see useWebSocket.ts); these
+// guards narrow it once at the entry point so the rest of the handler
+// reads payloads as plain TypeScript.
+//
+// Reason for `as any` originally: the backend emits ~24 event types and
+// nobody wanted to enumerate all of them. Reason for replacing it: the
+// device events are a small stable subset, and silent payload drift
+// (e.g. backend renaming `udid` → `device_id`) was invisible to TS.
+interface DeviceConnectedPayload {
+  udid: string
+  name?: string
+  ios_version?: string
+  connection_type?: string
+}
+
+interface DeviceDisconnectedPayload {
+  udid?: string
+  udids?: readonly string[]
+  reason?: string
+}
+
+interface DeviceReconnectedPayload {
+  udid: string
+}
+
+function asObject(v: unknown): Record<string, unknown> | null {
+  return typeof v === 'object' && v != null ? v as Record<string, unknown> : null
+}
+
+function asString(v: unknown): string | undefined {
+  return typeof v === 'string' ? v : undefined
+}
+
+function asStringArray(v: unknown): readonly string[] | undefined {
+  if (!Array.isArray(v)) return undefined
+  if (v.every((x): x is string => typeof x === 'string')) return v
+  return undefined
+}
+
+function parseDeviceConnected(data: unknown): DeviceConnectedPayload | null {
+  const obj = asObject(data)
+  if (!obj) return null
+  const udid = asString(obj.udid)
+  if (!udid) return null
+  return {
+    udid,
+    name: asString(obj.name),
+    ios_version: asString(obj.ios_version),
+    connection_type: asString(obj.connection_type),
+  }
+}
+
+function parseDeviceDisconnected(data: unknown): DeviceDisconnectedPayload {
+  const obj = asObject(data) ?? {}
+  return {
+    udid: asString(obj.udid),
+    udids: asStringArray(obj.udids),
+    reason: asString(obj.reason),
+  }
+}
+
+function parseDeviceReconnected(data: unknown): DeviceReconnectedPayload | null {
+  const obj = asObject(data)
+  if (!obj) return null
+  const udid = asString(obj.udid)
+  if (!udid) return null
+  return { udid }
+}
+
 function deviceListEqual(a: readonly DeviceInfo[], b: readonly DeviceInfo[]): boolean {
   if (a === b) return true
   if (a.length !== b.length) return false
@@ -72,6 +142,15 @@ export function useDevice(subscribe?: WsSubscribe) {
   // Cleared when the UDID reappears connected, or on a fresh scan.
   const [lostUdids, setLostUdids] = useState<Set<string>>(() => new Set())
 
+  // Bumped every time a WS-driven state change is applied (connected /
+  // disconnected / reconnected). Used by REST flows (scan/connect/
+  // disconnect) to detect "did a WS event race past me while I was
+  // awaiting?" — if so, the WS event is authoritative and we skip the
+  // post-await `setDevices` apply that would clobber it. See the
+  // auto-connect path in `scan` for the canonical use.
+  const wsEventGenRef = useRef(0)
+  const bumpWsGen = useCallback(() => { wsEventGenRef.current += 1 }, [])
+
   // React to real-time device state broadcasts via the subscribe callback.
   // See useWebSocket.ts for the rationale vs the old useState pattern.
   //
@@ -87,12 +166,13 @@ export function useDevice(subscribe?: WsSubscribe) {
     if (!subscribe) return
     return subscribe((msg) => {
       if (msg.type === 'device_disconnected') {
+        bumpWsGen()
         // Group mode: only mark the specific udid disconnected when provided;
         // fall back to clearing all for legacy single-device disconnect events.
-        const udid = (msg.data as any)?.udid
-        const udids: string[] = Array.isArray((msg.data as any)?.udids) ? (msg.data as any).udids : (udid ? [udid] : [])
-        const reason: string | undefined = (msg.data as any)?.reason
-        const involuntary = reason !== 'user' // user-initiated disconnects don't warrant a "lost" pill
+        const payload = parseDeviceDisconnected(msg.data)
+        const udids: readonly string[] = payload.udids ?? (payload.udid ? [payload.udid] : [])
+        // user-initiated disconnects don't warrant a "lost" pill
+        const involuntary = payload.reason !== 'user'
         if (udids.length === 0) {
           setConnectedDevice(null)
           setDevices((prev) => {
@@ -112,14 +192,14 @@ export function useDevice(subscribe?: WsSubscribe) {
           }
         }
       } else if (msg.type === 'device_connected') {
-        const data = (msg.data as any) ?? {}
-        const udid: string | undefined = data.udid
-        if (!udid) return
+        const payload = parseDeviceConnected(msg.data)
+        if (!payload) return
+        bumpWsGen()
         const incoming: DeviceInfo = {
-          udid,
-          name: data.name ?? '',
-          ios_version: data.ios_version ?? '',
-          connection_type: data.connection_type ?? 'USB',
+          udid: payload.udid,
+          name: payload.name ?? '',
+          ios_version: payload.ios_version ?? '',
+          connection_type: payload.connection_type ?? 'USB',
           is_connected: true,
         }
         // `merged` holds the post-update entry for this udid; we thread
@@ -128,7 +208,7 @@ export function useDevice(subscribe?: WsSubscribe) {
         // `developer_mode_*` fields and the other doesn't.
         let merged: DeviceInfo = incoming
         setDevices((prev) => {
-          const idx = prev.findIndex((d) => d.udid === udid)
+          const idx = prev.findIndex((d) => d.udid === payload.udid)
           if (idx === -1) {
             merged = incoming
             return [...prev, incoming]
@@ -154,10 +234,12 @@ export function useDevice(subscribe?: WsSubscribe) {
           return next
         })
         setConnectedDevice((prev) => prev ?? merged)
-        setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
+        setLostUdids((s) => { if (!s.has(payload.udid)) return s; const n = new Set(s); n.delete(payload.udid); return n })
       } else if (msg.type === 'device_reconnected') {
-        const udid: string | undefined = (msg.data as any)?.udid
-        if (!udid) return
+        const payload = parseDeviceReconnected(msg.data)
+        if (!payload) return
+        bumpWsGen()
+        const { udid } = payload
         setDevices((prev) => {
           const idx = prev.findIndex((d) => d.udid === udid)
           if (idx === -1) return prev
@@ -173,16 +255,27 @@ export function useDevice(subscribe?: WsSubscribe) {
         setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
       }
     })
-  }, [subscribe])
+  }, [subscribe, bumpWsGen])
   const [scanning, setScanning] = useState(false)
   const [wifiScanning, setWifiScanning] = useState(false)
   const [wifiDevices, setWifiDevices] = useState<WifiScanResult[]>([])
+
+  // Coalesce burst scans (visibility-change + WS-reconnect debounce can
+  // both fire within ~200ms). When `poll: true` AND another poll ran
+  // within COALESCE_MS, skip — manual scans always go through.
+  const lastPollAtRef = useRef(0)
+  const SCAN_COALESCE_MS = 1500
 
   const scan = useCallback(async (opts?: { poll?: boolean }) => {
     // Background polling path: silent (no spinner), and never triggers
     // auto-connect — polling is pure observation so the UI reflects
     // reality when WS events are missed.
     const isPoll = opts?.poll === true
+    if (isPoll) {
+      const dt = Date.now() - lastPollAtRef.current
+      if (dt < SCAN_COALESCE_MS) return []
+      lastPollAtRef.current = Date.now()
+    }
     if (!isPoll) setScanning(true)
     try {
       const result = await listDevices()
@@ -196,15 +289,23 @@ export function useDevice(subscribe?: WsSubscribe) {
       if (active) {
         setConnectedDevice(active)
       } else if (!isPoll && list.length === 1) {
-        // Auto-connect when exactly one device is found (manual scan only)
+        // Auto-connect when exactly one device is found (manual scan only).
+        // Race protection: snapshot the WS event generation before the
+        // await; if a `device_connected` / `device_disconnected` event
+        // fires during the call, the WS subscriber has already updated
+        // state and is authoritative — skip our refresh apply so we
+        // don't clobber it.
+        const wsGen = wsEventGenRef.current
         try {
           await connectDevice(list[0].udid)
           const refreshed = await listDevices()
           const rList: DeviceInfo[] = Array.isArray(refreshed) ? refreshed : []
-          setDevices((prev) => deviceListEqual(prev, rList) ? prev : rList)
-          setConnectedDevice(rList.find((d) => d.udid === list[0].udid) ?? list[0])
+          if (wsEventGenRef.current === wsGen) {
+            setDevices((prev) => deviceListEqual(prev, rList) ? prev : rList)
+            setConnectedDevice(rList.find((d) => d.udid === list[0].udid) ?? list[0])
+          }
         } catch {
-          setConnectedDevice(null)
+          if (wsEventGenRef.current === wsGen) setConnectedDevice(null)
         }
       } else {
         setConnectedDevice(null)
@@ -260,13 +361,18 @@ export function useDevice(subscribe?: WsSubscribe) {
 
   const connect = useCallback(
     async (udid: string) => {
+      // Race protection: see `scan` auto-connect path. If WS already
+      // told us about a state change during the await, skip the apply.
+      const wsGen = wsEventGenRef.current
       try {
         await connectDevice(udid)
         const refreshed = await listDevices()
         const list: DeviceInfo[] = Array.isArray(refreshed) ? refreshed : []
-        setDevices((prev) => deviceListEqual(prev, list) ? prev : list)
         const active = list.find((d) => d.udid === udid) ?? null
-        setConnectedDevice(active)
+        if (wsEventGenRef.current === wsGen) {
+          setDevices((prev) => deviceListEqual(prev, list) ? prev : list)
+          setConnectedDevice(active)
+        }
         setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
         return active
       } catch (err) {
@@ -279,12 +385,15 @@ export function useDevice(subscribe?: WsSubscribe) {
 
   const disconnect = useCallback(
     async (udid: string) => {
+      const wsGen = wsEventGenRef.current
       try {
         await disconnectDevice(udid)
         const refreshed = await listDevices()
         const list: DeviceInfo[] = Array.isArray(refreshed) ? refreshed : []
-        setDevices((prev) => deviceListEqual(prev, list) ? prev : list)
-        setConnectedDevice(null)
+        if (wsEventGenRef.current === wsGen) {
+          setDevices((prev) => deviceListEqual(prev, list) ? prev : list)
+          setConnectedDevice(null)
+        }
       } catch (err) {
         devLog('Failed to disconnect device:', err)
         throw err
@@ -383,11 +492,17 @@ export function useDevice(subscribe?: WsSubscribe) {
 
   // Group-mode derived state: every device in `devices` marked is_connected.
   // `primaryDevice` is the first one (ordering = connection order preserved
-  // because scan() preserves backend list order). Existing single-device
-  // call sites can keep reading `connectedDevice`; new call sites should
-  // prefer `connectedDevices` / `primaryDevice`.
+  // because scan() preserves backend list order).
+  //
+  // **New call sites should use `connectedDevices` / `primaryDevice`.**
+  // `connectedDevice` is legacy and can be stale in multi-device flows
+  // (e.g. when device B's `device_connected` arrives before device A's
+  // `device_disconnected`, `connectedDevice` keeps pointing at A).
   const connectedDevices = useMemo(() => devices.filter((d) => d.is_connected), [devices])
-  const primaryDevice: DeviceInfo | null = connectedDevices[0] ?? connectedDevice ?? null
+  const primaryDevice = useMemo<DeviceInfo | null>(
+    () => connectedDevices[0] ?? connectedDevice ?? null,
+    [connectedDevices, connectedDevice],
+  )
 
   // Stabilise the return object identity so consumers (DeviceContext
   // provider, App.tsx effect deps, useDeviceContext()) only re-run when

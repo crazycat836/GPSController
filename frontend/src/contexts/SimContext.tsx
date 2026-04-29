@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useSimulation, SimMode, MoveMode } from '../hooks/useSimulation'
-import type { WsSubscribe, FanoutOutcome } from '../hooks/useSimulation'
+import type { FanoutOutcome } from '../hooks/useSimulation'
 import { useJoystick } from '../hooks/useJoystick'
 import * as api from '../services/api'
 import { DEFAULT_RANDOM_WALK_RADIUS, DEFAULT_WP_GEN_RADIUS } from '../lib/constants'
 import { useDeviceContext } from './DeviceContext'
 import { useToastContext } from './ToastContext'
+import { useWebSocketContext } from './WebSocketContext'
 import { useT } from '../i18n'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 
@@ -93,15 +94,14 @@ interface SimContextValue {
 const SimContext = createContext<SimContextValue | null>(null)
 
 interface SimProviderProps {
-  subscribe?: WsSubscribe
-  sendMessage: (type: string, data?: any) => void
   children: React.ReactNode
 }
 
-export function SimProvider({ subscribe, sendMessage, children }: SimProviderProps) {
+export function SimProvider({ children }: SimProviderProps) {
   const t = useT()
   const device = useDeviceContext()
   const { showToast } = useToastContext()
+  const { subscribe, sendMessage } = useWebSocketContext()
   const sim = useSimulation(subscribe)
   const joystick = useJoystick(sendMessage, sim.mode === SimMode.Joystick)
 

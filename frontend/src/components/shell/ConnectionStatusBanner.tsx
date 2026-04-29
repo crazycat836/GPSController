@@ -19,18 +19,13 @@ export default function ConnectionStatusBanner() {
   const isOffline = hint === 'ws_offline'
   return createPortal(
     <div
-      role="status"
-      aria-live="polite"
+      // Offline is a blocking outage — escalate to assertive so screen
+      // readers interrupt. Reconnecting is transient; polite is fine.
+      role={isOffline ? 'alert' : 'status'}
+      aria-live={isOffline ? 'assertive' : 'polite'}
+      className="conn-banner"
       // z just under toast so a command-failure banner can still appear above.
-      className={[
-        'fixed top-3 left-1/2 -translate-x-1/2 z-[var(--z-overlay)]',
-        'inline-flex items-center gap-2 px-3.5 h-9 rounded-full',
-        'text-[12px] font-medium tracking-[-0.005em]',
-        'backdrop-blur-[10px] border shadow-lg',
-        isOffline
-          ? 'bg-[rgba(255,71,87,0.18)] border-[rgba(255,71,87,0.45)] text-[var(--color-error-text)]'
-          : 'bg-[rgba(255,178,71,0.18)] border-[rgba(255,178,71,0.45)] text-[var(--color-warning-text,#ffb347)]',
-      ].join(' ')}
+      data-variant={isOffline ? 'offline' : 'reconnecting'}
     >
       {isOffline ? (
         <WifiOff className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />

@@ -1,0 +1,40 @@
+/* Connection-status banner — sits above the map, below z-toast.
+ * Variants are switched via [data-variant] so we don't need to compose
+ * className strings in the component (and so the design tokens stay
+ * the single source of truth for color). */
+
+.conn-banner {
+  position: fixed;
+  /* Below the TopBar pill (top-4 + ~44px) so the centered SearchBar
+     and this banner don't stack on each other. Above the MiniStatusBar
+     (top-[76px]) so they read as a vertical sequence. */
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-overlay);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.875rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  border: 1px solid transparent;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+}
+
+.conn-banner[data-variant='offline'] {
+  background: var(--color-danger-dim);
+  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+  color: var(--color-error-text);
+}
+
+.conn-banner[data-variant='reconnecting'] {
+  background: var(--color-warning-dim);
+  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+  color: var(--color-warning-text);
+}

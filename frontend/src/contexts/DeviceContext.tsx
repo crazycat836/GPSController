@@ -1,6 +1,7 @@
 import React, { createContext, useContext } from 'react'
 import { useDevice } from '../hooks/useDevice'
-import type { DeviceInfo, WsSubscribe } from '../hooks/useDevice'
+import type { DeviceInfo } from '../hooks/useDevice'
+import { useWebSocketContext } from './WebSocketContext'
 
 // Re-export for consumers
 export type { DeviceInfo }
@@ -9,12 +10,8 @@ type DeviceHookReturn = ReturnType<typeof useDevice>
 
 const DeviceContext = createContext<DeviceHookReturn | null>(null)
 
-interface DeviceProviderProps {
-  subscribe?: WsSubscribe
-  children: React.ReactNode
-}
-
-export function DeviceProvider({ subscribe, children }: DeviceProviderProps) {
+export function DeviceProvider({ children }: { children: React.ReactNode }) {
+  const { subscribe } = useWebSocketContext()
   const device = useDevice(subscribe)
   return (
     <DeviceContext.Provider value={device}>

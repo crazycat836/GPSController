@@ -58,8 +58,11 @@ export default function MiniStatusBar() {
       )}
 
       {/* Live-position card — suppressed in dual-device mode because
-          each pill already carries its own coord. */}
-      {!isDual && <LivePosCard currentPos={currentPos} isRunning={isRunning} />}
+          each pill already carries its own coord. Marked stale when
+          the WS transport is down: the displayed lat/lng is no fresher
+          than the device pill's "stale" annotation, so dimming both
+          keeps the user's mental model consistent. */}
+      {!isDual && <LivePosCard currentPos={currentPos} isRunning={isRunning} stale={isStale} />}
 
       {/* Location + weather chip — slim, secondary info. Hidden entirely
           when we have no position and no country data to show. */}
@@ -155,9 +158,10 @@ function DualDevicePills({ devices, stale }: { devices: DeviceInfo[]; stale?: bo
 interface LivePosCardProps {
   currentPos: { lat: number; lng: number } | null
   isRunning: boolean
+  stale?: boolean
 }
 
-function LivePosCard({ currentPos, isRunning }: LivePosCardProps) {
+function LivePosCard({ currentPos, isRunning, stale }: LivePosCardProps) {
   const t = useT()
   const [copied, setCopied] = useState(false)
 
@@ -176,9 +180,12 @@ function LivePosCard({ currentPos, isRunning }: LivePosCardProps) {
   return (
     <div
       data-fc="status.live-pos"
-      className="live-pos w-full"
+      className="live-pos w-full transition-opacity"
       data-has-pos={hasPos ? 'true' : 'false'}
       data-sim={simState}
+      data-stale={stale ? 'true' : undefined}
+      style={stale ? { opacity: 0.55 } : undefined}
+      title={stale ? t('conn.stale_tooltip') : undefined}
       aria-label={t('status.virtual_position')}
     >
       <div className="lp-head">

@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type L from 'leaflet'
 import { useT } from './i18n'
-import { useWebSocket } from './hooks/useWebSocket'
 import { SimMode } from './hooks/useSimulation'
 import { STORAGE_KEYS } from './lib/storage-keys'
 import { haversineM, polylineDistanceM } from './lib/geo'
 
 // Context providers
 import { ToastProvider, useToastContext } from './contexts/ToastContext'
+import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext'
 import { DeviceProvider, useDeviceContext } from './contexts/DeviceContext'
 import { ConnectionHealthProvider } from './contexts/ConnectionHealthContext'
 import { SimProvider, useSimContext, SPEED_MAP } from './contexts/SimContext'
@@ -50,25 +50,29 @@ import DevicesPopover from './components/device/DevicesPopover'
 import LibraryDrawer from './components/modals/LibraryDrawer'
 
 // Root component — just providers.
-// ConnectionHealthProvider nests inside DeviceProvider so it can read
-// device state, and above SimProvider so sim consumers can disable
-// actions via `useConnectionHealth().canOperate` without duplicating
-// the health derivation.
+//
+// Order matters: WebSocketProvider is the single owner of the backend
+// socket; everything else reads from it. DeviceProvider feeds state
+// into ConnectionHealthProvider, which then fans `canOperate` /
+// `hint` out to action-button consumers (panels, search bar, banner).
+// SimProvider sits inside health so sim consumers can disable actions
+// without duplicating the health derivation.
 function App() {
-  const ws = useWebSocket()
   return (
     <ToastProvider>
-      <DeviceProvider subscribe={ws.subscribe}>
-        <ConnectionHealthProvider wsConnected={ws.connected}>
-          <SimProvider subscribe={ws.subscribe} sendMessage={ws.sendMessage}>
-            <BookmarkProvider>
-              <AvatarProvider>
-                <AppShell wsConnected={ws.connected} />
-              </AvatarProvider>
-            </BookmarkProvider>
-          </SimProvider>
-        </ConnectionHealthProvider>
-      </DeviceProvider>
+      <WebSocketProvider>
+        <DeviceProvider>
+          <ConnectionHealthProvider>
+            <SimProvider>
+              <BookmarkProvider>
+                <AvatarProvider>
+                  <AppShell />
+                </AvatarProvider>
+              </BookmarkProvider>
+            </SimProvider>
+          </ConnectionHealthProvider>
+        </DeviceProvider>
+      </WebSocketProvider>
     </ToastProvider>
   )
 }
@@ -108,13 +112,14 @@ function resolveSpeedKmh(
 }
 
 // Inner shell — consumes all contexts
-function AppShell({ wsConnected }: { wsConnected: boolean }) {
+function AppShell() {
   const t = useT()
   const toast = useToastContext()
   const device = useDeviceContext()
   const simCtx = useSimContext()
   const bm = useBookmarkContext()
   const health = useConnectionHealth()
+  const { connected: wsConnected } = useWebSocketContext()
   const { sim, joystick, handlePause, handleResume } = simCtx
 
   // Static preview for the ETA bar before simulation starts.

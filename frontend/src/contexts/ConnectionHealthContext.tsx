@@ -1,109 +1,70 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useDeviceContext } from './DeviceContext'
+import { useWebSocketContext } from './WebSocketContext'
+import {
+  deriveConnectionHealth,
+  OFFLINE_THRESHOLD_MS,
+  type ConnectionHealth,
+  type DeviceHealth,
+  type HealthHint,
+  type WsState,
+} from '../lib/connectionHealth'
 
-// Transport layer: raw WebSocket reachability to the Python backend.
-// `reconnecting` = briefly offline (< OFFLINE_THRESHOLD_MS), auto-retry
-// still in progress. `offline` = extended outage; the user should know
-// the app is not in touch with the backend at all.
-export type WsState = 'open' | 'reconnecting' | 'offline'
-
-// Domain layer: the combined view over `useDevice`. `stale` is the
-// transport-degraded variant of `connected` — we still have a device
-// cached as connected, but WS is down, so the cache cannot be trusted.
-export type DeviceHealth = 'connected' | 'lost' | 'none' | 'stale'
-
-// Discriminator for UI hints. Consumers map this to an i18n key; keeping
-// it as an enum here decouples the health model from the translation
-// catalog so tests / new surfaces don't need to know about i18n.
-export type HealthHint = null | 'ws_reconnecting' | 'ws_offline' | 'device_lost'
-
-export interface ConnectionHealth {
-  ws: WsState
-  device: DeviceHealth
-  /** True iff it is safe to send a command right now (WS open AND a
-   *  device is actually connected). Intended for disabling action
-   *  buttons — consumers can trust a positive value. */
-  canOperate: boolean
-  /** The most-urgent human-facing condition worth surfacing. `null`
-   *  when everything is healthy. */
-  hint: HealthHint
-}
+// Re-export so existing consumers don't need to change their import path.
+export type { ConnectionHealth, DeviceHealth, HealthHint, WsState }
 
 const ConnectionHealthContext = createContext<ConnectionHealth | null>(null)
 
-// How long WS has to be down before the UI escalates from "reconnecting"
-// (transient, probably fine) to "offline" (user should act).
-// 10s covers most dev-mode HMR reconnects and backend restart; longer
-// than that and we want to alarm.
-const OFFLINE_THRESHOLD_MS = 10_000
-
-interface ConnectionHealthProviderProps {
-  /** Raw transport state from `useWebSocket().connected`. Passed in as a
-   *  prop so the hook stays single-ownership inside `App`; we don't want
-   *  two `useWebSocket` call sites. */
-  wsConnected: boolean
-  children: React.ReactNode
-}
-
-export function ConnectionHealthProvider({ wsConnected, children }: ConnectionHealthProviderProps) {
+export function ConnectionHealthProvider({ children }: { children: React.ReactNode }) {
+  const { connected: wsConnected } = useWebSocketContext()
   const device = useDeviceContext()
 
-  // `now` is a heartbeat that forces the memo below to re-evaluate the
-  // reconnecting→offline threshold while WS is down. Only ticks while
-  // offline — when connected, no interval runs, so steady-state renders
-  // cost nothing.
-  const [now, setNow] = useState(() => Date.now())
-  const disconnectedAtRef = useRef<number | null>(null)
+  // `disconnectedAt` is React state (not a ref) so the derived memo
+  // observes it through the standard data-flow path. Using a ref here
+  // worked but coupled correctness to render/effect ordering — every
+  // future reader of this file would need to reason about whether the
+  // memo runs before or after the effect on the WS-state-change frame.
+  const [disconnectedAt, setDisconnectedAt] = useState<number | null>(null)
+  // Forces a re-derive once we cross the reconnecting→offline threshold
+  // while WS is still down. Bumped by a single setTimeout so we don't
+  // burn wakeups on a 500ms polling interval.
+  const [thresholdTick, setThresholdTick] = useState(0)
 
   useEffect(() => {
     if (wsConnected) {
-      disconnectedAtRef.current = null
+      setDisconnectedAt(null)
       return
     }
-    if (disconnectedAtRef.current == null) {
-      disconnectedAtRef.current = Date.now()
-    }
-    // 500ms cadence is enough to animate a countdown-ish escalation;
-    // the memo only re-runs when `now` crosses OFFLINE_THRESHOLD_MS.
-    const id = setInterval(() => setNow(Date.now()), 500)
-    return () => clearInterval(id)
+    setDisconnectedAt((prev) => prev ?? Date.now())
   }, [wsConnected])
+
+  // Single timer: fire exactly when the offline threshold elapses.
+  // Cleared if WS comes back or a new disconnect cycle starts.
+  useEffect(() => {
+    if (disconnectedAt == null) return
+    const elapsed = Date.now() - disconnectedAt
+    const remaining = OFFLINE_THRESHOLD_MS - elapsed
+    if (remaining <= 0) return
+    const id = setTimeout(() => setThresholdTick((n) => n + 1), remaining)
+    return () => clearTimeout(id)
+  }, [disconnectedAt])
 
   const connectedCount = device.connectedDevices.length
   const lostCount = device.lostUdids.size
 
-  const health = useMemo<ConnectionHealth>(() => {
-    let ws: WsState
-    if (wsConnected) {
-      ws = 'open'
-    } else {
-      const since = disconnectedAtRef.current
-      const offlineMs = since == null ? 0 : now - since
-      ws = offlineMs >= OFFLINE_THRESHOLD_MS ? 'offline' : 'reconnecting'
-    }
-
-    let deviceState: DeviceHealth
-    if (ws !== 'open' && connectedCount > 0) {
-      deviceState = 'stale'
-    } else if (connectedCount > 0) {
-      deviceState = 'connected'
-    } else if (lostCount > 0) {
-      deviceState = 'lost'
-    } else {
-      deviceState = 'none'
-    }
-
-    const canOperate = ws === 'open' && deviceState === 'connected'
-
-    // Severity order: WS outage dominates (nothing works), then device
-    // loss. Consumers showing a single banner can just read `hint`.
-    let hint: HealthHint = null
-    if (ws === 'offline') hint = 'ws_offline'
-    else if (ws === 'reconnecting') hint = 'ws_reconnecting'
-    else if (deviceState === 'lost') hint = 'device_lost'
-
-    return { ws, device: deviceState, canOperate, hint }
-  }, [wsConnected, now, connectedCount, lostCount])
+  const health = useMemo<ConnectionHealth>(
+    () => deriveConnectionHealth({
+      wsConnected,
+      disconnectedAt,
+      now: Date.now(),
+      connectedCount,
+      lostCount,
+    }),
+    // `thresholdTick` is in the deps so the memo re-runs when the
+    // setTimeout fires; its value is otherwise unused.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [wsConnected, disconnectedAt, connectedCount, lostCount, thresholdTick],
+  )
 
   return (
     <ConnectionHealthContext.Provider value={health}>
