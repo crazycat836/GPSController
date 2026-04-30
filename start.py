@@ -9,7 +9,6 @@ import sys
 import os
 import time
 import shutil
-import unicodedata
 import webbrowser
 import urllib.request
 import socket
@@ -18,6 +17,10 @@ import socket
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BACKEND = os.path.join(ROOT, "backend")
 FRONTEND = os.path.join(ROOT, "frontend")
+
+# 共用 box-drawing helpers (與 build.py 共用)
+sys.path.insert(0, ROOT)
+from tools.terminal_ui import _visual_width, _box_line, _box_border  # noqa: E402, F401
 
 BACKEND_PORT = 8777
 FRONTEND_PORT = 5173
@@ -39,34 +42,11 @@ procs = []
 BOX_WIDTH = 46
 
 
-def _visual_width(text: str) -> int:
-    """計算字串在終端機中的顯示寬度（CJK 與 fullwidth 字元佔 2 欄）。"""
-    width = 0
-    for ch in text:
-        if unicodedata.east_asian_width(ch) in ("W", "F"):
-            width += 2
-        else:
-            width += 1
-    return width
-
-
-def _box_line(content: str, inner_width: int = BOX_WIDTH) -> str:
-    """以終端機顯示寬度對齊，產生一行帶邊框的文字。"""
-    pad = inner_width - _visual_width(content)
-    if pad < 0:
-        pad = 0
-    return "  ║" + content + " " * pad + "║"
-
-
-def _box_border(left: str, fill: str, right: str, inner_width: int = BOX_WIDTH) -> str:
-    return "  " + left + fill * inner_width + right
-
-
 def print_banner():
     print()
-    print(_box_border("╔", "═", "╗"))
-    print(_box_line(f"   GPSController — iOS 虛擬定位模擬器 v{APP_VERSION}"))
-    print(_box_border("╚", "═", "╝"))
+    print(_box_border("╔", "═", "╗", BOX_WIDTH))
+    print(_box_line(f"   GPSController — iOS 虛擬定位模擬器 v{APP_VERSION}", BOX_WIDTH))
+    print(_box_border("╚", "═", "╝", BOX_WIDTH))
     print()
 
 
@@ -97,10 +77,16 @@ def kill_port(port):
         )
         for line in result.stdout.strip().splitlines():
             parts = line.split()
-            if parts:
-                pid = parts[-1]
-                subprocess.run(f"taskkill /pid {pid} /f",
-                               shell=True, capture_output=True)
+            if not parts:
+                continue
+            try:
+                pid_int = int(parts[-1])
+            except ValueError:
+                continue
+            subprocess.run(
+                ["taskkill", "/PID", str(pid_int), "/F"],
+                check=False, capture_output=True,
+            )
     else:
         result = subprocess.run(
             ["lsof", "-ti", f":{port}"],
@@ -283,15 +269,15 @@ def main():
     url = f"http://localhost:{FRONTEND_PORT}"
     webbrowser.open(url)
 
-    print(_box_border("╔", "═", "╗"))
-    print(_box_line("          GPSController 已就緒！"))
-    print(_box_border("╠", "═", "╣"))
-    print(_box_line(f"  前端畫面:  http://localhost:{FRONTEND_PORT}"))
-    print(_box_line(f"  後端 API:  http://localhost:{BACKEND_PORT}"))
-    print(_box_line(f"  API 文件:  http://localhost:{BACKEND_PORT}/docs"))
-    print(_box_border("╠", "═", "╣"))
-    print(_box_line("  按 Enter 停止所有服務"))
-    print(_box_border("╚", "═", "╝"))
+    print(_box_border("╔", "═", "╗", BOX_WIDTH))
+    print(_box_line("          GPSController 已就緒！", BOX_WIDTH))
+    print(_box_border("╠", "═", "╣", BOX_WIDTH))
+    print(_box_line(f"  前端畫面:  http://localhost:{FRONTEND_PORT}", BOX_WIDTH))
+    print(_box_line(f"  後端 API:  http://localhost:{BACKEND_PORT}", BOX_WIDTH))
+    print(_box_line(f"  API 文件:  http://localhost:{BACKEND_PORT}/docs", BOX_WIDTH))
+    print(_box_border("╠", "═", "╣", BOX_WIDTH))
+    print(_box_line("  按 Enter 停止所有服務", BOX_WIDTH))
+    print(_box_border("╚", "═", "╝", BOX_WIDTH))
     print()
 
     try:

@@ -17,10 +17,17 @@ def main():
             )
             for line in result.stdout.strip().splitlines():
                 parts = line.split()
-                if parts:
-                    pid = parts[-1]
-                    subprocess.run(f"taskkill /pid {pid} /f", shell=True,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if not parts:
+                    continue
+                try:
+                    pid_int = int(parts[-1])
+                except ValueError:
+                    continue
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid_int), "/F"],
+                    check=False,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
         else:
             result = subprocess.run(
                 ["lsof", "-ti", f":{port}"],

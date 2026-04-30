@@ -30,7 +30,6 @@ import shutil
 import subprocess
 import sys
 import time
-import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -40,30 +39,18 @@ DIST_PY = ROOT / "dist-py"
 BUILD_PY = ROOT / "build-py"
 RELEASE = FRONTEND / "release"
 
+# 共用 box-drawing helpers (與 start.py 共用)
+sys.path.insert(0, str(ROOT))
+from tools.terminal_ui import _visual_width, _box_line, _box_border  # noqa: E402, F401
+
 BOX_WIDTH = 58
-
-
-def _visual_width(text: str) -> int:
-    width = 0
-    for ch in text:
-        width += 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
-    return width
-
-
-def _box_line(content: str, inner_width: int = BOX_WIDTH) -> str:
-    pad = max(0, inner_width - _visual_width(content))
-    return "  ║" + content + " " * pad + "║"
-
-
-def _box_border(left: str, fill: str, right: str, inner_width: int = BOX_WIDTH) -> str:
-    return "  " + left + fill * inner_width + right
 
 
 def print_banner(title: str) -> None:
     print()
-    print(_box_border("╔", "═", "╗"))
-    print(_box_line(f"   {title}"))
-    print(_box_border("╚", "═", "╝"))
+    print(_box_border("╔", "═", "╗", BOX_WIDTH))
+    print(_box_line(f"   {title}", BOX_WIDTH))
+    print(_box_border("╚", "═", "╝", BOX_WIDTH))
     print()
 
 
@@ -199,10 +186,10 @@ def main() -> None:
     mins, secs = divmod(elapsed, 60)
 
     print()
-    print(_box_border("╔", "═", "╗"))
-    print(_box_line(f"   打包完成(耗時 {mins}m {secs}s)"))
-    print(_box_line(f"   產物位置:{RELEASE}"))
-    print(_box_border("╚", "═", "╝"))
+    print(_box_border("╔", "═", "╗", BOX_WIDTH))
+    print(_box_line(f"   打包完成(耗時 {mins}m {secs}s)", BOX_WIDTH))
+    print(_box_line(f"   產物位置:{RELEASE}", BOX_WIDTH))
+    print(_box_border("╚", "═", "╝", BOX_WIDTH))
     print()
 
 
