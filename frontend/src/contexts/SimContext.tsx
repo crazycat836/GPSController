@@ -558,21 +558,51 @@ export function SimProvider({ children }: SimProviderProps) {
 
   const speed = SPEED_MAP[sim.moveMode] || 5
 
-  const fmtSpeedFromInputs = (kmh: number | null, lo: number | null, hi: number | null): number | string => {
-    if (lo != null && hi != null) return `${Math.min(lo, hi)}~${Math.max(lo, hi)}`
-    if (kmh != null) return kmh
-    return speed
-  }
-  const displaySpeed: number | string = sim.status.running && sim.effectiveSpeed
-    ? fmtSpeedFromInputs(sim.effectiveSpeed.kmh, sim.effectiveSpeed.min, sim.effectiveSpeed.max)
-    : fmtSpeedFromInputs(sim.customSpeedKmh, sim.speedMinKmh, sim.speedMaxKmh)
+  // displaySpeed used to be re-computed on every parent render (string
+  // template + ternary allocate fresh each time). The memo below keys
+  // on the primitive inputs so the value object sees a stable reference
+  // when only unrelated sim state changed (e.g. lat/lng tick).
+  const displaySpeed: number | string = useMemo(() => {
+    const fmt = (kmh: number | null, lo: number | null, hi: number | null): number | string => {
+      if (lo != null && hi != null) return `${Math.min(lo, hi)}~${Math.max(lo, hi)}`
+      if (kmh != null) return kmh
+      return speed
+    }
+    return sim.status.running && sim.effectiveSpeed
+      ? fmt(sim.effectiveSpeed.kmh, sim.effectiveSpeed.min, sim.effectiveSpeed.max)
+      : fmt(sim.customSpeedKmh, sim.speedMinKmh, sim.speedMaxKmh)
+  }, [
+    sim.status.running,
+    sim.effectiveSpeed?.kmh,
+    sim.effectiveSpeed?.min,
+    sim.effectiveSpeed?.max,
+    sim.customSpeedKmh,
+    sim.speedMinKmh,
+    sim.speedMaxKmh,
+    speed,
+  ])
 
   const isRunning = sim.status.running
   const isPaused = sim.status.paused
 
-  // Memoize so every SimProvider render doesn't hand consumers a new
-  // object reference (would force every `useSimContext()` user to re-render
-  // regardless of which field actually changed).
+  // value memo trade-off:
+  //   The dep list still includes `sim` and `joystick` because the value
+  //   object holds a reference to each, and consumers reading
+  //   `value.sim.foo` must see the latest state. Their identity churns
+  //   on every WS event from `useSimulation` / `useJoystick`, so this
+  //   memo will recompute on every such update — that is correct.
+  //
+  //   To actually stabilise consumer re-renders (so a panel that only
+  //   uses `handleStart` doesn't re-render on every position tick) the
+  //   context needs to be split into focused contexts (state vs handlers
+  //   vs derived) so handler-only consumers can subscribe to a stable
+  //   slice. Every existing consumer reads through `useSimContext()`
+  //   today, so that split is a 16-file follow-up — see the 2026-05-01
+  //   review (`docs/code-review-2026-05-01.md`) for the plan.
+  //
+  //   The displaySpeed memo above is a small step in the right direction:
+  //   one less per-render allocation, and the value memo at least sees a
+  //   stable `displaySpeed` reference when unrelated sim state moves.
   const value = useMemo<SimContextValue>(() => ({
     sim,
     joystick,
