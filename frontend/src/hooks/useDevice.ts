@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { DEFAULT_TUNNEL_PORT } from '../lib/constants'
 import {
-  listDevices, connectDevice, disconnectDevice,
+  listDevices, connectDevice, disconnectDevice, forgetDevice,
   wifiConnect, wifiScan,
   wifiTunnelStartAndConnect, wifiTunnelStatus, wifiTunnelStop,
 } from '../services/api'
@@ -404,6 +404,26 @@ export function useDevice(subscribe?: WsSubscribe) {
     [],
   )
 
+  const forget = useCallback(
+    async (udid: string) => {
+      const wsGen = wsEventGenRef.current
+      try {
+        await forgetDevice(udid)
+        const refreshed = await listDevices()
+        const list: DeviceInfo[] = Array.isArray(refreshed) ? refreshed : []
+        if (wsEventGenRef.current === wsGen) {
+          setDevices((prev) => deviceListEqual(prev, list) ? prev : list)
+          // Forgotten device cannot remain "primary"; clear if it was.
+          setConnectedDevice((prev) => (prev && prev.udid === udid ? null : prev))
+        }
+      } catch (err) {
+        devLog('Failed to forget device:', err)
+        throw err
+      }
+    },
+    [],
+  )
+
   const connectWifi = useCallback(
     async (ip: string) => {
       try {
@@ -513,14 +533,14 @@ export function useDevice(subscribe?: WsSubscribe) {
   // any useEffect dep array produces an infinite re-render loop.
   return useMemo(
     () => ({
-      devices, connectedDevice, scanning, scan, connect, disconnect,
+      devices, connectedDevice, scanning, scan, connect, disconnect, forget,
       connectWifi, scanWifi, wifiScanning, wifiDevices,
       startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
       connectedDevices, primaryDevice,
       lostUdids,
     }),
     [
-      devices, connectedDevice, scanning, scan, connect, disconnect,
+      devices, connectedDevice, scanning, scan, connect, disconnect, forget,
       connectWifi, scanWifi, wifiScanning, wifiDevices,
       startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
       connectedDevices, primaryDevice,

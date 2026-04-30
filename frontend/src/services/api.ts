@@ -173,6 +173,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const listDevices = () => request<DeviceInfo[]>('GET', '/api/device/list')
 export const connectDevice = (udid: string) => request<StatusResponse>('POST', `/api/device/${udid}/connect`)
 export const disconnectDevice = (udid: string) => request<StatusResponse>('DELETE', `/api/device/${udid}/connect`)
+export const forgetDevice = (udid: string) =>
+  request<{ status: string; udid: string; removed: string[] }>('DELETE', `/api/device/${udid}/pair`)
 export interface WifiConnectResponse {
   status: string
   udid: string

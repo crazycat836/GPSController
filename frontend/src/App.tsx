@@ -45,7 +45,6 @@ import RandomWalkPanel from './components/panels/RandomWalkPanel'
 import JoystickPanel from './components/panels/JoystickPanel'
 
 // Modals/Drawers
-import DeviceDrawer from './components/device/DeviceDrawer'
 import DevicesPopover from './components/device/DevicesPopover'
 import LibraryDrawer from './components/modals/LibraryDrawer'
 
@@ -159,7 +158,6 @@ function AppShell() {
   }, [sim.mode, simCtx])
 
   // UI state
-  const [deviceDrawerOpen, setDeviceDrawerOpen] = useState(false)
   const [devicesPopoverAnchor, setDevicesPopoverAnchor] = useState<DOMRect | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -235,7 +233,6 @@ function AppShell() {
       }
       if (e.key === 'Escape') {
         if (libraryOpen) { setLibraryOpen(false); return }
-        if (deviceDrawerOpen) { setDeviceDrawerOpen(false); return }
         return
       }
       if (!isInput && e.key >= '1' && e.key <= '6') {
@@ -251,7 +248,7 @@ function AppShell() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [libraryOpen, deviceDrawerOpen, sim, handlePause, handleResume])
+  }, [libraryOpen, sim, handlePause, handleResume])
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
@@ -451,9 +448,7 @@ function AppShell() {
       <DevicesPopover
         anchor={devicesPopoverAnchor}
         onClose={() => setDevicesPopoverAnchor(null)}
-        onOpenManage={() => setDeviceDrawerOpen(true)}
       />
-      <DeviceDrawer open={deviceDrawerOpen} onClose={() => setDeviceDrawerOpen(false)} />
       <LibraryDrawer open={libraryOpen} onClose={() => setLibraryOpen(false)} />
     </div>
   )

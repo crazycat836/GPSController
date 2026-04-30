@@ -1,4 +1,8 @@
+import asyncio
 import logging
+import os
+import sys
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
@@ -95,6 +99,68 @@ async def disconnect_device(udid: str):
     except Exception:
         pass
     return {"status": "disconnected", "udid": udid}
+
+
+def _pair_record_candidates(udid: str) -> list[Path]:
+    """Return every OS-specific path the lockdown pair-record for *udid*
+    could live at. We try them all on forget so a stale record doesn't
+    survive in a fallback location."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("ALLUSERSPROFILE", "C:/ProgramData")) / "Apple" / "Lockdown"
+        return [base / f"{udid}.plist"]
+    # macOS + Linux: try system-wide first, then user-level.
+    return [
+        Path("/var/db/lockdown") / f"{udid}.plist",
+        Path("/var/lib/lockdown") / f"{udid}.plist",
+        Path.home() / "Library" / "Lockdown" / f"{udid}.plist",
+    ]
+
+
+@router.delete("/{udid}/pair")
+async def forget_device(udid: str):
+    """Forget a paired device — disconnects it (if connected), tells the
+    device to drop our pair record, and removes the local cached record.
+
+    After this, the iPhone will show "Trust This Computer" again the next
+    time it's plugged in via USB.
+    """
+    app_state = ctx.app_state
+    dm = _dm()
+
+    conn = dm.get_connection(udid)
+    if conn is not None:
+        # Tell the device to forget us, best-effort. lockdown.unpair() may
+        # be sync or async depending on connection type — handle both.
+        try:
+            result = conn.lockdown.unpair()
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception:
+            logger.warning(
+                "lockdown.unpair() failed for %s; will still remove local record",
+                udid, exc_info=True,
+            )
+        # Tear down engine + transport before nuking the pair record.
+        await app_state.terminate_engine(udid)
+        await dm.disconnect(udid)
+
+    removed: list[str] = []
+    for p in _pair_record_candidates(udid):
+        try:
+            if p.exists():
+                p.unlink()
+                removed.append(str(p))
+        except OSError:
+            logger.warning("Could not remove pair record %s", p, exc_info=True)
+
+    try:
+        from api.websocket import broadcast
+        await broadcast("device_disconnected", {"udid": udid, "udids": [udid], "reason": "forget"})
+    except Exception:
+        pass
+
+    logger.info("Forgot device %s (removed %d pair-record file(s))", udid, len(removed))
+    return {"status": "forgotten", "udid": udid, "removed": removed}
 
 
 @router.get("/{udid}/info", response_model=DeviceInfo | None)
