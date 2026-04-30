@@ -672,6 +672,7 @@ app.add_middleware(_TokenAuthMiddleware)
 
 # Register routers
 from api.device import router as device_router
+from api.wifi_tunnel import router as wifi_tunnel_router
 from api.location import router as location_router
 from api.route import router as route_router
 from api.geocode import router as geocode_router
@@ -680,6 +681,7 @@ from api.websocket import router as ws_router
 from api.system import router as system_router
 
 app.include_router(device_router)
+app.include_router(wifi_tunnel_router)
 app.include_router(location_router)
 app.include_router(route_router)
 app.include_router(geocode_router)
