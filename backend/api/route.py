@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from pydantic import BaseModel, Field
 
 from config import ROUTES_FILE
 from models.schemas import RoutePlanRequest, SavedRoute, Coordinate
@@ -53,9 +54,7 @@ _saved_routes_lock = asyncio.Lock()
 
 @router.post("/plan")
 async def plan_route(req: RoutePlanRequest):
-    profile_map = {"walking": "foot", "running": "foot", "driving": "car", "foot": "foot", "car": "car"}
-    profile = profile_map.get(req.profile, "foot")
-    result = await route_service.get_route(req.start.lat, req.start.lng, req.end.lat, req.end.lng, profile)
+    result = await route_service.get_route(req.start.lat, req.start.lng, req.end.lat, req.end.lng, req.profile)
     return result
 
 
@@ -84,11 +83,8 @@ async def delete_saved(route_id: str):
     return {"status": "deleted"}
 
 
-from pydantic import BaseModel as _BM, Field as _Field
-
-
-class _RouteRenameRequest(_BM):
-    name: str = _Field(max_length=512)
+class _RouteRenameRequest(BaseModel):
+    name: str = Field(max_length=512)
 
 
 @router.patch("/saved/{route_id}")
@@ -115,8 +111,8 @@ async def export_all_saved_routes():
                     headers={"Content-Disposition": 'attachment; filename="gpscontroller-routes.json"'})
 
 
-class _RouteImportBody(_BM):
-    routes: list[SavedRoute] = _Field(max_length=1000)
+class _RouteImportBody(BaseModel):
+    routes: list[SavedRoute] = Field(max_length=1000)
 
 
 @router.post("/saved/import")
