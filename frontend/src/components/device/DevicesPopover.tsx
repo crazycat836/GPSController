@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Smartphone, Wifi, Usb, CircleSlash, Scan, Loader2, Check, XCircle,
+  Wifi, Usb, CircleSlash, Scan, Loader2, Check, XCircle,
   ChevronLeft, Plus, Power, Trash2, Shield, Search, RotateCcw,
   Settings as SettingsIcon, PlugZap,
 } from 'lucide-react'
@@ -22,6 +22,13 @@ interface DevicesPopoverProps {
 }
 
 type DevView = 'list' | 'manage' | 'add'
+type RowAction = 'reveal' | 'disconnect'
+
+const POPOVER_WIDTH = 360
+const POPOVER_GAP = 8
+// How long the "Found N" / "Not found" pill stays visible after a scan
+// completes, before reverting to the default Scan label.
+const SCAN_RESULT_VISIBLE_MS = 2000
 
 // All device flows now live inside this single popover (per the redesign):
 // - list   — paired devices + scan + Add-device entry
@@ -57,7 +64,7 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
     finally {
       setScanning(false)
       setScanResult(devicesRef.current.length)
-      scanTimer.current = setTimeout(() => setScanResult(null), 2000)
+      scanTimer.current = setTimeout(() => setScanResult(null), SCAN_RESULT_VISIBLE_MS)
     }
   }, [device])
 
@@ -162,10 +169,13 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
     }
   }, [forgetUdid, device, showToast, t])
 
-  // ─── AMFI: Reveal Developer Mode (per-row, USB-only iOS 16+) ─
-  const [revealInFlight, setRevealInFlight] = useState<Record<string, boolean>>({})
+  // Per-row actions (Reveal Dev Mode / Disconnect) are exclusive in
+  // practice — only one row's button is clickable at a time — so a
+  // single { udid, action } slot replaces two parallel maps.
+  const [inFlight, setInFlight] = useState<{ udid: string; action: RowAction } | null>(null)
+
   const handleRevealDevMode = useCallback(async (udid: string) => {
-    setRevealInFlight((prev) => ({ ...prev, [udid]: true }))
+    setInFlight({ udid, action: 'reveal' })
     try {
       await revealDeveloperMode(udid)
       showToast(t('dev_mode.reveal_success'))
@@ -173,29 +183,19 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
       const msg = err instanceof Error ? err.message : String(err)
       showToast(`${t('dev_mode.reveal_failed')}: ${msg}`)
     } finally {
-      setRevealInFlight((prev) => {
-        const next = { ...prev }
-        delete next[udid]
-        return next
-      })
+      setInFlight(null)
     }
   }, [showToast, t])
 
-  // ─── Disconnect (per-row in manage view) ─────────────────────
-  const [disconnectInFlight, setDisconnectInFlight] = useState<Record<string, boolean>>({})
   const handleDisconnect = useCallback(async (udid: string) => {
-    setDisconnectInFlight((prev) => ({ ...prev, [udid]: true }))
+    setInFlight({ udid, action: 'disconnect' })
     try {
       await device.disconnect(udid)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       showToast(msg)
     } finally {
-      setDisconnectInFlight((prev) => {
-        const next = { ...prev }
-        delete next[udid]
-        return next
-      })
+      setInFlight(null)
     }
   }, [device, showToast])
 
@@ -231,12 +231,10 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
   if (!anchor) return null
 
   // ─── Layout positioning ──────────────────────────────────────
-  const width = 360
-  const gap = 8
   const viewportW = window.innerWidth
   const right = Math.max(8, viewportW - anchor.right)
-  const top = anchor.bottom + gap
-  const left = Math.max(8, viewportW - right - width)
+  const top = anchor.bottom + POPOVER_GAP
+  const left = Math.max(8, viewportW - right - POPOVER_WIDTH)
 
   const selectedUdid = device.connectedDevice?.udid
 
@@ -305,7 +303,26 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
     )
   }
 
-  // ─── List view ──────────────────────────────────────────────
+  // Manage and Add views share the same back-arrow + title shell;
+  // list view uses a different header shape (count + scan + manage).
+  function renderViewHeader(title: string) {
+    return (
+      <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-[var(--color-border-subtle)]">
+        <button
+          type="button"
+          onClick={() => setView('list')}
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-accent-strong)] hover:text-[var(--color-accent)] transition-colors"
+        >
+          <ChevronLeft className="w-3 h-3" />
+          {t('device.popover_back')}
+        </button>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-3)]">
+          {title}
+        </span>
+      </div>
+    )
+  }
+
   function renderListView() {
     const activeCount = device.devices.filter((d) => d.is_connected).length
     return (
@@ -428,23 +445,10 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
     )
   }
 
-  // ─── Manage view ────────────────────────────────────────────
   function renderManageView() {
     return (
       <>
-        <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-[var(--color-border-subtle)]">
-          <button
-            type="button"
-            onClick={() => setView('list')}
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-accent-strong)] hover:text-[var(--color-accent)] transition-colors"
-          >
-            <ChevronLeft className="w-3 h-3" />
-            {t('device.popover_back')}
-          </button>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-3)]">
-            {t('device.popover_manage_title')}
-          </span>
-        </div>
+        {renderViewHeader(t('device.popover_manage_title'))}
 
         <div className="p-1.5 max-h-[300px] overflow-y-auto scrollbar-thin">
           {device.devices.length === 0 ? (
@@ -455,8 +459,8 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
             device.devices.map((d, idx) => {
               const { unsupported, isUsb } = deviceMeta(d, idx)
               const canRevealDevMode = !!d.can_reveal_developer_mode
-              const revealing = !!revealInFlight[d.udid]
-              const disconnecting = !!disconnectInFlight[d.udid]
+              const revealing = inFlight?.udid === d.udid && inFlight.action === 'reveal'
+              const disconnecting = inFlight?.udid === d.udid && inFlight.action === 'disconnect'
               const isOnline = d.is_connected
               return (
                 <div
@@ -532,23 +536,10 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
     )
   }
 
-  // ─── Add view ───────────────────────────────────────────────
   function renderAddView() {
     return (
       <>
-        <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-[var(--color-border-subtle)]">
-          <button
-            type="button"
-            onClick={() => setView('list')}
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-accent-strong)] hover:text-[var(--color-accent)] transition-colors"
-          >
-            <ChevronLeft className="w-3 h-3" />
-            {t('device.popover_back')}
-          </button>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-3)]">
-            {t('device.popover_add_title')}
-          </span>
-        </div>
+        {renderViewHeader(t('device.popover_add_title'))}
 
         <div className="px-3.5 pt-3.5 pb-3 flex flex-col gap-4 max-h-[420px] overflow-y-auto scrollbar-thin">
           {/* USB section — guidance only; the actual scan button lives
@@ -680,13 +671,12 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
         role="dialog"
         aria-label={t('device.popover_aria')}
         className={['surface-popup', 'fixed z-[var(--z-dropdown)] overflow-hidden rounded-2xl', 'anim-scale-in-tl'].join(' ')}
-        style={{ width, left, top, transformOrigin: 'top right' }}
+        style={{ width: POPOVER_WIDTH, left, top, transformOrigin: 'top right' }}
       >
         {view === 'list' && renderListView()}
         {view === 'manage' && renderManageView()}
         {view === 'add' && renderAddView()}
 
-        <Smartphone className="hidden" aria-hidden="true" />
       </div>
 
       {/* Forget device confirmation */}
@@ -703,30 +693,42 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
       />
 
       {/* Repair pairing dialog (with running/success/failed states) */}
-      <ConfirmDialog
-        open={showRepairConfirm}
-        title={t('wifi.repair_confirm_title')}
-        description={
-          repairState === 'running' ? t('wifi.repair_running')
-            : repairState === 'success' ? `${t('wifi.repair_success')}${repairMessage ? ` — ${repairMessage}` : ''}`
-            : repairState === 'failed' ? `${t('wifi.repair_failed')}${repairMessage ? `: ${repairMessage}` : ''}`
-            : t('wifi.repair_confirm_body')
-        }
-        confirmLabel={
-          repairState === 'running' ? t('wifi.repair_running')
-            : repairState === 'success' ? t('generic.confirm')
-            : repairState === 'failed' ? t('generic.confirm')
-            : t('wifi.repair_button')
-        }
-        cancelLabel={t('generic.cancel')}
-        tone="default"
-        busy={repairState === 'running'}
-        onConfirm={() => {
-          if (repairState === 'idle') void handleRepair()
-          else closeRepairDialog()
-        }}
-        onCancel={closeRepairDialog}
-      />
+      {(() => {
+        const repairCopy = (() => {
+          switch (repairState) {
+            case 'running':
+              return { description: t('wifi.repair_running'), confirmLabel: t('wifi.repair_running') }
+            case 'success':
+              return {
+                description: `${t('wifi.repair_success')}${repairMessage ? ` — ${repairMessage}` : ''}`,
+                confirmLabel: t('generic.confirm'),
+              }
+            case 'failed':
+              return {
+                description: `${t('wifi.repair_failed')}${repairMessage ? `: ${repairMessage}` : ''}`,
+                confirmLabel: t('generic.confirm'),
+              }
+            default:
+              return { description: t('wifi.repair_confirm_body'), confirmLabel: t('wifi.repair_button') }
+          }
+        })()
+        return (
+          <ConfirmDialog
+            open={showRepairConfirm}
+            title={t('wifi.repair_confirm_title')}
+            description={repairCopy.description}
+            confirmLabel={repairCopy.confirmLabel}
+            cancelLabel={t('generic.cancel')}
+            tone="default"
+            busy={repairState === 'running'}
+            onConfirm={() => {
+              if (repairState === 'idle') void handleRepair()
+              else closeRepairDialog()
+            }}
+            onCancel={closeRepairDialog}
+          />
+        )
+      })()}
     </>,
     document.body,
   )
