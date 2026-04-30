@@ -8,7 +8,6 @@ iOS versions, wrapping pymobiledevice3's location simulation capabilities.
 from __future__ import annotations
 
 import logging
-import inspect
 from abc import ABC, abstractmethod
 
 import asyncio
@@ -200,7 +199,7 @@ class LegacyLocationService(LocationService):
 
     async def _maybe_await(self, result) -> None:
         """Support both sync and async DtSimulateLocation methods."""
-        if inspect.isawaitable(result):
+        if asyncio.iscoroutine(result):
             await result
 
     def _reset_service(self) -> None:
