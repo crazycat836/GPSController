@@ -277,6 +277,7 @@ export const STRINGS = {
   'err.tunnel_lost': { zh: 'WiFi Tunnel 連線中斷,請重新建立', en: 'Wi-Fi tunnel dropped, please reconnect' },
   'err.cooldown_active': { zh: '冷卻中,請等待後再跳點', en: 'Cooldown active, wait before teleporting' },
   'err.teleport_failed': { zh: '跳點失敗', en: 'Teleport failed' },
+  'err.simulation_error': { zh: '模擬錯誤', en: 'Simulation error' },
 
   // ── Start-from-cached confirm dialog ────────
   // Shown when the user triggers a movement action (navigate / multi-stop /

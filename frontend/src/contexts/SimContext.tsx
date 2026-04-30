@@ -1,14 +1,29 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useSimulation, SimMode, MoveMode } from '../hooks/useSimulation'
-import type { FanoutOutcome } from '../hooks/useSimulation'
+import type { FanoutOutcome, SimErrorCode } from '../hooks/useSimulation'
 import { useJoystick } from '../hooks/useJoystick'
 import * as api from '../services/api'
-import { DEFAULT_RANDOM_WALK_RADIUS, DEFAULT_WP_GEN_RADIUS } from '../lib/constants'
+import type { CooldownStatusResponse } from '../services/api'
+import {
+  DEFAULT_RANDOM_WALK_RADIUS,
+  DEFAULT_WP_GEN_RADIUS,
+  RESTORE_MIN_DISPLAY_MS,
+} from '../lib/constants'
 import { useDeviceContext } from './DeviceContext'
 import { useToastContext } from './ToastContext'
 import { useWebSocketContext } from './WebSocketContext'
 import { useT } from '../i18n'
+import type { StringKey } from '../i18n'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+
+// Translator keys for hook-emitted error codes (`SimErrorCode`). Defined
+// here so SimContext can hand `useSimulation` a code → localised string
+// function without baking i18n knowledge into the hook itself.
+const SIM_ERROR_KEYS: Record<SimErrorCode, StringKey> = {
+  tunnel_lost: 'err.tunnel_lost',
+  simulation_error: 'err.simulation_error',
+  no_device_connected: 'err.no_device',
+}
 
 // Re-export for consumers
 export { SimMode, MoveMode }
@@ -22,7 +37,7 @@ const clampLat = (lat: number): number => Math.max(-90, Math.min(90, lat))
 
 // Summarise a group fan-out result into a single toast string.
 export function toastForFanout<T>(
-  t: (k: any, v?: Record<string, string | number>) => string,
+  t: (k: StringKey, v?: Record<string, string | number>) => string,
   action: string,
   outcome: FanoutOutcome<T>,
   devices: { udid: string }[],
@@ -102,7 +117,15 @@ export function SimProvider({ children }: SimProviderProps) {
   const device = useDeviceContext()
   const { showToast } = useToastContext()
   const { subscribe, sendMessage } = useWebSocketContext()
-  const sim = useSimulation(subscribe)
+  // Stable translator: looks up the latest `t` via ref so the function
+  // identity passed to `useSimulation` doesn't churn on every i18n
+  // re-render and tear down the hook's WS subscriber.
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t }, [t])
+  const translateError = useCallback((code: SimErrorCode): string => {
+    return tRef.current(SIM_ERROR_KEYS[code])
+  }, [])
+  const sim = useSimulation(subscribe, { translateError })
   const joystick = useJoystick(
     (type, data) => sendMessage(type, { ...data }),
     sim.mode === SimMode.Joystick,
@@ -209,8 +232,8 @@ export function SimProvider({ children }: SimProviderProps) {
         await sim.restore()
       }
       const elapsed = Date.now() - startedAt
-      if (elapsed < 1200) {
-        await new Promise((r) => setTimeout(r, 1200 - elapsed))
+      if (elapsed < RESTORE_MIN_DISPLAY_MS) {
+        await new Promise((r) => setTimeout(r, RESTORE_MIN_DISPLAY_MS - elapsed))
       }
       showToast(t('status.restore_success_wait'))
     } catch {
@@ -432,7 +455,10 @@ export function SimProvider({ children }: SimProviderProps) {
         await sim.navigate(dest.lat, dest.lng)
       }
     } else if (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) {
-      handleStartWaypointRoute()
+      // `handleStartWaypointRoute` performs an async fan-out + may await
+      // a confirm prompt. Await so any rejection propagates into this
+      // callback's caller (BottomDock catches it and toasts).
+      await handleStartWaypointRoute()
     }
   }, [sim, device, randomWalkRadius, handleStartWaypointRoute, showToast, t, confirmStartFromCached])
 
@@ -500,7 +526,7 @@ export function SimProvider({ children }: SimProviderProps) {
   // One initial GET on mount to sync state, then all updates come via WS.
   useEffect(() => {
     // Initial sync
-    api.getCooldownStatus().then((s: any) => {
+    api.getCooldownStatus().then((s: CooldownStatusResponse) => {
       setCooldown(s.remaining_seconds ?? 0)
       if (typeof s.enabled === 'boolean') setCooldownEnabled(s.enabled)
     }).catch(() => {})

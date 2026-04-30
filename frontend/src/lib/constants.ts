@@ -47,3 +47,17 @@ export const RADIUS_PRESETS = [200, 500, 1000, 2000] as const
 export const RETRY_BACKOFF_INITIAL_MS = 500
 export const RETRY_BACKOFF_STEP_MS = 300
 export const RETRY_BACKOFF_MAX_MS = 2000
+
+/**
+ * Minimum on-screen time for the "Clearing virtual location…" toast in
+ * `SimContext.handleRestore`. Restore can complete in <100ms on a healthy
+ * USB link; the user wouldn't see the toast at all otherwise.
+ */
+export const RESTORE_MIN_DISPLAY_MS = 1200
+
+/**
+ * Settle delay between the group-mode pre-sync teleport fan-out and the
+ * follow-up action (navigate / loop / etc.). Lets each engine finalise the
+ * teleport before the next command arrives. See `useSimulation.preSyncStart`.
+ */
+export const PRE_SYNC_SETTLE_MS = 150
