@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import {
   RotateCcw, FileText, MapPin, Timer, Languages, Layers, Info,
-  Trash2, Sun, ChevronRight, UserCircle2,
+  Sun, ChevronRight, UserCircle2,
 } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
@@ -284,18 +284,6 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
               interactive={false}
               trailing={<span className="font-mono text-[11px] text-[var(--color-text-3)]">v{APP_VERSION}</span>}
             />
-            {/* TODO: "Clear all history" has no handler yet — hidden
-                until we decide whether it clears bookmarks / routes /
-                recents / everything. Re-enable by wiring onClick and
-                removing the `false &&` below. */}
-            {false && (
-              <SettingsRow
-                icon={<Trash2 className="w-[14px] h-[14px]" />}
-                label={t('settings.clear_history')}
-                danger
-                onClick={() => { /* unimplemented */ }}
-              />
-            )}
           </Section>
         </div>
       )}
