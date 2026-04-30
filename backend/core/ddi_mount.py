@@ -110,20 +110,21 @@ async def ensure_personalized_ddi_mounted(
         pass
     mount_succeeded = False
     try:
-        # auto_mount_personalized internally uses requests.get for the
-        # GitHub DDI download — that call is blocking sync I/O. Wrapping
-        # the *coroutine* in asyncio.wait_for cannot preempt blocking
-        # syscalls inside a thread, so we hand the whole operation to a
-        # default executor and apply the timeout to the executor future.
-        # That keeps the event loop responsive even on slow networks.
+        # auto_mount_personalized is a coroutine that talks to the device
+        # over the same lockdown connection — its async resources are
+        # bound to the running event loop, so it MUST run on the main
+        # loop. We previously delegated this to a thread executor via
+        # asyncio.run(...) to keep the loop responsive during the GitHub
+        # DDI download, but that hits "Future attached to a different
+        # loop" because lockdown sockets/futures stay tied to the main
+        # loop. Trade-off: the GitHub fetch may briefly stall the loop
+        # for a couple of seconds — acceptable vs. a hard crash.
         # Serialise across devices so parallel connects don't corrupt
         # the shared DDI cache.
         async with mount_lock:
-            loop = asyncio.get_running_loop()
-            executor_future = loop.run_in_executor(
-                None, lambda: asyncio.run(auto_mount_personalized(conn.lockdown)),
+            await asyncio.wait_for(
+                auto_mount_personalized(conn.lockdown), timeout=120.0,
             )
-            await asyncio.wait_for(executor_future, timeout=120.0)
         logger.info("Personalized DDI mounted successfully for %s", conn.udid)
         mount_succeeded = True
     except AlreadyMountedError:
