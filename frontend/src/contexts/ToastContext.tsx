@@ -9,7 +9,7 @@ const ToastContext = createContext<ToastContextValue | null>(null)
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toastMsg, setToastMsg] = useState<string | null>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const showToast = useCallback((msg: string, ms = 2000) => {
     if (timerRef.current) clearTimeout(timerRef.current)
