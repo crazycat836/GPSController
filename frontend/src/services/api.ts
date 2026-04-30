@@ -114,12 +114,39 @@ function currentLang(): 'zh' | 'en' {
   return (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('zh')) ? 'zh' : 'en'
 }
 
-function formatError(detail: unknown, fallback: string): string {
-  if (typeof detail === 'string') return detail
-  if (detail && typeof detail === 'object') {
-    const d = detail as { code?: string; message?: string }
-    if (d.code && ERROR_I18N[d.code]) return ERROR_I18N[d.code][currentLang()]
-    if (d.message) return d.message
+/** Structured error returned in the response envelope. */
+interface ApiError {
+  code?: string
+  message?: string
+}
+
+/** Standard `{success, data, error, meta}` envelope per
+ * `~/.claude/rules/common/patterns.md`. Every JSON response from the
+ * backend is wrapped in this shape; `request()` unwraps `data` so
+ * callers see only the inner type they asked for. */
+interface ApiEnvelope<T> {
+  success: boolean
+  data: T | null
+  error: ApiError | null
+  meta?: { total?: number; page?: number; limit?: number } | null
+}
+
+function isEnvelope(body: unknown): body is ApiEnvelope<unknown> {
+  return (
+    body !== null &&
+    typeof body === 'object' &&
+    'success' in body &&
+    'data' in body &&
+    'error' in body
+  )
+}
+
+function formatError(error: unknown, fallback: string): string {
+  if (typeof error === 'string') return error
+  if (error && typeof error === 'object') {
+    const e = error as ApiError
+    if (e.code && ERROR_I18N[e.code]) return ERROR_I18N[e.code][currentLang()]
+    if (e.message) return e.message
   }
   return fallback
 }
@@ -162,11 +189,24 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const opts: RequestInit = { method, headers }
   if (body !== undefined) opts.body = JSON.stringify(body)
   const res = await fetchWithRetry(`${API}${path}`, opts)
+  // Single .json() read regardless of status — the envelope shape is the
+  // same on success and on failure (just `success`/`data`/`error` fields
+  // flipped), so we don't need to branch before parsing.
+  const parsed: unknown = await res.json().catch(() => null)
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(formatError(err.detail, res.statusText))
+    if (isEnvelope(parsed)) {
+      throw new Error(formatError(parsed.error, res.statusText))
+    }
+    // Backend should always emit the envelope; this branch only fires if a
+    // proxy / dev-server intercepts the response and returns its own body.
+    throw new Error(res.statusText || `HTTP ${res.status}`)
   }
-  return res.json()
+  if (!isEnvelope(parsed) || parsed.success !== true) {
+    // 200 with a non-envelope body means we hit a non-API endpoint or the
+    // backend version is older than this client expects.
+    throw new Error('Malformed API response (missing envelope)')
+  }
+  return parsed.data as T
 }
 
 // Device
@@ -381,11 +421,17 @@ export async function importGpx(file: File): Promise<{ status: string; id: strin
   const headers: Record<string, string> = {}
   if (token) headers['X-GPS-Token'] = token
   const res = await fetch(`${API}/api/route/gpx/import`, { method: 'POST', body: form, headers })
+  const parsed: unknown = await res.json().catch(() => null)
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(formatError(err.detail, res.statusText))
+    if (isEnvelope(parsed)) {
+      throw new Error(formatError(parsed.error, res.statusText))
+    }
+    throw new Error(res.statusText || `HTTP ${res.status}`)
   }
-  return res.json()
+  if (!isEnvelope(parsed) || parsed.success !== true) {
+    throw new Error('Malformed API response (missing envelope)')
+  }
+  return parsed.data as { status: string; id: string; points: number }
 }
 
 export function exportGpxUrl(routeId: string): string {

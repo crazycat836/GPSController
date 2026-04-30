@@ -11,9 +11,16 @@ from typing import TYPE_CHECKING
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from api._envelope import (
+    EnvelopeJSONResponse,
+    http_exception_handler,
+    unauthorized_response,
+    validation_exception_handler,
+)
 from config import API_HOST, API_PORT, SETTINGS_FILE, TOKEN_FILE, DEFAULT_LOCATION, MAX_DEVICES
 from core.device_manager import DeviceManager
 from services.cooldown import CooldownTimer
@@ -676,7 +683,22 @@ async def lifespan(application: FastAPI):
 
 # ── FastAPI app ───────────────────────────────────────────
 
-app = FastAPI(title="GPSController", version=__version__, description="iOS Virtual Location Simulator", lifespan=lifespan)
+app = FastAPI(
+    title="GPSController",
+    version=__version__,
+    description="iOS Virtual Location Simulator",
+    lifespan=lifespan,
+    # Every JSON response is auto-wrapped in {success, data, error, meta}
+    # by EnvelopeJSONResponse. File-download endpoints that explicitly
+    # return a Response(content=bytes, ...) bypass this so binary payloads
+    # remain unwrapped.
+    default_response_class=EnvelopeJSONResponse,
+)
+
+# Convert HTTPException + 422 RequestValidationError into the same
+# error envelope shape so the frontend has a single failure shape to parse.
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -712,11 +734,7 @@ class _TokenAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         supplied = request.headers.get("x-gps-token", "")
         if not API_TOKEN or not secrets.compare_digest(supplied, API_TOKEN):
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                {"detail": {"code": "unauthorized", "message": "Missing or invalid X-GPS-Token"}},
-                status_code=401,
-            )
+            return unauthorized_response()
         return await call_next(request)
 
 
