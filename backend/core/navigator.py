@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from models.schemas import Coordinate, MovementMode, SimulationState
 from config import resolve_speed_profile
+
+if TYPE_CHECKING:
+    from core.simulation_engine import SimulationEngine
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +17,7 @@ logger = logging.getLogger(__name__)
 class Navigator:
     """Navigates from the current position to a destination via OSRM routing."""
 
-    def __init__(self, engine):
+    def __init__(self, engine: "SimulationEngine") -> None:
         self.engine = engine
 
     async def navigate_to(

@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from models.schemas import (
     Coordinate,
@@ -17,7 +18,7 @@ from models.schemas import (
     SimulationStatus,
 )
 from services.interpolator import RouteInterpolator
-from services.location_service import DeviceLostError
+from services.location_service import DeviceLostError, LocationService
 from services.route_service import RouteService
 from config import SPEED_PROFILES, SpeedProfile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
 
@@ -30,6 +31,17 @@ from core.random_walk import RandomWalkHandler
 from core.restore import RestoreHandler
 
 logger = logging.getLogger(__name__)
+
+
+# Waypoint-pass detection thresholds (meters).
+#
+# OSRM snaps off-road taps onto the nearest road, so the routed polyline
+# rarely passes within a strict radius of the user's literal click. These
+# thresholds let _move_along_route decide when a user-named waypoint counts
+# as "visited" without needing pixel-perfect coincidence.
+WP_HARD_HIT_M = 15.0   # within this radius, count it as a direct hit
+WP_NEAR_M = 60.0       # got close enough to plausibly count as visiting
+WP_RECEDE_M = 12.0     # how far past the running min before declaring passed
 
 
 SnapshotMode = Literal["navigate", "loop", "multi_stop", "random_walk"]
@@ -142,7 +154,11 @@ class SimulationEngine:
         used to push realtime events over WebSocket.
     """
 
-    def __init__(self, location_service, event_callback=None) -> None:
+    def __init__(
+        self,
+        location_service: LocationService,
+        event_callback: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
+    ) -> None:
         self.location_service = location_service
         self.state: SimulationState = SimulationState.IDLE
         self.current_position: Coordinate | None = None
@@ -611,9 +627,7 @@ class SimulationEngine:
         # target and consider it "passed" when either we got *close enough*
         # OR we got reasonably close and have started moving away.
         user_wps = list(self._user_waypoints)
-        WP_HARD_HIT_M = 15.0      # straight-up "we're at it"
-        WP_NEAR_M = 60.0          # got close enough to count as visiting
-        WP_RECEDE_M = 12.0        # how far past min before declaring passed
+        # Thresholds (WP_HARD_HIT_M / WP_NEAR_M / WP_RECEDE_M) live at module scope.
         wp_min_dist = float("inf")
         if user_wps:
             await self._emit("waypoint_progress", {
