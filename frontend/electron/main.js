@@ -1,9 +1,8 @@
-const { app, BrowserWindow, Menu, shell } = require('electron')
+const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron')
 const path = require('path')
 const os = require('os')
 const fs = require('fs')
 const { spawn } = require('child_process')
-const http = require('http')
 
 // Single source of truth for the app version — same file Electron already
 // consumes for `app.getVersion()` / auto-updater metadata.
@@ -22,6 +21,17 @@ function readSessionToken() {
     return ''
   }
 }
+
+// Deliver the session token to the renderer via a one-time IPC handshake
+// instead of `additionalArguments`. argv is visible to other same-user
+// processes (`ps aux`, `/proc/<pid>/cmdline`) on macOS/Linux, so a
+// session-scoped auth token has no business being on the command line.
+//
+// The handler is registered at module load — well before any
+// BrowserWindow is created — so the channel is always wired up by the
+// time the renderer's preload invokes it.
+let cachedSessionToken = ''
+ipcMain.handle('session:get-token', () => cachedSessionToken)
 
 // Strip the default "File Edit View Window Help" menubar — GPSController has its
 // own in-window controls and the native menu only adds noise on Windows.
@@ -69,23 +79,6 @@ function stopBackend() {
   backendProc = null
 }
 
-function waitForBackend(timeoutMs = 30000) {
-  const started = Date.now()
-  return new Promise((resolve, reject) => {
-    const tick = () => {
-      const req = http.get('http://127.0.0.1:8777/docs', (res) => {
-        res.destroy()
-        resolve()
-      })
-      req.on('error', () => {
-        if (Date.now() - started > timeoutMs) return reject(new Error('backend timeout'))
-        setTimeout(tick, 500)
-      })
-    }
-    tick()
-  })
-}
-
 async function createWindow() {
   // OSM tile policy (https://operations.osmfoundation.org/policies/tiles/)
   // requires an identifying User-Agent; Electron's default Chrome UA is
@@ -116,10 +109,10 @@ async function createWindow() {
     })
   } catch (e) { console.error('[electron] UA hook failed:', e) }
 
-  // Backend writes the token before accepting any HTTP request, and
-  // `waitForBackend()` polls /docs until that succeeds — so by the time
-  // we reach here the token file is on disk. In dev mode it's empty.
-  const sessionToken = readSessionToken()
+  // Backend writes the token file before accepting any HTTP request. By
+  // the time the renderer issues its first request the file is on disk;
+  // in dev mode it's empty (GPSCONTROLLER_DEV_NOAUTH=1).
+  cachedSessionToken = readSessionToken()
 
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -139,13 +132,13 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      // Pass the version + session token down so preload.js can expose
-      // them to the renderer without filesystem access (sandbox blocks
-      // node:fs). The token is regenerated each backend run so leaking
-      // the argv post-hoc yields nothing the renderer couldn't read.
+      // Only the version is forwarded via argv — it's non-sensitive and
+      // lets preload expose `version` synchronously without an IPC round
+      // trip. The session token is delivered via the
+      // `session:get-token` IPC handshake instead (see ipcMain.handle
+      // above) to keep it out of `process.argv`.
       additionalArguments: [
         `--gps-version=${APP_VERSION}`,
-        `--gps-token=${sessionToken}`,
       ],
     },
   })
@@ -175,7 +168,7 @@ async function createWindow() {
   } else {
     // Spawn the backend in parallel and load the UI immediately. The
     // renderer already has fetch-with-retry so it rides out the backend
-    // startup race — no need to block loadFile on waitForBackend() and
+    // startup race — no need to block loadFile on a readiness probe and
     // stare at a blank window for seconds.
     startBackend()
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))

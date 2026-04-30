@@ -1,5 +1,11 @@
 import { STORAGE_KEYS } from '../lib/storage-keys'
-import { API_BASE, DEFAULT_TUNNEL_PORT } from '../lib/constants'
+import {
+  API_BASE,
+  DEFAULT_TUNNEL_PORT,
+  RETRY_BACKOFF_INITIAL_MS,
+  RETRY_BACKOFF_MAX_MS,
+  RETRY_BACKOFF_STEP_MS,
+} from '../lib/constants'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../hooks/useBookmarks'
 import type { DeviceInfo } from '../hooks/useDevice'
 
@@ -63,7 +69,10 @@ async function fetchWithRetry(url: string, opts: RequestInit, maxAttempts = 15):
       return await fetch(url, opts)
     } catch (e) {
       lastErr = e
-      const delay = Math.min(500 + i * 300, 2000)
+      const delay = Math.min(
+        RETRY_BACKOFF_INITIAL_MS + i * RETRY_BACKOFF_STEP_MS,
+        RETRY_BACKOFF_MAX_MS,
+      )
       await new Promise((r) => setTimeout(r, delay))
     }
   }
@@ -117,21 +126,38 @@ function formatError(detail: unknown, fallback: string): string {
 
 /**
  * Read the session auth token. In the packaged Electron build the token
- * is injected into the renderer via `contextBridge` (see
- * frontend/electron/preload.js). In Vite dev mode the backend is
- * expected to run with GPSCONTROLLER_DEV_NOAUTH=1 so no token is
- * required — empty string is fine.
+ * is held by the main process and fetched once via the
+ * `session:get-token` IPC handshake (see frontend/electron/preload.js
+ * and frontend/electron/main.js). The bridge exposes it as the async
+ * `window.gpsController.getSessionToken()`. In Vite dev mode the
+ * backend is expected to run with GPSCONTROLLER_DEV_NOAUTH=1, so when
+ * the bridge is absent we resolve to an empty string — empty token is
+ * accepted by the dev backend.
+ *
+ * The first call performs the IPC round-trip; subsequent calls return
+ * the cached promise so the token isn't refetched on every request.
  */
-function getAuthToken(): string {
-  const injected = (globalThis as unknown as {
-    gpsController?: { token?: string }
-  }).gpsController?.token
-  return typeof injected === 'string' ? injected : ''
+let authTokenPromise: Promise<string> | null = null
+
+function getAuthToken(): Promise<string> {
+  if (authTokenPromise) return authTokenPromise
+  const bridge = (globalThis as unknown as {
+    gpsController?: { getSessionToken?: () => Promise<unknown> }
+  }).gpsController
+  if (!bridge || typeof bridge.getSessionToken !== 'function') {
+    authTokenPromise = Promise.resolve('')
+    return authTokenPromise
+  }
+  authTokenPromise = bridge
+    .getSessionToken()
+    .then((value) => (typeof value === 'string' ? value : ''))
+    .catch(() => '')
+  return authTokenPromise
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const token = getAuthToken()
+  const token = await getAuthToken()
   if (token) headers['X-GPS-Token'] = token
   const opts: RequestInit = { method, headers }
   if (body !== undefined) opts.body = JSON.stringify(body)
@@ -225,7 +251,20 @@ export const getStatus = (udid?: string) =>
   request<SimulationStatusResponse>('GET', `/api/location/status${qs(udid)}`)
 
 // Cooldown
-export const getCooldownStatus = () => request<{ enabled: boolean; remaining: number; total: number }>('GET', '/api/location/cooldown/status')
+/**
+ * Mirrors the backend `CooldownStatus` Pydantic model
+ * (`backend/models/schemas.py`). The status route returns this shape via
+ * `response_model=CooldownStatus`, so the snake_case keys are authoritative.
+ */
+export interface CooldownStatusResponse {
+  enabled: boolean
+  is_active: boolean
+  remaining_seconds: number
+  total_seconds: number
+  distance_km: number
+}
+export const getCooldownStatus = () =>
+  request<CooldownStatusResponse>('GET', '/api/location/cooldown/status')
 export const setCooldownEnabled = (enabled: boolean) =>
   request<StatusResponse>('PUT', '/api/location/cooldown/settings', { enabled })
 export const dismissCooldown = () => request<StatusResponse>('POST', '/api/location/cooldown/dismiss')
@@ -334,7 +373,7 @@ export const renameRoute = (id: string, name: string) => request<SavedRoute>('PA
 export async function importGpx(file: File): Promise<{ status: string; id: string; points: number }> {
   const form = new FormData()
   form.append('file', file)
-  const token = getAuthToken()
+  const token = await getAuthToken()
   const headers: Record<string, string> = {}
   if (token) headers['X-GPS-Token'] = token
   const res = await fetch(`${API}/api/route/gpx/import`, { method: 'POST', body: form, headers })

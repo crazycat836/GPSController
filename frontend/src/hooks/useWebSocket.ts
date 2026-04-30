@@ -50,18 +50,31 @@ export function useWebSocket() {
       const ws = new WebSocket(WS_URL)
       wsRef.current = ws
 
-      ws.onopen = () => {
+      ws.onopen = async () => {
         if (!mountedRef.current) {
           ws.close()
           return
         }
-        // Send the auth frame first. In dev mode the token is an empty
-        // string and the backend shortcuts the check; in packaged mode
-        // the preload bridge injects the value read from the token file.
-        const injected = (globalThis as unknown as {
-          gpsController?: { token?: string }
-        }).gpsController?.token
-        const token = typeof injected === 'string' ? injected : ''
+        // Send the auth frame first. In dev mode the token resolves to
+        // an empty string and the backend shortcuts the check; in
+        // packaged mode the preload bridge resolves it via the
+        // `session:get-token` IPC handshake (kept off `process.argv`).
+        const bridge = (globalThis as unknown as {
+          gpsController?: { getSessionToken?: () => Promise<unknown> }
+        }).gpsController
+        let token = ''
+        if (bridge && typeof bridge.getSessionToken === 'function') {
+          try {
+            const value = await bridge.getSessionToken()
+            if (typeof value === 'string') token = value
+          } catch {
+            // Fall through with empty token; the backend will close the
+            // socket and scheduleReconnect() handles the retry.
+          }
+        }
+        // The socket may have been torn down (unmount or remote close)
+        // while we awaited the token. Don't send into a dead socket.
+        if (!mountedRef.current || ws.readyState !== WebSocket.OPEN) return
         try {
           ws.send(JSON.stringify({ type: 'auth', token }))
         } catch {
