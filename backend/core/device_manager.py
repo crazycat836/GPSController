@@ -28,16 +28,14 @@ from pymobiledevice3.lockdown import create_using_usbmux, create_using_tcp
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
 from pymobiledevice3.remote.tunnel_service import CoreDeviceTunnelProxy
 from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
-from pymobiledevice3.services.dvt.instruments.location_simulation import LocationSimulation
-from pymobiledevice3.services.simulate_location import DtSimulateLocation
 from pymobiledevice3.usbmux import list_devices
 
-from models.schemas import DeviceInfo
-from services.location_service import (
-    DvtLocationService,
-    LegacyLocationService,
-    LocationService,
+from core.ddi_mount import (
+    create_dvt_location_service,
+    create_legacy_location_service,
 )
+from models.schemas import DeviceInfo
+from services.location_service import LocationService
 
 
 class UnsupportedIosVersionError(RuntimeError):
@@ -62,28 +60,6 @@ def _parse_ios_version(version_string: str) -> tuple[int, ...]:
     except (ValueError, AttributeError):
         logger.warning("Unable to parse iOS version '%s', assuming 0.0", version_string)
         return (0, 0)
-
-
-async def _broadcast_ddi_mount_failure(udid: str, stage: str, reason: str) -> None:
-    """Emit the structured failure pair the frontend expects.
-
-    ``ddi_mount_missing`` drives the user-facing hint toast;
-    ``ddi_mount_failed`` is the legacy event name retained for
-    downstream consumers. Both carry the same fields so either can be
-    handled consistently.
-    """
-    try:
-        from api.websocket import broadcast
-        payload = {
-            "udid": udid,
-            "stage": stage,
-            "reason": reason,
-            "hint_key": "ddi.missing_hint",
-        }
-        await broadcast("ddi_mount_missing", payload)
-        await broadcast("ddi_mount_failed", {**payload, "error": reason})
-    except Exception:
-        logger.debug("ddi broadcast failed", exc_info=True)
 
 
 @dataclass
@@ -522,231 +498,22 @@ class DeviceManager:
 
         ver = _parse_ios_version(conn.ios_version)
         if ver >= (17, 0):
-            loc = await self._create_dvt_location_service(conn)
+            loc = await create_dvt_location_service(conn, self._ddi_mount_lock)
         else:
-            loc = await self._create_legacy_location_service(conn)
+            loc = await create_legacy_location_service(conn)
         conn.location_service = loc
         return loc
 
-    async def _ensure_personalized_ddi_mounted(self, conn: _ActiveConnection) -> None:
-        """For iOS 17+ devices, make sure the Personalized Developer Disk Image
-        is mounted. Without the DDI, the DVT service hub won't advertise and
-        DvtProvider will fail with "No such service: com.apple.instruments.dtservicehub".
-
-        If already mounted, this is a no-op. Otherwise it downloads the image
-        from the pymobiledevice3 DDI repository (GitHub) and mounts it. The
-        per-device signing (TSS) is handled internally by pymobiledevice3.
-        """
-        try:
-            from pymobiledevice3.services.mobile_image_mounter import (
-                MobileImageMounterService,
-                auto_mount_personalized,
-                AlreadyMountedError,
-            )
-        except ImportError as exc:
-            logger.warning(
-                "pymobiledevice3.mobile_image_mounter not importable (%s: %s); "
-                "skipping DDI mount",
-                type(exc).__name__, exc,
-            )
-            return
-
-        # 1. Check whether a Personalized image is already mounted.
-        try:
-            mounter = MobileImageMounterService(lockdown=conn.lockdown)
-            try:
-                await mounter.connect()
-                if await mounter.is_image_mounted("Personalized"):
-                    logger.debug("Personalized DDI already mounted on %s", conn.udid)
-                    return
-            finally:
-                try:
-                    await mounter.close()
-                except Exception:
-                    pass
-        except Exception:
-            logger.warning("Could not query image mount status; will attempt to mount anyway", exc_info=True)
-
-        # 2. Not mounted — download + mount. Notify frontend so the user
-        # sees a "preparing device" overlay instead of a frozen UI.
-        logger.info("Personalized DDI not mounted on %s; mounting (may download ~20MB)...", conn.udid)
-        try:
-            from api.websocket import broadcast
-            await broadcast("ddi_mounting", {"udid": conn.udid})
-        except Exception:
-            pass
-        mount_succeeded = False
-        try:
-            # auto_mount_personalized internally uses requests.get for the
-            # GitHub DDI download — that call is blocking sync I/O. Wrapping
-            # the *coroutine* in asyncio.wait_for cannot preempt blocking
-            # syscalls inside a thread, so we hand the whole operation to a
-            # default executor and apply the timeout to the executor future.
-            # That keeps the event loop responsive even on slow networks.
-            # Serialise across devices so parallel connects don't corrupt
-            # the shared DDI cache.
-            async with self._ddi_mount_lock:
-                loop = asyncio.get_running_loop()
-                executor_future = loop.run_in_executor(
-                    None, lambda: asyncio.run(auto_mount_personalized(conn.lockdown)),
-                )
-                await asyncio.wait_for(executor_future, timeout=120.0)
-            logger.info("Personalized DDI mounted successfully for %s", conn.udid)
-            mount_succeeded = True
-        except AlreadyMountedError:
-            logger.info("DDI was mounted concurrently for %s", conn.udid)
-            mount_succeeded = True
-        except asyncio.TimeoutError:
-            logger.error("DDI mount timed out after 120s for %s", conn.udid)
-            await _broadcast_ddi_mount_failure(
-                conn.udid, "personalized",
-                "TimeoutError: DDI download/mount timed out after 120s",
-            )
-            raise RuntimeError("DDI mount timed out — check network access to github.com")
-        except Exception as exc:
-            logger.exception("auto_mount_personalized failed for %s", conn.udid)
-            await _broadcast_ddi_mount_failure(
-                conn.udid, "personalized", f"{type(exc).__name__}: {exc}",
-            )
-            raise
-        finally:
-            if mount_succeeded:
-                try:
-                    from api.websocket import broadcast
-                    await broadcast("ddi_mounted", {"udid": conn.udid})
-                except Exception:
-                    pass
-
-    async def _ensure_classic_ddi_mounted(self, conn: _ActiveConnection) -> None:
-        """Best-effort Developer Disk Image mount for iOS 16.x devices."""
-        try:
-            import pymobiledevice3.services.mobile_image_mounter as mim
-        except ImportError as exc:
-            logger.warning(
-                "pymobiledevice3.mobile_image_mounter not importable (%s: %s); "
-                "skipping classic DDI mount",
-                type(exc).__name__, exc,
-            )
-            return
-
-        mounter_cls = getattr(mim, "MobileImageMounterService", None)
-        if mounter_cls is not None:
-            try:
-                mounter = mounter_cls(lockdown=conn.lockdown)
-                try:
-                    await mounter.connect()
-                    if await mounter.is_image_mounted("Developer"):
-                        logger.debug("Classic DDI already mounted on %s", conn.udid)
-                        return
-                finally:
-                    try:
-                        await mounter.close()
-                    except Exception:
-                        pass
-            except Exception:
-                logger.warning("Could not query classic DDI mount state", exc_info=True)
-
-        mount_fn = None
-        for name in ("auto_mount_developer", "auto_mount", "auto_mount_disk_image"):
-            candidate = getattr(mim, name, None)
-            if callable(candidate):
-                mount_fn = candidate
-                break
-        if mount_fn is None:
-            logger.warning("No classic DDI auto-mount helper found; continuing without mount")
-            return
-
-        logger.info("Classic DDI not mounted on %s; attempting auto-mount", conn.udid)
-        try:
-            from api.websocket import broadcast
-            await broadcast("ddi_mounting", {"udid": conn.udid})
-        except Exception:
-            pass
-
-        mounted = False
-        failure_reason: str | None = None
-        try:
-            await asyncio.wait_for(mount_fn(conn.lockdown), timeout=120.0)
-            mounted = True
-            logger.info("Classic DDI mounted successfully for %s", conn.udid)
-        except Exception as exc:
-            failure_reason = f"{type(exc).__name__}: {exc}"
-            logger.warning("Classic DDI auto-mount failed for %s", conn.udid, exc_info=True)
-        finally:
-            if mounted:
-                try:
-                    from api.websocket import broadcast
-                    await broadcast("ddi_mounted", {"udid": conn.udid})
-                except Exception:
-                    pass
-            else:
-                await _broadcast_ddi_mount_failure(
-                    conn.udid, "classic",
-                    failure_reason or "Classic DDI mount failed",
-                )
-
-    async def _create_dvt_location_service(
-        self, conn: _ActiveConnection
-    ) -> DvtLocationService:
-        """Spin up a DVT provider and hand it to ``DvtLocationService``.
-
-        If DVT fails because the Developer Disk Image is not mounted,
-        we try to mount it automatically and retry once.
-        """
-        # Try to mount DDI proactively (fast no-op when already mounted).
-        try:
-            await self._ensure_personalized_ddi_mounted(conn)
-        except Exception:
-            logger.warning("DDI auto-mount failed; DVT may still fail", exc_info=True)
-
-        try:
-            dvt = DvtProvider(conn.lockdown)
-            await dvt.__aenter__()
-            conn.dvt_provider = dvt
-            logger.debug("DVT provider opened for %s", conn.udid)
-            return DvtLocationService(dvt, lockdown=conn.lockdown)
-        except Exception as dvt_exc:
-            logger.warning(
-                "DVT location service failed for %s (%s). Falling back to "
-                "legacy DtSimulateLocation over lockdown.",
-                conn.udid, dvt_exc,
-            )
-            # iOS 17+ still exposes com.apple.dt.simulatelocation on some
-            # devices (reported working on iOS 26 by multiple users), so
-            # try the legacy service before giving up entirely.
-            try:
-                # Prefer the original usbmux/TCP lockdown for DtSimulateLocation;
-                # fall back to whatever we have stored if not available.
-                legacy_lockdown = conn.usbmux_lockdown or conn.lockdown
-                legacy = LegacyLocationService(legacy_lockdown)
-                logger.info("Using LegacyLocationService fallback for %s", conn.udid)
-                return legacy
-            except Exception:
-                logger.exception(
-                    "Both DVT and legacy location services failed for %s", conn.udid
-                )
-                raise dvt_exc
-
-    async def _create_legacy_location_service(
-        self, conn: _ActiveConnection
-    ) -> LegacyLocationService:
-        """Build the legacy location service for iOS 16.x devices."""
-        try:
-            await self._ensure_classic_ddi_mounted(conn)
-        except Exception:
-            logger.warning("Classic DDI auto-mount failed; legacy location may still fail", exc_info=True)
-        logger.info("Using LegacyLocationService for %s", conn.udid)
-        return LegacyLocationService(conn.lockdown)
-
     # connect_wifi (the legacy direct-IP WiFi connect helper) was removed
     # in v0.1.49 in favour of connect_wifi_tunnel below, which assumes a
-    # pre-established RSD tunnel. _ensure_classic_ddi_mounted and
-    # _create_legacy_location_service are still defined above because
-    # iOS 16.x devices remain supported (UnsupportedIosVersionError only
-    # rejects < 16.0). iOS 17+ continues to use the personalized DDI
-    # mount path + DvtLocationService, with LegacyLocationService as a
-    # runtime fallback inside _create_dvt_location_service when DVT
-    # itself fails.
+    # pre-established RSD tunnel. The DDI mount and location-service
+    # factory helpers used by ``get_location_service`` now live in
+    # ``core.ddi_mount`` (extracted in v0.13.x). iOS 16.x devices remain
+    # supported (UnsupportedIosVersionError only rejects < 16.0). iOS
+    # 17+ continues to use the personalized DDI mount path +
+    # DvtLocationService, with LegacyLocationService as a runtime
+    # fallback inside ``create_dvt_location_service`` when DVT itself
+    # fails.
 
     # ------------------------------------------------------------------
     # WiFi connection (iOS 17+ tunnel only)
