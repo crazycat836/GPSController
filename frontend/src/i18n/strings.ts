@@ -280,6 +280,15 @@ export const STRINGS = {
   'err.cooldown_active': { zh: '冷卻中,請等待後再跳點', en: 'Cooldown active, wait before teleporting' },
   'err.teleport_failed': { zh: '跳點失敗', en: 'Teleport failed' },
   'err.simulation_error': { zh: '模擬錯誤', en: 'Simulation error' },
+  // Codes returned by the backend's HTTPException flow that the frontend
+  // surfaces as toasts via services/api.ts/formatError.
+  'err.repair_needs_usb': { zh: '重新配對需要 USB, 請先用線連接 iPhone', en: 'Re-pair needs USB, please connect the iPhone first' },
+  'err.usbmux_unavailable': { zh: '無法列出 USB 裝置,請確認驅動與 Apple Mobile Device Service 是否正常', en: 'Cannot list USB devices, check iTunes/Apple Mobile Device Service' },
+  'err.trust_failed': { zh: 'USB 信任失敗, 請在 iPhone 上點「信任」後再試', en: 'USB trust failed, tap Trust on the iPhone and retry' },
+  'err.remote_pair_failed': { zh: 'RemotePairing 記錄重建失敗, 請以系統管理員身分重啟 GPSController', en: 'RemotePairing record rebuild failed, restart GPSController as Administrator' },
+  'err.device_lost': { zh: '裝置連線中斷(USB 拔除或 Tunnel 死亡),請重新插上 USB 後再操作', en: 'Device connection lost (USB unplugged or tunnel died), please reconnect USB and try again' },
+  'err.max_devices_reached': { zh: '已連接最多 2 台裝置', en: 'Maximum 2 devices connected' },
+  'err.ios_unsupported': { zh: '裝置 iOS 版本過舊,GPSController 僅支援 iOS 16 以上。請升級 iOS 後再試。', en: 'This device runs an unsupported iOS version. GPSController requires iOS 16 or later. Please update and try again.' },
 
   // ── Start-from-cached confirm dialog ────────
   // Shown when the user triggers a movement action (navigate / multi-stop /

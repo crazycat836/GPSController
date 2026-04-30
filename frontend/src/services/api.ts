@@ -6,6 +6,7 @@ import {
   RETRY_BACKOFF_MAX_MS,
   RETRY_BACKOFF_STEP_MS,
 } from '../lib/constants'
+import { STRINGS } from '../i18n/strings'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../hooks/useBookmarks'
 import type { DeviceInfo } from '../hooks/useDevice'
 
@@ -79,33 +80,6 @@ async function fetchWithRetry(url: string, opts: RequestInit, maxAttempts = 15):
   throw lastErr ?? new Error('fetch failed')
 }
 
-// Bilingual backend error code → user-facing message.
-// Looks up the currently selected language from localStorage (set by i18n/index.ts).
-const ERROR_I18N: Record<string, { zh: string; en: string }> = {
-  python313_missing: { zh: '需要 Python 3.13+ 才能啟動 WiFi Tunnel', en: 'Python 3.13+ is required to start the Wi-Fi tunnel' },
-  tunnel_script_missing: { zh: '找不到 wifi_tunnel.py 腳本', en: 'wifi_tunnel.py script not found' },
-  tunnel_spawn_failed: { zh: '無法啟動 Tunnel 進程', en: 'Failed to spawn tunnel process' },
-  tunnel_exited: { zh: 'Tunnel 進程異常結束', en: 'Tunnel process exited unexpectedly' },
-  tunnel_timeout: { zh: 'Tunnel 啟動逾時,請確認 iPhone 解鎖且與電腦同網段', en: 'Tunnel startup timed out, ensure iPhone is unlocked and on the same subnet' },
-  no_device: { zh: '尚未連接任何 iOS 裝置,請先透過 USB 連線', en: 'No iOS device connected, connect via USB first' },
-  no_position: { zh: '尚未取得目前位置,請先跳點到一個座標', en: 'No current position, teleport to a coordinate first' },
-  tunnel_lost: { zh: 'WiFi Tunnel 連線中斷,請重新建立', en: 'Wi-Fi tunnel dropped, please reconnect' },
-  cooldown_active: { zh: '冷卻中,請等待後再跳點', en: 'Cooldown active, wait before teleporting' },
-  repair_needs_usb: { zh: '重新配對需要 USB, 請先用線連接 iPhone', en: 'Re-pair needs USB, please connect the iPhone first' },
-  usbmux_unavailable: { zh: '無法列出 USB 裝置,請確認驅動與 Apple Mobile Device Service 是否正常', en: 'Cannot list USB devices, check iTunes/Apple Mobile Device Service' },
-  trust_failed: { zh: 'USB 信任失敗, 請在 iPhone 上點「信任」後再試', en: 'USB trust failed, tap Trust on the iPhone and retry' },
-  remote_pair_failed: { zh: 'RemotePairing 記錄重建失敗, 請以系統管理員身分重啟 GPSController', en: 'RemotePairing record rebuild failed, restart GPSController as Administrator' },
-  device_lost: { zh: '裝置連線中斷(USB 拔除或 Tunnel 死亡),請重新插上 USB 後再操作', en: 'Device connection lost (USB unplugged or tunnel died), please reconnect USB and try again' },
-  max_devices_reached: {
-    zh: '已連接最多 2 台裝置',
-    en: 'Maximum 2 devices connected',
-  },
-  ios_unsupported: {
-    zh: '裝置 iOS 版本過舊,GPSController 僅支援 iOS 16 以上。請升級 iOS 後再試。',
-    en: 'This device runs an unsupported iOS version. GPSController requires iOS 16 or later. Please update and try again.',
-  },
-}
-
 function currentLang(): 'zh' | 'en' {
   try {
     const v = localStorage.getItem(STORAGE_KEYS.lang)
@@ -145,7 +119,15 @@ function formatError(error: unknown, fallback: string): string {
   if (typeof error === 'string') return error
   if (error && typeof error === 'object') {
     const e = error as ApiError
-    if (e.code && ERROR_I18N[e.code]) return ERROR_I18N[e.code][currentLang()]
+    if (e.code) {
+      // Look up `err.<code>` in the central translation table — single
+      // source of truth for both UI strings and backend-error messages.
+      const key = `err.${e.code}` as keyof typeof STRINGS
+      const entry = STRINGS[key] as { zh?: string; en?: string } | undefined
+      if (entry) {
+        return entry[currentLang()] ?? entry.zh ?? entry.en ?? fallback
+      }
+    }
     if (e.message) return e.message
   }
   return fallback
