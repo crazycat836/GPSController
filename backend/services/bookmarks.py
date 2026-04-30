@@ -237,10 +237,16 @@ class BookmarkManager:
         place = self._find_place(place_id)
         if place is None:
             return None
+        updates: dict[str, object] = {}
         if name is not None:
-            place.name = name
+            updates["name"] = name
         if color is not None:
-            place.color = color
+            updates["color"] = color
+        if updates:
+            new_place = place.model_copy(update=updates)
+            idx = self.store.places.index(place)
+            self.store.places[idx] = new_place
+            place = new_place
         self._save()
         return place
 
@@ -252,9 +258,10 @@ class BookmarkManager:
         if self._find_place(place_id) is None:
             return False
 
-        for bm in self.store.bookmarks:
-            if bm.place_id == place_id:
-                bm.place_id = "default"
+        self.store.bookmarks = [
+            bm.model_copy(update={"place_id": "default"}) if bm.place_id == place_id else bm
+            for bm in self.store.bookmarks
+        ]
 
         self.store.places = [p for p in self.store.places if p.id != place_id]
         self._save()
@@ -268,14 +275,16 @@ class BookmarkManager:
         ignored. Returns number of places whose sort_order actually changed."""
         id_to_order = {pid: i for i, pid in enumerate(ordered_ids)}
         changed = 0
+        new_places: list[BookmarkPlace] = []
         for place in self.store.places:
             new_order = id_to_order.get(place.id)
-            if new_order is None:
+            if new_order is None or place.sort_order == new_order:
+                new_places.append(place)
                 continue
-            if place.sort_order != new_order:
-                place.sort_order = new_order
-                changed += 1
+            new_places.append(place.model_copy(update={"sort_order": new_order}))
+            changed += 1
         if changed:
+            self.store.places = new_places
             self._save()
         return changed
 
@@ -308,10 +317,16 @@ class BookmarkManager:
         tag = self._find_tag(tag_id)
         if tag is None:
             return None
+        updates: dict[str, object] = {}
         if name is not None:
-            tag.name = name
+            updates["name"] = name
         if color is not None:
-            tag.color = color
+            updates["color"] = color
+        if updates:
+            new_tag = tag.model_copy(update=updates)
+            idx = self.store.tags.index(tag)
+            self.store.tags[idx] = new_tag
+            tag = new_tag
         self._save()
         return tag
 
@@ -319,9 +334,12 @@ class BookmarkManager:
         """Delete a tag. Also strips it from every bookmark's tags list."""
         if self._find_tag(tag_id) is None:
             return False
-        for bm in self.store.bookmarks:
-            if tag_id in bm.tags:
-                bm.tags = [t for t in bm.tags if t != tag_id]
+        self.store.bookmarks = [
+            bm.model_copy(update={"tags": [t for t in bm.tags if t != tag_id]})
+            if tag_id in bm.tags
+            else bm
+            for bm in self.store.bookmarks
+        ]
         self.store.tags = [t for t in self.store.tags if t.id != tag_id]
         self._save()
         return True
@@ -332,14 +350,16 @@ class BookmarkManager:
     def reorder_tags(self, ordered_ids: list[str]) -> int:
         id_to_order = {tid: i for i, tid in enumerate(ordered_ids)}
         changed = 0
+        new_tags: list[BookmarkTag] = []
         for tag in self.store.tags:
             new_order = id_to_order.get(tag.id)
-            if new_order is None:
+            if new_order is None or tag.sort_order == new_order:
+                new_tags.append(tag)
                 continue
-            if tag.sort_order != new_order:
-                tag.sort_order = new_order
-                changed += 1
+            new_tags.append(tag.model_copy(update={"sort_order": new_order}))
+            changed += 1
         if changed:
+            self.store.tags = new_tags
             self._save()
         return changed
 
@@ -394,6 +414,7 @@ class BookmarkManager:
             "name", "lat", "lng", "address", "place_id", "tags",
             "last_used_at", "country_code", "country",
         }
+        updates: dict[str, object] = {}
         for key, value in kwargs.items():
             if key not in allowed or value is None:
                 continue
@@ -402,7 +423,13 @@ class BookmarkManager:
             if key == "tags":
                 known = {t.id for t in self.store.tags}
                 value = [t for t in value if t in known]  # type: ignore[union-attr]
-            setattr(bm, key, value)
+            updates[key] = value
+
+        if updates:
+            new_bm = bm.model_copy(update=updates)
+            idx = self.store.bookmarks.index(bm)
+            self.store.bookmarks[idx] = new_bm
+            bm = new_bm
 
         self._save()
         return bm
@@ -440,12 +467,16 @@ class BookmarkManager:
 
         moved = 0
         ids_set = set(bookmark_ids)
+        new_bookmarks: list[Bookmark] = []
         for bm in self.store.bookmarks:
             if bm.id in ids_set and bm.place_id != target_place_id:
-                bm.place_id = target_place_id
+                new_bookmarks.append(bm.model_copy(update={"place_id": target_place_id}))
                 moved += 1
+            else:
+                new_bookmarks.append(bm)
 
         if moved:
+            self.store.bookmarks = new_bookmarks
             self._save()
         return moved
 
@@ -467,8 +498,10 @@ class BookmarkManager:
         ids_set = set(bookmark_ids)
 
         changed = 0
+        new_bookmarks: list[Bookmark] = []
         for bm in self.store.bookmarks:
             if bm.id not in ids_set:
+                new_bookmarks.append(bm)
                 continue
             before = list(bm.tags)
             after = [t for t in before if t not in remove_set]
@@ -476,10 +509,13 @@ class BookmarkManager:
                 if t not in after:
                     after.append(t)
             if after != before:
-                bm.tags = after
+                new_bookmarks.append(bm.model_copy(update={"tags": after}))
                 changed += 1
+            else:
+                new_bookmarks.append(bm)
 
         if changed:
+            self.store.bookmarks = new_bookmarks
             self._save()
         return changed
 
@@ -527,11 +563,14 @@ class BookmarkManager:
         for bm in incoming.bookmarks:
             if bm.id in existing_bm_ids:
                 continue
+            updates: dict[str, object] = {
+                "tags": [t for t in bm.tags if t in existing_tag_ids],
+            }
             if bm.place_id not in existing_place_ids:
-                bm.place_id = "default"
-            bm.tags = [t for t in bm.tags if t in existing_tag_ids]
-            self.store.bookmarks.append(bm)
-            existing_bm_ids.add(bm.id)
+                updates["place_id"] = "default"
+            new_bm = bm.model_copy(update=updates)
+            self.store.bookmarks.append(new_bm)
+            existing_bm_ids.add(new_bm.id)
             imported += 1
 
         if imported:
