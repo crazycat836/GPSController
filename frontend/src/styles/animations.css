@@ -27,8 +27,8 @@
   to { opacity: 1; transform: scale(1); transform-origin: top left; }
 }
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(108, 140, 255, 0.2); }
-  50% { box-shadow: 0 0 16px rgba(108, 140, 255, 0.4); }
+  0%, 100% { box-shadow: 0 0 8px rgba(167, 139, 250, 0.2); }
+  50% { box-shadow: 0 0 16px rgba(167, 139, 250, 0.4); }
 }
 @keyframes marker-pop {
   0%   { transform: scale(0); opacity: 0; }

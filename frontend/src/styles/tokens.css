@@ -15,14 +15,15 @@
   --color-surface-hover: #282a31;
 
   /* ── Accent ─────────────────────────────────────────────────
-     Primary blue. Used for active states, focus rings, CTAs.
-     `--color-accent-strong` is the lighter variant required for
-     legible text on accent-dim backgrounds (WCAG AA at small sizes). */
-  --color-accent: #6c8cff;
-  --color-accent-hover: #8aa3ff;
-  --color-accent-strong: #a8bdff;
-  --color-accent-dim: rgba(108, 140, 255, 0.12);
-  --color-accent-glow: rgba(108, 140, 255, 0.25);
+     Primary violet (#a78bfa, Tailwind violet-400). Used for active
+     states, focus rings, CTAs. `--color-accent-strong` is the lighter
+     variant required for legible text on accent-dim backgrounds
+     (WCAG AA at small sizes). */
+  --color-accent: #a78bfa;
+  --color-accent-hover: #b9a3fc;
+  --color-accent-strong: #c4b5fd;
+  --color-accent-dim: rgba(167, 139, 250, 0.12);
+  --color-accent-glow: rgba(167, 139, 250, 0.25);
 
   /* ── Semantic ───────────────────────────────────────────────
      Signal colors for status, feedback, alerts.
@@ -130,7 +131,7 @@
   --color-border: rgba(255, 255, 255, 0.08);
   --color-border-subtle: rgba(255, 255, 255, 0.05);
   --color-border-strong: rgba(255, 255, 255, 0.12);
-  --color-border-focus: rgba(108, 140, 255, 0.4);
+  --color-border-focus: rgba(167, 139, 250, 0.4);
 
   /* ── Overlay ────────────────────────────────────────────────
      Modal backdrops and scrim layers. */
@@ -143,7 +144,7 @@
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
   --shadow-xl: 0 20px 60px rgba(12, 18, 40, 0.65);
-  --shadow-glow: 0 0 24px rgba(108, 140, 255, 0.28);
+  --shadow-glow: 0 0 24px rgba(167, 139, 250, 0.28);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
   /* ── Radius ─────────────────────────────────────────────────

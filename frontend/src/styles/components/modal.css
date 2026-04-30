@@ -18,7 +18,7 @@
 .modal-dialog {
   width: 360px;
   background: rgba(26, 29, 39, 0.96);
-  border: 1px solid rgba(108, 140, 255, 0.25);
+  border: 1px solid rgba(167, 139, 250, 0.25);
   border-radius: var(--radius-md);
   padding: 22px;
   color: var(--color-text-1);

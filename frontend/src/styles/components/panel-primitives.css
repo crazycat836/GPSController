@@ -93,7 +93,7 @@
 }
 .list-row--selected {
   background: var(--color-accent-dim);
-  border-color: rgba(108, 140, 255, 0.25);
+  border-color: rgba(167, 139, 250, 0.25);
 }
 .list-row--selected .list-row-title { color: var(--color-accent-strong); }
 .list-row--disabled {
@@ -228,7 +228,7 @@
 .kebab-btn[aria-expanded="true"] {
   background: var(--color-accent-dim);
   color: var(--color-accent-strong);
-  border-color: rgba(108, 140, 255, 0.25);
+  border-color: rgba(167, 139, 250, 0.25);
 }
 .kebab-btn:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -273,7 +273,7 @@
 .chip-filter-chip[aria-pressed="true"] {
   background: var(--color-accent-dim);
   color: var(--color-accent-strong);
-  border-color: rgba(108, 140, 255, 0.18);
+  border-color: rgba(167, 139, 250, 0.18);
 }
 .chip-filter-chip:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -298,7 +298,7 @@
   line-height: 1.2;
 }
 .chip-filter-chip[aria-pressed="true"] .chip-filter-count {
-  background: rgba(108, 140, 255, 0.2);
+  background: rgba(167, 139, 250, 0.2);
   color: var(--color-accent-strong);
 }
 
@@ -438,7 +438,7 @@
   gap: 8px;
   padding: 8px 12px;
   background: var(--color-accent-dim);
-  border: 1px solid rgba(108, 140, 255, 0.25);
+  border: 1px solid rgba(167, 139, 250, 0.25);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
   font-weight: 500;

@@ -119,8 +119,8 @@ function Chip({ point, index, kind, onRemove, onSelect, removable }: ChipProps) 
       color: 'var(--color-origin-text)',
     },
     accent: {
-      background: 'rgba(108,140,255,0.15)',
-      borderColor: 'rgba(108,140,255,0.35)',
+      background: 'rgba(167, 139, 250,0.15)',
+      borderColor: 'rgba(167, 139, 250,0.35)',
       color: 'var(--color-accent-strong)',
     },
     loop: {
@@ -230,7 +230,7 @@ function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
         'shrink-0 inline-flex items-center gap-1.5 h-[34px] px-3 rounded-[10px]',
         'border-[1.5px] border-dashed border-[var(--color-border-strong)]',
         'text-[var(--color-text-2)] text-[12px] font-medium',
-        'hover:text-[var(--color-accent-strong)] hover:border-[rgba(108,140,255,0.5)] hover:bg-[var(--color-accent-dim)]',
+        'hover:text-[var(--color-accent-strong)] hover:border-[rgba(167, 139, 250,0.5)] hover:bg-[var(--color-accent-dim)]',
         'transition-[color,background,border-color] duration-150',
       ].join(' ')}
     >
@@ -250,7 +250,7 @@ function RandomButton({ onClick, label }: { onClick: () => void; label: string }
         'shrink-0 inline-flex items-center gap-1.5 h-[34px] px-3 rounded-[10px]',
         'border-[1.5px] border-dashed border-[var(--color-border-strong)]',
         'text-[var(--color-text-2)] text-[12px] font-medium',
-        'hover:text-[var(--color-accent-strong)] hover:border-[rgba(108,140,255,0.5)] hover:bg-[var(--color-accent-dim)]',
+        'hover:text-[var(--color-accent-strong)] hover:border-[rgba(167, 139, 250,0.5)] hover:bg-[var(--color-accent-dim)]',
         'transition-[color,background,border-color] duration-150',
       ].join(' ')}
     >

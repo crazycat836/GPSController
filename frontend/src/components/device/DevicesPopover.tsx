@@ -432,16 +432,16 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
   function renderManageView() {
     return (
       <>
-        <div className="flex items-center gap-2 px-3 pt-3 pb-2.5 border-b border-[var(--color-border-subtle)]">
+        <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-[var(--color-border-subtle)]">
           <button
             type="button"
             onClick={() => setView('list')}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-[var(--color-text-2)] hover:bg-white/[0.06] transition-colors"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-accent-strong)] hover:text-[var(--color-accent)] transition-colors"
           >
             <ChevronLeft className="w-3 h-3" />
             {t('device.popover_back')}
           </button>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-3)] ml-1">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-3)]">
             {t('device.popover_manage_title')}
           </span>
         </div>
@@ -536,16 +536,16 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
   function renderAddView() {
     return (
       <>
-        <div className="flex items-center gap-2 px-3 pt-3 pb-2.5 border-b border-[var(--color-border-subtle)]">
+        <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-[var(--color-border-subtle)]">
           <button
             type="button"
             onClick={() => setView('list')}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-[var(--color-text-2)] hover:bg-white/[0.06] transition-colors"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-accent-strong)] hover:text-[var(--color-accent)] transition-colors"
           >
             <ChevronLeft className="w-3 h-3" />
             {t('device.popover_back')}
           </button>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-3)] ml-1">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-3)]">
             {t('device.popover_add_title')}
           </span>
         </div>

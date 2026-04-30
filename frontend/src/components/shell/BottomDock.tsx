@@ -248,7 +248,7 @@ function RoutePoint({ tone, label, coord, placeholder, onBookmark }: RoutePointP
     ? { bg: 'rgba(52,211,153,0.14)', bd: 'rgba(52,211,153,0.25)', fg: '#6ee5b5' }
     : empty
       ? { bg: 'var(--color-surface-ghost)', bd: 'var(--color-border-strong)', fg: 'var(--color-text-3)' }
-      : { bg: 'rgba(108,140,255,0.14)', bd: 'rgba(108,140,255,0.25)', fg: 'var(--color-accent-strong)' }
+      : { bg: 'rgba(167, 139, 250,0.14)', bd: 'rgba(167, 139, 250,0.25)', fg: 'var(--color-accent-strong)' }
 
   return (
     <div

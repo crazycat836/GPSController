@@ -85,7 +85,7 @@
   background: var(--color-accent-dim);
   color: var(--color-accent-strong);
   font-weight: 600;
-  border-color: rgba(108, 140, 255, 0.2);
+  border-color: rgba(167, 139, 250, 0.2);
 }
 
 /* ── Speed slider ── */
@@ -106,7 +106,7 @@
   border-radius: 50%;
   background: var(--color-accent);
   border: 2px solid var(--color-surface-1);
-  box-shadow: 0 0 6px rgba(108, 140, 255, 0.35);
+  box-shadow: 0 0 6px rgba(167, 139, 250, 0.35);
   cursor: grab;
   transition: transform 100ms;
 }
@@ -117,7 +117,7 @@
   border-radius: 50%;
   background: var(--color-accent);
   border: 2px solid var(--color-surface-1);
-  box-shadow: 0 0 6px rgba(108, 140, 255, 0.35);
+  box-shadow: 0 0 6px rgba(167, 139, 250, 0.35);
   cursor: grab;
 }
 .speed-slider::-moz-range-track {
@@ -148,7 +148,7 @@
   background: var(--color-accent-dim);
   color: var(--color-accent-strong);
   font-weight: 600;
-  border-color: rgba(108, 140, 255, 0.2);
+  border-color: rgba(167, 139, 250, 0.2);
 }
 
 .seg-unit {

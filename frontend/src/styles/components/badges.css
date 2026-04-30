@@ -15,7 +15,7 @@
 }
 .status-badge-accent {
   background: var(--color-accent-dim);
-  border: 1px solid rgba(108, 140, 255, 0.4);
+  border: 1px solid rgba(167, 139, 250, 0.4);
   color: var(--color-accent);
 }
 .status-badge-warning {

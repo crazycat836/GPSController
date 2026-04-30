@@ -21,7 +21,7 @@ export const MARKER_HEX = {
 
 /** Primary accent — mirrors `--color-accent`. Used for Leaflet polyline
  *  strokes that bypass CSS. */
-export const ACCENT_HEX = '#6c8cff'
+export const ACCENT_HEX = '#a78bfa'
 
 export type DeviceLetter = (typeof DEVICE_LETTERS)[number]
 

@@ -269,7 +269,7 @@ function AppShell() {
             <div className="surface-popup rounded-2xl px-7 py-5 max-w-[420px] text-center">
               <svg
                 width="32" height="32" viewBox="0 0 24 24" fill="none"
-                stroke="#6c8cff" strokeWidth="2"
+                stroke="#a78bfa" strokeWidth="2"
                 className="animate-spin mx-auto mb-2.5"
               >
                 <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="16" />
