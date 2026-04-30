@@ -5,15 +5,13 @@ import {
   Navigation, Route, Shuffle, Gamepad2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useSimContext, type MoveMode as _MoveMode } from '../../contexts/SimContext'
+import { useSimContext } from '../../contexts/SimContext'
 import { SimMode, MoveMode } from '../../hooks/useSimulation'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT, type StringKey } from '../../i18n'
 import WaypointChain, { type ChainPoint } from '../WaypointChain'
 import { haversineM, polylineDistanceM } from '../../lib/geo'
-
-// Silence the unused _MoveMode import — kept for potential prop typing.
-void (undefined as _MoveMode | undefined)
+import { RADIUS_PRESETS } from '../../lib/constants'
 
 // Speed preset rail. Icons map to design's Walk/Run/Drive glyphs;
 // lucide's Footprints / Rabbit / Car are the closest analogues.
@@ -24,8 +22,6 @@ const SPEED_PRESETS: Array<{ mode: MoveMode; Icon: typeof Footprints; labelKey: 
   { mode: MoveMode.Running, Icon: Rabbit,     labelKey: 'move.running', value: 19.8 },
   { mode: MoveMode.Driving, Icon: Car,        labelKey: 'move.driving', value: 60 },
 ]
-
-const RADIUS_PRESETS = [200, 500, 1000, 2000] as const
 
 // Bottom dock-panel — renders the redesign/Home anatomy verbatim:
 // glass `.dock-panel` with a `panel-body` two-column grid containing

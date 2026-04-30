@@ -1,6 +1,7 @@
 import React from 'react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
+import { RADIUS_PRESETS } from '../../lib/constants'
 import PauseControl from '../PauseControl'
 import SpeedControls from './SpeedControls'
 import ActionButtons from './ActionButtons'
@@ -21,7 +22,7 @@ export default function RandomWalkPanel() {
         </div>
         <div className="seg-row seg-row-flush">
           <div className="flex gap-1 w-full">
-            {[200, 500, 1000, 2000].map(r => (
+            {RADIUS_PRESETS.map(r => (
               <button
                 key={r}
                 onClick={() => setRandomWalkRadius(r)}

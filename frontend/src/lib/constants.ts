@@ -36,6 +36,9 @@ export const DEFAULT_PAUSE = { enabled: true, min: 5, max: 20 } as const
 export const DEFAULT_RANDOM_WALK_RADIUS = 500
 export const DEFAULT_WP_GEN_RADIUS = 300
 
+/** Random-walk radius preset rail (metres). Shared by BottomDock and RandomWalkPanel. */
+export const RADIUS_PRESETS = [200, 500, 1000, 2000] as const
+
 /**
  * Retry backoff for `fetchWithRetry` in `services/api.ts`.
  * Used only when the connection itself fails (e.g. backend not yet up).
