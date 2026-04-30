@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from services.location_service import DeviceLostError
+from context import ctx
 
 from models.schemas import (
     MovementMode,
@@ -43,7 +44,7 @@ async def _engine(udid: str | None = None):
     attempt we just rebuild the engine; if that fails we force a full
     disconnect + reconnect + engine rebuild (covers the common iOS 17+ case
     where the RSD tunnel is alive but the DVT channel has silently gone stale)."""
-    from main import app_state
+    app_state = ctx.app_state
     import logging as _logging
     _log = _logging.getLogger("gpscontroller")
 
@@ -120,7 +121,7 @@ async def _handle_device_lost(exc: Exception) -> "HTTPException":
     DeviceManager, drop the simulation engine, broadcast an explicit
     `device_disconnected` WebSocket event so the frontend can banner it.
     Returns an HTTPException the caller should raise."""
-    from main import app_state
+    app_state = ctx.app_state
     from api.websocket import broadcast
 
     dm = app_state.device_manager
@@ -158,12 +159,12 @@ async def _handle_device_lost(exc: Exception) -> "HTTPException":
 
 
 def _cooldown():
-    from main import app_state
+    app_state = ctx.app_state
     return app_state.cooldown_timer
 
 
 def _coord_fmt():
-    from main import app_state
+    app_state = ctx.app_state
     return app_state.coord_formatter
 
 
@@ -208,7 +209,7 @@ async def teleport(req: TeleportRequest):
     # Group mode (2+ engines): bypass cooldown entirely. The UI also locks the
     # toggle off, but the saved cooldown_enabled value is preserved so single-
     # device mode restores the user's preference automatically.
-    from main import app_state as _app_state
+    _app_state = ctx.app_state
     dual_mode = len(_app_state.simulation_engines) >= 2
 
     # Enforce cooldown server-side: if enabled and currently active,
@@ -428,7 +429,7 @@ async def stop_simulation(udid: str | None = None):
 @router.get("/debug")
 async def debug_info():
     """Debug endpoint to check engine and location service state."""
-    from main import app_state
+    app_state = ctx.app_state
     engine = app_state.simulation_engine
     if engine is None:
         return {"engine": None}
@@ -503,7 +504,7 @@ class _InitialPosRequest(BaseModel):
 
 @router.get("/settings/initial-position", tags=["settings"])
 async def get_initial_position():
-    from main import app_state
+    app_state = ctx.app_state
     pos = app_state._initial_map_position
     return {"position": pos}  # {"position": null} or {"position": {"lat","lng"}}
 
@@ -512,7 +513,7 @@ async def get_initial_position():
 async def set_initial_position(req: _InitialPosRequest):
     """Pass `{lat: null, lng: null}` (or omit) to clear the custom initial
     map center and fall back to the default on next launch."""
-    from main import app_state
+    app_state = ctx.app_state
     if req.lat is None or req.lng is None:
         # Only clear the persisted center; preserve _last_position so the
         # frontend still gets the device's last-known coordinate on relaunch.
@@ -537,5 +538,5 @@ async def get_last_device_position():
     until the user explicitly teleports / navigates (preserves the phone's
     real GPS on connect).
     """
-    from main import app_state
+    app_state = ctx.app_state
     return {"position": app_state._last_position}

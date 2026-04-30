@@ -14,6 +14,8 @@ from models.schemas import (
 )
 from services.geocoding import GeocodingService
 
+from context import ctx
+
 router = APIRouter(prefix="/api/bookmarks", tags=["bookmarks"])
 
 logger = logging.getLogger(__name__)
@@ -29,7 +31,7 @@ class BookmarkListResponse(BaseModel):
 
 
 def _bm():
-    from main import app_state
+    app_state = ctx.app_state
     return app_state.bookmark_manager
 
 

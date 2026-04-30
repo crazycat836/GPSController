@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from config import MAX_DEVICES
+from context import ctx
 from core.wifi_tunnel import TunnelRunner
 from models.schemas import DeviceInfo
 
@@ -50,7 +51,7 @@ def _validate_local_ip(value: str) -> str:
 
 
 def _dm():
-    from main import app_state
+    app_state = ctx.app_state
     return app_state.device_manager
 
 
@@ -88,7 +89,7 @@ class WifiTunnelConnectRequest(BaseModel):
 @router.post("/wifi/tunnel")
 async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
     """Connect to a device via an existing WiFi tunnel (RSD address/port)."""
-    from main import app_state
+    app_state = ctx.app_state
     from core.device_manager import UnsupportedIosVersionError
     dm = _dm()
     # Max MAX_DEVICES devices (group mode). connect_wifi_tunnel may reconnect an
@@ -427,7 +428,7 @@ async def _cleanup_wifi_connections() -> list[str]:
     Broadcasts device_disconnected so the frontend banners/disables context
     menu items immediately instead of waiting for the next failed action.
     Returns the UDIDs that were disconnected."""
-    from main import app_state
+    app_state = ctx.app_state
     dm = _dm()
     udids: list[str] = []
     try:
@@ -569,7 +570,7 @@ async def wifi_tunnel_stop():
     """Stop the WiFi tunnel and clean up any network-based device
     connections that were routed through it."""
     global _tunnel_watchdog_task
-    from main import app_state
+    app_state = ctx.app_state
     dm = _dm()
 
     async with _tunnel.lock:
@@ -638,7 +639,7 @@ async def wifi_tunnel_stop():
 @router.post("/wifi/tunnel/start-and-connect")
 async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
     """Start a WiFi tunnel and immediately connect the device through it."""
-    from main import app_state
+    app_state = ctx.app_state
 
     # Start the tunnel
     tunnel_result = await wifi_tunnel_start(req)
@@ -683,7 +684,7 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
 
 @router.post("/{udid}/connect")
 async def connect_device(udid: str):
-    from main import app_state
+    app_state = ctx.app_state
     from core.device_manager import UnsupportedIosVersionError
     dm = _dm()
     # Max MAX_DEVICES devices (group mode). Allow re-connect of an already-connected udid.
@@ -729,7 +730,7 @@ async def connect_device(udid: str):
 
 @router.delete("/{udid}/connect")
 async def disconnect_device(udid: str):
-    from main import app_state
+    app_state = ctx.app_state
     dm = _dm()
     # Terminate the simulation engine *before* the transport goes away so
     # any running Navigate/Loop/MultiStop/RandomWalk task exits cleanly.

@@ -406,6 +406,8 @@ class AppState:
 
 
 app_state = AppState()
+from context import ctx
+ctx.app_state = app_state
 
 
 # ── Lifespan ─────────────────────────────────────────────

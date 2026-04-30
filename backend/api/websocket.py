@@ -5,6 +5,7 @@ import secrets
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from context import ctx
 from models.schemas import JoystickInput
 
 router = APIRouter(tags=["websocket"])
@@ -36,7 +37,7 @@ async def broadcast(event_type: str, data: dict):
 
 async def _send_initial_state(ws: WebSocket) -> None:
     """Push current position and cooldown to a newly connected client."""
-    from main import app_state
+    app_state = ctx.app_state
     # Current position from any active engine
     for engine in app_state.simulation_engines.values():
         pos = engine.current_position
@@ -105,7 +106,7 @@ async def websocket_endpoint(ws: WebSocket):
 
             if msg_type == "joystick_input":
                 data = msg.get("data", {})
-                from main import app_state
+                app_state = ctx.app_state
                 # Route per-udid if provided; otherwise fan out to all engines.
                 udid = msg.get("udid") or data.get("udid")
                 inp = JoystickInput(
@@ -121,7 +122,7 @@ async def websocket_endpoint(ws: WebSocket):
                         engine.joystick_move(inp)
 
             elif msg_type == "joystick_stop":
-                from main import app_state
+                app_state = ctx.app_state
                 udid = msg.get("udid") or msg.get("data", {}).get("udid")
                 if udid:
                     engine = app_state.get_engine(udid)
