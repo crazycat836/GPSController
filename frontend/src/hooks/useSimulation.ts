@@ -727,7 +727,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       setEta(null)
       return res
     } catch (err: unknown) {
-      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -744,7 +743,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err: unknown) {
-        setError(errorMessage(err))
         throw err
       }
     },
@@ -769,7 +767,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err: unknown) {
-        setError(errorMessage(err))
         throw err
       }
     },
@@ -789,7 +786,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err: unknown) {
-        setError(errorMessage(err))
         throw err
       }
     },
@@ -807,7 +803,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err: unknown) {
-        setError(errorMessage(err))
         throw err
       }
     },
@@ -823,7 +818,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       setStatus((prev) => ({ ...prev, running: true, paused: false }))
       return res
     } catch (err: unknown) {
-      setError(errorMessage(err))
       throw err
     }
   }, [moveMode])
@@ -836,7 +830,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       setStatus((prev) => ({ ...prev, running: false, paused: false }))
       return res
     } catch (err: unknown) {
-      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -848,7 +841,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       setStatus((prev) => ({ ...prev, paused: true }))
       return res
     } catch (err: unknown) {
-      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -860,7 +852,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       setStatus((prev) => ({ ...prev, paused: false }))
       return res
     } catch (err: unknown) {
-      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -885,7 +876,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       setDestination(null)
       return res
     } catch (err: unknown) {
-      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -908,7 +898,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       setEffectiveSpeed(null)
       return res
     } catch (err: unknown) {
-      setError(errorMessage(err))
       throw err
     }
   }, [])
@@ -926,7 +915,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
       return res
     } catch (err: unknown) {
-      setError(errorMessage(err))
       throw err
     }
   }, [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh])
