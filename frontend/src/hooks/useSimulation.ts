@@ -2,217 +2,25 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import * as api from '../services/api'
 import { STORAGE_KEYS } from '../lib/storage-keys'
 import { PRE_SYNC_SETTLE_MS } from '../lib/constants'
-import type { WsMessage } from './useWebSocket'
+import type { LatLng } from './sim/types'
+import {
+  useSimRuntimes,
+  emptyRuntime,
+  type DeviceRuntime,
+  type RuntimesMap,
+} from './sim/useSimRuntimes'
+import {
+  useSimWsDispatcher,
+  type WsSubscribe,
+  type SimErrorCode,
+  type SimulationStatus,
+} from './sim/useSimWsDispatcher'
 
-// ── Typed WS payloads ──────────────────────────────────────────────────
-// `WsMessage.data` is intentionally `unknown` (see useWebSocket.ts: the
-// backend emits ~24 event types and there is no single shape that fits
-// them all). Each per-event interface + parser narrows the payloads this
-// hook actually consumes. Mirrors the discipline in `useDevice.ts`.
-
-interface PositionUpdatePayload {
-  udid?: string
-  lat?: number
-  lng?: number
-  progress?: number
-  eta?: number
-  eta_seconds?: number
-  distance_remaining?: number
-  distance_traveled?: number
-  speed_mps?: number
-}
-
-interface SimulationStatePayload {
-  udid?: string
-  running?: boolean
-  paused?: boolean
-  speed?: number
-  state?: string
-  mode?: SimMode
-  progress?: number
-  eta?: number
-  destination?: LatLng
-  waypoints?: LatLng[]
-  distance_remaining?: number
-  distance_traveled?: number
-}
-
-interface RoutePathPayload {
-  udid?: string
-  coords?: ReadonlyArray<{ lat?: number; lng?: number } | [number, number]>
-}
-
-interface StateChangePayload {
-  udid?: string
-  state?: string
-}
-
-interface WaypointProgressPayload {
-  udid?: string
-  current_index?: number
-  next_index?: number
-  total?: number
-}
-
-interface LapCompletePayload {
-  lap?: number
-  total?: number
-}
-
-interface PauseCountdownPayload {
-  duration_seconds?: number
-}
-
-interface DdiMountMissingPayload {
-  reason?: string
-  stage?: string
-}
-
-interface DeviceConnectedPayload {
-  udid: string
-}
-
-interface DeviceDisconnectedPayload {
-  udid?: string
-}
-
-interface SimulationErrorPayload {
-  message?: string
-}
-
-// ── Type guards ────────────────────────────────────────────────────────
-// Light hand-rolled narrowing: this is internal frontend↔backend traffic,
-// not user-supplied input. `typeof` + `in` is enough.
-
-function asObject(v: unknown): Record<string, unknown> | null {
-  return typeof v === 'object' && v != null ? v as Record<string, unknown> : null
-}
-
-function asString(v: unknown): string | undefined {
-  return typeof v === 'string' ? v : undefined
-}
-
-function asNumber(v: unknown): number | undefined {
-  return typeof v === 'number' ? v : undefined
-}
-
-function asBool(v: unknown): boolean | undefined {
-  return typeof v === 'boolean' ? v : undefined
-}
-
-function parsePositionUpdate(data: unknown): PositionUpdatePayload | null {
-  const o = asObject(data)
-  if (!o) return null
-  return {
-    udid: asString(o.udid),
-    lat: asNumber(o.lat),
-    lng: asNumber(o.lng),
-    progress: asNumber(o.progress),
-    eta: asNumber(o.eta),
-    eta_seconds: asNumber(o.eta_seconds),
-    distance_remaining: asNumber(o.distance_remaining),
-    distance_traveled: asNumber(o.distance_traveled),
-    speed_mps: asNumber(o.speed_mps),
-  }
-}
-
-function parseSimulationState(data: unknown): SimulationStatePayload | null {
-  const o = asObject(data)
-  if (!o) return null
-  const dest = asObject(o.destination)
-  const wps = Array.isArray(o.waypoints) ? o.waypoints : null
-  const mode = asString(o.mode) as SimMode | undefined
-  const destLat = dest ? asNumber(dest.lat) : undefined
-  const destLng = dest ? asNumber(dest.lng) : undefined
-  return {
-    udid: asString(o.udid),
-    running: asBool(o.running),
-    paused: asBool(o.paused),
-    speed: asNumber(o.speed),
-    state: asString(o.state),
-    mode,
-    progress: asNumber(o.progress),
-    eta: asNumber(o.eta),
-    destination: destLat != null && destLng != null ? { lat: destLat, lng: destLng } : undefined,
-    waypoints: wps
-      ? wps.map((p) => {
-          const po = asObject(p) ?? {}
-          return { lat: asNumber(po.lat) ?? 0, lng: asNumber(po.lng) ?? 0 }
-        })
-      : undefined,
-    distance_remaining: asNumber(o.distance_remaining),
-    distance_traveled: asNumber(o.distance_traveled),
-  }
-}
-
-function parseRoutePath(data: unknown): RoutePathPayload | null {
-  const o = asObject(data)
-  if (!o) return null
-  const coords = Array.isArray(o.coords) ? o.coords : undefined
-  return { udid: asString(o.udid), coords: coords as RoutePathPayload['coords'] }
-}
-
-function parseStateChange(data: unknown): StateChangePayload | null {
-  const o = asObject(data)
-  if (!o) return null
-  return { udid: asString(o.udid), state: asString(o.state) }
-}
-
-function parseWaypointProgress(data: unknown): WaypointProgressPayload | null {
-  const o = asObject(data)
-  if (!o) return null
-  return {
-    udid: asString(o.udid),
-    current_index: asNumber(o.current_index),
-    next_index: asNumber(o.next_index),
-    total: asNumber(o.total),
-  }
-}
-
-function parseLapComplete(data: unknown): LapCompletePayload | null {
-  const o = asObject(data)
-  if (!o) return null
-  return { lap: asNumber(o.lap), total: asNumber(o.total) }
-}
-
-function parsePauseCountdown(data: unknown): PauseCountdownPayload | null {
-  const o = asObject(data)
-  if (!o) return null
-  return { duration_seconds: asNumber(o.duration_seconds) }
-}
-
-function parseDdiMountMissing(data: unknown): DdiMountMissingPayload {
-  const o = asObject(data) ?? {}
-  return { reason: asString(o.reason), stage: asString(o.stage) }
-}
-
-function parseDeviceConnected(data: unknown): DeviceConnectedPayload | null {
-  const o = asObject(data)
-  if (!o) return null
-  const udid = asString(o.udid)
-  if (!udid) return null
-  return { udid }
-}
-
-function parseDeviceDisconnected(data: unknown): DeviceDisconnectedPayload {
-  const o = asObject(data) ?? {}
-  return { udid: asString(o.udid) }
-}
-
-function parseSimulationError(data: unknown): SimulationErrorPayload {
-  const o = asObject(data) ?? {}
-  return { message: asString(o.message) }
-}
-
-function extractUdid(data: unknown): string | undefined {
-  const o = asObject(data)
-  return o ? asString(o.udid) : undefined
-}
-
-// ── Error codes ────────────────────────────────────────────────────────
-// Localised at the consumer (SimContext owns `useT`); the hook itself
-// emits stable codes so it doesn't need to depend on the i18n context.
-export type SimErrorCode = 'tunnel_lost' | 'simulation_error' | 'no_device_connected'
+// Re-export the public types so existing callers (DeviceChip, EtaBar,
+// SimContext, App.tsx, etc.) keep importing from `'../hooks/useSimulation'`
+// without churn.
+export type { LatLng, DeviceRuntime, RuntimesMap, WsSubscribe, SimErrorCode, SimulationStatus }
+export { emptyRuntime }
 
 export enum SimMode {
   Teleport = 'teleport',
@@ -248,61 +56,6 @@ export function stateToMode(state: string): SimMode | null {
     case 'random_walk': return SimMode.RandomWalk
     case 'joystick': return SimMode.Joystick
     default: return null
-  }
-}
-
-export interface LatLng {
-  lat: number
-  lng: number
-}
-
-export interface SimulationStatus {
-  running: boolean
-  paused: boolean
-  speed: number
-  state?: string
-  distance_remaining?: number
-  distance_traveled?: number
-}
-
-export type WsSubscribe = (fn: (m: WsMessage) => void) => () => void
-
-// ── Per-device runtime state (group mode) ──────────────────────────────
-export interface DeviceRuntime {
-  udid: string
-  state: string
-  currentPos: LatLng | null
-  destination: LatLng | null
-  routePath: LatLng[]
-  progress: number
-  eta: number
-  distanceRemaining: number
-  distanceTraveled: number
-  waypointIndex: number | null
-  currentSpeedKmh: number
-  error: string | null
-  lapCount: number
-  cooldown: number
-}
-
-export type RuntimesMap = Record<string, DeviceRuntime>
-
-function emptyRuntime(udid: string): DeviceRuntime {
-  return {
-    udid,
-    state: 'idle',
-    currentPos: null,
-    destination: null,
-    routePath: [],
-    progress: 0,
-    eta: 0,
-    distanceRemaining: 0,
-    distanceTraveled: 0,
-    waypointIndex: null,
-    currentSpeedKmh: 0,
-    error: null,
-    lapCount: 0,
-    cooldown: 0,
   }
 }
 
@@ -437,14 +190,9 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     { mode: MoveMode; kmh: number | null; min: number | null; max: number | null } | null
   >(null)
 
-  // Per-device runtime map (group mode). Populated from WS events tagged with udid.
-  const [runtimes, setRuntimes] = useState<RuntimesMap>({})
-  const updateRuntime = useCallback((udid: string, patch: Partial<DeviceRuntime>) => {
-    setRuntimes((prev) => {
-      const cur = prev[udid] ?? emptyRuntime(udid)
-      return { ...prev, [udid]: { ...cur, ...patch } }
-    })
-  }, [])
+  // Per-device runtime map (group mode). Populated from WS events tagged
+  // with udid via the dispatcher hook below.
+  const { runtimes, setRuntimes, updateRuntime } = useSimRuntimes()
 
   // Tick the pause countdown at 1 Hz
   useEffect(() => {
@@ -462,238 +210,34 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     return () => clearInterval(id)
   }, [pauseEndAt])
 
-  // Process incoming WS messages via subscribe callback. The old
-  // useState-based approach dropped messages when two arrived in the
-  // same React tick; see useWebSocket.ts for details.
-  useEffect(() => {
-    if (!subscribe) return
-    return subscribe((wsMessage) => {
-    // Coerce p[0] / p[1] indexes only when the entry is a tuple — typed
-    // helper so we don't sprinkle `p as any` across two case branches.
-    const coordOf = (p: { lat?: number; lng?: number } | [number, number] | unknown): LatLng => {
-      if (Array.isArray(p)) return { lat: p[0] as number, lng: p[1] as number }
-      const po = asObject(p) ?? {}
-      return { lat: asNumber(po.lat) ?? 0, lng: asNumber(po.lng) ?? 0 }
-    }
-
-    // ── Group mode: mirror per-device state into `runtimes` map ────────
-    const udid = extractUdid(wsMessage.data)
-    if (udid) {
-      switch (wsMessage.type) {
-        case 'position_update': {
-          const d = parsePositionUpdate(wsMessage.data)
-          if (!d) break
-          // Only include a key when the incoming payload carries it,
-          // so a tick without `eta` doesn't wipe the cached value.
-          const patch: Partial<DeviceRuntime> = {}
-          if (d.lat != null && d.lng != null) {
-            patch.currentPos = { lat: d.lat, lng: d.lng }
-          }
-          if (d.progress != null) patch.progress = d.progress
-          const etaVal = d.eta_seconds ?? d.eta
-          if (etaVal != null) patch.eta = etaVal
-          if (d.distance_remaining != null) patch.distanceRemaining = d.distance_remaining
-          if (d.distance_traveled != null) patch.distanceTraveled = d.distance_traveled
-          if (d.speed_mps != null) patch.currentSpeedKmh = d.speed_mps * 3.6
-          if (Object.keys(patch).length > 0) updateRuntime(udid, patch)
-          break
-        }
-        case 'route_path': {
-          const d = parseRoutePath(wsMessage.data)
-          if (d?.coords) {
-            updateRuntime(udid, { routePath: d.coords.map(coordOf) })
-          }
-          break
-        }
-        case 'state_change': {
-          const d = parseStateChange(wsMessage.data)
-          if (d?.state) {
-            updateRuntime(udid, {
-              state: d.state,
-              ...(d.state === 'idle' || d.state === 'disconnected' ? { routePath: [] } : {}),
-            })
-          }
-          break
-        }
-        case 'device_connected': {
-          setRuntimes((prev) => prev[udid] ? prev : { ...prev, [udid]: emptyRuntime(udid) })
-          // A device reconnecting implicitly resolves any prior connection-
-          // loss banner (watchdog auto-connect now broadcasts `device_connected`
-          // rather than `device_reconnected`; the legacy case still handles
-          // the latter).
-          setError(null)
-          break
-        }
-        case 'device_disconnected': {
-          updateRuntime(udid, { state: 'disconnected' })
-          break
-        }
-        case 'simulation_complete': {
-          updateRuntime(udid, { progress: 1, state: 'idle' })
-          break
-        }
-        case 'waypoint_progress': {
-          const d = parseWaypointProgress(wsMessage.data)
-          if (d?.current_index != null) {
-            updateRuntime(udid, { waypointIndex: d.current_index })
-          }
-          break
-        }
-      }
-    }
-    switch (wsMessage.type) {
-      case 'position_update': {
-        const d = parsePositionUpdate(wsMessage.data)
-        if (!d) break
-        if (d.lat != null && d.lng != null) {
-          setCurrentPosition({ lat: d.lat, lng: d.lng })
-          // Live position means the backend engine is now in sync with the UI.
-          setBackendPositionSynced(true)
-        }
-        if (d.progress != null) setProgress(d.progress)
-        const etaVal = d.eta_seconds ?? d.eta
-        if (etaVal != null) setEta(etaVal)
-        if (d.distance_remaining != null || d.distance_traveled != null) {
-          setStatus((prev) => ({
-            ...prev,
-            ...(d.distance_remaining != null ? { distance_remaining: d.distance_remaining } : {}),
-            ...(d.distance_traveled != null ? { distance_traveled: d.distance_traveled } : {}),
-          }))
-        }
-        break
-      }
-      case 'simulation_state': {
-        const d = parseSimulationState(wsMessage.data)
-        if (!d) break
-        setStatus({
-          running: !!d.running,
-          paused: !!d.paused,
-          speed: d.speed ?? 0,
-          state: d.state,
-          distance_remaining: d.distance_remaining,
-          distance_traveled: d.distance_traveled,
-        })
-        if (d.mode) _setMode(d.mode)
-        if (d.progress != null) setProgress(d.progress)
-        if (d.eta != null) setEta(d.eta)
-        if (d.destination) setDestination(d.destination)
-        if (d.waypoints) setWaypoints(d.waypoints)
-        break
-      }
-      case 'simulation_complete': {
-        setStatus((prev) => ({ ...prev, running: false, paused: false }))
-        setProgress(1)
-        setEta(null)
-        setPauseEndAt(null)
-        setWaypointProgress(null)
-        setLapProgress(null)
-        setDestination(null)
-        setRoutePath([])
-        break
-      }
-      case 'waypoint_progress': {
-        const d = parseWaypointProgress(wsMessage.data)
-        if (d?.current_index != null) {
-          setWaypointProgress({
-            current: d.current_index,
-            next: d.next_index ?? d.current_index + 1,
-            total: d.total ?? 0,
-          })
-        }
-        break
-      }
-      case 'lap_complete': {
-        const d = parseLapComplete(wsMessage.data)
-        if (d?.lap != null) {
-          setLapProgress({
-            current: d.lap,
-            total: d.total ?? null,
-          })
-        }
-        break
-      }
-      case 'ddi_mounting': {
-        setDdiMounting(true)
-        break
-      }
-      case 'ddi_mounted':
-      case 'ddi_mount_failed': {
-        setDdiMounting(false)
-        break
-      }
-      case 'ddi_mount_missing': {
-        // Auto-mount failed. The SimContext observer will surface a
-        // single hint toast so the user knows what to do next.
-        setDdiMounting(false)
-        const d = parseDdiMountMissing(wsMessage.data)
-        setDdiMissing({
-          reason: d.reason ?? 'unknown',
-          stage: d.stage,
-          ts: Date.now(),
-        })
-        break
-      }
-      case 'tunnel_lost': {
-        setError(localizeError('tunnel_lost'))
-        break
-      }
-      case 'device_disconnected': {
-        // User-facing notice is a toast fired by App.tsx off device.lostUdids
-        // (canonical Toast per DESIGN.md §4). The legacy ErrorBanner path was
-        // removed: banner isn't in DESIGN.md and DeviceChip's "已斷線" pill
-        // already persists the state until reconnect.
-        setStatus((prev) => ({ ...prev, running: false, paused: false }))
-        break
-      }
-      case 'device_reconnected': {
-        // Auto-reconnected by the usbmux watchdog after a re-plug, clear
-        // the banner; the success is already visible via DeviceStatus.
-        setError(null)
-        break
-      }
-      case 'pause_countdown':
-      case 'random_walk_pause': {
-        const d = parsePauseCountdown(wsMessage.data)
-        const dur = d?.duration_seconds
-        if (typeof dur === 'number' && dur > 0) {
-          setPauseEndAt(Date.now() + dur * 1000)
-        }
-        break
-      }
-      case 'pause_countdown_end':
-      case 'random_walk_pause_end': {
-        setPauseEndAt(null)
-        break
-      }
-      case 'route_path': {
-        const d = parseRoutePath(wsMessage.data)
-        if (d?.coords) {
-          setRoutePath(d.coords.map(coordOf))
-        }
-        break
-      }
-      case 'state_change': {
-        const st = parseStateChange(wsMessage.data)?.state
-        if (st === 'idle' || st === 'disconnected') {
-          setStatus((prev) => ({ ...prev, running: false, paused: false, state: st }))
-          setRoutePath([])
-          setDestination(null)
-          setEta(null)
-        } else if (st === 'paused') {
-          setStatus((prev) => ({ ...prev, paused: true, state: st }))
-        } else if (st) {
-          setStatus((prev) => ({ ...prev, running: true, paused: false, state: st }))
-        }
-        break
-      }
-      case 'simulation_error': {
-        const d = parseSimulationError(wsMessage.data)
-        setError(d.message ?? localizeError('simulation_error'))
-        break
-      }
-    }
-    })
-  }, [subscribe, updateRuntime, localizeError])
+  // Wire incoming WS messages into the legacy single-device state and the
+  // per-device runtimes map. The dispatcher itself owns no state — it just
+  // routes events to the setters bundled below. The bundle is rebuilt
+  // each render but the dispatcher captures it via a ref so its subscribe
+  // effect doesn't tear down on every parent re-render.
+  //
+  // setMode: dispatcher passes a backend-side string (lowercase mode name)
+  // through; cast to SimMode here since the enum values match the strings.
+  useSimWsDispatcher(subscribe, {
+    setRuntimes,
+    updateRuntime,
+    setCurrentPosition,
+    setBackendPositionSynced,
+    setProgress,
+    setEta,
+    setStatus,
+    setMode: (next) => _setMode(next as SimMode),
+    setDestination,
+    setWaypoints,
+    setRoutePath,
+    setPauseEndAt,
+    setWaypointProgress,
+    setLapProgress,
+    setDdiMounting,
+    setDdiMissing,
+    setError,
+    localizeError,
+  })
 
   const clearError = useCallback(() => setError(null), [])
 
