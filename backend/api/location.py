@@ -1,3 +1,6 @@
+import logging
+import traceback
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -19,7 +22,19 @@ from models.schemas import (
     CoordinateFormat,
 )
 
+logger = logging.getLogger("gpscontroller")
+
 router = APIRouter(prefix="/api/location", tags=["location"])
+
+
+def _http_err(status_code: int, code: str, message: str) -> HTTPException:
+    """Build an HTTPException with the project's standard {code, message}
+    detail envelope. Use this instead of leaking ``str(e)`` into responses —
+    internal error text belongs in logs (logger.exception), not on the wire."""
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": code, "message": message},
+    )
 
 
 async def _engine(udid: str | None = None):
@@ -107,23 +122,22 @@ async def _handle_device_lost(exc: Exception) -> "HTTPException":
     Returns an HTTPException the caller should raise."""
     from main import app_state
     from api.websocket import broadcast
-    import logging as _logging
-    _log = _logging.getLogger("gpscontroller")
 
     dm = app_state.device_manager
     lost_udids = dm.connected_udids
     for udid in lost_udids:
         try:
             await dm.disconnect(udid)
-            _log.info("device_lost cleanup: disconnected %s", udid)
+            logger.info("device_lost cleanup: disconnected %s", udid)
         except Exception:
-            _log.exception("device_lost cleanup: disconnect failed for %s", udid)
+            logger.exception("device_lost cleanup: disconnect failed for %s", udid)
         # Only remove this udid's engine; the legacy `= None` setter clears
-        # every engine (bad for dual mode).
-        app_state.simulation_engines.pop(udid, None)
-        if app_state._primary_udid == udid:
-            remaining = next(iter(app_state.simulation_engines.keys()), None)
-            app_state._primary_udid = remaining
+        # every engine (bad for dual mode). terminate_engine cancels any
+        # in-flight task, pops the registry slot, and rotates _primary_udid.
+        try:
+            await app_state.terminate_engine(udid)
+        except Exception:
+            logger.exception("device_lost cleanup: terminate_engine failed for %s", udid)
 
     try:
         await broadcast("device_disconnected", {
@@ -132,7 +146,7 @@ async def _handle_device_lost(exc: Exception) -> "HTTPException":
             "error": str(exc),
         })
     except Exception:
-        _log.exception("Failed to broadcast device_disconnected")
+        logger.exception("Failed to broadcast device_disconnected")
 
     return HTTPException(
         status_code=503,
@@ -217,8 +231,7 @@ async def teleport(req: TeleportRequest):
     except DeviceLostError as e:
         raise (await _handle_device_lost(e))
     except Exception as e:
-        import traceback, logging
-        logging.getLogger("gpscontroller").error("Teleport failed:\n%s", traceback.format_exc())
+        logger.exception("Teleport failed")
         # Also inspect the cause — nested DeviceLostError (e.g. re-raised from
         # the simulation engine retry loop) should still trigger cleanup.
         cause = e
@@ -226,7 +239,7 @@ async def teleport(req: TeleportRequest):
             if isinstance(cause, DeviceLostError):
                 raise (await _handle_device_lost(cause))
             cause = cause.__cause__
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _http_err(500, "teleport_failed", "跳點失敗,請查看 ~/.gpscontroller/logs/backend.log")
 
     # Start cooldown if enabled and there was a previous position.
     # Skipped in dual mode for the same reason the check above is skipped.
@@ -359,8 +372,9 @@ async def joystick_start(req: JoystickStartRequest):
         await _guard(engine.joystick_start(req.mode))
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("joystick_start failed")
+        raise _http_err(500, "joystick_start_failed", "搖桿啟動失敗,請查看 ~/.gpscontroller/logs/backend.log")
     return {"status": "started", "mode": req.mode}
 
 
@@ -500,17 +514,17 @@ async def set_initial_position(req: _InitialPosRequest):
     map center and fall back to the default on next launch."""
     from main import app_state
     if req.lat is None or req.lng is None:
-        app_state._initial_map_position = None
+        # Only clear the persisted center; preserve _last_position so the
+        # frontend still gets the device's last-known coordinate on relaunch.
+        new_pos: dict | None = None
     else:
         from utils.geo import validate_coords
         if not validate_coords(req.lat, req.lng):
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "invalid_coord", "message": "lat must be in [-90, 90], lng in [-180, 180]"},
-            )
-        app_state._initial_map_position = {"lat": float(req.lat), "lng": float(req.lng)}
+            raise _http_err(400, "invalid_coord", "lat must be in [-90, 90], lng in [-180, 180]")
+        new_pos = {"lat": float(req.lat), "lng": float(req.lng)}
+    app_state.set_initial_position(new_pos)
     app_state.save_settings()
-    return {"position": app_state._initial_map_position}
+    return {"position": new_pos}
 
 
 @router.get("/last-device-position", tags=["settings"])
