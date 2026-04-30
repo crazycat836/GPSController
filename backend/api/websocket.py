@@ -134,6 +134,16 @@ async def websocket_endpoint(ws: WebSocket):
 
     except WebSocketDisconnect:
         pass
+    except RuntimeError as e:
+        # Starlette raises "WebSocket is not connected" instead of
+        # WebSocketDisconnect when the client cuts the TCP stream
+        # mid-frame (page reload, hot-restart, abrupt close). Treat
+        # as a normal disconnect so it doesn't pollute the error log.
+        msg = str(e)
+        if "not connected" in msg or 'call "accept"' in msg:
+            logger.debug("WebSocket disconnected mid-frame: %s", e)
+        else:
+            logger.error("WebSocket runtime error: %s", e)
     except Exception as e:
         logger.error("WebSocket error: %s", e)
     finally:
