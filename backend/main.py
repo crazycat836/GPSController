@@ -53,10 +53,10 @@ class _ColorFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         color = self._COLORS.get(record.levelno, "")
-        # Pad to a fixed width BEFORE wrapping in ANSI so visual columns
-        # align (ANSI escape chars don't print but would otherwise count
-        # toward `%-7s` padding and offset the layout).
-        padded = f"{record.levelname:<7s}"
+        # Match uvicorn's `levelprefix` shape: append `:` and pad to 9
+        # chars (e.g. "INFO:    ", "ERROR:   "). Padding happens BEFORE
+        # the ANSI wrap so the escape codes don't count toward width.
+        padded = f"{record.levelname}:".ljust(9)
         record.levelname = f"{color}{padded}{self._RESET}"
         return super().format(record)
 
