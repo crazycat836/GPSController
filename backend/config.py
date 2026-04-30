@@ -97,3 +97,8 @@ DEFAULT_LOCATION = {"lat": 25.0375, "lng": 121.5637}
 # 0.0.0.0 lets any LAN peer drive the simulator without authentication.
 API_HOST = "127.0.0.1"
 API_PORT = 8777
+
+# Group / dual-device cap. Auto-connect, manual /devices/connect, and the
+# usbmux watchdog all enforce this ceiling so the simulation engine pool
+# never exceeds the supported size.
+MAX_DEVICES = 2

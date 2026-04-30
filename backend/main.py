@@ -7,18 +7,22 @@ import time
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from config import API_HOST, API_PORT, SETTINGS_FILE, TOKEN_FILE, DEFAULT_LOCATION
+from config import API_HOST, API_PORT, SETTINGS_FILE, TOKEN_FILE, DEFAULT_LOCATION, MAX_DEVICES
 from core.device_manager import DeviceManager
 from services.cooldown import CooldownTimer
 from services.bookmarks import BookmarkManager
 from services.coord_format import CoordinateFormatter
 from version import __version__
+
+if TYPE_CHECKING:
+    from core.simulation_engine import SimulationEngine
 
 # Migrate legacy ~/.locwarp → ~/.gpscontroller if needed
 _old_data_dir = Path.home() / ".locwarp"
@@ -123,8 +127,9 @@ class AppState:
         # `simulation_engine` attribute still returns the most-recently-
         # created engine for single-device call sites that have not yet
         # been refactored.
-        self.simulation_engines: dict = {}
+        self.simulation_engines: dict[str, "SimulationEngine"] = {}
         self._primary_udid: str | None = None
+        # deferred to break api↔main circular import
         from api.websocket import broadcast
         self.cooldown_timer = CooldownTimer(broadcast=broadcast)
         self.bookmark_manager = BookmarkManager()
@@ -182,6 +187,15 @@ class AppState:
         if now - self._last_save_time >= self._save_interval:
             self._last_save_time = now
             self.save_settings()
+
+    def set_initial_position(self, position: dict | None) -> None:
+        """Set the persisted initial map center ({"lat","lng"} or None)."""
+        self._initial_map_position = position
+
+    def clear_position_settings(self) -> None:
+        """Clear both the initial map center and the last-known device position."""
+        self._initial_map_position = None
+        self._last_position = None
 
     @property
     def simulation_engine(self):
@@ -327,7 +341,10 @@ class AppState:
                         "mode": snapshot.mode,
                     })
                 except Exception:
-                    pass
+                    logger.debug(
+                        "dual_sync_start broadcast failed for %s",
+                        new_udid, exc_info=True,
+                    )
 
                 if snapshot.mode == "navigate" and snapshot.destination:
                     await new_engine.navigate(
@@ -478,11 +495,10 @@ async def _usbmux_presence_watchdog():
                     logger.exception("watchdog: broadcast (disconnected) failed")
                 continue  # skip appearance logic this tick
 
-            # --- Appearance (auto-connect up to 2 devices, group mode) ---
+            # --- Appearance (auto-connect up to MAX_DEVICES, group mode) ---
             # Auto-connect any USB device not yet connected, up to the dual-
-            # device cap. The user environment is assumed to only ever have
-            # their own iPhones plugged in.
-            MAX_DEVICES = 2
+            # device cap (config.MAX_DEVICES). The user environment is assumed
+            # to only ever have their own iPhones plugged in.
             new_udids = present_usb - connected
             if not new_udids or len(connected) >= MAX_DEVICES:
                 continue
