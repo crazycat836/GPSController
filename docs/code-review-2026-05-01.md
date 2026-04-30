@@ -9,14 +9,28 @@
 
 ---
 
+## Status
+
+> **v0.14.1 (2026-05-01)** — released [v0.14.1](https://github.com/crazycat836/GPSController/releases/tag/v0.14.1). 5 HIGH items fully resolved + 1 partial. 17 HIGH items remain outstanding. Fixed items inline below are marked **[DONE v0.14.1]**; partial progress is marked **[PARTIAL v0.14.1]**.
+>
+> **Remaining HIGH items by category:**
+> - Architecture / God modules: 3 outstanding (oversize components, `wifi_tunnel.py`, backend movement loops)
+> - Bugs / correctness: 7 outstanding (DevicesPopover ×2, useDevice ordering, MapContextMenu ×2, wifi_tunnel watchdog race, setCooldownEnabled StrictMode)
+> - Security: 4 outstanding (`noopener`, import body validation, subnet semaphore, `forget_device` partial-success)
+> - Error handling: 3 outstanding (silent excepts ×37, `LegacyLocationService.clear`, GPX UTF-8)
+> - Auth / token: 2 outstanding (401 invalidation, export-URL token)
+
+---
+
 ## HIGH Priority
 
 ### Architecture / God modules
 
-- **[HIGH] Architecture — `useSimulation.ts` is a 1126-line god hook**
+- **[PARTIAL v0.14.1] [HIGH] Architecture — `useSimulation.ts` is a 1126-line god hook**
   - File: `frontend/src/hooks/useSimulation.ts:1-1126`
   - Bundles seven concerns: WS dispatch, per-device runtimes, group fan-out, single-device actions, pause persistence, straight-line toggle, error translator. Returns 50+ values; consumers re-render on every WS tick.
   - Fix: split into `useSimWsDispatcher`, `useSimRuntimes`, `useSimGroupFanout`, `useSimSingle`, `usePauseSettings`, `useStraightLineToggle`, `useSimErrorTranslator`. `useSimulation` becomes a thin aggregator.
+  - **v0.14.1**: extracted `useSimWsDispatcher` + `useSimRuntimes` + `usePauseSettings` + `useStraightLineToggle` to `hooks/sim/`. File now 656 lines (down from 1134). `useSimGroupFanout` / `useSimSingle` deferred — would funnel 30+ setters through a bundle pattern without reducing complexity.
 
 - **[HIGH] Architecture — `BottomDock.tsx` (689), `BookmarksPanel.tsx` (886), `DevicesPopover.tsx` (735), `SimContext.tsx` (670), `MapView.tsx` (568), `useDevice.ts` (556) all approach or exceed the 800-line cap**
   - Files listed above
@@ -52,10 +66,11 @@
   - `setDevices(prev => [...prev.filter(d => d.udid !== info.udid), info])` always appends — known devices jump to the end whenever they re-arrive via WS.
   - Fix: `findIndex` then in-place replace; append only when not found.
 
-- **[HIGH] Optimistic state without rollback**
+- **[DONE v0.14.1] [HIGH] Optimistic state without rollback**
   - File: `frontend/src/hooks/useSimulation.ts:809-853` (`pause`/`resume`/`joystickStart`/`joystickStop`); same shape in `navigate`/`startLoop`/`multiStop`/`randomWalk` (lines 730-805).
   - `setStatus` runs before `await api.*()`; failed call leaves UI inconsistent with backend.
   - Fix: only update state after successful await, or revert in `catch`.
+  - **v0.14.1**: `navigate` / `startLoop` / `multiStop` / `randomWalk` / `joystickStart` capture pre-call mode via `modeRef.current` and revert on rejection; `pause`/`resume`/`joystickStop` were already post-await (no fix needed).
 
 - **[HIGH] Click handler installed before menu paints**
   - File: `frontend/src/components/MapContextMenu.tsx:75`
@@ -72,15 +87,17 @@
   - After 5s sleep, the watchdog re-acquires `_tunnel.lock` and checks `_tunnel.task is task`. If `wifi_tunnel_stop()` has run and a fresh `wifi_tunnel_start()` is mid-flight, `_tunnel.task` could be transiently `None` and the watchdog will tear down healthy resources.
   - Fix: track tunnel generation (monotonic counter) and bail when generation changed.
 
-- **[HIGH] `apply_speed` mutates engine without lock**
+- **[DONE v0.14.1] [HIGH] `apply_speed` mutates engine without lock**
   - File: `backend/core/simulation_engine.py:552-578`
   - Concurrent `stop()` (which clears `_active_route_coords` in `core/movement_loop.py:289-291`) can race with `apply_speed`'s write to `_pending_speed_profile` / `_joystick.speed_profile`.
   - Fix: serialise behind a dedicated `asyncio.Lock` on the engine and re-check `state` after acquire.
+  - **v0.14.1**: `apply_speed` is now async, holds `_apply_speed_lock`, and re-reads `state` + `_active_route_coords` after acquire.
 
-- **[HIGH] `BookmarkManager` mutates shared state without locks**
+- **[DONE v0.14.1] [HIGH] `BookmarkManager` mutates shared state without locks**
   - File: `backend/services/bookmarks.py` (entire class)
   - `create_*`, `update_*`, `delete_*`, `reorder_*`, `import_json` all mutate `self.store.places / .tags / .bookmarks` and call `_save()` without serialisation. Concurrent `POST /api/bookmarks` requests can interleave list mutations and the last-writer-wins JSON dump.
   - Fix: an `asyncio.Lock` inside `BookmarkManager` covering every mutator + `_save()`.
+  - **v0.14.1**: 16 mutators converted to async + wrapped in `async with self._lock`. Read-only methods stay sync.
 
 - **[HIGH] `setCooldownEnabled` rollback double-toggles in StrictMode**
   - File: `frontend/src/contexts/SimContext.tsx:301`
@@ -126,15 +143,17 @@
   - Real-world devices export UTF-16 / latin-1 GPX. Current behaviour: 500 with raw decode error on the wire.
   - Fix: try `utf-8` then fall back to `latin-1`, or raise a structured `{"code": "gpx_decode_failed"}` 400.
 
-- **[HIGH] `try { … } catch (err) { throw err }` boilerplate**
+- **[DONE v0.14.1] [HIGH] `try { … } catch (err) { throw err }` boilerplate**
   - File: `frontend/src/hooks/useSimulation.ts:711-901` (12 occurrences in action callbacks)
   - The catch is dead — re-throws unchanged. Adds noise without behaviour.
   - Fix: delete the try/catch; let the await reject naturally.
+  - **v0.14.1**: all 12 wrappers removed.
 
-- **[HIGH] `Promise.allSettled` wrapped in unreachable try/catch**
+- **[DONE v0.14.1] [HIGH] `Promise.allSettled` wrapped in unreachable try/catch**
   - File: `frontend/src/hooks/useSimulation.ts:975` (`preSyncStart`)
   - `allSettled` never rejects, so the catch is dead. Failed pre-sync teleports proceed silently.
   - Fix: inspect results and bail/log on rejected entries; remove the dead try/catch.
+  - **v0.14.1**: dead catch removed; rejected results now dev-logged via `console.warn` (gated by `import.meta.env.DEV`).
 
 ### Auth / token edge cases
 
@@ -170,10 +189,11 @@
   - `frontend/src/components/library/BookmarksPanel.tsx:210`, `frontend/src/components/MapContextMenu.tsx:252`
   - Fix: `frontend/src/lib/clipboard.ts`.
 
-- **[MEDIUM] Two parallel translation tables**
+- **[DONE v0.14.1] [MEDIUM] Two parallel translation tables**
   - `frontend/src/services/api.ts:84-107` (`ERROR_I18N`) vs `frontend/src/i18n/strings.ts`
   - Translators must keep both in sync; missing keys don't fail typecheck.
   - Fix: move every `ERROR_I18N` entry into `i18n/strings.ts` under an `err.*` namespace, pass `t` into `formatError`.
+  - **v0.14.1**: `ERROR_I18N` removed; 7 missing keys added under `err.*`. `formatError` looks up `STRINGS['err.<code>']`.
 
 - **[MEDIUM] Default pause object hardcoded in three places**
   - `frontend/src/hooks/useSimulation.ts:387,394,396,406` (`{ enabled: true, min: 5, max: 20 }`), `frontend/src/services/api.ts:218-219`, plus `frontend/src/lib/constants.ts:35` (which already exports `DEFAULT_PAUSE` but is unused)
@@ -193,10 +213,11 @@
 
 ### Response format inconsistency
 
-- **[MEDIUM] No consistent envelope across the API surface**
+- **[DONE v0.14.1] [MEDIUM] No consistent envelope across the API surface**
   - Mix of `{"status": "ok|started|stopped|deleted|forgotten|connected|disconnected|opened|already_running|not_running|dismissed"}`, raw model objects, counter-only `{"moved": N, "deleted": N}`, and `{"detail": {"code","message"}}` for errors.
   - Examples: `backend/api/location.py:201, 250, 324, 338, 386`; `backend/api/bookmarks.py:114, 128, 135, 244`; `backend/api/route.py:83`; `backend/api/device.py:71, 98, 118, 195, 269`.
   - Fix: standardise on `{success, data, error, meta}` envelope (per `~/.claude/rules/common/patterns.md`).
+  - **v0.14.1**: `{success, data, error, meta?}` envelope adopted via `EnvelopeJSONResponse` (default response class) + global `HTTPException` / `RequestValidationError` handlers. File-download endpoints bypass via raw `Response(bytes)`. Frontend `request<T>()` unwraps `body.data`.
 
 ### Hardcoded user-facing strings (i18n leakage)
 
