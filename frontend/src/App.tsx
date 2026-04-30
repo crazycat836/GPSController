@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type L from 'leaflet'
 import { useT } from './i18n'
-import { SimMode } from './hooks/useSimulation'
+import { SimMode, type LatLng } from './hooks/useSimulation'
 import { STORAGE_KEYS } from './lib/storage-keys'
 import { haversineM, polylineDistanceM } from './lib/geo'
 
@@ -308,7 +308,7 @@ function AppShell() {
           currentPosition={simCtx.currentPos}
           currentPositionUnsynced={!!simCtx.currentPos && !sim.backendPositionSynced}
           destination={simCtx.destPos}
-          waypoints={sim.waypoints.map((w: any, i: number) => ({ ...w, index: i }))}
+          waypoints={sim.waypoints.map((w: LatLng, i: number) => ({ ...w, index: i }))}
           routePath={sim.routePath}
           randomWalkRadius={
             sim.mode === SimMode.RandomWalk ? simCtx.randomWalkRadius :
