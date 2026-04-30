@@ -34,7 +34,7 @@ if _old_data_dir.exists() and not _new_data_dir.exists():
         pass  # cross-device or permission issue — ignore, will create fresh
 
 # Configure logging — colored console + rotating file in ~/.gpscontroller/logs/
-_log_fmt = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"
+_log_fmt = "%(asctime)s [%(name)-20s] %(levelname)s %(message)s"
 _log_datefmt = "%Y-%m-%d %H:%M:%S"
 _log_dir = _new_data_dir / "logs"
 
@@ -53,7 +53,11 @@ class _ColorFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         color = self._COLORS.get(record.levelno, "")
-        record.levelname = f"{color}{record.levelname}{self._RESET}"
+        # Pad to a fixed width BEFORE wrapping in ANSI so visual columns
+        # align (ANSI escape chars don't print but would otherwise count
+        # toward `%-7s` padding and offset the layout).
+        padded = f"{record.levelname:<7s}"
+        record.levelname = f"{color}{padded}{self._RESET}"
         return super().format(record)
 
 
@@ -76,13 +80,35 @@ except Exception:
 logging.basicConfig(level=logging.INFO, handlers=_handlers, force=True)
 logger = logging.getLogger("gpscontroller")
 
-# ── Filter out noisy OPTIONS preflight requests from access log ──
-class _OptionsFilter(logging.Filter):
+# ── Filter noise out of uvicorn's access log ──
+# - OPTIONS preflight: zero signal, fires per CORS request
+# - Routine polling endpoints (frontend heartbeats): /api/device/list every
+#   30s, cooldown/last-device-position checks each WS reconnect, etc.
+#   These flood the log without telling us anything when they 200.
+#   Non-2xx responses on these paths still surface elsewhere (the caller
+#   handles the error) so dropping them here keeps the dev log readable.
+_ACCESS_NOISE_PATHS = (
+    '"GET /api/device/list ',
+    '"GET /api/location/cooldown/status ',
+    '"GET /api/location/last-device-position ',
+    '"GET /api/location/settings/initial-position ',
+    '"GET /api/bookmarks ',
+    '"GET /api/bookmarks/places ',
+    '"GET /api/bookmarks/tags ',
+    '"GET /api/route/saved ',
+    '"GET /api/location/status ',
+)
+
+
+class _AccessNoiseFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
-        return '"OPTIONS ' not in msg
+        if '"OPTIONS ' in msg:
+            return False
+        return not any(p in msg for p in _ACCESS_NOISE_PATHS)
 
-logging.getLogger("uvicorn.access").addFilter(_OptionsFilter())
+
+logging.getLogger("uvicorn.access").addFilter(_AccessNoiseFilter())
 
 
 # Session auth token. Generated once per backend process (see lifespan)
@@ -735,13 +761,13 @@ if __name__ == "__main__":
         "formatters": {
             "default": {
                 "()": "uvicorn.logging.DefaultFormatter",
-                "fmt": "%(asctime)s [uvicorn] %(levelprefix)s %(message)s",
+                "fmt": "%(asctime)s [%(name)-20s] %(levelprefix)s %(message)s",
                 "datefmt": "%Y-%m-%d %H:%M:%S",
                 "use_colors": True,
             },
             "access": {
                 "()": "uvicorn.logging.AccessFormatter",
-                "fmt": "%(asctime)s [uvicorn.access] %(levelprefix)s %(client_addr)s - \"%(request_line)s\" %(status_code)s",
+                "fmt": "%(asctime)s [%(name)-20s] %(levelprefix)s %(client_addr)s - \"%(request_line)s\" %(status_code)s",
                 "datefmt": "%Y-%m-%d %H:%M:%S",
                 "use_colors": True,
             },
