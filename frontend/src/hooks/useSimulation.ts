@@ -967,13 +967,12 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     action: string,
     fn: (udid: string) => Promise<T>,
   ): Promise<FanoutOutcome<T>> => {
-    if (udids.length === 0) {
-      setError(localizeError('no_device_connected'))
-      return { ok: [], failed: [] }
-    }
+    // Callers gate on `connectedDevices.length >= 2`, so this path is
+    // only entered with a non-empty list. No empty-list defensive
+    // branch (would otherwise double-fire with caller's toast).
     const results = await Promise.allSettled(udids.map((u) => fn(u)))
     return summarizeResults(results, udids, action)
-  }, [localizeError])
+  }, [])
 
   // Group-mode sync helper: before any action that depends on a common start
   // (navigate / loop / multistop / randomwalk / joystick), teleport every

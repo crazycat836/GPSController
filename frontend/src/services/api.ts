@@ -175,6 +175,8 @@ export const connectDevice = (udid: string) => request<StatusResponse>('POST', `
 export const disconnectDevice = (udid: string) => request<StatusResponse>('DELETE', `/api/device/${udid}/connect`)
 export const forgetDevice = (udid: string) =>
   request<{ status: string; udid: string; removed: string[] }>('DELETE', `/api/device/${udid}/pair`)
+export const clearAutoReconnectBlocks = () =>
+  request<{ status: string }>('POST', '/api/device/auto-reconnect/reset')
 export interface WifiConnectResponse {
   status: string
   udid: string

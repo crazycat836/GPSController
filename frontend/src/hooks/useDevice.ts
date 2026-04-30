@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { DEFAULT_TUNNEL_PORT } from '../lib/constants'
 import {
   listDevices, connectDevice, disconnectDevice, forgetDevice,
+  clearAutoReconnectBlocks,
   wifiConnect, wifiScan,
   wifiTunnelStartAndConnect, wifiTunnelStatus, wifiTunnelStop,
 } from '../services/api'
@@ -155,6 +156,15 @@ export function useDevice(subscribe?: WsSubscribe) {
   // auto-connect path in `scan` for the canonical use.
   const wsEventGenRef = useRef(0)
   const bumpWsGen = useCallback(() => { wsEventGenRef.current += 1 }, [])
+
+  // Frontend boot — tell the backend to drop any "user-disconnected"
+  // marks from the prior session. A fresh page load is the user
+  // re-engaging with the app, so every paired device should be
+  // eligible for auto-reconnect again. Errors are non-fatal (the
+  // endpoint is best-effort cleanup).
+  useEffect(() => {
+    clearAutoReconnectBlocks().catch((err) => devLog('clearAutoReconnectBlocks failed', err))
+  }, [])
 
   // React to real-time device state broadcasts via the subscribe callback.
   // See useWebSocket.ts for the rationale vs the old useState pattern.

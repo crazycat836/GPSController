@@ -44,6 +44,9 @@ async def connect_device(udid: str):
     app_state = ctx.app_state
     from core.device_manager import UnsupportedIosVersionError
     dm = _dm()
+    # User-initiated connect is the canonical "I want this device on"
+    # signal — clear any prior auto-reconnect block for this UDID.
+    app_state.unblock_auto_reconnect(udid)
     # Max MAX_DEVICES devices (group mode). Allow re-connect of an already-connected udid.
     if not dm.is_connected(udid) and dm.connected_count >= MAX_DEVICES:
         raise HTTPException(
@@ -85,10 +88,24 @@ async def connect_device(udid: str):
         raise _http_err(500, "connect_failed", "裝置連線失敗,請重試")
 
 
+@router.post("/auto-reconnect/reset")
+async def reset_auto_reconnect_blocks():
+    """Clear all 'user-disconnected' UDIDs. Called by the frontend on
+    boot so a fresh page treats every device as eligible for auto-
+    reconnect again."""
+    app_state = ctx.app_state
+    app_state.clear_auto_reconnect_blocks()
+    return {"status": "ok"}
+
+
 @router.delete("/{udid}/connect")
 async def disconnect_device(udid: str):
     app_state = ctx.app_state
     dm = _dm()
+    # Block auto-reconnect: the watchdog must not reverse the user's
+    # explicit Disconnect. Cleared on user Connect, on frontend boot,
+    # or on backend restart (in-memory only).
+    app_state.block_auto_reconnect(udid)
     # Terminate the simulation engine *before* the transport goes away so
     # any running Navigate/Loop/MultiStop/RandomWalk task exits cleanly.
     await app_state.terminate_engine(udid)
