@@ -4,11 +4,14 @@ import 'leaflet/dist/leaflet.css'
 import './index.css'
 import App from './App'
 import { I18nProvider } from './i18n'
+import ErrorBoundary from './components/ErrorBoundary'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <I18nProvider>
-      <App />
-    </I18nProvider>
+    <ErrorBoundary>
+      <I18nProvider>
+        <App />
+      </I18nProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 )
