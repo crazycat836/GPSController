@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import TypedDict
 
+from version import __version__
+
 # Paths
 DATA_DIR = Path.home() / ".gpscontroller"
 DATA_DIR.mkdir(exist_ok=True)
@@ -17,7 +19,7 @@ OSRM_BASE_URL = "https://router.project-osrm.org"
 
 # Nominatim
 NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org"
-NOMINATIM_USER_AGENT = "GPSController/0.1"
+NOMINATIM_USER_AGENT = f"GPSController/{__version__}"
 
 
 class SpeedProfile(TypedDict):
