@@ -22,7 +22,7 @@ import socket
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from pymobiledevice3.lockdown import create_using_usbmux, create_using_tcp
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
@@ -103,6 +103,14 @@ class _ActiveConnection:
     # invalidated by the AMFI reveal endpoint so `/device/list` doesn't
     # pay a lockdown round-trip per device per poll.
     developer_mode_enabled: Optional[bool] = None
+
+
+# Public alias so callers outside this module can type-annotate against
+# the connection record without depending on the private name. The
+# underlying dataclass is intentionally still named with a leading
+# underscore — instances are owned and constructed exclusively by
+# DeviceManager. External callers obtain one via DeviceManager.get_connection().
+ConnectionInfo = _ActiveConnection
 
 
 class DeviceManager:
@@ -354,8 +362,11 @@ class DeviceManager:
     # -- iOS 17+ via CoreDeviceTunnelProxy ---------------------------------
 
     async def _connect_tunnel(
-        self, udid: str, lockdown, ios_version: str
+        self, udid: str, lockdown: Any, ios_version: str
     ) -> _ActiveConnection:
+        # `lockdown`: pymobiledevice3 lockdown handle (LockdownClient or
+        # similar). Typed as Any since pymobiledevice3 doesn't export a
+        # stable public protocol for it.
         """TCP tunnel for iOS 17+ using CoreDeviceTunnelProxy + RSD."""
         logger.debug("Establishing TCP tunnel for %s (iOS %s)", udid, ios_version)
 
@@ -395,9 +406,12 @@ class DeviceManager:
     # iOS < 17 path removed in v0.1.49 — see UnsupportedIosVersionError.
 
     def _connect_legacy(
-        self, udid: str, lockdown, ios_version: str
+        self, udid: str, lockdown: Any, ios_version: str
     ) -> _ActiveConnection:
-        """Direct usbmux lockdown connection for iOS 16.x devices."""
+        """Direct usbmux lockdown connection for iOS 16.x devices.
+
+        ``lockdown`` is a pymobiledevice3 lockdown handle (typed Any
+        because pymobiledevice3 has no stable public protocol)."""
         logger.info("Using legacy lockdown connection for %s (iOS %s)", udid, ios_version)
         return _ActiveConnection(
             udid=udid,
@@ -564,12 +578,19 @@ class DeviceManager:
         mount_succeeded = False
         try:
             # auto_mount_personalized internally uses requests.get for the
-            # GitHub DDI download. Hard-cap the whole operation so a slow or
-            # blocked network can't freeze us indefinitely.
+            # GitHub DDI download — that call is blocking sync I/O. Wrapping
+            # the *coroutine* in asyncio.wait_for cannot preempt blocking
+            # syscalls inside a thread, so we hand the whole operation to a
+            # default executor and apply the timeout to the executor future.
+            # That keeps the event loop responsive even on slow networks.
             # Serialise across devices so parallel connects don't corrupt
             # the shared DDI cache.
             async with self._ddi_mount_lock:
-                await asyncio.wait_for(auto_mount_personalized(conn.lockdown), timeout=120.0)
+                loop = asyncio.get_running_loop()
+                executor_future = loop.run_in_executor(
+                    None, lambda: asyncio.run(auto_mount_personalized(conn.lockdown)),
+                )
+                await asyncio.wait_for(executor_future, timeout=120.0)
             logger.info("Personalized DDI mounted successfully for %s", conn.udid)
             mount_succeeded = True
         except AlreadyMountedError:
@@ -717,12 +738,15 @@ class DeviceManager:
         logger.info("Using LegacyLocationService for %s", conn.udid)
         return LegacyLocationService(conn.lockdown)
 
-    # _ensure_classic_ddi_mounted, _create_legacy_location_service, and
-    # connect_wifi (legacy direct-IP WiFi) removed in v0.1.49 — see
-    # UnsupportedIosVersionError. iOS 17+ continues to use the
-    # personalized DDI mount path + DvtLocationService (with
-    # LegacyLocationService as a runtime fallback inside
-    # _create_dvt_location_service when DVT itself fails).
+    # connect_wifi (the legacy direct-IP WiFi connect helper) was removed
+    # in v0.1.49 in favour of connect_wifi_tunnel below, which assumes a
+    # pre-established RSD tunnel. _ensure_classic_ddi_mounted and
+    # _create_legacy_location_service are still defined above because
+    # iOS 16.x devices remain supported (UnsupportedIosVersionError only
+    # rejects < 16.0). iOS 17+ continues to use the personalized DDI
+    # mount path + DvtLocationService, with LegacyLocationService as a
+    # runtime fallback inside _create_dvt_location_service when DVT
+    # itself fails.
 
     # ------------------------------------------------------------------
     # WiFi connection (iOS 17+ tunnel only)
@@ -882,6 +906,18 @@ class DeviceManager:
     def is_connected(self, udid: str) -> bool:
         """Check whether a device is currently connected."""
         return udid in self._connections
+
+    def get_connection(self, udid: str) -> "ConnectionInfo | None":
+        """Return the live connection record for *udid*, or None if absent.
+
+        Public accessor for the API layer, which previously reached into
+        ``_connections`` directly. The returned object exposes
+        ``lockdown``, ``ios_version``, ``connection_type``,
+        ``developer_mode_enabled`` and similar fields callers need for
+        cross-cutting concerns like AMFI. Mutations on the returned
+        instance are visible to subsequent reads — that is intentional;
+        DeviceManager owns the lifecycle but does not deep-copy on read."""
+        return self._connections.get(udid)
 
     def udids_by_connection_type(self, connection_type: str) -> list[str]:
         """Return UDIDs whose connection matches ``connection_type``
