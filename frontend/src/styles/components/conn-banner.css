@@ -27,14 +27,18 @@
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
 }
 
+/* Variant backgrounds: tint surface-2 with the semantic color so the
+ * banner stays opaque-readable over the map. The previous `*-dim`
+ * tokens are 15% alpha — fine for inline chips on solid surfaces, but
+ * a banner sitting over satellite imagery needs a real backdrop. */
 .conn-banner[data-variant='offline'] {
-  background: var(--color-danger-dim);
-  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 22%, var(--color-surface-2));
+  border-color: color-mix(in srgb, var(--color-danger) 55%, transparent);
   color: var(--color-error-text);
 }
 
 .conn-banner[data-variant='reconnecting'] {
-  background: var(--color-warning-dim);
-  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 22%, var(--color-surface-2));
+  border-color: color-mix(in srgb, var(--color-warning) 55%, transparent);
   color: var(--color-warning-text);
 }
