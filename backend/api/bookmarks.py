@@ -20,6 +20,14 @@ logger = logging.getLogger(__name__)
 _geocoder = GeocodingService()
 
 
+class BookmarkListResponse(BaseModel):
+    """Combined payload for the bookmark list endpoint — places, tags, and
+    bookmarks together so the frontend can hydrate state in a single call."""
+    places: list[BookmarkPlace]
+    tags: list[BookmarkTag]
+    bookmarks: list[Bookmark]
+
+
 def _bm():
     from main import app_state
     return app_state.bookmark_manager
@@ -39,9 +47,17 @@ async def _resolve_country(lat: float, lng: float) -> tuple[str, str]:
     return res.country_code or "", res.country or ""
 
 
+async def _ensure_country(bookmark: Bookmark) -> tuple[str, str]:
+    """Return ``(country_code, country)`` for *bookmark*, reverse-geocoding
+    only when the client didn't already supply a country code."""
+    if bookmark.country_code:
+        return bookmark.country_code, bookmark.country
+    return await _resolve_country(bookmark.lat, bookmark.lng)
+
+
 # ── Bookmarks ─────────────────────────────────────────────
 
-@router.get("", response_model=dict)
+@router.get("", response_model=BookmarkListResponse)
 async def list_bookmarks():
     bm = _bm()
     return {
@@ -55,10 +71,7 @@ async def list_bookmarks():
 async def create_bookmark(bookmark: Bookmark):
     bm = _bm()
     # Auto-fill the country flag metadata when the client didn't supply it.
-    country_code = bookmark.country_code
-    country = bookmark.country
-    if not country_code:
-        country_code, country = await _resolve_country(bookmark.lat, bookmark.lng)
+    country_code, country = await _ensure_country(bookmark)
     return bm.create_bookmark(
         name=bookmark.name,
         lat=bookmark.lat,
@@ -74,10 +87,7 @@ async def create_bookmark(bookmark: Bookmark):
 @router.put("/{bookmark_id}", response_model=Bookmark)
 async def update_bookmark(bookmark_id: str, bookmark: Bookmark):
     bm = _bm()
-    country_code = bookmark.country_code
-    country = bookmark.country
-    if not country_code:
-        country_code, country = await _resolve_country(bookmark.lat, bookmark.lng)
+    country_code, country = await _ensure_country(bookmark)
     updated = bm.update_bookmark(
         bookmark_id,
         name=bookmark.name,
