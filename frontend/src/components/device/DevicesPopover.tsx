@@ -551,7 +551,9 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
         </div>
 
         <div className="px-3.5 pt-3.5 pb-3 flex flex-col gap-4 max-h-[420px] overflow-y-auto scrollbar-thin">
-          {/* USB section */}
+          {/* USB section — guidance only; the actual scan button lives
+              in the list view header, where the result (refreshed list)
+              is visible. No need to duplicate the action here. */}
           <section className="flex flex-col gap-2">
             <div className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[var(--color-text-1)]">
               <Usb width={14} height={14} />
@@ -560,18 +562,6 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
             <p className="text-[11px] text-[var(--color-text-3)] leading-[1.5]">
               {t('device.add_via_usb_hint')}
             </p>
-            <button
-              type="button"
-              onClick={handleScan}
-              disabled={scanning}
-              className="action-btn primary w-full justify-center text-[12px]"
-            >
-              {scanning ? (
-                <><Loader2 className="w-3 h-3 animate-spin" /> {t('device.scan_scanning')}</>
-              ) : (
-                <><Search className="w-3 h-3" /> {t('device.scan_tooltip')}</>
-              )}
-            </button>
           </section>
 
           {/* OR divider */}
