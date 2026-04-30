@@ -103,7 +103,10 @@ export function SimProvider({ children }: SimProviderProps) {
   const { showToast } = useToastContext()
   const { subscribe, sendMessage } = useWebSocketContext()
   const sim = useSimulation(subscribe)
-  const joystick = useJoystick(sendMessage, sim.mode === SimMode.Joystick)
+  const joystick = useJoystick(
+    (type, data) => sendMessage(type, { ...data }),
+    sim.mode === SimMode.Joystick,
+  )
 
   const [cooldown, setCooldown] = useState(0)
   const [cooldownEnabled, setCooldownEnabled] = useState(false)

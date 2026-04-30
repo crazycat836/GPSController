@@ -7,6 +7,11 @@ interface KeyState {
   right: boolean
 }
 
+interface JoystickInput {
+  direction: number
+  intensity: number
+}
+
 function keysToDirection(keys: KeyState): { direction: number; intensity: number } {
   const { up, down, left, right } = keys
 
@@ -45,7 +50,7 @@ const KEY_MAP: Record<string, keyof KeyState> = {
 }
 
 export function useJoystick(
-  sendWsMessage: (type: string, data: any) => void,
+  sendWsMessage: (type: string, data: JoystickInput) => void,
   active: boolean,
 ) {
   const [direction, setDirection] = useState(0)
