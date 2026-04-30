@@ -303,8 +303,6 @@ function AppShell() {
         </Toast>
 
         <MapView
-          runtimes={sim.runtimes}
-          devices={device.connectedDevices}
           currentPosition={simCtx.currentPos}
           currentPositionUnsynced={!!simCtx.currentPos && !sim.backendPositionSynced}
           destination={simCtx.destPos}

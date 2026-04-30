@@ -3,6 +3,7 @@ import { useT } from '../i18n';
 import { getInitialPosition, reverseGeocode } from '../services/api';
 import { MARKER_HEX, ACCENT_HEX, DEVICE_COLORS_HEX } from '../lib/constants';
 import L from 'leaflet';
+import MapControls from './shell/MapControls';
 
 interface Position {
   lat: number;
@@ -32,9 +33,6 @@ interface WhatsHereState {
 
 const WHATS_HERE_IDLE: WhatsHereState = { loading: false, label: '', address: '', error: false };
 
-import type { DeviceRuntime, RuntimesMap } from '../hooks/useSimulation';
-import type { DeviceInfo } from '../hooks/useDevice';
-
 interface MapViewProps {
   currentPosition: Position | null;
   /** When true, renders the current-position pin in a "cached / not yet live"
@@ -56,11 +54,6 @@ interface MapViewProps {
   onShowToast?: (msg: string) => void;
   layerKey?: string;
   onLayerChange?: (key: string) => void;
-  // Group mode: when runtimes + devices are present and 2+ devices connected,
-  // render per-device markers/polylines/circles. Single-device rendering is
-  // still driven by the legacy currentPosition/destination/routePath props.
-  runtimes?: RuntimesMap;
-  devices?: DeviceInfo[];
   /** Fires once after Leaflet initializes so parents can drive imperative
    *  camera moves (fly-to, setView) without owning the instance. Called
    *  with null on unmount. */
@@ -71,12 +64,6 @@ interface MapViewProps {
    *  PC popover). Null/undefined removes the marker. */
   pcPosition?: Position | null;
 }
-
-// Leaflet requires raw hex — CSS variables don't work in SVG marker innerHTML.
-// Keep in sync with --color-device-a / --color-device-b in index.css @theme.
-import { DEVICE_COLORS_HEX as DEVICE_COLORS, DEVICE_LETTERS } from '../lib/constants';
-import { haversineM } from '../lib/geo';
-import MapControls from './shell/MapControls';
 
 function MapView({
   currentPosition,
@@ -95,23 +82,9 @@ function MapView({
   onShowToast,
   layerKey = 'osm',
   onLayerChange,
-  runtimes,
-  devices,
   onMapReady,
   pcPosition,
 }: MapViewProps) {
-  // Dual-mode rendering disabled by design: with pre-sync (both devices
-  // teleport to the same start before any group action) and shared random
-  // seed, the two phones always sit at the exact same coordinate, so two
-  // markers and two polylines just overlap and add visual noise. We keep
-  // the dual data plumbing (devices, runtimes) for the dual cleanup effect
-  // below but always render the single-device view (driven by the primary
-  // device's currentPosition / routePath / destination passed in as props).
-  const dualMode = false;
-  // Suppress unused-prop warnings — kept for API compatibility and the
-  // dual-marker cleanup effect that wipes any residual dual markers if a
-  // user upgrades from an earlier 0.2.0 build that had them rendered.
-  void devices; void runtimes;
   const t = useT();
   // onMapClick closure gets captured by the once-per-mount click handler;
   // route through a ref so toggling the prop mid-session takes effect.
@@ -320,36 +293,6 @@ function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (dualMode) {
-      // Dual-mode renderer below owns current-position markers; clear any
-      // legacy single-device marker so it doesn't duplicate.
-      if (currentMarkerRef.current) {
-        try { (currentMarkerRef.current as any).remove(); } catch { /* ignore */ }
-        currentMarkerRef.current = null;
-      }
-      // Pan the map to the new currentPosition in dual mode as well (address
-      // search / coord input / bookmark click sets currentPosition before the
-      // backend position_update arrives). First jump always centers; after
-      // that only re-center on large jumps (>500m).
-      if (currentPosition) {
-        const latlng: L.LatLngExpression = [currentPosition.lat, currentPosition.lng];
-        const prev = prevPositionRef.current;
-        if (!prev) {
-          map.setView(latlng, map.getZoom());
-        } else {
-          const dlat = (currentPosition.lat - prev.lat) * 111320;
-          const dlng = (currentPosition.lng - prev.lng) * 111320 * Math.cos(currentPosition.lat * Math.PI / 180);
-          const distM = Math.sqrt(dlat * dlat + dlng * dlng);
-          if (distM > 500) {
-            map.setView(latlng, map.getZoom());
-          }
-        }
-        prevPositionRef.current = currentPosition;
-      } else {
-        prevPositionRef.current = null;
-      }
-      return;
-    }
     if (!currentPosition) {
       if (currentMarkerRef.current) {
         try { (currentMarkerRef.current as any).remove(); } catch { /* ignore */ }
@@ -406,7 +349,7 @@ function MapView({
       }
     }
     prevPositionRef.current = currentPosition;
-  }, [currentPosition, currentPositionUnsynced, dualMode]);
+  }, [currentPosition, currentPositionUnsynced]);
 
   // PC geolocation marker — separate from the virtual GPS avatar. Added /
   // updated / removed in response to the LocatePcButton feature so users
@@ -454,14 +397,6 @@ function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (dualMode) {
-      if (destMarkerRef.current) {
-        destMarkerRef.current.remove();
-        destMarkerRef.current = null;
-      }
-      destSigRef.current = null;
-      return;
-    }
 
     const sig = destination ? `${destination.lat.toFixed(7)},${destination.lng.toFixed(7)}` : null;
     if (sig === destSigRef.current) return;
@@ -495,7 +430,7 @@ function MapView({
       marker.bindTooltip(t('map.destination'), { direction: 'top', offset: [0, -38] });
       destMarkerRef.current = marker;
     }
-  }, [destination, dualMode]);
+  }, [destination]);
 
   // Update waypoint markers
   const waypointSigRef = useRef<string>('');
@@ -562,8 +497,6 @@ function MapView({
       polylineOverlayRef.current = null;
     }
 
-    if (dualMode) return;
-
     if (routePath.length > 1) {
       const latlngs: L.LatLngExpression[] = routePath.map((p) => [p.lat, p.lng]);
       // Wide faint glow (design: stroke-width 0.022, opacity 0.08).
@@ -590,7 +523,7 @@ function MapView({
       }).addTo(map);
       polylineOverlayRef.current = main;
     }
-  }, [routePath, dualMode]);
+  }, [routePath]);
 
   // Update random walk radius circle
   useEffect(() => {
@@ -602,8 +535,6 @@ function MapView({
       radiusCircleRef.current.remove();
       radiusCircleRef.current = null;
     }
-
-    if (dualMode) return;
 
     // Draw circle when radius is set and we have a position
     if (randomWalkRadius && randomWalkRadius > 0 && currentPosition) {
@@ -621,178 +552,7 @@ function MapView({
       ).addTo(map);
       radiusCircleRef.current = circle;
     }
-  }, [randomWalkRadius, currentPosition, dualMode]);
-
-  // ── Dual-mode per-device overlays ────────────────────────────────────
-  // Keeps refs for markers/polylines/circles keyed by udid so updates don't
-  // recreate Leaflet layers on every position tick.
-  const deviceMarkersRef = useRef<Record<string, L.Marker>>({});
-  const deviceDestMarkersRef = useRef<Record<string, L.Marker>>({});
-  const deviceDestSharedRef = useRef<L.Marker | null>(null);
-  const devicePolylinesRef = useRef<Record<string, L.Polyline>>({});
-  const deviceCirclesRef = useRef<Record<string, L.Circle>>({});
-
-  const clearDeviceOverlays = () => {
-    Object.values(deviceMarkersRef.current).forEach((m) => { try { m.remove(); } catch { /* ignore */ } });
-    deviceMarkersRef.current = {};
-    Object.values(deviceDestMarkersRef.current).forEach((m) => { try { m.remove(); } catch { /* ignore */ } });
-    deviceDestMarkersRef.current = {};
-    if (deviceDestSharedRef.current) {
-      try { deviceDestSharedRef.current.remove(); } catch { /* ignore */ }
-      deviceDestSharedRef.current = null;
-    }
-    Object.values(devicePolylinesRef.current).forEach((p) => { try { p.remove(); } catch { /* ignore */ } });
-    devicePolylinesRef.current = {};
-    Object.values(deviceCirclesRef.current).forEach((c) => { try { c.remove(); } catch { /* ignore */ } });
-    deviceCirclesRef.current = {};
-  };
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (!dualMode || !devices || !runtimes) {
-      clearDeviceOverlays();
-      return;
-    }
-
-    const activeUdids = new Set<string>();
-    devices.slice(0, 2).forEach((dev, i) => {
-      const rt: DeviceRuntime | undefined = runtimes[dev.udid];
-      if (!rt) return;
-      activeUdids.add(dev.udid);
-      const color = DEVICE_COLORS[i];
-      const letter = DEVICE_LETTERS[i];
-
-      // Current position marker
-      if (rt.currentPos) {
-        const latlng: L.LatLngExpression = [rt.currentPos.lat, rt.currentPos.lng];
-        const existing = deviceMarkersRef.current[dev.udid];
-        if (existing) {
-          (existing as any).setLatLng(latlng);
-        } else {
-          // Dual-mode letter badge — no pulse ring (single-device pin owns
-          // the pulse language; dual mode needs two distinguishable dots).
-          const icon = L.divIcon({
-            className: 'current-pos-marker',
-            html: `<svg width="44" height="44" viewBox="0 0 44 44">
-              <circle cx="22" cy="22" r="13" fill="${color}" opacity="0.95"/>
-              <circle cx="22" cy="22" r="11" fill="none" stroke="#ffffff" stroke-width="2"/>
-              <text x="22" y="26" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="600" font-family="system-ui">${letter}</text>
-            </svg>`,
-            iconSize: [44, 44],
-            iconAnchor: [22, 22],
-          });
-          const marker = L.marker(latlng, { icon, zIndexOffset: 1000 + i }).addTo(map);
-          marker.bindTooltip(`${letter} · ${dev.name}`, { direction: 'top', offset: [0, -20] });
-          deviceMarkersRef.current[dev.udid] = marker;
-        }
-      } else if (deviceMarkersRef.current[dev.udid]) {
-        try { deviceMarkersRef.current[dev.udid].remove(); } catch { /* ignore */ }
-        delete deviceMarkersRef.current[dev.udid];
-      }
-
-      // Route polyline
-      const existingLine = devicePolylinesRef.current[dev.udid];
-      if (existingLine) {
-        try { existingLine.remove(); } catch { /* ignore */ }
-        delete devicePolylinesRef.current[dev.udid];
-      }
-      if (rt.routePath && rt.routePath.length > 1) {
-        const latlngs: L.LatLngExpression[] = rt.routePath.map((p) => [p.lat, p.lng]);
-        const line = L.polyline(latlngs, { color, weight: 4, opacity: 0.85 }).addTo(map);
-        devicePolylinesRef.current[dev.udid] = line;
-      }
-
-      // Random-walk radius circle
-      const existingCircle = deviceCirclesRef.current[dev.udid];
-      if (existingCircle) {
-        try { existingCircle.remove(); } catch { /* ignore */ }
-        delete deviceCirclesRef.current[dev.udid];
-      }
-      if (randomWalkRadius && randomWalkRadius > 0 && rt.currentPos) {
-        const c = L.circle([rt.currentPos.lat, rt.currentPos.lng], {
-          radius: randomWalkRadius,
-          color, weight: 2, opacity: 0.7,
-          fillColor: color, fillOpacity: 0.06,
-          dashArray: '6, 6',
-        }).addTo(map);
-        deviceCirclesRef.current[dev.udid] = c;
-      }
-    });
-
-    // Remove layers for devices no longer in the slice
-    Object.keys(deviceMarkersRef.current).forEach((u) => {
-      if (!activeUdids.has(u)) {
-        try { deviceMarkersRef.current[u].remove(); } catch { /* ignore */ }
-        delete deviceMarkersRef.current[u];
-      }
-    });
-    Object.keys(devicePolylinesRef.current).forEach((u) => {
-      if (!activeUdids.has(u)) {
-        try { devicePolylinesRef.current[u].remove(); } catch { /* ignore */ }
-        delete devicePolylinesRef.current[u];
-      }
-    });
-    Object.keys(deviceCirclesRef.current).forEach((u) => {
-      if (!activeUdids.has(u)) {
-        try { deviceCirclesRef.current[u].remove(); } catch { /* ignore */ }
-        delete deviceCirclesRef.current[u];
-      }
-    });
-
-    // Destination markers: dedup when both destinations are within ~5m.
-    Object.values(deviceDestMarkersRef.current).forEach((m) => { try { m.remove(); } catch { /* ignore */ } });
-    deviceDestMarkersRef.current = {};
-    if (deviceDestSharedRef.current) {
-      try { deviceDestSharedRef.current.remove(); } catch { /* ignore */ }
-      deviceDestSharedRef.current = null;
-    }
-
-    const dests: { dev: DeviceInfo; color: string; letter: string; dest: Position }[] = [];
-    devices.slice(0, 2).forEach((dev, i) => {
-      const rt = runtimes[dev.udid];
-      if (rt && rt.destination) {
-        dests.push({ dev, color: DEVICE_COLORS[i], letter: DEVICE_LETTERS[i], dest: rt.destination });
-      }
-    });
-
-    const allSame = dests.length >= 2 && dests.slice(1).every((d) => haversineM(d.dest, dests[0].dest) <= 5);
-    if (dests.length === 0) {
-      // nothing to draw
-    } else if (allSame) {
-      const d = dests[0].dest;
-      const redIcon = L.divIcon({
-        className: 'dest-marker',
-        html: `<svg width="36" height="50" viewBox="0 0 36 50">
-          <ellipse cx="18" cy="47" rx="6" ry="2" fill="#000" opacity="0.2"/>
-          <path d="M18 2C9.7 2 3 8.7 3 17c0 12 15 30 15 30s15-18 15-30C33 8.7 26.3 2 18 2z" fill="#e53935"/>
-          <circle cx="18" cy="17" r="7" fill="#ffffff" opacity="0.95"/>
-        </svg>`,
-        iconSize: [36, 50],
-        iconAnchor: [18, 47],
-      });
-      const m = L.marker([d.lat, d.lng], { icon: redIcon }).addTo(map);
-      m.bindTooltip(t('map.destination'), { direction: 'top', offset: [0, -48] });
-      deviceDestSharedRef.current = m;
-    } else {
-      dests.forEach(({ dev, color, letter, dest }) => {
-        const icon = L.divIcon({
-          className: 'dest-marker',
-          html: `<svg width="36" height="50" viewBox="0 0 36 50">
-            <ellipse cx="18" cy="47" rx="6" ry="2" fill="#000" opacity="0.2"/>
-            <path d="M18 2C9.7 2 3 8.7 3 17c0 12 15 30 15 30s15-18 15-30C33 8.7 26.3 2 18 2z" fill="${color}"/>
-            <circle cx="18" cy="17" r="7" fill="#ffffff" opacity="0.95"/>
-            <text x="18" y="21" text-anchor="middle" fill="${color}" font-size="11" font-weight="600" font-family="system-ui">${letter}</text>
-          </svg>`,
-          iconSize: [36, 50],
-          iconAnchor: [18, 47],
-        });
-        const m = L.marker([dest.lat, dest.lng], { icon }).addTo(map);
-        m.bindTooltip(`${letter} · ${t('map.destination')}`, { direction: 'top', offset: [0, -48] });
-        deviceDestMarkersRef.current[dev.udid] = m;
-      });
-    }
-  }, [dualMode, devices, runtimes, randomWalkRadius, t]);
+  }, [randomWalkRadius, currentPosition]);
 
   // Close context menu on outside click
   useEffect(() => {
