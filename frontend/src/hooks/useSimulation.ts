@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import * as api from '../services/api'
-import { STORAGE_KEYS } from '../lib/storage-keys'
 import { PRE_SYNC_SETTLE_MS } from '../lib/constants'
 import type { LatLng } from './sim/types'
 import {
@@ -15,11 +14,16 @@ import {
   type SimErrorCode,
   type SimulationStatus,
 } from './sim/useSimWsDispatcher'
+import {
+  usePauseSettings,
+  useStraightLineToggle,
+  type PauseSetting,
+} from './sim/usePauseSettings'
 
 // Re-export the public types so existing callers (DeviceChip, EtaBar,
 // SimContext, App.tsx, etc.) keep importing from `'../hooks/useSimulation'`
 // without churn.
-export type { LatLng, DeviceRuntime, RuntimesMap, WsSubscribe, SimErrorCode, SimulationStatus }
+export type { LatLng, DeviceRuntime, RuntimesMap, WsSubscribe, SimErrorCode, SimulationStatus, PauseSetting }
 export { emptyRuntime }
 
 export enum SimMode {
@@ -132,40 +136,14 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const [speedMaxKmh, setSpeedMaxKmh] = useState<number | null>(null)
   // Global "straight-line path" toggle. When on, all nav modes bypass OSRM
   // and move along densified straight segments between waypoints.
-  const [straightLine, setStraightLineRaw] = useState<boolean>(() => {
-    try { return localStorage.getItem(STORAGE_KEYS.straightLine) === '1' } catch { return false }
-  })
-  const setStraightLine = (v: boolean) => {
-    setStraightLineRaw(v)
-    try { localStorage.setItem(STORAGE_KEYS.straightLine, v ? '1' : '0') } catch { /* ignore */ }
-  }
+  const [straightLine, setStraightLine] = useStraightLineToggle()
 
-  // Per-mode pause settings, persisted in localStorage.
-  interface PauseSetting { enabled: boolean; min: number; max: number }
-  const defaultPause: PauseSetting = { enabled: true, min: 5, max: 20 }
-  const loadPause = (key: string): PauseSetting => {
-    try {
-      const raw = localStorage.getItem(key)
-      if (!raw) return defaultPause
-      const p = JSON.parse(raw)
-      return {
-        enabled: typeof p.enabled === 'boolean' ? p.enabled : true,
-        min: typeof p.min === 'number' ? p.min : 5,
-        max: typeof p.max === 'number' ? p.max : 20,
-      }
-    } catch {
-      return defaultPause
-    }
-  }
-  const savePause = (key: string, v: PauseSetting) => {
-    try { localStorage.setItem(key, JSON.stringify(v)) } catch { /* ignore */ }
-  }
-  const [pauseMultiStop, setPauseMultiStopRaw] = useState<PauseSetting>(() => loadPause(STORAGE_KEYS.pauseMultiStop))
-  const [pauseLoop, setPauseLoopRaw] = useState<PauseSetting>(() => loadPause(STORAGE_KEYS.pauseLoop))
-  const [pauseRandomWalk, setPauseRandomWalkRaw] = useState<PauseSetting>(() => loadPause(STORAGE_KEYS.pauseRandomWalk))
-  const setPauseMultiStop = (v: PauseSetting) => { setPauseMultiStopRaw(v); savePause(STORAGE_KEYS.pauseMultiStop, v) }
-  const setPauseLoop = (v: PauseSetting) => { setPauseLoopRaw(v); savePause(STORAGE_KEYS.pauseLoop, v) }
-  const setPauseRandomWalk = (v: PauseSetting) => { setPauseRandomWalkRaw(v); savePause(STORAGE_KEYS.pauseRandomWalk, v) }
+  // Per-mode pause settings, persisted in localStorage. Default
+  // {enabled: true, min: 5, max: 20} matches backend DEFAULT_PAUSE_*.
+  const {
+    pauseLoop, pauseMultiStop, pauseRandomWalk,
+    setPauseLoop, setPauseMultiStop, setPauseRandomWalk,
+  } = usePauseSettings()
   const [error, setError] = useState<string | null>(null)
   // Random-walk pause countdown (unix epoch seconds of when pause ends)
   const [pauseEndAt, setPauseEndAt] = useState<number | null>(null)
