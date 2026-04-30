@@ -83,13 +83,12 @@ async def run_tunnel(udid: str, ip: str, port: int) -> None:
             json.dump(info, f, indent=2)
         logger.info("Tunnel info written to %s", info_path)
 
-        print(flush=True)
-        print("=" * 50, flush=True)
-        print("  WiFi tunnel is active.", flush=True)
-        print("  USB cable can be safely disconnected.", flush=True)
-        print("  Press Ctrl+C to stop the tunnel.", flush=True)
-        print("=" * 50, flush=True)
-        print(flush=True)
+        banner = "=" * 50
+        logger.info(banner)
+        logger.info("  WiFi tunnel is active.")
+        logger.info("  USB cable can be safely disconnected.")
+        logger.info("  Press Ctrl+C to stop the tunnel.")
+        logger.info(banner)
 
         # Keep the tunnel alive
         stop = asyncio.Event()
@@ -128,10 +127,11 @@ def main() -> None:
     args = parser.parse_args()
 
     if not args.udid:
-        # Try to auto-detect from a currently attached USB device
+        # Try to auto-detect from a currently attached USB device.
+        # pymobiledevice3.usbmux.list_devices is a coroutine, so it must be awaited.
         try:
             from pymobiledevice3.usbmux import list_devices
-            devs = list_devices()
+            devs = asyncio.run(list_devices())
             if devs:
                 args.udid = devs[0].serial
         except Exception:
