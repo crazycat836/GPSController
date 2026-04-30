@@ -58,6 +58,9 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
   const [tunnelConnecting, setTunnelConnecting] = useState(false)
   const [tunnelError, setTunnelError] = useState<string | null>(null)
   const [discovering, setDiscovering] = useState(false)
+  // When auto-detect finds 2+ iPhones we surface a picker instead of
+  // silently applying the first hit.
+  const [discoverResults, setDiscoverResults] = useState<Array<{ ip: string; port: number; name: string }>>([])
   const [showIpHelp, setShowIpHelp] = useState(false)
 
   const [showRepairConfirm, setShowRepairConfirm] = useState(false)
@@ -91,15 +94,28 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
   const handleDiscover = useCallback(async () => {
     setDiscovering(true)
     setTunnelError(null)
+    setDiscoverResults([])
     try {
       const res = await wifiTunnelDiscover()
-      const first = res?.devices?.[0]
-      if (first) { setTunnelIp(first.ip); setTunnelPort(String(first.port)) }
-      else setTunnelError(t('wifi.device_not_detected'))
+      const list = res?.devices ?? []
+      if (list.length === 0) {
+        setTunnelError(t('wifi.device_not_detected'))
+      } else if (list.length === 1) {
+        setTunnelIp(list[0].ip)
+        setTunnelPort(String(list[0].port))
+      } else {
+        setDiscoverResults(list.map((d) => ({ ip: d.ip, port: d.port, name: d.name || d.ip })))
+      }
     } catch (err: unknown) {
       setTunnelError(err instanceof Error ? err.message : t('wifi.detect_failed'))
     } finally { setDiscovering(false) }
   }, [t])
+
+  const pickDiscoverResult = useCallback((r: { ip: string; port: number }) => {
+    setTunnelIp(r.ip)
+    setTunnelPort(String(r.port))
+    setDiscoverResults([])
+  }, [])
 
   const handleTunnelConnect = useCallback(async () => {
     if (!tunnelIp.trim()) return
@@ -402,6 +418,34 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
                     <div className="text-[var(--color-text-2)]">{t('wifi.help_steps')}</div>
                     <div className="text-[10px] text-[var(--color-text-3)] mt-1.5">
                       {t('wifi.help_hint')}
+                    </div>
+                  </div>
+                )}
+
+                {discoverResults.length > 0 && (
+                  <div className="text-[11px] p-2 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-dim)]">
+                    <div className="font-semibold mb-1 text-[var(--color-accent-strong)]">
+                      {t('wifi.tunnel_detect_multiple', { n: discoverResults.length })}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {discoverResults.map((r) => (
+                        <div
+                          key={`${r.ip}:${r.port}`}
+                          className="flex items-center gap-2 py-1 border-t border-white/5 first:border-t-0"
+                        >
+                          <div className="flex-1 min-w-0 truncate">
+                            <span className="font-mono text-[var(--color-text-2)]">{r.ip}</span>
+                            <span className="ml-2 text-[var(--color-text-3)]">{r.name}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => pickDiscoverResult(r)}
+                            className="action-btn primary text-[10px] px-2 py-0.5"
+                          >
+                            {t('wifi.tunnel_use_this')}
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

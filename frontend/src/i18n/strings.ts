@@ -194,6 +194,8 @@ export const STRINGS = {
   'wifi.legacy_hint': { zh: '請先解鎖並配對 iPhone,再進行連線。', en: 'Unlock and pair the iPhone, then connect directly.' },
   'wifi.device_not_detected': { zh: '未偵測到裝置,請確認 iPhone 與電腦在同一 WiFi', en: 'Device not detected, ensure iPhone and computer are on the same Wi-Fi' },
   'wifi.detect_failed': { zh: '偵測失敗', en: 'Detection failed' },
+  'wifi.tunnel_detect_multiple': { zh: '找到 {n} 台 iPhone,請選一台', en: 'Found {n} iPhones — pick one' },
+  'wifi.tunnel_use_this': { zh: '選擇', en: 'Use' },
 
   // ── Map ──────────────────────────────────────
   'map.layers': { zh: '切換圖層', en: 'Switch layers' },
