@@ -1,11 +1,34 @@
+import asyncio
 import ipaddress
+import logging
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from config import MAX_DEVICES
+from core.wifi_tunnel import TunnelRunner
 from models.schemas import DeviceInfo
 
 router = APIRouter(prefix="/api/device", tags=["device"])
+
+# Module-level singletons (tunnel runner, watchdog handle).
+# In-process tunnel runner. Serialised by its own asyncio.Lock so concurrent
+# /start or /stop requests never race.
+_tunnel = TunnelRunner()
+# Watchdog task handle (lives at module level since TunnelRunner is now shared).
+_tunnel_watchdog_task: "asyncio.Task | None" = None
+
+_tunnel_logger = logging.getLogger("wifi_tunnel")
+logger = logging.getLogger(__name__)
+
+
+def _http_err(status: int, code: str, message: str) -> HTTPException:
+    """Build a structured HTTPException with `{code, message}` detail.
+
+    Use this instead of raising `HTTPException(detail=str(e))` so internal
+    exception text never leaks to API clients.
+    """
+    return HTTPException(status_code=status, detail={"code": code, "message": message})
 
 
 def _validate_local_ip(value: str) -> str:
@@ -47,8 +70,9 @@ async def wifi_scan():
     try:
         results = await dm.scan_wifi_devices()
         return results
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("WiFi scan failed")
+        raise _http_err(500, "scan_failed", "WiFi 掃描失敗,請稍後再試")
 
 
 class WifiTunnelConnectRequest(BaseModel):
@@ -67,12 +91,12 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
     from main import app_state
     from core.device_manager import UnsupportedIosVersionError
     dm = _dm()
-    # Max 2 devices (group mode). connect_wifi_tunnel may reconnect an existing udid;
-    # we can only cheaply check the pre-state here.
-    if dm.connected_count >= 2:
+    # Max MAX_DEVICES devices (group mode). connect_wifi_tunnel may reconnect an
+    # existing udid; we can only cheaply check the pre-state here.
+    if dm.connected_count >= MAX_DEVICES:
         raise HTTPException(
             status_code=409,
-            detail={"code": "max_devices_reached", "message": "已連接最多 2 台裝置"},
+            detail={"code": "max_devices_reached", "message": f"已連接最多 {MAX_DEVICES} 台裝置"},
         )
     try:
         info = await dm.connect_wifi_tunnel(req.rsd_address, req.rsd_port)
@@ -108,26 +132,12 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
                 "min_version": UnsupportedIosVersionError.MIN_VERSION,
             },
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("WiFi tunnel connect failed", extra={"rsd_address": req.rsd_address})
+        raise _http_err(500, "connect_failed", "連線失敗,請確認 tunnel 仍在執行並重試")
 
 
 # ── WiFi Tunnel lifecycle (start / status / stop) ───────
-
-import asyncio
-import logging
-
-from core.wifi_tunnel import TunnelRunner
-
-_tunnel_logger = logging.getLogger("wifi_tunnel")
-logger = logging.getLogger(__name__)
-
-# In-process tunnel runner. Serialised by its own asyncio.Lock so concurrent
-# /start or /stop requests never race.
-_tunnel = TunnelRunner()
-
-# Watchdog task handle (lives at module level since TunnelRunner is now shared).
-_tunnel_watchdog_task: asyncio.Task | None = None
 
 
 @router.post("/wifi/repair")
@@ -155,11 +165,9 @@ async def wifi_repair():
 
     try:
         raw_devices = await mux_list_devices()
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "usbmux_unavailable", "message": f"無法列出 USB 裝置:{e}"},
-        )
+    except Exception:
+        logger.exception("usbmux list_devices failed during /wifi/repair")
+        raise _http_err(500, "usbmux_unavailable", "無法列出 USB 裝置,請確認 usbmuxd 是否運作")
 
     # Prefer a USB-attached device (Network entries won't help us regenerate
     # the RemotePairing record).
@@ -179,12 +187,13 @@ async def wifi_repair():
     # Step 1: USB lockdown autopair — pops Trust prompt if USB record missing.
     try:
         lockdown = await create_using_usbmux(serial=udid, autopair=True)
-    except Exception as e:
+    except Exception:
+        logger.exception("USB autopair failed during /wifi/repair", extra={"udid": udid})
         raise HTTPException(
             status_code=500,
             detail={
                 "code": "trust_failed",
-                "message": f"USB 信任失敗 — 請在 iPhone 解鎖畫面上點「信任」後再試:{e}",
+                "message": "USB 信任失敗 — 請在 iPhone 解鎖畫面上點「信任」後再試",
                 "udid": udid,
             },
         )
@@ -249,13 +258,14 @@ async def wifi_repair():
             remote_record_regenerated = True
         except Exception as e:
             _tunnel_logger.exception("Re-pair: RemotePairing handshake failed")
-            msg = str(e)
-            if "PairingDialogResponsePending" in msg or "consent" in msg.lower():
+            # `_msg` is used only for internal classification — never returned.
+            _msg = str(e)
+            if "PairingDialogResponsePending" in _msg or "consent" in _msg.lower():
                 friendly = "請在 iPhone 解鎖螢幕上按「信任」後重試(timeout 只有幾秒)。"
-            elif "not paired" in msg.lower() or "pairingerror" in msg.lower():
+            elif "not paired" in _msg.lower() or "pairingerror" in _msg.lower():
                 friendly = "USB 配對失效,請拔 USB 重插一次並按信任。"
             else:
-                friendly = f"RemotePairing 握手失敗:{msg}"
+                friendly = "RemotePairing 握手失敗,請查看後端記錄檔以取得詳細資訊。"
             raise HTTPException(
                 status_code=500,
                 detail={
@@ -532,11 +542,12 @@ async def wifi_tunnel_start(req: WifiTunnelStartRequest):
                 status_code=500,
                 detail={"code": "tunnel_timeout", "message": "Tunnel 啟動逾時(20 秒)"},
             )
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail={"code": "tunnel_spawn_failed", "message": f"無法啟動 tunnel:{e}"},
+        except Exception:
+            logger.exception(
+                "Tunnel spawn failed",
+                extra={"udid": resolved_udid, "ip": req.ip, "port": req.port},
             )
+            raise _http_err(500, "tunnel_spawn_failed", "無法啟動 tunnel,請查看後端記錄檔")
 
         _tunnel_logger.info("WiFi tunnel started: %s", info)
         if _tunnel_watchdog_task is None or _tunnel_watchdog_task.done():
@@ -632,20 +643,20 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
     # Start the tunnel
     tunnel_result = await wifi_tunnel_start(req)
     if tunnel_result.get("status") not in ("started", "already_running"):
-        raise HTTPException(status_code=500, detail="Tunnel failed to start")
+        raise _http_err(500, "tunnel_failed", "Tunnel 啟動失敗")
 
     rsd_address = tunnel_result.get("rsd_address")
     rsd_port = tunnel_result.get("rsd_port")
 
     if not rsd_address or not rsd_port:
-        raise HTTPException(status_code=500, detail="Tunnel started but no RSD info available")
+        raise _http_err(500, "tunnel_no_rsd", "Tunnel 已啟動但無 RSD 資訊")
 
     # Connect through the tunnel
     dm = _dm()
-    if dm.connected_count >= 2:
+    if dm.connected_count >= MAX_DEVICES:
         raise HTTPException(
             status_code=409,
-            detail={"code": "max_devices_reached", "message": "已連接最多 2 台裝置"},
+            detail={"code": "max_devices_reached", "message": f"已連接最多 {MAX_DEVICES} 台裝置"},
         )
     try:
         info = await dm.connect_wifi_tunnel(rsd_address, rsd_port)
@@ -659,8 +670,12 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
             "rsd_address": rsd_address,
             "rsd_port": rsd_port,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Tunnel started but connection failed: {e}")
+    except Exception:
+        logger.exception(
+            "Tunnel started but device connection failed",
+            extra={"rsd_address": rsd_address, "rsd_port": rsd_port},
+        )
+        raise _http_err(500, "connect_failed", "Tunnel 已啟動但裝置連線失敗")
 
 
 # ── Generic UDID routes (MUST be defined after all specific /wifi/* routes
@@ -671,11 +686,11 @@ async def connect_device(udid: str):
     from main import app_state
     from core.device_manager import UnsupportedIosVersionError
     dm = _dm()
-    # Max 2 devices (group mode). Allow re-connect of an already-connected udid.
-    if not dm.is_connected(udid) and dm.connected_count >= 2:
+    # Max MAX_DEVICES devices (group mode). Allow re-connect of an already-connected udid.
+    if not dm.is_connected(udid) and dm.connected_count >= MAX_DEVICES:
         raise HTTPException(
             status_code=409,
-            detail={"code": "max_devices_reached", "message": "已連接最多 2 台裝置"},
+            detail={"code": "max_devices_reached", "message": f"已連接最多 {MAX_DEVICES} 台裝置"},
         )
     try:
         await dm.connect(udid)
@@ -707,8 +722,9 @@ async def connect_device(udid: str):
                 "min_version": UnsupportedIosVersionError.MIN_VERSION,
             },
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Device connect failed", extra={"udid": udid})
+        raise _http_err(500, "connect_failed", "裝置連線失敗,請重試")
 
 
 @router.delete("/{udid}/connect")
@@ -749,10 +765,8 @@ async def device_info(udid: str):
 async def amfi_reveal_developer_mode(udid: str):
     dm = _dm()
     # AMFI reads several fields off the live Connection (ios_version,
-    # connection_type); keep the private read here — abstracting it
-    # would require exposing the Connection type, which belongs to a
-    # later refactor pass.
-    conn = dm._connections.get(udid)
+    # connection_type) via the public ConnectionInfo accessor.
+    conn = dm.get_connection(udid)
     if conn is None:
         raise HTTPException(
             status_code=404,
@@ -787,26 +801,15 @@ async def amfi_reveal_developer_mode(udid: str):
 
     try:
         from pymobiledevice3.services.amfi import AmfiService
-    except ImportError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "code": "amfi_unavailable",
-                "message": f"pymobiledevice3 AMFI 服務無法載入 ({type(exc).__name__}: {exc})",
-            },
-        )
+    except ImportError:
+        logger.exception("pymobiledevice3 AMFI module import failed", extra={"udid": udid})
+        raise _http_err(500, "amfi_unavailable", "pymobiledevice3 AMFI 服務無法載入")
 
     try:
         AmfiService(conn.lockdown).reveal_developer_mode_option_in_ui()
-    except Exception as exc:
+    except Exception:
         logger.exception("AMFI reveal failed for %s", udid)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "code": "amfi_reveal_failed",
-                "message": f"{type(exc).__name__}: {exc}",
-            },
-        )
+        raise _http_err(500, "amfi_reveal_failed", "AMFI 操作失敗,請確認裝置已解鎖並信任這台電腦")
 
     # Invalidate the cached status so the next discover pays a fresh
     # lockdown query and the frontend sees the toggle flip.
