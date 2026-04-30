@@ -146,35 +146,50 @@ async def forget_device(udid: str):
 
     conn = dm.get_connection(udid)
     if conn is not None:
-        # Tell the device to forget us, best-effort. lockdown.unpair() may
-        # be sync or async depending on connection type — handle both.
-        try:
+        async def _unpair() -> None:
+            # lockdown.unpair() may be sync or async depending on
+            # connection type — normalise both to a coroutine.
             result = conn.lockdown.unpair()
             if asyncio.iscoroutine(result):
                 await result
+
+        # Run the device-side unpair in parallel with the local
+        # engine teardown — they touch different resources and the
+        # unpair RPC is the long pole.
+        unpair_task = asyncio.create_task(_unpair())
+        await app_state.terminate_engine(udid)
+        try:
+            await unpair_task
         except Exception:
             logger.warning(
                 "lockdown.unpair() failed for %s; will still remove local record",
                 udid, exc_info=True,
             )
-        # Tear down engine + transport before nuking the pair record.
-        await app_state.terminate_engine(udid)
         await dm.disconnect(udid)
 
+    # One syscall per candidate — atomic, no TOCTOU. FileNotFoundError
+    # means the path already absent (fine); other OSErrors are logged.
     removed: list[str] = []
     for p in _pair_record_candidates(udid):
         try:
-            if p.exists():
-                p.unlink()
-                removed.append(str(p))
+            p.unlink()
+        except FileNotFoundError:
+            pass
         except OSError:
             logger.warning("Could not remove pair record %s", p, exc_info=True)
+        else:
+            removed.append(str(p))
+
+    # The forgotten UDID can't auto-reconnect anyway (the pair record is
+    # gone), but if the user later re-pairs the same device they'd want
+    # auto-connect to work again — drop the stale blocklist entry.
+    app_state.unblock_auto_reconnect(udid)
 
     try:
         from api.websocket import broadcast
         await broadcast("device_disconnected", {"udid": udid, "udids": [udid], "reason": "forget"})
     except Exception:
-        pass
+        logger.warning("forget_device: device_disconnected broadcast failed", exc_info=True)
 
     logger.info("Forgot device %s (removed %d pair-record file(s))", udid, len(removed))
     return {"status": "forgotten", "udid": udid, "removed": removed}
