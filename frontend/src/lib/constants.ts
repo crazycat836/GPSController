@@ -35,3 +35,12 @@ export const DEFAULT_TUNNEL_PORT = 49152
 export const DEFAULT_PAUSE = { enabled: true, min: 5, max: 20 } as const
 export const DEFAULT_RANDOM_WALK_RADIUS = 500
 export const DEFAULT_WP_GEN_RADIUS = 300
+
+/**
+ * Retry backoff for `fetchWithRetry` in `services/api.ts`.
+ * Used only when the connection itself fails (e.g. backend not yet up).
+ * Schedule per attempt `i`: min(INITIAL + i * STEP, MAX).
+ */
+export const RETRY_BACKOFF_INITIAL_MS = 500
+export const RETRY_BACKOFF_STEP_MS = 300
+export const RETRY_BACKOFF_MAX_MS = 2000
