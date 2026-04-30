@@ -74,7 +74,7 @@ async def create_bookmark(bookmark: Bookmark):
     bm = _bm()
     # Auto-fill the country flag metadata when the client didn't supply it.
     country_code, country = await _ensure_country(bookmark)
-    return bm.create_bookmark(
+    return await bm.create_bookmark(
         name=bookmark.name,
         lat=bookmark.lat,
         lng=bookmark.lng,
@@ -90,7 +90,7 @@ async def create_bookmark(bookmark: Bookmark):
 async def update_bookmark(bookmark_id: str, bookmark: Bookmark):
     bm = _bm()
     country_code, country = await _ensure_country(bookmark)
-    updated = bm.update_bookmark(
+    updated = await bm.update_bookmark(
         bookmark_id,
         name=bookmark.name,
         lat=bookmark.lat,
@@ -109,7 +109,7 @@ async def update_bookmark(bookmark_id: str, bookmark: Bookmark):
 @router.delete("/{bookmark_id}")
 async def delete_bookmark(bookmark_id: str):
     bm = _bm()
-    if not bm.delete_bookmark(bookmark_id):
+    if not await bm.delete_bookmark(bookmark_id):
         raise HTTPException(status_code=404, detail="Bookmark not found")
     return {"status": "deleted"}
 
@@ -124,21 +124,21 @@ async def delete_bookmarks_batch(req: BatchDeleteRequest):
     than DELETE with a body) sidesteps FastAPI/CORS + middleware quirks around
     body-bearing DELETE requests and keeps the endpoint trivially cacheable."""
     bm = _bm()
-    removed = bm.delete_bookmarks(req.ids)
+    removed = await bm.delete_bookmarks(req.ids)
     return {"deleted": removed, "requested": len(req.ids)}
 
 
 @router.post("/move")
 async def move_bookmarks(req: BookmarkMoveRequest):
     bm = _bm()
-    count = bm.move_bookmarks(req.bookmark_ids, req.target_place_id)
+    count = await bm.move_bookmarks(req.bookmark_ids, req.target_place_id)
     return {"moved": count}
 
 
 @router.post("/tag")
 async def tag_bookmarks(req: BookmarkTagRequest):
     bm = _bm()
-    count = bm.tag_bookmarks(req.bookmark_ids, req.tag_ids_add, req.tag_ids_remove)
+    count = await bm.tag_bookmarks(req.bookmark_ids, req.tag_ids_add, req.tag_ids_remove)
     return {"tagged": count}
 
 
@@ -153,7 +153,7 @@ async def backfill_flags():
             continue
         cc, country = await _resolve_country(b.lat, b.lng)
         if cc:
-            bm.update_bookmark(b.id, country_code=cc, country=country)
+            await bm.update_bookmark(b.id, country_code=cc, country=country)
             filled += 1
     return {"filled": filled}
 
@@ -167,12 +167,12 @@ async def list_places():
 
 @router.post("/places", response_model=BookmarkPlace)
 async def create_place(place: BookmarkPlace):
-    return _bm().create_place(name=place.name, color=place.color)
+    return await _bm().create_place(name=place.name, color=place.color)
 
 
 @router.put("/places/{place_id}", response_model=BookmarkPlace)
 async def update_place(place_id: str, place: BookmarkPlace):
-    updated = _bm().update_place(place_id, name=place.name, color=place.color)
+    updated = await _bm().update_place(place_id, name=place.name, color=place.color)
     if not updated:
         raise HTTPException(status_code=404, detail="Place not found")
     return updated
@@ -182,14 +182,14 @@ async def update_place(place_id: str, place: BookmarkPlace):
 async def delete_place(place_id: str):
     if place_id == "default":
         raise HTTPException(status_code=400, detail="Cannot delete default place")
-    if not _bm().delete_place(place_id):
+    if not await _bm().delete_place(place_id):
         raise HTTPException(status_code=404, detail="Place not found")
     return {"status": "deleted"}
 
 
 @router.post("/places/reorder")
 async def reorder_places(req: ReorderRequest):
-    changed = _bm().reorder_places(req.ordered_ids)
+    changed = await _bm().reorder_places(req.ordered_ids)
     return {"reordered": changed}
 
 
@@ -202,12 +202,12 @@ async def list_tags():
 
 @router.post("/tags", response_model=BookmarkTag)
 async def create_tag(tag: BookmarkTag):
-    return _bm().create_tag(name=tag.name, color=tag.color)
+    return await _bm().create_tag(name=tag.name, color=tag.color)
 
 
 @router.put("/tags/{tag_id}", response_model=BookmarkTag)
 async def update_tag(tag_id: str, tag: BookmarkTag):
-    updated = _bm().update_tag(tag_id, name=tag.name, color=tag.color)
+    updated = await _bm().update_tag(tag_id, name=tag.name, color=tag.color)
     if not updated:
         raise HTTPException(status_code=404, detail="Tag not found")
     return updated
@@ -215,14 +215,14 @@ async def update_tag(tag_id: str, tag: BookmarkTag):
 
 @router.delete("/tags/{tag_id}")
 async def delete_tag(tag_id: str):
-    if not _bm().delete_tag(tag_id):
+    if not await _bm().delete_tag(tag_id):
         raise HTTPException(status_code=404, detail="Tag not found")
     return {"status": "deleted"}
 
 
 @router.post("/tags/reorder")
 async def reorder_tags(req: ReorderRequest):
-    changed = _bm().reorder_tags(req.ordered_ids)
+    changed = await _bm().reorder_tags(req.ordered_ids)
     return {"reordered": changed}
 
 
@@ -240,5 +240,5 @@ async def export_bookmarks():
 async def import_bookmarks(data: dict):
     import json
     bm = _bm()
-    count = bm.import_json(json.dumps(data))
+    count = await bm.import_json(json.dumps(data))
     return {"imported": count}

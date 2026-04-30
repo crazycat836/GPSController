@@ -10,6 +10,7 @@ new shape via :func:`_migrate_v0_to_v1` before handing them to Pydantic.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -147,6 +148,13 @@ class BookmarkManager:
             tags=_build_preset_tags(),
             bookmarks=[],
         )
+        # Serialise every public mutator + _save() so concurrent
+        # POST /api/bookmarks (and place/tag/import) requests cannot
+        # interleave list mutations and write a torn JSON snapshot to
+        # disk. asyncio.Lock created here is bound lazily to the running
+        # loop on first acquire (Python 3.10+), so __init__ at import
+        # time is safe.
+        self._lock = asyncio.Lock()
         self._load()
 
     # ------------------------------------------------------------------
@@ -215,78 +223,82 @@ class BookmarkManager:
     # Places
     # ------------------------------------------------------------------
 
-    def create_place(self, name: str, color: str = "#6c8cff") -> BookmarkPlace:
-        max_order = max((p.sort_order for p in self.store.places), default=-1)
-        place = BookmarkPlace(
-            id=str(uuid.uuid4()),
-            name=name,
-            color=color,
-            sort_order=max_order + 1,
-            created_at=_now_iso(),
-        )
-        self.store.places.append(place)
-        self._save()
-        return place
+    async def create_place(self, name: str, color: str = "#6c8cff") -> BookmarkPlace:
+        async with self._lock:
+            max_order = max((p.sort_order for p in self.store.places), default=-1)
+            place = BookmarkPlace(
+                id=str(uuid.uuid4()),
+                name=name,
+                color=color,
+                sort_order=max_order + 1,
+                created_at=_now_iso(),
+            )
+            self.store.places.append(place)
+            self._save()
+            return place
 
-    def update_place(
+    async def update_place(
         self,
         place_id: str,
         name: str | None = None,
         color: str | None = None,
     ) -> BookmarkPlace | None:
-        place = self._find_place(place_id)
-        if place is None:
-            return None
-        updates: dict[str, object] = {}
-        if name is not None:
-            updates["name"] = name
-        if color is not None:
-            updates["color"] = color
-        if updates:
-            new_place = place.model_copy(update=updates)
-            idx = self.store.places.index(place)
-            self.store.places[idx] = new_place
-            place = new_place
-        self._save()
-        return place
+        async with self._lock:
+            place = self._find_place(place_id)
+            if place is None:
+                return None
+            updates: dict[str, object] = {}
+            if name is not None:
+                updates["name"] = name
+            if color is not None:
+                updates["color"] = color
+            if updates:
+                new_place = place.model_copy(update=updates)
+                idx = self.store.places.index(place)
+                self.store.places[idx] = new_place
+                place = new_place
+            self._save()
+            return place
 
-    def delete_place(self, place_id: str) -> bool:
+    async def delete_place(self, place_id: str) -> bool:
         """Delete a place; bookmarks pointing at it fall back to *default*."""
         if place_id == "default":
             logger.warning("Cannot delete the default place")
             return False
-        if self._find_place(place_id) is None:
-            return False
+        async with self._lock:
+            if self._find_place(place_id) is None:
+                return False
 
-        self.store.bookmarks = [
-            bm.model_copy(update={"place_id": "default"}) if bm.place_id == place_id else bm
-            for bm in self.store.bookmarks
-        ]
+            self.store.bookmarks = [
+                bm.model_copy(update={"place_id": "default"}) if bm.place_id == place_id else bm
+                for bm in self.store.bookmarks
+            ]
 
-        self.store.places = [p for p in self.store.places if p.id != place_id]
-        self._save()
-        return True
+            self.store.places = [p for p in self.store.places if p.id != place_id]
+            self._save()
+            return True
 
     def list_places(self) -> list[BookmarkPlace]:
         return sorted(self.store.places, key=lambda p: p.sort_order)
 
-    def reorder_places(self, ordered_ids: list[str]) -> int:
+    async def reorder_places(self, ordered_ids: list[str]) -> int:
         """Rewrite sort_order to match the given id sequence. Unknown ids are
         ignored. Returns number of places whose sort_order actually changed."""
-        id_to_order = {pid: i for i, pid in enumerate(ordered_ids)}
-        changed = 0
-        new_places: list[BookmarkPlace] = []
-        for place in self.store.places:
-            new_order = id_to_order.get(place.id)
-            if new_order is None or place.sort_order == new_order:
-                new_places.append(place)
-                continue
-            new_places.append(place.model_copy(update={"sort_order": new_order}))
-            changed += 1
-        if changed:
-            self.store.places = new_places
-            self._save()
-        return changed
+        async with self._lock:
+            id_to_order = {pid: i for i, pid in enumerate(ordered_ids)}
+            changed = 0
+            new_places: list[BookmarkPlace] = []
+            for place in self.store.places:
+                new_order = id_to_order.get(place.id)
+                if new_order is None or place.sort_order == new_order:
+                    new_places.append(place)
+                    continue
+                new_places.append(place.model_copy(update={"sort_order": new_order}))
+                changed += 1
+            if changed:
+                self.store.places = new_places
+                self._save()
+            return changed
 
     def _find_place(self, place_id: str) -> BookmarkPlace | None:
         return next((p for p in self.store.places if p.id == place_id), None)
@@ -295,73 +307,77 @@ class BookmarkManager:
     # Tags
     # ------------------------------------------------------------------
 
-    def create_tag(self, name: str, color: str = "#A855F7") -> BookmarkTag:
-        max_order = max((t.sort_order for t in self.store.tags), default=-1)
-        tag = BookmarkTag(
-            id=str(uuid.uuid4()),
-            name=name,
-            color=color,
-            sort_order=max_order + 1,
-            created_at=_now_iso(),
-        )
-        self.store.tags.append(tag)
-        self._save()
-        return tag
+    async def create_tag(self, name: str, color: str = "#A855F7") -> BookmarkTag:
+        async with self._lock:
+            max_order = max((t.sort_order for t in self.store.tags), default=-1)
+            tag = BookmarkTag(
+                id=str(uuid.uuid4()),
+                name=name,
+                color=color,
+                sort_order=max_order + 1,
+                created_at=_now_iso(),
+            )
+            self.store.tags.append(tag)
+            self._save()
+            return tag
 
-    def update_tag(
+    async def update_tag(
         self,
         tag_id: str,
         name: str | None = None,
         color: str | None = None,
     ) -> BookmarkTag | None:
-        tag = self._find_tag(tag_id)
-        if tag is None:
-            return None
-        updates: dict[str, object] = {}
-        if name is not None:
-            updates["name"] = name
-        if color is not None:
-            updates["color"] = color
-        if updates:
-            new_tag = tag.model_copy(update=updates)
-            idx = self.store.tags.index(tag)
-            self.store.tags[idx] = new_tag
-            tag = new_tag
-        self._save()
-        return tag
+        async with self._lock:
+            tag = self._find_tag(tag_id)
+            if tag is None:
+                return None
+            updates: dict[str, object] = {}
+            if name is not None:
+                updates["name"] = name
+            if color is not None:
+                updates["color"] = color
+            if updates:
+                new_tag = tag.model_copy(update=updates)
+                idx = self.store.tags.index(tag)
+                self.store.tags[idx] = new_tag
+                tag = new_tag
+            self._save()
+            return tag
 
-    def delete_tag(self, tag_id: str) -> bool:
+    async def delete_tag(self, tag_id: str) -> bool:
         """Delete a tag. Also strips it from every bookmark's tags list."""
-        if self._find_tag(tag_id) is None:
-            return False
-        self.store.bookmarks = [
-            bm.model_copy(update={"tags": [t for t in bm.tags if t != tag_id]})
-            if tag_id in bm.tags
-            else bm
-            for bm in self.store.bookmarks
-        ]
-        self.store.tags = [t for t in self.store.tags if t.id != tag_id]
-        self._save()
-        return True
+        async with self._lock:
+            if self._find_tag(tag_id) is None:
+                return False
+            self.store.bookmarks = [
+                bm.model_copy(update={"tags": [t for t in bm.tags if t != tag_id]})
+                if tag_id in bm.tags
+                else bm
+                for bm in self.store.bookmarks
+            ]
+            self.store.tags = [t for t in self.store.tags if t.id != tag_id]
+            self._save()
+            return True
 
     def list_tags(self) -> list[BookmarkTag]:
         return sorted(self.store.tags, key=lambda t: t.sort_order)
 
-    def reorder_tags(self, ordered_ids: list[str]) -> int:
-        id_to_order = {tid: i for i, tid in enumerate(ordered_ids)}
-        changed = 0
-        new_tags: list[BookmarkTag] = []
-        for tag in self.store.tags:
-            new_order = id_to_order.get(tag.id)
-            if new_order is None or tag.sort_order == new_order:
-                new_tags.append(tag)
-                continue
-            new_tags.append(tag.model_copy(update={"sort_order": new_order}))
-            changed += 1
-        if changed:
-            self.store.tags = new_tags
-            self._save()
-        return changed
+    async def reorder_tags(self, ordered_ids: list[str]) -> int:
+        async with self._lock:
+            id_to_order = {tid: i for i, tid in enumerate(ordered_ids)}
+            changed = 0
+            new_tags: list[BookmarkTag] = []
+            for tag in self.store.tags:
+                new_order = id_to_order.get(tag.id)
+                if new_order is None or tag.sort_order == new_order:
+                    new_tags.append(tag)
+                    continue
+                new_tags.append(tag.model_copy(update={"sort_order": new_order}))
+                changed += 1
+            if changed:
+                self.store.tags = new_tags
+                self._save()
+            return changed
 
     def _find_tag(self, tag_id: str) -> BookmarkTag | None:
         return next((t for t in self.store.tags if t.id == tag_id), None)
@@ -370,7 +386,7 @@ class BookmarkManager:
     # Bookmarks
     # ------------------------------------------------------------------
 
-    def create_bookmark(
+    async def create_bookmark(
         self,
         name: str,
         lat: float,
@@ -381,106 +397,111 @@ class BookmarkManager:
         country_code: str = "",
         country: str = "",
     ) -> Bookmark:
-        if self._find_place(place_id) is None:
-            place_id = "default"
+        async with self._lock:
+            if self._find_place(place_id) is None:
+                place_id = "default"
 
-        known_tag_ids = {t.id for t in self.store.tags}
-        cleaned_tags = [t for t in (tags or []) if t in known_tag_ids]
+            known_tag_ids = {t.id for t in self.store.tags}
+            cleaned_tags = [t for t in (tags or []) if t in known_tag_ids]
 
-        now = _now_iso()
-        bm = Bookmark(
-            id=str(uuid.uuid4()),
-            name=name,
-            lat=lat,
-            lng=lng,
-            address=address,
-            place_id=place_id,
-            tags=cleaned_tags,
-            created_at=now,
-            last_used_at=now,
-            country_code=country_code,
-            country=country,
-        )
-        self.store.bookmarks.append(bm)
-        self._save()
-        return bm
-
-    def update_bookmark(self, bm_id: str, **kwargs: object) -> Bookmark | None:
-        bm = self._find_bookmark(bm_id)
-        if bm is None:
-            return None
-
-        allowed = {
-            "name", "lat", "lng", "address", "place_id", "tags",
-            "last_used_at", "country_code", "country",
-        }
-        updates: dict[str, object] = {}
-        for key, value in kwargs.items():
-            if key not in allowed or value is None:
-                continue
-            if key == "place_id" and self._find_place(str(value)) is None:
-                continue  # reject unknown place silently; keep current value
-            if key == "tags":
-                known = {t.id for t in self.store.tags}
-                value = [t for t in value if t in known]  # type: ignore[union-attr]
-            updates[key] = value
-
-        if updates:
-            new_bm = bm.model_copy(update=updates)
-            idx = self.store.bookmarks.index(bm)
-            self.store.bookmarks[idx] = new_bm
-            bm = new_bm
-
-        self._save()
-        return bm
-
-    def delete_bookmark(self, bm_id: str) -> bool:
-        before = len(self.store.bookmarks)
-        self.store.bookmarks = [b for b in self.store.bookmarks if b.id != bm_id]
-        if len(self.store.bookmarks) < before:
+            now = _now_iso()
+            bm = Bookmark(
+                id=str(uuid.uuid4()),
+                name=name,
+                lat=lat,
+                lng=lng,
+                address=address,
+                place_id=place_id,
+                tags=cleaned_tags,
+                created_at=now,
+                last_used_at=now,
+                country_code=country_code,
+                country=country,
+            )
+            self.store.bookmarks.append(bm)
             self._save()
-            return True
-        return False
+            return bm
 
-    def delete_bookmarks(self, bm_ids: list[str]) -> int:
+    async def update_bookmark(self, bm_id: str, **kwargs: object) -> Bookmark | None:
+        async with self._lock:
+            bm = self._find_bookmark(bm_id)
+            if bm is None:
+                return None
+
+            allowed = {
+                "name", "lat", "lng", "address", "place_id", "tags",
+                "last_used_at", "country_code", "country",
+            }
+            updates: dict[str, object] = {}
+            for key, value in kwargs.items():
+                if key not in allowed or value is None:
+                    continue
+                if key == "place_id" and self._find_place(str(value)) is None:
+                    continue  # reject unknown place silently; keep current value
+                if key == "tags":
+                    known = {t.id for t in self.store.tags}
+                    value = [t for t in value if t in known]  # type: ignore[union-attr]
+                updates[key] = value
+
+            if updates:
+                new_bm = bm.model_copy(update=updates)
+                idx = self.store.bookmarks.index(bm)
+                self.store.bookmarks[idx] = new_bm
+                bm = new_bm
+
+            self._save()
+            return bm
+
+    async def delete_bookmark(self, bm_id: str) -> bool:
+        async with self._lock:
+            before = len(self.store.bookmarks)
+            self.store.bookmarks = [b for b in self.store.bookmarks if b.id != bm_id]
+            if len(self.store.bookmarks) < before:
+                self._save()
+                return True
+            return False
+
+    async def delete_bookmarks(self, bm_ids: list[str]) -> int:
         if not bm_ids:
             return 0
-        ids = set(bm_ids)
-        before = len(self.store.bookmarks)
-        self.store.bookmarks = [b for b in self.store.bookmarks if b.id not in ids]
-        removed = before - len(self.store.bookmarks)
-        if removed:
-            self._save()
-        return removed
+        async with self._lock:
+            ids = set(bm_ids)
+            before = len(self.store.bookmarks)
+            self.store.bookmarks = [b for b in self.store.bookmarks if b.id not in ids]
+            removed = before - len(self.store.bookmarks)
+            if removed:
+                self._save()
+            return removed
 
     def list_bookmarks(self) -> list[Bookmark]:
         return list(self.store.bookmarks)
 
-    def move_bookmarks(self, bookmark_ids: list[str], target_place_id: str) -> int:
+    async def move_bookmarks(self, bookmark_ids: list[str], target_place_id: str) -> int:
         """Move multiple bookmarks to *target_place_id*.
 
         Returns the number of bookmarks actually moved.
         """
-        if self._find_place(target_place_id) is None:
-            logger.warning("Target place %s does not exist", target_place_id)
-            return 0
+        async with self._lock:
+            if self._find_place(target_place_id) is None:
+                logger.warning("Target place %s does not exist", target_place_id)
+                return 0
 
-        moved = 0
-        ids_set = set(bookmark_ids)
-        new_bookmarks: list[Bookmark] = []
-        for bm in self.store.bookmarks:
-            if bm.id in ids_set and bm.place_id != target_place_id:
-                new_bookmarks.append(bm.model_copy(update={"place_id": target_place_id}))
-                moved += 1
-            else:
-                new_bookmarks.append(bm)
+            moved = 0
+            ids_set = set(bookmark_ids)
+            new_bookmarks: list[Bookmark] = []
+            for bm in self.store.bookmarks:
+                if bm.id in ids_set and bm.place_id != target_place_id:
+                    new_bookmarks.append(bm.model_copy(update={"place_id": target_place_id}))
+                    moved += 1
+                else:
+                    new_bookmarks.append(bm)
 
-        if moved:
-            self.store.bookmarks = new_bookmarks
-            self._save()
-        return moved
+            if moved:
+                self.store.bookmarks = new_bookmarks
+                self._save()
+            return moved
 
-    def tag_bookmarks(
+    async def tag_bookmarks(
         self,
         bookmark_ids: list[str],
         tag_ids_add: list[str] | None = None,
@@ -492,32 +513,33 @@ class BookmarkManager:
         if not bookmark_ids:
             return 0
 
-        known = {t.id for t in self.store.tags}
-        add = [t for t in (tag_ids_add or []) if t in known]
-        remove_set = set(tag_ids_remove or [])
-        ids_set = set(bookmark_ids)
+        async with self._lock:
+            known = {t.id for t in self.store.tags}
+            add = [t for t in (tag_ids_add or []) if t in known]
+            remove_set = set(tag_ids_remove or [])
+            ids_set = set(bookmark_ids)
 
-        changed = 0
-        new_bookmarks: list[Bookmark] = []
-        for bm in self.store.bookmarks:
-            if bm.id not in ids_set:
-                new_bookmarks.append(bm)
-                continue
-            before = list(bm.tags)
-            after = [t for t in before if t not in remove_set]
-            for t in add:
-                if t not in after:
-                    after.append(t)
-            if after != before:
-                new_bookmarks.append(bm.model_copy(update={"tags": after}))
-                changed += 1
-            else:
-                new_bookmarks.append(bm)
+            changed = 0
+            new_bookmarks: list[Bookmark] = []
+            for bm in self.store.bookmarks:
+                if bm.id not in ids_set:
+                    new_bookmarks.append(bm)
+                    continue
+                before = list(bm.tags)
+                after = [t for t in before if t not in remove_set]
+                for t in add:
+                    if t not in after:
+                        after.append(t)
+                if after != before:
+                    new_bookmarks.append(bm.model_copy(update={"tags": after}))
+                    changed += 1
+                else:
+                    new_bookmarks.append(bm)
 
-        if changed:
-            self.store.bookmarks = new_bookmarks
-            self._save()
-        return changed
+            if changed:
+                self.store.bookmarks = new_bookmarks
+                self._save()
+            return changed
 
     def _find_bookmark(self, bm_id: str) -> Bookmark | None:
         return next((b for b in self.store.bookmarks if b.id == bm_id), None)
@@ -529,7 +551,7 @@ class BookmarkManager:
     def export_json(self) -> str:
         return self.store.model_dump_json(indent=2)
 
-    def import_json(self, data: str) -> int:
+    async def import_json(self, data: str) -> int:
         """Import bookmarks (and places/tags) from a JSON string.
 
         Accepts both v0 (`categories` + `category_id`) and v1 payloads — v0
@@ -546,34 +568,35 @@ class BookmarkManager:
             logger.error("Invalid bookmark JSON: %s", exc)
             return 0
 
-        existing_place_ids = {p.id for p in self.store.places}
-        for place in incoming.places:
-            if place.id not in existing_place_ids:
-                self.store.places.append(place)
-                existing_place_ids.add(place.id)
+        async with self._lock:
+            existing_place_ids = {p.id for p in self.store.places}
+            for place in incoming.places:
+                if place.id not in existing_place_ids:
+                    self.store.places.append(place)
+                    existing_place_ids.add(place.id)
 
-        existing_tag_ids = {t.id for t in self.store.tags}
-        for tag in incoming.tags:
-            if tag.id not in existing_tag_ids:
-                self.store.tags.append(tag)
-                existing_tag_ids.add(tag.id)
+            existing_tag_ids = {t.id for t in self.store.tags}
+            for tag in incoming.tags:
+                if tag.id not in existing_tag_ids:
+                    self.store.tags.append(tag)
+                    existing_tag_ids.add(tag.id)
 
-        existing_bm_ids = {b.id for b in self.store.bookmarks}
-        imported = 0
-        for bm in incoming.bookmarks:
-            if bm.id in existing_bm_ids:
-                continue
-            updates: dict[str, object] = {
-                "tags": [t for t in bm.tags if t in existing_tag_ids],
-            }
-            if bm.place_id not in existing_place_ids:
-                updates["place_id"] = "default"
-            new_bm = bm.model_copy(update=updates)
-            self.store.bookmarks.append(new_bm)
-            existing_bm_ids.add(new_bm.id)
-            imported += 1
+            existing_bm_ids = {b.id for b in self.store.bookmarks}
+            imported = 0
+            for bm in incoming.bookmarks:
+                if bm.id in existing_bm_ids:
+                    continue
+                updates: dict[str, object] = {
+                    "tags": [t for t in bm.tags if t in existing_tag_ids],
+                }
+                if bm.place_id not in existing_place_ids:
+                    updates["place_id"] = "default"
+                new_bm = bm.model_copy(update=updates)
+                self.store.bookmarks.append(new_bm)
+                existing_bm_ids.add(new_bm.id)
+                imported += 1
 
-        if imported:
-            self._save()
-        logger.info("Imported %d bookmarks", imported)
-        return imported
+            if imported:
+                self._save()
+            logger.info("Imported %d bookmarks", imported)
+            return imported
