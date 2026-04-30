@@ -348,6 +348,12 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     return fn ? fn(code) : code
   }, [])
   const [mode, _setMode] = useState<SimMode>(SimMode.Teleport)
+  // Latest mode in a ref so optimistic action handlers can capture the
+  // pre-call value cheaply (without re-creating their useCallback identity
+  // on every mode change). Used by navigate/startLoop/multiStop/randomWalk/
+  // joystickStart to roll back if the backend rejects the request.
+  const modeRef = useRef(mode)
+  useEffect(() => { modeRef.current = mode }, [mode])
   const [moveMode, setMoveMode] = useState<MoveMode>(MoveMode.Walking)
   const [status, setStatus] = useState<SimulationStatus>({
     running: false,
@@ -725,13 +731,23 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const navigate = useCallback(
     async (lat: number, lng: number) => {
       setError(null)
+      // Capture pre-call state for rollback on backend rejection. Without
+      // this the tab UI stays on "Navigate" with a destination pin while
+      // the engine is actually idle.
+      const prevMode = modeRef.current
       _setMode(SimMode.Navigate)
       setDestination({ lat, lng })
       setProgress(0)
-      const res = await api.navigate(lat, lng, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, undefined, straightLine)
-      setStatus((prev) => ({ ...prev, running: true, paused: false }))
-      setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
-      return res
+      try {
+        const res = await api.navigate(lat, lng, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, undefined, straightLine)
+        setStatus((prev) => ({ ...prev, running: true, paused: false }))
+        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+        return res
+      } catch (err) {
+        _setMode(prevMode)
+        setDestination(null)
+        throw err
+      }
     },
     // navigate body doesn't read pauseMultiStop / pauseLoop / pauseRandomWalk —
     // dropping them so this callback identity doesn't churn on unrelated edits.
@@ -741,6 +757,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const startLoop = useCallback(
     async (wps: LatLng[]) => {
       setError(null)
+      const prevMode = modeRef.current
       _setMode(SimMode.Loop)
       // Don't setWaypoints(wps) — wps is the route as sent to the backend
       // (already includes the start position from caller). Overwriting UI
@@ -748,10 +765,16 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       // and break the backend↔UI seg_idx mapping for highlighting.
       setProgress(0)
       setLapProgress(loopLapCount != null ? { current: 0, total: loopLapCount } : null)
-      const res = await api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, undefined, straightLine, loopLapCount)
-      setStatus((prev) => ({ ...prev, running: true, paused: false }))
-      setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
-      return res
+      try {
+        const res = await api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, undefined, straightLine, loopLapCount)
+        setStatus((prev) => ({ ...prev, running: true, paused: false }))
+        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+        return res
+      } catch (err) {
+        _setMode(prevMode)
+        setLapProgress(null)
+        throw err
+      }
     },
     [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, pauseLoop, pauseRandomWalk, straightLine, loopLapCount],
   )
@@ -759,14 +782,21 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const multiStop = useCallback(
     async (wps: LatLng[], stopDuration: number, loop: boolean) => {
       setError(null)
+      const prevMode = modeRef.current
       _setMode(SimMode.MultiStop)
       // See startLoop — do not overwrite UI waypoints with the backend route.
       setProgress(0)
       setLapProgress(loop && loopLapCount != null ? { current: 0, total: loopLapCount } : null)
-      const res = await api.multiStop(wps, moveMode, stopDuration, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, undefined, straightLine, loop ? loopLapCount : null)
-      setStatus((prev) => ({ ...prev, running: true, paused: false }))
-      setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
-      return res
+      try {
+        const res = await api.multiStop(wps, moveMode, stopDuration, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, undefined, straightLine, loop ? loopLapCount : null)
+        setStatus((prev) => ({ ...prev, running: true, paused: false }))
+        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+        return res
+      } catch (err) {
+        _setMode(prevMode)
+        setLapProgress(null)
+        throw err
+      }
     },
     [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, pauseLoop, pauseRandomWalk, straightLine, loopLapCount],
   )
@@ -774,12 +804,18 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const randomWalk = useCallback(
     async (center: LatLng, radiusM: number) => {
       setError(null)
+      const prevMode = modeRef.current
       _setMode(SimMode.RandomWalk)
       setProgress(0)
-      const res = await api.randomWalk(center, radiusM, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseRandomWalk.enabled, pause_min: pauseRandomWalk.min, pause_max: pauseRandomWalk.max }, undefined, undefined, straightLine)
-      setStatus((prev) => ({ ...prev, running: true, paused: false }))
-      setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
-      return res
+      try {
+        const res = await api.randomWalk(center, radiusM, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseRandomWalk.enabled, pause_min: pauseRandomWalk.min, pause_max: pauseRandomWalk.max }, undefined, undefined, straightLine)
+        setStatus((prev) => ({ ...prev, running: true, paused: false }))
+        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+        return res
+      } catch (err) {
+        _setMode(prevMode)
+        throw err
+      }
     },
     // Body uses only pauseRandomWalk — drop the other two pause settings.
     [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseRandomWalk, straightLine],
@@ -787,10 +823,16 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
 
   const joystickStart = useCallback(async () => {
     setError(null)
+    const prevMode = modeRef.current
     _setMode(SimMode.Joystick)
-    const res = await api.joystickStart(moveMode)
-    setStatus((prev) => ({ ...prev, running: true, paused: false }))
-    return res
+    try {
+      const res = await api.joystickStart(moveMode)
+      setStatus((prev) => ({ ...prev, running: true, paused: false }))
+      return res
+    } catch (err) {
+      _setMode(prevMode)
+      throw err
+    }
   }, [moveMode])
 
   const joystickStop = useCallback(async () => {
