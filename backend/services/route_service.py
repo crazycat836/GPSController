@@ -62,15 +62,20 @@ def _straight_line_fallback(
 class RouteService:
     """Thin async wrapper around the OSRM HTTP API."""
 
-    # Per-region OSRM coverage cache. Keyed by 1°×1° grid cell (≈110 km
-    # square), value is ('ok' | 'down', monotonic_timestamp). 'ok' means
-    # OSRM has data here and a normal request worked. 'down' means a probe
-    # request to this region timed out / failed (no map coverage or area
-    # blocked) so future requests skip OSRM and go straight to fallback.
-    _region_status: dict[tuple[int, int], tuple[str, float]] = {}
-    _region_lock: asyncio.Lock | None = None
     _REGION_TTL_SECONDS = 600.0  # re-probe a region every 10 minutes
     _PROBE_TIMEOUT = httpx.Timeout(2.5, connect=2.0)
+
+    def __init__(self) -> None:
+        # Per-region OSRM coverage cache. Keyed by 1°×1° grid cell (≈110 km
+        # square), value is ('ok' | 'down', monotonic_timestamp). 'ok' means
+        # OSRM has data here and a normal request worked. 'down' means a probe
+        # request to this region timed out / failed (no map coverage or area
+        # blocked) so future requests skip OSRM and go straight to fallback.
+        # Per-instance to avoid unintentionally sharing state across
+        # RouteService instances (api/route.py and SimulationEngine each
+        # construct their own).
+        self._region_status: dict[tuple[int, int], tuple[str, float]] = {}
+        self._region_lock: asyncio.Lock = asyncio.Lock()
 
     @staticmethod
     def _region_key(lat: float, lng: float) -> tuple[int, int]:
@@ -78,20 +83,20 @@ class RouteService:
         import math
         return (int(math.floor(lat)), int(math.floor(lng)))
 
-    @classmethod
-    def _region_state(cls, key: tuple[int, int]) -> str | None:
+    async def _region_state(self, key: tuple[int, int]) -> str | None:
         """Return cached status for *key* if still fresh, else None."""
-        rec = cls._region_status.get(key)
-        if rec is None:
-            return None
-        status, checked_at = rec
-        if (time.monotonic() - checked_at) >= cls._REGION_TTL_SECONDS:
-            return None
-        return status
+        async with self._region_lock:
+            rec = self._region_status.get(key)
+            if rec is None:
+                return None
+            status, checked_at = rec
+            if (time.monotonic() - checked_at) >= self._REGION_TTL_SECONDS:
+                return None
+            return status
 
-    @classmethod
-    def _mark_region(cls, key: tuple[int, int], status: str) -> None:
-        cls._region_status[key] = (status, time.monotonic())
+    async def _mark_region(self, key: tuple[int, int], status: str) -> None:
+        async with self._region_lock:
+            self._region_status[key] = (status, time.monotonic())
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -177,7 +182,7 @@ class RouteService:
         # and mark 'ok'; on failure we mark 'down' and fall back.
         first_lat, first_lng = waypoints[0]
         key = self._region_key(first_lat, first_lng)
-        cached = self._region_state(key)
+        cached = await self._region_state(key)
         if cached == "down":
             return _straight_line_fallback(waypoints)
 
@@ -192,7 +197,7 @@ class RouteService:
                 msg = data.get("message", "Unknown OSRM error")
                 raise RuntimeError(f"OSRM error: {msg}")
         except (httpx.HTTPError, httpx.TimeoutException, RuntimeError) as e:
-            self._mark_region(key, "down")
+            await self._mark_region(key, "down")
             logger.warning(
                 "OSRM failed for region %s (%s); marking down, using straight-line",
                 key, type(e).__name__,
@@ -200,7 +205,7 @@ class RouteService:
             return _straight_line_fallback(waypoints)
         else:
             if cached != "ok":
-                self._mark_region(key, "ok")
+                await self._mark_region(key, "ok")
                 logger.info("OSRM region %s confirmed ok", key)
 
         route = data["routes"][0]
