@@ -7,6 +7,11 @@ import {
 } from '../services/api'
 import type { WsMessage } from './useWebSocket'
 
+// Coalesce burst scans (visibility-change + WS-reconnect debounce can
+// both fire within ~200ms). When `poll: true` AND another poll ran
+// within SCAN_COALESCE_MS, skip — manual scans always go through.
+const SCAN_COALESCE_MS = 1500
+
 // Only log to the DevTools console in dev builds; production (packaged
 // Electron) has no attached console and these would add noise if anyone
 // ever attached one. Uses console.warn so informational "scan failed /
@@ -260,11 +265,8 @@ export function useDevice(subscribe?: WsSubscribe) {
   const [wifiScanning, setWifiScanning] = useState(false)
   const [wifiDevices, setWifiDevices] = useState<WifiScanResult[]>([])
 
-  // Coalesce burst scans (visibility-change + WS-reconnect debounce can
-  // both fire within ~200ms). When `poll: true` AND another poll ran
-  // within COALESCE_MS, skip — manual scans always go through.
+  // See `SCAN_COALESCE_MS` at module top — coalesces burst polls.
   const lastPollAtRef = useRef(0)
-  const SCAN_COALESCE_MS = 1500
 
   const scan = useCallback(async (opts?: { poll?: boolean }) => {
     // Background polling path: silent (no spinner), and never triggers
