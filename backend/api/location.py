@@ -191,7 +191,7 @@ async def apply_speed(req: ApplySpeedRequest):
         speed_min_kmh=req.speed_min_kmh,
         speed_max_kmh=req.speed_max_kmh,
     )
-    swapped = engine.apply_speed(profile)
+    swapped = await engine.apply_speed(profile)
     if not swapped:
         raise HTTPException(
             status_code=400,

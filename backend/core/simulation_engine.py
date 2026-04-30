@@ -169,6 +169,13 @@ class SimulationEngine:
         self._pause_event = asyncio.Event()
         self._pause_event.set()  # set = running, clear = paused
         self._stop_event = asyncio.Event()
+        # Serialises apply_speed against itself so concurrent /apply-speed
+        # requests can't interleave the read-modify-write of
+        # `_pending_speed_profile` / `_speed_was_applied`. After acquire,
+        # apply_speed re-reads `state` and `_active_route_coords` because
+        # _move_along_route's finalize block (movement_loop.py:289-290)
+        # may have cleared them while we were queued behind another caller.
+        self._apply_speed_lock = asyncio.Lock()
 
         # Sub-handlers
         self.route_service = RouteService()
@@ -549,7 +556,7 @@ class SimulationEngine:
         await self.location_service.set(lat, lng)
         self.current_position = Coordinate(lat=lat, lng=lng)
 
-    def apply_speed(
+    async def apply_speed(
         self,
         speed_profile: "SpeedProfile",
     ) -> bool:
@@ -563,19 +570,26 @@ class SimulationEngine:
 
         Returns True if the change was queued/applied, False if nothing is
         running to apply it to.
+
+        Held under ``_apply_speed_lock`` so concurrent /apply-speed
+        requests are serialised. State is re-read after acquire because
+        the engine may have stopped (or _move_along_route may have
+        finalised, clearing _active_route_coords) while this caller was
+        queued.
         """
-        if self.state in (SimulationState.IDLE, SimulationState.DISCONNECTED):
-            return False
-        # Joystick uses its own independent speed profile attribute.
-        if self.state == SimulationState.JOYSTICK and self._joystick.is_active:
-            self._joystick.speed_profile = dict(speed_profile)
+        async with self._apply_speed_lock:
+            if self.state in (SimulationState.IDLE, SimulationState.DISCONNECTED):
+                return False
+            # Joystick uses its own independent speed profile attribute.
+            if self.state == SimulationState.JOYSTICK and self._joystick.is_active:
+                self._joystick.speed_profile = dict(speed_profile)
+                self._speed_was_applied = True
+                return True
+            if not self._active_route_coords:
+                return False
+            self._pending_speed_profile = dict(speed_profile)
             self._speed_was_applied = True
             return True
-        if not self._active_route_coords:
-            return False
-        self._pending_speed_profile = dict(speed_profile)
-        self._speed_was_applied = True
-        return True
 
     async def _move_along_route(
         self,
