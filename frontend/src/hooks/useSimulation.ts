@@ -315,7 +315,6 @@ export interface FanoutOutcome<T> {
 export function summarizeResults<T>(
   results: PromiseSettledResult<T>[],
   udids: string[],
-  _action: string,
 ): FanoutOutcome<T> {
   const ok: FanoutOutcome<T>['ok'] = []
   const failed: FanoutOutcome<T>['failed'] = []
@@ -714,33 +713,25 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     // touch mode here — quick-fly actions (bookmark click, search,
     // TeleportPanel "Go") keep the current Loop / MultiStop / Navigate.
     setError(null)
-    try {
-      const res = await api.teleport(lat, lng)
-      setCurrentPosition({ lat, lng })
-      setBackendPositionSynced(true)
-      setDestination(null)
-      setProgress(0)
-      setEta(null)
-      return res
-    } catch (err: unknown) {
-      throw err
-    }
+    const res = await api.teleport(lat, lng)
+    setCurrentPosition({ lat, lng })
+    setBackendPositionSynced(true)
+    setDestination(null)
+    setProgress(0)
+    setEta(null)
+    return res
   }, [])
 
   const navigate = useCallback(
     async (lat: number, lng: number) => {
       setError(null)
-      try {
-        _setMode(SimMode.Navigate)
-        setDestination({ lat, lng })
-        setProgress(0)
-        const res = await api.navigate(lat, lng, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, undefined, straightLine)
-        setStatus((prev) => ({ ...prev, running: true, paused: false }))
-        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
-        return res
-      } catch (err: unknown) {
-        throw err
-      }
+      _setMode(SimMode.Navigate)
+      setDestination({ lat, lng })
+      setProgress(0)
+      const res = await api.navigate(lat, lng, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, undefined, straightLine)
+      setStatus((prev) => ({ ...prev, running: true, paused: false }))
+      setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+      return res
     },
     // navigate body doesn't read pauseMultiStop / pauseLoop / pauseRandomWalk —
     // dropping them so this callback identity doesn't churn on unrelated edits.
@@ -750,21 +741,17 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const startLoop = useCallback(
     async (wps: LatLng[]) => {
       setError(null)
-      try {
-        _setMode(SimMode.Loop)
-        // Don't setWaypoints(wps) — wps is the route as sent to the backend
-        // (already includes the start position from caller). Overwriting UI
-        // waypoints here would prepend the start point on every restart,
-        // and break the backend↔UI seg_idx mapping for highlighting.
-        setProgress(0)
-        setLapProgress(loopLapCount != null ? { current: 0, total: loopLapCount } : null)
-        const res = await api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, undefined, straightLine, loopLapCount)
-        setStatus((prev) => ({ ...prev, running: true, paused: false }))
-        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
-        return res
-      } catch (err: unknown) {
-        throw err
-      }
+      _setMode(SimMode.Loop)
+      // Don't setWaypoints(wps) — wps is the route as sent to the backend
+      // (already includes the start position from caller). Overwriting UI
+      // waypoints here would prepend the start point on every restart,
+      // and break the backend↔UI seg_idx mapping for highlighting.
+      setProgress(0)
+      setLapProgress(loopLapCount != null ? { current: 0, total: loopLapCount } : null)
+      const res = await api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, undefined, straightLine, loopLapCount)
+      setStatus((prev) => ({ ...prev, running: true, paused: false }))
+      setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+      return res
     },
     [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, pauseLoop, pauseRandomWalk, straightLine, loopLapCount],
   )
@@ -772,18 +759,14 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const multiStop = useCallback(
     async (wps: LatLng[], stopDuration: number, loop: boolean) => {
       setError(null)
-      try {
-        _setMode(SimMode.MultiStop)
-        // See startLoop — do not overwrite UI waypoints with the backend route.
-        setProgress(0)
-        setLapProgress(loop && loopLapCount != null ? { current: 0, total: loopLapCount } : null)
-        const res = await api.multiStop(wps, moveMode, stopDuration, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, undefined, straightLine, loop ? loopLapCount : null)
-        setStatus((prev) => ({ ...prev, running: true, paused: false }))
-        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
-        return res
-      } catch (err: unknown) {
-        throw err
-      }
+      _setMode(SimMode.MultiStop)
+      // See startLoop — do not overwrite UI waypoints with the backend route.
+      setProgress(0)
+      setLapProgress(loop && loopLapCount != null ? { current: 0, total: loopLapCount } : null)
+      const res = await api.multiStop(wps, moveMode, stopDuration, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, undefined, straightLine, loop ? loopLapCount : null)
+      setStatus((prev) => ({ ...prev, running: true, paused: false }))
+      setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+      return res
     },
     [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, pauseLoop, pauseRandomWalk, straightLine, loopLapCount],
   )
@@ -791,16 +774,12 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const randomWalk = useCallback(
     async (center: LatLng, radiusM: number) => {
       setError(null)
-      try {
-        _setMode(SimMode.RandomWalk)
-        setProgress(0)
-        const res = await api.randomWalk(center, radiusM, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseRandomWalk.enabled, pause_min: pauseRandomWalk.min, pause_max: pauseRandomWalk.max }, undefined, undefined, straightLine)
-        setStatus((prev) => ({ ...prev, running: true, paused: false }))
-        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
-        return res
-      } catch (err: unknown) {
-        throw err
-      }
+      _setMode(SimMode.RandomWalk)
+      setProgress(0)
+      const res = await api.randomWalk(center, radiusM, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseRandomWalk.enabled, pause_min: pauseRandomWalk.min, pause_max: pauseRandomWalk.max }, undefined, undefined, straightLine)
+      setStatus((prev) => ({ ...prev, running: true, paused: false }))
+      setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+      return res
     },
     // Body uses only pauseRandomWalk — drop the other two pause settings.
     [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseRandomWalk, straightLine],
@@ -808,111 +787,83 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
 
   const joystickStart = useCallback(async () => {
     setError(null)
-    try {
-      _setMode(SimMode.Joystick)
-      const res = await api.joystickStart(moveMode)
-      setStatus((prev) => ({ ...prev, running: true, paused: false }))
-      return res
-    } catch (err: unknown) {
-      throw err
-    }
+    _setMode(SimMode.Joystick)
+    const res = await api.joystickStart(moveMode)
+    setStatus((prev) => ({ ...prev, running: true, paused: false }))
+    return res
   }, [moveMode])
 
   const joystickStop = useCallback(async () => {
     setError(null)
-    try {
-      const res = await api.joystickStop()
-      // leave mode as-is; status drives running state
-      setStatus((prev) => ({ ...prev, running: false, paused: false }))
-      return res
-    } catch (err: unknown) {
-      throw err
-    }
+    const res = await api.joystickStop()
+    // leave mode as-is; status drives running state
+    setStatus((prev) => ({ ...prev, running: false, paused: false }))
+    return res
   }, [])
 
   const pause = useCallback(async () => {
     setError(null)
-    try {
-      const res = await api.pauseSim()
-      setStatus((prev) => ({ ...prev, paused: true }))
-      return res
-    } catch (err: unknown) {
-      throw err
-    }
+    const res = await api.pauseSim()
+    setStatus((prev) => ({ ...prev, paused: true }))
+    return res
   }, [])
 
   const resume = useCallback(async () => {
     setError(null)
-    try {
-      const res = await api.resumeSim()
-      setStatus((prev) => ({ ...prev, paused: false }))
-      return res
-    } catch (err: unknown) {
-      throw err
-    }
+    const res = await api.resumeSim()
+    setStatus((prev) => ({ ...prev, paused: false }))
+    return res
   }, [])
 
   const stop = useCallback(async () => {
     setError(null)
-    try {
-      const res = await api.stopSim()
-      setStatus((prev) => ({ ...prev, running: false, paused: false }))
-      setProgress(0)
-      setEta(null)
-      setRoutePath([])
-      setWaypointProgress(null)
-      // Clear the lap progress counter too — otherwise a stopped run
-      // keeps showing "3 / 5" in the Loop / MultiStop panel until the
-      // next `simulation_complete` WS event (which never arrives on a
-      // manual Stop in some edge cases).
-      setLapProgress(null)
-      setEffectiveSpeed(null)
-      // Clear the destination so the red "target" marker goes away —
-      // lingering destination pin after Stop was a reported UX bug.
-      setDestination(null)
-      return res
-    } catch (err: unknown) {
-      throw err
-    }
+    const res = await api.stopSim()
+    setStatus((prev) => ({ ...prev, running: false, paused: false }))
+    setProgress(0)
+    setEta(null)
+    setRoutePath([])
+    setWaypointProgress(null)
+    // Clear the lap progress counter too — otherwise a stopped run
+    // keeps showing "3 / 5" in the Loop / MultiStop panel until the
+    // next `simulation_complete` WS event (which never arrives on a
+    // manual Stop in some edge cases).
+    setLapProgress(null)
+    setEffectiveSpeed(null)
+    // Clear the destination so the red "target" marker goes away —
+    // lingering destination pin after Stop was a reported UX bug.
+    setDestination(null)
+    return res
   }, [])
 
   const restore = useCallback(async () => {
     setError(null)
-    try {
-      const res = await api.restoreSim()
-      // leave mode as-is; status drives running state
-      setStatus({ running: false, paused: false, speed: 0 })
-      setCurrentPosition(null)
-      setBackendPositionSynced(false)
-      setDestination(null)
-      setProgress(0)
-      setEta(null)
-      setWaypoints([])
-      setRoutePath([])
-      setWaypointProgress(null)
-      setLapProgress(null)
-      setEffectiveSpeed(null)
-      return res
-    } catch (err: unknown) {
-      throw err
-    }
+    const res = await api.restoreSim()
+    // leave mode as-is; status drives running state
+    setStatus({ running: false, paused: false, speed: 0 })
+    setCurrentPosition(null)
+    setBackendPositionSynced(false)
+    setDestination(null)
+    setProgress(0)
+    setEta(null)
+    setWaypoints([])
+    setRoutePath([])
+    setWaypointProgress(null)
+    setLapProgress(null)
+    setEffectiveSpeed(null)
+    return res
   }, [])
 
   const applySpeed = useCallback(async () => {
     setError(null)
-    try {
-      const res = await api.applySpeed(moveMode, {
-        speed_kmh: customSpeedKmh,
-        speed_min_kmh: speedMinKmh,
-        speed_max_kmh: speedMaxKmh,
-      })
-      // Status bar should now reflect the just-applied values, not the
-      // ones the route originally started with.
-      setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
-      return res
-    } catch (err: unknown) {
-      throw err
-    }
+    const res = await api.applySpeed(moveMode, {
+      speed_kmh: customSpeedKmh,
+      speed_min_kmh: speedMinKmh,
+      speed_max_kmh: speedMaxKmh,
+    })
+    // Status bar should now reflect the just-applied values, not the
+    // ones the route originally started with.
+    setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+    return res
   }, [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh])
 
   // Fetch initial status on mount
@@ -965,25 +916,40 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   ): Promise<FanoutOutcome<T>> => {
     // Caller-gated: udids is always non-empty.
     const results = await Promise.allSettled(udids.map((u) => fn(u)))
-    return summarizeResults(results, udids, action)
+    return summarizeResults(results, udids)
   }, [])
 
   // Group-mode sync helper: before any action that depends on a common start
   // (navigate / loop / multistop / randomwalk / joystick), teleport every
   // target device to the primary's current position so both phones begin from
   // the same coordinate and follow identical paths.
+  //
+  // Pre-sync failures are non-fatal — the primary action proceeds — but we
+  // log them in dev so a half-synced fan-out doesn't disappear silently.
+  // (The previous try/catch wrapped Promise.allSettled, which never rejects,
+  // so failures were being swallowed by an unreachable handler.)
   const preSyncStart = useCallback(async (udids: string[]) => {
     if (udids.length < 2) return
     const pos = currentPosition
     if (!pos) return
-    try {
-      await Promise.allSettled(udids.map((u) => api.teleport(pos.lat, pos.lng, u)))
-      // Tiny settle delay so devices finalise the teleport before the next
-      // command arrives.
-      await new Promise((r) => setTimeout(r, PRE_SYNC_SETTLE_MS))
-    } catch {
-      // Non-fatal: fall through to the primary action.
+    const results = await Promise.allSettled(
+      udids.map((u) => api.teleport(pos.lat, pos.lng, u)),
+    )
+    if (import.meta.env.DEV) {
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[preSyncStart] teleport failed for',
+            udids[i],
+            r.reason,
+          )
+        }
+      })
     }
+    // Tiny settle delay so devices finalise the teleport before the next
+    // command arrives.
+    await new Promise((r) => setTimeout(r, PRE_SYNC_SETTLE_MS))
   }, [currentPosition])
 
   const teleportAll = useCallback((udids: string[], lat: number, lng: number) =>
