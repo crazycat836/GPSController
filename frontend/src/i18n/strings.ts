@@ -568,6 +568,8 @@ export const STRINGS = {
 
   // ── Device drawer (new) ────────────────────────
   'device.drawer_title': { zh: '裝置管理', en: 'Devices' },
+  'device.drawer_settings_title': { zh: '進階設定', en: 'Advanced settings' },
+  'device.drawer_no_active_hint': { zh: '尚未連線裝置。從上方的「裝置」面板挑選一台。', en: 'No active device. Pick one from the Devices popover above.' },
   'device.popover_aria': { zh: '已配對裝置', en: 'Paired devices' },
   'device.no_device_hint': { zh: '請透過 USB 連接 iPhone,或於下方「WiFi 無線連線」啟用 Tunnel。', en: 'Connect an iPhone via USB, or enable WiFi Tunnel below.' },
   'device.tunnel_connected': { zh: 'WiFi Tunnel 已連線', en: 'Wi-Fi tunnel connected' },

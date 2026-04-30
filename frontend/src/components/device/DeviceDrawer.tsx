@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
-  Wifi, Usb, Search, Loader2, Check, XCircle,
-  CircleSlash, Smartphone, RotateCcw, Power, PlugZap,
+  Wifi, Usb, Search, Loader2,
+  Smartphone, RotateCcw, Power, PlugZap,
 } from 'lucide-react'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
@@ -12,7 +12,6 @@ import { DEFAULT_TUNNEL_PORT } from '../../lib/constants'
 import { ICON_SIZE } from '../../lib/icons'
 import Drawer from '../shell/Drawer'
 import ListRow from '../ui/ListRow'
-import SectionHeader from '../ui/SectionHeader'
 import EmptyState from '../ui/EmptyState'
 import CollapsibleSection from '../ui/CollapsibleSection'
 import ConfirmDialog from '../ui/ConfirmDialog'
@@ -28,27 +27,6 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
   const t = useT()
   const device = useDeviceContext()
   const { showToast } = useToastContext()
-
-  // ─── Scan state ─────────────────────────────────────────────
-  const [scanning, setScanning] = useState(false)
-  const [scanResult, setScanResult] = useState<number | null>(null)
-  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const devicesRef = useRef(device.devices)
-  devicesRef.current = device.devices
-
-  useEffect(() => () => { if (scanTimer.current) clearTimeout(scanTimer.current) }, [])
-
-  const handleScan = useCallback(async () => {
-    if (scanTimer.current) clearTimeout(scanTimer.current)
-    setScanning(true)
-    setScanResult(null)
-    try { await device.scan() }
-    finally {
-      setScanning(false)
-      setScanResult(devicesRef.current.length)
-      scanTimer.current = setTimeout(() => setScanResult(null), 2000)
-    }
-  }, [device])
 
   // ─── Wi-Fi Tunnel state ─────────────────────────────────────
   const [tunnelIp, setTunnelIp] = useState(() => localStorage.getItem(STORAGE_KEYS.tunnelIp) || '')
@@ -148,202 +126,84 @@ export default function DeviceDrawer({ open, onClose }: DeviceDrawerProps) {
     if (repairState !== 'running') setShowRepairConfirm(false)
   }, [repairState])
 
-  const selectedUdid = device.connectedDevice?.udid
-
-  // ─── Scan button renderer (right-slot of devices SectionHeader) ─
-  const scanButton = (
-    <button
-      type="button"
-      onClick={handleScan}
-      disabled={scanning}
-      className="action-btn text-[11px]"
-      aria-label={t('device.scan_tooltip')}
-      title={t('device.scan_tooltip')}
-    >
-      {scanning ? (
-        <>
-          <Loader2 width={ICON_SIZE.xs} height={ICON_SIZE.xs} className="animate-spin" />
-          {t('device.scan_scanning')}
-        </>
-      ) : scanResult != null && scanResult > 0 ? (
-        <>
-          <Check width={ICON_SIZE.xs} height={ICON_SIZE.xs} className="text-[var(--color-success-text)]" />
-          <span className="text-[var(--color-success-text)]">
-            {t('device.scan_found', { n: scanResult })}
-          </span>
-        </>
-      ) : scanResult === 0 ? (
-        <>
-          <XCircle width={ICON_SIZE.xs} height={ICON_SIZE.xs} className="text-[var(--color-error-text)]" />
-          <span className="text-[var(--color-error-text)]">{t('device.scan_none')}</span>
-        </>
-      ) : (
-        <>
-          <Usb width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
-          {t('device.scan')}
-        </>
-      )}
-    </button>
-  )
-
   return (
     <>
       <Drawer
         data-fc="drawer.device"
         open={open}
         onClose={onClose}
-        title={t('device.drawer_title')}
+        title={t('device.drawer_settings_title')}
         icon={<Smartphone className="w-4 h-4" />}
         side="left"
         width="w-[min(440px,92vw)]"
       >
         <div className="p-4 flex flex-col gap-3">
-          <SectionHeader
-            icon={<Smartphone width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
-            title={t('panel.devices')}
-            count={device.devices.length}
-            right={scanButton}
-          />
-
-          {/* Device list */}
-          {device.devices.length === 0 ? (
+          {/* Context header — which device do these settings apply to?
+              The device list lives in DevicesPopover; the drawer only
+              configures the currently primary device. */}
+          {device.connectedDevice ? (() => {
+            const d = device.connectedDevice
+            const idx = device.devices.findIndex((x) => x.udid === d.udid)
+            const isNetwork = d.connection_type === 'Network'
+            const idxLetter = idx >= 0 && idx < 26 ? String.fromCharCode(65 + idx) : (d.name?.[0] ?? '•')
+            const canRevealDevMode = !!d.can_reveal_developer_mode
+            const busy = !!revealInFlight[d.udid]
+            return (
+              <div className="flex flex-col gap-2">
+                <ListRow
+                  density="compact"
+                  leading={
+                    <span
+                      className="w-9 h-9 rounded-[10px] grid place-items-center shrink-0 text-white font-semibold text-[14px]"
+                      style={{
+                        background: `var(${isNetwork ? '--gradient-device-network' : '--gradient-device-usb'})`,
+                        boxShadow: 'var(--shadow-avatar-ring)',
+                      }}
+                      aria-hidden="true"
+                    >
+                      {idxLetter}
+                    </span>
+                  }
+                  title={<span className="truncate">{d.name}</span>}
+                  subtitle={
+                    <span className="inline-flex items-center gap-1.5 font-mono">
+                      {isNetwork
+                        ? <Wifi width={10} height={10} className="text-[var(--color-success-text)]" />
+                        : <Usb width={10} height={10} className="text-[var(--color-accent-strong)]" />}
+                      <span>{isNetwork ? 'Wi-Fi' : 'USB'}</span>
+                      <span className="text-[var(--color-text-3)] opacity-50">·</span>
+                      <span>iOS {d.ios_version}</span>
+                    </span>
+                  }
+                  trailing={
+                    <span className="inline-flex items-center gap-1.5 font-mono text-[10px] shrink-0 text-[var(--color-success-text)]">
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0 bg-[var(--color-success-text)]"
+                        style={{ boxShadow: '0 0 6px var(--color-success-text)' }}
+                      />
+                      {t('device.chip_state_idle')}
+                    </span>
+                  }
+                />
+                {canRevealDevMode && (
+                  <button
+                    type="button"
+                    className="self-end text-[11px] px-2.5 py-1 rounded-md border border-[var(--color-border)] text-[var(--color-text-2)] hover:text-[var(--color-text-1)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-wait transition-colors cursor-pointer"
+                    onClick={() => handleRevealDevMode(d.udid)}
+                    disabled={busy}
+                    title={t('dev_mode.reveal_hint')}
+                  >
+                    {busy ? t('dev_mode.reveal_working') : t('dev_mode.reveal_button')}
+                  </button>
+                )}
+              </div>
+            )
+          })() : (
             <EmptyState
               icon={<Smartphone width={ICON_SIZE.lg} height={ICON_SIZE.lg} />}
               title={t('device.no_device')}
-              help={t('device.no_device_hint')}
+              help={t('device.drawer_no_active_hint')}
             />
-          ) : (
-            <div className="flex flex-col gap-1.5">
-              {device.devices.map((d, idx) => {
-                const major = parseInt((d.ios_version || '0').split('.')[0], 10) || 0
-                const unsupported = major > 0 && major < 16
-                const isSelected = d.udid === selectedUdid
-                const isNetwork = d.connection_type === 'Network'
-                // Letter avatar — design uses per-device initials. We use the
-                // list index (A, B, C, ...) since devices don't have a
-                // pre-assigned letter; falls back to first char of name for
-                // overflow past Z.
-                const letter = idx < 26 ? String.fromCharCode(65 + idx) : (d.name?.[0] ?? '•')
-                const avatarColor = `var(${isNetwork ? '--gradient-device-network' : '--gradient-device-usb'})`
-
-                const leading = unsupported ? (
-                  <span
-                    className="w-9 h-9 rounded-[10px] grid place-items-center shrink-0"
-                    style={{
-                      background: 'rgba(255,71,87,0.08)',
-                      border: '1px solid rgba(255,71,87,0.3)',
-                      color: 'var(--color-error-text)',
-                    }}
-                    aria-hidden="true"
-                  >
-                    <CircleSlash width={ICON_SIZE.md} height={ICON_SIZE.md} />
-                  </span>
-                ) : (
-                  <span
-                    className="w-9 h-9 rounded-[10px] grid place-items-center shrink-0 text-white font-semibold text-[14px]"
-                    style={{
-                      background: avatarColor,
-                      boxShadow: 'var(--shadow-avatar-ring)',
-                    }}
-                    aria-hidden="true"
-                  >
-                    {letter}
-                  </span>
-                )
-
-                // Mono subtitle combining connection type + iOS version —
-                // matches the design's `USB · iOS 18.2` line.
-                const subtitle = unsupported ? (
-                  <span className="text-[var(--color-error-text)]">
-                    {t('device.ios_unsupported_label', { version: d.ios_version })}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 font-mono">
-                    {isNetwork
-                      ? <Wifi width={10} height={10} className="text-[var(--color-success-text)]" />
-                      : <Usb width={10} height={10} className="text-[var(--color-accent-strong)]" />}
-                    <span>{isNetwork ? 'Wi-Fi' : 'USB'}</span>
-                    <span className="text-[var(--color-text-3)] opacity-50">·</span>
-                    <span>iOS {d.ios_version}</span>
-                  </span>
-                )
-
-                // Status pill — dot + label matching the design's
-                // dev-status treatment (online / offline / pairing).
-                let statusDotColor = 'var(--color-text-3)'
-                let statusLabel: string = t('device.chip_state_idle')
-                let statusLabelColor = 'var(--color-text-3)'
-                const isLost = device.lostUdids.has(d.udid) && !d.is_connected
-                if (unsupported) {
-                  statusDotColor = 'var(--color-danger)'
-                  statusLabel = t('device.status_unsupported')
-                  statusLabelColor = 'var(--color-error-text)'
-                } else if (isLost) {
-                  statusDotColor = 'var(--color-danger)'
-                  statusLabel = t('device.chip_state_disconnected')
-                  statusLabelColor = 'var(--color-error-text)'
-                } else if (isSelected) {
-                  statusDotColor = 'var(--color-success-text)'
-                  statusLabel = t('device.chip_state_idle')
-                  statusLabelColor = 'var(--color-success-text)'
-                } else {
-                  statusDotColor = 'rgba(255,255,255,0.35)'
-                  statusLabel = t('device.status_ready')
-                  statusLabelColor = 'var(--color-text-3)'
-                }
-
-                const trailing = (
-                  <span
-                    className="inline-flex items-center gap-1.5 font-mono text-[10px] shrink-0"
-                    style={{ color: statusLabelColor }}
-                  >
-                    <span
-                      className="w-1.5 h-1.5 rounded-full shrink-0"
-                      style={{
-                        background: statusDotColor,
-                        boxShadow: isSelected && !unsupported
-                          ? '0 0 6px var(--color-success-text)'
-                          : 'none',
-                      }}
-                    />
-                    {statusLabel}
-                  </span>
-                )
-
-                // Backend derives `can_reveal_developer_mode` from
-                // connected-USB-iOS16-and-toggle-OFF; render the
-                // button when it's selected AND that's true.
-                const canRevealDevMode = isSelected && !!d.can_reveal_developer_mode
-                const busy = !!revealInFlight[d.udid]
-
-                return (
-                  <div key={d.udid} className="flex flex-col gap-1">
-                    <ListRow
-                      as="button"
-                      selected={isSelected}
-                      disabled={unsupported}
-                      onClick={() => { if (!unsupported) device.connect(d.udid) }}
-                      aria-label={d.name}
-                      leading={leading}
-                      title={<span className="truncate">{d.name}</span>}
-                      subtitle={subtitle}
-                      trailing={trailing}
-                    />
-                    {canRevealDevMode && (
-                      <button
-                        type="button"
-                        className="self-end text-[11px] px-2.5 py-1 rounded-md border border-[var(--color-border)] text-[var(--color-text-2)] hover:text-[var(--color-text-1)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-wait transition-colors cursor-pointer"
-                        onClick={() => handleRevealDevMode(d.udid)}
-                        disabled={busy}
-                        title={t('dev_mode.reveal_hint')}
-                      >
-                        {busy ? t('dev_mode.reveal_working') : t('dev_mode.reveal_button')}
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
           )}
 
           {/* Wi-Fi Tunnel section */}

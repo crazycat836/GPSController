@@ -97,19 +97,12 @@ export default function DevicesPopover({ anchor, onClose, onOpenManage }: Device
       ].join(' ')}
       style={{ width, left, top, transformOrigin: 'top right' }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-[var(--color-border-subtle)]">
+      {/* Header — counted label only; the advanced-settings entry lives
+          in the footer to avoid duplicate affordances. */}
+      <div className="px-4 pt-3.5 pb-2.5 border-b border-[var(--color-border-subtle)]">
         <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-3)]">
           {t('panel.devices')}
         </span>
-        <button
-          type="button"
-          onClick={() => { onClose(); onOpenManage() }}
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-accent-strong)] hover:text-[var(--color-accent)] transition-colors"
-        >
-          <SettingsIcon className="w-3 h-3" />
-          {t('device.drawer_title')}
-        </button>
       </div>
 
       {/* Device list */}
@@ -259,8 +252,8 @@ export default function DevicesPopover({ anchor, onClose, onOpenManage }: Device
           ].join(' ')}
           style={{ background: 'var(--color-accent)', boxShadow: 'var(--shadow-glow)' }}
         >
-          <Wifi className="w-3.5 h-3.5" />
-          {t('device.drawer_title')}
+          <SettingsIcon className="w-3.5 h-3.5" />
+          {t('device.drawer_settings_title')}
         </button>
       </div>
 
