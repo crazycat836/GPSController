@@ -4,10 +4,6 @@ import { STORAGE_KEYS } from '../lib/storage-keys'
 import { PRE_SYNC_SETTLE_MS } from '../lib/constants'
 import type { WsMessage } from './useWebSocket'
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
-}
-
 // ── Typed WS payloads ──────────────────────────────────────────────────
 // `WsMessage.data` is intentionally `unknown` (see useWebSocket.ts: the
 // backend emits ~24 event types and there is no single shape that fits
@@ -967,9 +963,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     action: string,
     fn: (udid: string) => Promise<T>,
   ): Promise<FanoutOutcome<T>> => {
-    // Callers gate on `connectedDevices.length >= 2`, so this path is
-    // only entered with a non-empty list. No empty-list defensive
-    // branch (would otherwise double-fire with caller's toast).
+    // Caller-gated: udids is always non-empty.
     const results = await Promise.allSettled(udids.map((u) => fn(u)))
     return summarizeResults(results, udids, action)
   }, [])

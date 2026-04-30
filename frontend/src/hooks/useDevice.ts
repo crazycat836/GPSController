@@ -157,11 +157,10 @@ export function useDevice(subscribe?: WsSubscribe) {
   const wsEventGenRef = useRef(0)
   const bumpWsGen = useCallback(() => { wsEventGenRef.current += 1 }, [])
 
-  // Frontend boot — tell the backend to drop any "user-disconnected"
-  // marks from the prior session. A fresh page load is the user
-  // re-engaging with the app, so every paired device should be
-  // eligible for auto-reconnect again. Errors are non-fatal (the
-  // endpoint is best-effort cleanup).
+  // Frontend boot — drop any "user-disconnected" marks from the prior
+  // session so a fresh page treats every paired device as eligible
+  // for auto-reconnect again. Endpoint is idempotent + fire-and-forget,
+  // so the StrictMode double-mount in dev is harmless.
   useEffect(() => {
     clearAutoReconnectBlocks().catch((err) => devLog('clearAutoReconnectBlocks failed', err))
   }, [])
@@ -397,15 +396,12 @@ export function useDevice(subscribe?: WsSubscribe) {
 
   const disconnect = useCallback(
     async (udid: string) => {
-      const wsGen = wsEventGenRef.current
       try {
         await disconnectDevice(udid)
-        const refreshed = await listDevices()
-        const list: DeviceInfo[] = Array.isArray(refreshed) ? refreshed : []
-        if (wsEventGenRef.current === wsGen) {
-          setDevices((prev) => deviceListEqual(prev, list) ? prev : list)
-          setConnectedDevice(null)
-        }
+        // The backend broadcasts `device_disconnected` (see WS handler
+        // above) which updates both `devices` and `connectedDevice` —
+        // no need to re-list. The WS handler is also race-safe via
+        // bumpWsGen.
       } catch (err) {
         devLog('Failed to disconnect device:', err)
         throw err
