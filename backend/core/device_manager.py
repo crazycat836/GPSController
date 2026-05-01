@@ -378,8 +378,8 @@ class DeviceManager:
                 udid, ios_version,
             )
             raise RuntimeError(
-                f"無法建立裝置通道 (iOS {ios_version})。"
-                f"請以系統管理員身份執行 GPSController。"
+                f"Could not establish device tunnel (iOS {ios_version}). "
+                f"Please run GPSController as Administrator."
             )
 
     # iOS < 17 path removed in v0.1.49 — see UnsupportedIosVersionError.
@@ -565,8 +565,8 @@ class DeviceManager:
         if last_exc is not None:
             logger.error("Failed to connect to RSD at %s:%d after retries", rsd_address, rsd_port)
             raise RuntimeError(
-                f"無法連線到 WiFi tunnel RSD ({rsd_address}:{rsd_port})。"
-                "請確認 WiFi tunnel 仍然活躍。"
+                f"Could not connect to WiFi tunnel RSD ({rsd_address}:{rsd_port}). "
+                "Ensure the WiFi tunnel is still active."
             ) from last_exc
 
         peer = rsd.peer_info or {}
