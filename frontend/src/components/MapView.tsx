@@ -6,6 +6,19 @@ import L from 'leaflet';
 import MapControls from './shell/MapControls';
 import MapContextMenu, { type ContextMenuState } from './MapContextMenu';
 
+// Typed view of Leaflet's private control-corner registry. Leaflet exposes
+// `_controlCorners` only on the runtime instance — its public d.ts omits it.
+// Keep this list MINIMAL: only the corners we actually nudge below the
+// FloatingPanel during map init.
+type LeafletMapInternal = L.Map & {
+  _controlCorners?: {
+    topleft?: HTMLElement;
+    topright?: HTMLElement;
+    bottomleft?: HTMLElement;
+    bottomright?: HTMLElement;
+  };
+};
+
 interface Position {
   lat: number;
   lng: number;
@@ -81,7 +94,10 @@ function MapView({
   tRef.current = t;
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const currentMarkerRef = useRef<L.CircleMarker | null>(null);
+  // Stores an `L.Marker` (not a CircleMarker) — the current-position pin is
+  // a div-icon marker (see the `L.marker(...)` call below), so we need the
+  // marker-specific API (setIcon, setLatLng) without `as any` bandaids.
+  const currentMarkerRef = useRef<L.Marker | null>(null);
   const prevPositionRef = useRef<Position | null>(null);
   const destMarkerRef = useRef<L.Marker | null>(null);
   const waypointMarkersRef = useRef<L.Marker[]>([]);
@@ -132,12 +148,13 @@ function MapView({
     });
     // Nudge the whole topleft control cluster down below the FloatingPanel
     // (panel sits at top ~56px, ~320px tall max). Position below panel area.
-    const topLeftEl = (map as any)._controlCorners?.topleft as HTMLElement | undefined;
+    const mapInternal = map as LeafletMapInternal;
+    const topLeftEl = mapInternal._controlCorners?.topleft;
     if (topLeftEl) {
       topLeftEl.style.marginTop = '56px';
       topLeftEl.style.marginLeft = '0px';
     }
-    const topRightEl = (map as any)._controlCorners?.topright as HTMLElement | undefined;
+    const topRightEl = mapInternal._controlCorners?.topright;
     if (topRightEl) {
       topRightEl.style.marginTop = '56px';
     }
@@ -271,7 +288,7 @@ function MapView({
     if (!map) return;
     if (!currentPosition) {
       if (currentMarkerRef.current) {
-        try { (currentMarkerRef.current as any).remove(); } catch { /* ignore */ }
+        try { currentMarkerRef.current.remove(); } catch { /* ignore */ }
         currentMarkerRef.current = null;
       }
       prevPositionRef.current = null;
@@ -291,11 +308,11 @@ function MapView({
     });
 
     if (currentMarkerRef.current) {
-      (currentMarkerRef.current as any).setLatLng(latlng);
+      currentMarkerRef.current.setLatLng(latlng);
       // Swap the icon so the pin reflects the current synced/unsynced state
       // without recreating the Leaflet marker (preserves tooltip binding).
-      (currentMarkerRef.current as any).setIcon(icon);
-      (currentMarkerRef.current as any).setTooltipContent(
+      currentMarkerRef.current.setIcon(icon);
+      currentMarkerRef.current.setTooltipContent(
         `${currentPosition.lat.toFixed(6)}, ${currentPosition.lng.toFixed(6)}`
       );
     } else {
@@ -309,7 +326,7 @@ function MapView({
         { direction: 'top', offset: [0, -20] }
       );
 
-      currentMarkerRef.current = marker as any;
+      currentMarkerRef.current = marker;
     }
 
     // Only auto-center on first position or teleport (large jump > 500m)
@@ -336,7 +353,7 @@ function MapView({
 
     if (!pcPosition) {
       if (pcMarkerRef.current) {
-        try { (pcMarkerRef.current as any).remove(); } catch { /* ignore */ }
+        try { pcMarkerRef.current.remove(); } catch { /* ignore */ }
         pcMarkerRef.current = null;
       }
       return;
@@ -346,8 +363,8 @@ function MapView({
     const tooltip = `${pcPosition.lat.toFixed(6)}, ${pcPosition.lng.toFixed(6)}`;
 
     if (pcMarkerRef.current) {
-      (pcMarkerRef.current as any).setLatLng(latlng);
-      (pcMarkerRef.current as any).setTooltipContent(tooltip);
+      pcMarkerRef.current.setLatLng(latlng);
+      pcMarkerRef.current.setTooltipContent(tooltip);
       return;
     }
 
