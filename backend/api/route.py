@@ -62,7 +62,7 @@ class _RouteRenameRequest(BaseModel):
 async def rename_saved(route_id: str, req: _RouteRenameRequest):
     name = req.name.strip()
     if not name:
-        raise HTTPException(status_code=400, detail={"code": "invalid_name", "message": "路線名稱不可為空"})
+        raise HTTPException(status_code=400, detail={"code": "invalid_name", "message": "Route name must not be empty"})
     route = await _store.rename(route_id, name)
     if route is None:
         raise HTTPException(status_code=404, detail="Route not found")
