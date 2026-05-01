@@ -19,11 +19,21 @@ import type { DeviceInfo } from '../../hooks/useDevice'
 export default function MiniStatusBar() {
   const t = useT()
   const { lang } = useI18n()
-  const { currentPos, isRunning } = useSimContext()
+  const { sim, currentPos, isRunning } = useSimContext()
   const device = useDeviceContext()
   const health = useConnectionHealth()
   const { countryCode, country } = useReverseGeocode(currentPos, lang, { paused: isRunning })
   const weather = useWeather(currentPos, { paused: isRunning })
+
+  // The dot indicator should reflect "is the iPhone currently showing a
+  // virtual location" — true after any teleport / navigate / loop / etc.
+  // push, not only while a continuous mode is actively moving. `isRunning`
+  // alone covers continuous modes (Loop / MultiStop / RandomWalk /
+  // Navigate / Joystick), so a stationary teleport would leave the dot
+  // grey even though the phone is showing a fake coord. backendPositionSynced
+  // is the right signal: set true on any successful push, set false only
+  // when the user explicitly hits Restore (real GPS restored).
+  const isSimulating = sim.backendPositionSynced
 
   const isDual = device.connectedDevices.length >= 2
   const isConnected = device.connectedDevices.length > 0
@@ -62,7 +72,7 @@ export default function MiniStatusBar() {
           the WS transport is down: the displayed lat/lng is no fresher
           than the device pill's "stale" annotation, so dimming both
           keeps the user's mental model consistent. */}
-      {!isDual && <LivePosCard currentPos={currentPos} isRunning={isRunning} stale={isStale} />}
+      {!isDual && <LivePosCard currentPos={currentPos} isSimulating={isSimulating} stale={isStale} />}
 
       {/* Location + weather chip — slim, secondary info. Hidden entirely
           when we have no position and no country data to show. */}
@@ -157,11 +167,14 @@ function DualDevicePills({ devices, stale }: { devices: DeviceInfo[]; stale?: bo
 
 interface LivePosCardProps {
   currentPos: { lat: number; lng: number } | null
-  isRunning: boolean
+  /** Whether the iPhone is currently showing a virtual location — true
+   *  after any teleport / navigate / loop / etc. push, false only after
+   *  the user hits Restore. Drives the green dot indicator. */
+  isSimulating: boolean
   stale?: boolean
 }
 
-function LivePosCard({ currentPos, isRunning, stale }: LivePosCardProps) {
+function LivePosCard({ currentPos, isSimulating, stale }: LivePosCardProps) {
   const t = useT()
   const [copied, setCopied] = useState(false)
 
@@ -175,7 +188,9 @@ function LivePosCard({ currentPos, isRunning, stale }: LivePosCardProps) {
   }, [currentPos])
 
   const hasPos = currentPos != null
-  const simState = isRunning ? 'running' : 'idle'
+  // CSS contract: `data-sim="running"` lights the dot green + pulses;
+  // `"idle"` greys it out. See styles/components/glass.css:79, 118.
+  const simState = isSimulating ? 'running' : 'idle'
 
   return (
     <div
