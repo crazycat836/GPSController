@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
-import { SimMode, MoveMode } from '../../hooks/useSimulation'
+import { SimMode, MoveMode, MODE_LABEL_KEYS } from '../../hooks/useSimulation'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT, type StringKey } from '../../i18n'
 import WaypointChain, { type ChainPoint } from '../WaypointChain'
@@ -174,14 +174,7 @@ function Eyebrow({ mode, t }: { mode: SimMode; t: ReturnType<typeof useT> }) {
   const accentColor = mode === SimMode.MultiStop
     ? 'var(--color-warning-text)'
     : 'var(--color-accent)'
-  const labelKey: StringKey = ({
-    [SimMode.Teleport]:   'mode.teleport',
-    [SimMode.Navigate]:   'mode.navigate',
-    [SimMode.Loop]:       'mode.loop',
-    [SimMode.MultiStop]:  'mode.multi_stop',
-    [SimMode.RandomWalk]: 'mode.random_walk',
-    [SimMode.Joystick]:   'mode.joystick',
-  } as const)[mode]
+  const labelKey: StringKey = MODE_LABEL_KEYS[mode]
   const Icon = modeIconMap[mode]
   return (
     <div
