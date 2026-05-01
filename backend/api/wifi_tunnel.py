@@ -95,8 +95,11 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
                 "ios_version": info.ios_version,
                 "connection_type": "Network",
             })
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "wifi_tunnel_connect: device_connected broadcast failed (%s)",
+                exc.__class__.__name__, exc_info=True,
+            )
         return {
             "status": "connected",
             "udid": info.udid,
@@ -278,8 +281,11 @@ async def wifi_repair():
                     r = closer()
                     if hasattr(r, "__await__"):
                         await r
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _tunnel_logger.debug(
+                        "Re-pair cleanup: closer raised (%s); ignoring",
+                        exc.__class__.__name__, exc_info=True,
+                    )
             try:
                 if proxy is not None:
                     # CoreDeviceTunnelProxy.close() is a coroutine — mirror
@@ -288,8 +294,11 @@ async def wifi_repair():
                     r = proxy.close()
                     if hasattr(r, "__await__"):
                         await r
-            except Exception:
-                pass
+            except Exception as exc:
+                _tunnel_logger.debug(
+                    "Re-pair cleanup: proxy.close() raised (%s); ignoring",
+                    exc.__class__.__name__, exc_info=True,
+                )
 
     return {
         "status": "paired",
@@ -333,8 +342,11 @@ async def _tcp_probe(ip: str, port: int, timeout: float = 0.4) -> bool:
         writer.close()
         try:
             await writer.wait_closed()
-        except (OSError, ConnectionError):
-            pass
+        except (OSError, ConnectionError) as exc:
+            _tunnel_logger.debug(
+                "_tcp_probe(%s:%d): wait_closed raised (%s); socket already torn down",
+                ip, port, exc.__class__.__name__, exc_info=True,
+            )
         return True
     except (OSError, ConnectionError, asyncio.TimeoutError):
         return False
@@ -484,8 +496,11 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
             await task
         except asyncio.CancelledError:
             return
-        except BaseException:
-            pass
+        except BaseException as exc:
+            _tunnel_logger.debug(
+                "watchdog: tunnel task raised %s; proceeding to cleanup",
+                exc.__class__.__name__, exc_info=True,
+            )
 
         # Task has ended. If a newer tunnel has already replaced ours,
         # this watchdog is stale — nothing to do.
@@ -521,8 +536,11 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
                     try:
                         from api.websocket import broadcast
                         await broadcast("tunnel_recovered", {})
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        _tunnel_logger.debug(
+                            "watchdog: tunnel_recovered broadcast failed (%s)",
+                            exc.__class__.__name__, exc_info=True,
+                        )
                 return
             await _cleanup_wifi_connections()
             _tunnel.task = None
@@ -552,8 +570,11 @@ async def wifi_tunnel_start(req: WifiTunnelStartRequest):
                 conns = _dm().connected_udids
                 if conns:
                     resolved_udid = conns[0]
-            except (RuntimeError, AttributeError):
-                pass
+            except (RuntimeError, AttributeError) as exc:
+                _tunnel_logger.debug(
+                    "wifi_tunnel_start: could not pre-resolve udid from device manager (%s)",
+                    exc.__class__.__name__, exc_info=True,
+                )
         if not resolved_udid:
             resolved_udid = "auto"
 
@@ -643,12 +664,18 @@ async def wifi_tunnel_stop():
                     )
                     try:
                         await app_state.terminate_engine(usb_dev.udid)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        _tunnel_logger.warning(
+                            "USB fallback rollback: terminate_engine(%s) failed (%s)",
+                            usb_dev.udid, exc.__class__.__name__, exc_info=True,
+                        )
                     try:
                         await dm.disconnect(usb_dev.udid)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        _tunnel_logger.warning(
+                            "USB fallback rollback: disconnect(%s) failed (%s)",
+                            usb_dev.udid, exc.__class__.__name__, exc_info=True,
+                        )
                     try:
                         from api.websocket import broadcast
                         await broadcast("device_error", {
@@ -656,8 +683,11 @@ async def wifi_tunnel_stop():
                             "stage": "usb_fallback",
                             "error": "USB fallback engine creation failed",
                         })
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        _tunnel_logger.debug(
+                            "USB fallback rollback: device_error broadcast failed (%s)",
+                            exc.__class__.__name__, exc_info=True,
+                        )
     except Exception:
         _tunnel_logger.exception("USB fallback after tunnel stop failed")
 
