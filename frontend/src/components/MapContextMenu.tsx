@@ -68,12 +68,22 @@ function MapContextMenu({
     }
   }, [state.visible]);
 
-  // Close context menu on outside click.
+  // Close context menu on outside click. Registering on the next tick
+  // (setTimeout 0) avoids the right-click that opened the menu from
+  // immediately auto-closing it — some browsers synthesize a `click`
+  // right after `contextmenu`, and that synthetic event would bubble
+  // to `document` before the user ever sees the menu. Same pattern
+  // used by DevicesPopover's outside-click effect.
   useEffect(() => {
     if (!state.visible) return;
     const handler = () => onClose();
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
+    const tid = setTimeout(() => {
+      document.addEventListener('click', handler);
+    }, 0);
+    return () => {
+      clearTimeout(tid);
+      document.removeEventListener('click', handler);
+    };
   }, [state.visible, onClose]);
 
   // Clamp the context menu to the viewport. Running in useLayoutEffect lets
