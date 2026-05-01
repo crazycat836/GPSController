@@ -4,14 +4,7 @@ import * as api from '../services/api'
 import type { SavedRoute } from '../services/api'
 import { useToastContext } from './ToastContext'
 import { useT } from '../i18n'
-
-const _IS_DEV = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true
-function devLog(...args: unknown[]): void {
-  if (_IS_DEV) {
-    // eslint-disable-next-line no-console
-    console.error(...args)
-  }
-}
+import { devLog } from '../lib/dev-log'
 
 interface AddBmDialog {
   lat: number

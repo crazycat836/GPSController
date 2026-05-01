@@ -1,13 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import * as api from '../services/api'
-
-const _IS_DEV = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true
-function devLog(...args: unknown[]): void {
-  if (_IS_DEV) {
-    // eslint-disable-next-line no-console
-    console.error(...args)
-  }
-}
+import { devLog } from '../lib/dev-log'
 
 // Dual-axis model:
 //   place_id — single "where" (富士山, 寺廟, default)
