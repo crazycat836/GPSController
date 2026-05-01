@@ -96,7 +96,7 @@ async def ensure_personalized_ddi_mounted(
             try:
                 await mounter.close()
             except Exception:
-                pass
+                logger.debug("mounter.close() failed (personalized status path)", exc_info=True)
     except Exception:
         logger.warning("Could not query image mount status; will attempt to mount anyway", exc_info=True)
 
@@ -107,7 +107,7 @@ async def ensure_personalized_ddi_mounted(
         from api.websocket import broadcast
         await broadcast("ddi_mounting", {"udid": conn.udid})
     except Exception:
-        pass
+        logger.debug("ddi_mounting WS broadcast failed (personalized)", exc_info=True)
     mount_succeeded = False
     try:
         # auto_mount_personalized is a coroutine that talks to the device
@@ -149,7 +149,7 @@ async def ensure_personalized_ddi_mounted(
                 from api.websocket import broadcast
                 await broadcast("ddi_mounted", {"udid": conn.udid})
             except Exception:
-                pass
+                logger.debug("ddi_mounted WS broadcast failed (personalized)", exc_info=True)
 
 
 async def ensure_classic_ddi_mounted(conn: "_ActiveConnection") -> None:
@@ -177,7 +177,7 @@ async def ensure_classic_ddi_mounted(conn: "_ActiveConnection") -> None:
                 try:
                     await mounter.close()
                 except Exception:
-                    pass
+                    logger.debug("mounter.close() failed (classic status path)", exc_info=True)
         except Exception:
             logger.warning("Could not query classic DDI mount state", exc_info=True)
 
@@ -196,7 +196,7 @@ async def ensure_classic_ddi_mounted(conn: "_ActiveConnection") -> None:
         from api.websocket import broadcast
         await broadcast("ddi_mounting", {"udid": conn.udid})
     except Exception:
-        pass
+        logger.debug("ddi_mounting WS broadcast failed (classic)", exc_info=True)
 
     mounted = False
     failure_reason: str | None = None
@@ -213,7 +213,7 @@ async def ensure_classic_ddi_mounted(conn: "_ActiveConnection") -> None:
                 from api.websocket import broadcast
                 await broadcast("ddi_mounted", {"udid": conn.udid})
             except Exception:
-                pass
+                logger.debug("ddi_mounted WS broadcast failed (classic)", exc_info=True)
         else:
             await broadcast_ddi_mount_failure(
                 conn.udid, "classic",
