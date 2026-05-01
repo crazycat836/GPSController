@@ -278,6 +278,7 @@ export const STRINGS = {
   'err.no_position': { zh: '尚未取得目前位置,請先跳點到一個座標', en: 'No current position, teleport to a coordinate first' },
   'err.tunnel_lost': { zh: 'WiFi Tunnel 連線中斷,請重新建立', en: 'Wi-Fi tunnel dropped, please reconnect' },
   'err.cooldown_active': { zh: '冷卻中,請等待後再跳點', en: 'Cooldown active, wait before teleporting' },
+  'err.cooldown_toggle_failed': { zh: '冷卻設定切換失敗,已還原', en: 'Could not change cooldown setting; reverted' },
   'err.teleport_failed': { zh: '跳點失敗', en: 'Teleport failed' },
   'err.simulation_error': { zh: '模擬錯誤', en: 'Simulation error' },
   // Codes returned by the backend's HTTPException flow that the frontend

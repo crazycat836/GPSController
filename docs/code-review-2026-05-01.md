@@ -99,10 +99,11 @@
   - Fix: an `asyncio.Lock` inside `BookmarkManager` covering every mutator + `_save()`.
   - **v0.14.1**: 16 mutators converted to async + wrapped in `async with self._lock`. Read-only methods stay sync.
 
-- **[HIGH] `setCooldownEnabled` rollback double-toggles in StrictMode**
+- **[DONE] [HIGH] `setCooldownEnabled` rollback double-toggles in StrictMode**
   - File: `frontend/src/contexts/SimContext.tsx:301`
   - `api.setCooldownEnabled(enabled).catch(() => setCooldownEnabled((v) => !v))` — `(v) => !v` runs twice in dev StrictMode, double-toggling. Also user is never notified of the failure.
   - Fix: revert with the original boolean (`setCooldownEnabled(!enabled)`) and `showToast` on failure.
+  - **Fixed**: rollback uses the explicit `setCooldownEnabled(!enabled)`; new `err.cooldown_toggle_failed` toast surfaces the failure.
 
 ### Security
 

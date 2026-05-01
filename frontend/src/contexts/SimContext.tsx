@@ -297,9 +297,17 @@ export function SimProvider({ children }: SimProviderProps) {
   }, [generateWaypoints])
 
   const handleToggleCooldown = useCallback((enabled: boolean) => {
+    // Optimistic update — flip the toggle immediately so the UI feels
+    // responsive. On backend failure, revert to the explicit prior value
+    // (the negation of `enabled`) rather than a functional `!v` setter.
+    // The functional form runs twice in StrictMode dev and double-toggles
+    // back to the failed state, which silently masks the error.
     setCooldownEnabled(enabled)
-    api.setCooldownEnabled(enabled).catch(() => setCooldownEnabled((v) => !v))
-  }, [])
+    api.setCooldownEnabled(enabled).catch(() => {
+      setCooldownEnabled(!enabled)
+      showToast(t('err.cooldown_toggle_failed'))
+    })
+  }, [showToast, t])
 
   const handleMapClick = useCallback((lat: number, lng: number) => {
     const nlat = clampLat(lat)
