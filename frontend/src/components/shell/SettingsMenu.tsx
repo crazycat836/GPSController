@@ -81,10 +81,13 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
       }
     }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('mousedown', handler)
+    // pointerdown (not mousedown) so the dismissal also fires for touch and
+    // pen input — Electron windows running on a touchscreen wouldn't close
+    // otherwise. Same `event.target` semantics across all input types.
+    document.addEventListener('pointerdown', handler)
     document.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('pointerdown', handler)
       document.removeEventListener('keydown', onKey)
     }
   }, [open, onClose])
