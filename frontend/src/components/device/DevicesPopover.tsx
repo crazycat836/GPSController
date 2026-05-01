@@ -45,7 +45,11 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
   const [view, setView] = useState<DevView>('list')
   // Reset to the list view whenever the popover is re-opened, so it
   // doesn't reappear stuck on a previous nested view.
-  useEffect(() => { if (anchor) setView('list') }, [anchor])
+  // Depend on the boolean (open vs. closed), NOT on the DOMRect itself —
+  // the parent passes a fresh getBoundingClientRect() on every open and
+  // on viewport resize. Using `anchor` as the dep would wipe in-progress
+  // sub-view interactions (Manage / Add) on an unrelated re-anchor.
+  useEffect(() => { if (anchor) setView('list') }, [!!anchor])
 
   // ─── Scan state (list-view header button) ────────────────────
   const [scanning, setScanning] = useState(false)
