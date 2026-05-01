@@ -14,6 +14,19 @@ import MapContextMenu, { type ContextMenuState } from './MapContextMenu';
  */
 const AUTO_RECENTER_THRESHOLD_M = 500;
 
+// Typed view of Leaflet's private control-corner registry. Leaflet exposes
+// `_controlCorners` only on the runtime instance — its public d.ts omits it.
+// Keep this list MINIMAL: only the corners we actually nudge below the
+// FloatingPanel during map init.
+type LeafletMapInternal = L.Map & {
+  _controlCorners?: {
+    topleft?: HTMLElement;
+    topright?: HTMLElement;
+    bottomleft?: HTMLElement;
+    bottomright?: HTMLElement;
+  };
+};
+
 interface Position {
   lat: number;
   lng: number;
@@ -87,9 +100,17 @@ function MapView({
   // Route lookups through a ref that we keep in sync every render.
   const tRef = useRef(t);
   tRef.current = t;
+  // onMapReady is invoked from both the init and the unmount-teardown
+  // effect; routing through a ref means parents can re-render with a new
+  // callback identity without retriggering either effect.
+  const onMapReadyRef = useRef(onMapReady);
+  useEffect(() => { onMapReadyRef.current = onMapReady; }, [onMapReady]);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const currentMarkerRef = useRef<L.CircleMarker | null>(null);
+  // Stores an `L.Marker` (not a CircleMarker) — the current-position pin is
+  // a div-icon marker (see the `L.marker(...)` call below), so we need the
+  // marker-specific API (setIcon, setLatLng) without `as any` bandaids.
+  const currentMarkerRef = useRef<L.Marker | null>(null);
   const prevPositionRef = useRef<Position | null>(null);
   const destMarkerRef = useRef<L.Marker | null>(null);
   const waypointMarkersRef = useRef<L.Marker[]>([]);
@@ -99,6 +120,11 @@ function MapView({
   const radiusCircleRef = useRef<L.Circle | null>(null);
 
   const layerMapRef = useRef<Record<string, L.TileLayer>>({});
+  // Tracks the ResizeObserver created during first-mount init so the
+  // map-owning effect's cleanup can tear it down — without needing the
+  // observer in the effect's closure (which would fire teardown on
+  // every layerKey change instead of unmount).
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
@@ -112,164 +138,184 @@ function MapView({
     setContextMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
   }, []);
 
-  // React to layerKey prop changes from SettingsMenu
+  // Single effect that owns the Leaflet tile layer:
+  //   - on first run, builds the map + control-corner offsets + the
+  //     three-layer registry (gated on `!mapRef.current`);
+  //   - on every run (first mount AND each `layerKey` change), removes
+  //     any currently-attached registry layer and adds the one matching
+  //     the current `layerKey`.
+  //
+  // Collapsing the previous "init + layerKey" effect pair eliminates the
+  // race where the layerKey effect (declared first, runs first) bailed on
+  // an empty registry during initial mount, while the `[]`-deps init
+  // effect then read `layerKey` directly without re-subscribing — any
+  // prop change between render and effect-flush was silently swallowed.
+  //
+  // Map+ResizeObserver teardown intentionally lives in a separate
+  // `[]`-deps effect so it fires exactly once on unmount, not on every
+  // layerKey change.
   useEffect(() => {
+    if (!mapRef.current && mapContainerRef.current) {
+      const map = L.map(mapContainerRef.current, {
+        center: [25.033, 121.5654],
+        zoom: 13,
+        zoomSnap: 1,
+        wheelPxPerZoomLevel: 120,
+        wheelDebounceTime: 60,
+        // Keep Leaflet's default control off so we can position our own
+        // zoom control below the EtaBar on the left (default top-left
+        // would collide with the overlay).
+        zoomControl: false,
+      });
+      // Nudge the whole topleft control cluster down below the FloatingPanel
+      // (panel sits at top ~56px, ~320px tall max). Position below panel area.
+      const mapInternal = map as LeafletMapInternal;
+      const topLeftEl = mapInternal._controlCorners?.topleft;
+      if (topLeftEl) {
+        topLeftEl.style.marginTop = '56px';
+        topLeftEl.style.marginLeft = '0px';
+      }
+      const topRightEl = mapInternal._controlCorners?.topright;
+      if (topRightEl) {
+        topRightEl.style.marginTop = '56px';
+      }
+
+      // Tile layers — three base maps with localStorage persistence.
+      // Electron main hooks a compliant User-Agent for tile hosts
+      // (see electron/main.js), otherwise tile.osm.org returns HTTP 418.
+      // NOTE: do NOT enable `detectRetina` here. On retina displays Leaflet
+      // bumps the tile URL zoom by +1 (via zoomOffset), which is applied
+      // AFTER `maxNativeZoom` clamping — so OSM (max z=19) ends up requesting
+      // z=20 at any display zoom past 18, all 404, and the dark container
+      // background (#0f1117) shows through as a fully black map. CARTO's
+      // `{r}` URL placeholder already handles retina via @2x tiles without
+      // this side effect.
+      // Neutral placeholder (warm gray 256x256 SVG) for tiles that ultimately
+      // fail to load. Without it, the dark .leaflet-container background bleeds
+      // through failed <img> slots as solid black squares.
+      const TILE_PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#d4d0c8"/></svg>'
+      );
+      const baseOpts: L.TileLayerOptions = {
+        updateWhenIdle: false,
+        updateWhenZooming: true,
+        keepBuffer: 4,
+        crossOrigin: true,
+        errorTileUrl: TILE_PLACEHOLDER,
+      };
+      // Use maxNativeZoom to cap real tile requests at each host's supported
+      // zoom, while letting Leaflet upscale those tiles past that cap. This
+      // prevents black/missing tiles at extreme zoom where servers 404 — the
+      // .leaflet-container dark background (#0f1117) would otherwise bleed
+      // through as solid black squares.
+      const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        subdomains: 'abc',
+        maxNativeZoom: 19,
+        maxZoom: 21,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        ...baseOpts,
+      });
+      const cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd',
+        maxNativeZoom: 20,
+        maxZoom: 22,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+        ...baseOpts,
+      });
+      const esriLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxNativeZoom: 19,
+        maxZoom: 21,
+        attribution: '&copy; <a href="https://www.esri.com/">Esri</a>',
+        ...baseOpts,
+      });
+
+      const layers: Record<string, L.TileLayer> = { osm: osmLayer, carto: cartoLayer, esri: esriLayer };
+      layerMapRef.current = layers;
+
+      // Transient failures at high zoom (OSM 418/429 on rate limits, CDN cache
+      // misses, flaky network) are common. Retry each failed tile once with a
+      // cache-busted URL; if that also fails, Leaflet renders TILE_PLACEHOLDER.
+      const attachTileRetry = (layer: L.TileLayer) => {
+        layer.on('tileerror', (e: L.TileErrorEvent) => {
+          const img = e.tile as HTMLImageElement | undefined;
+          const coords = e.coords;
+          if (!img || !coords || img.dataset.retried === '1') return;
+          img.dataset.retried = '1';
+          const url = layer.getTileUrl(coords);
+          if (!url) return;
+          const sep = url.includes('?') ? '&' : '?';
+          setTimeout(() => { img.src = `${url}${sep}_r=${Date.now()}`; }, 450);
+        });
+      };
+      attachTileRetry(osmLayer);
+      attachTileRetry(cartoLayer);
+      attachTileRetry(esriLayer);
+
+      // Left-click on the map dismisses any open context menu.
+      // If the parent wires `onMapClick` (currently used by the "left-click
+      // to add waypoint" toggle in Loop / MultiStop modes), forward the
+      // coordinates there too.
+      map.on('click', (e: L.LeafletMouseEvent) => {
+        closeContextMenu();
+        try {
+          onMapClickRef.current?.(e.latlng.lat, e.latlng.lng);
+        } catch { /* ignore handler errors */ }
+      });
+
+      map.on('contextmenu', (e: L.LeafletMouseEvent) => {
+        e.originalEvent.preventDefault();
+        setContextMenu({
+          visible: true,
+          x: e.originalEvent.clientX,
+          y: e.originalEvent.clientY,
+          lat: e.latlng.lat,
+          lng: e.latlng.lng,
+        });
+      });
+
+      mapRef.current = map;
+      onMapReadyRef.current?.(map);
+
+      // Ensure the map fills its container after layout settles and on resize.
+      const ro = new ResizeObserver(() => {
+        map.invalidateSize();
+      });
+      ro.observe(mapContainerRef.current);
+      resizeObserverRef.current = ro;
+
+      // Fetch the user-saved initial position from the backend (once, on mount).
+      // If set, pan the map to it. Brief Taipei flash is acceptable.
+      getInitialPosition().then(({ position }) => {
+        if (!position || !mapRef.current) return;
+        if (prevPositionRef.current) return; // a real device position already arrived
+        mapRef.current.setView([position.lat, position.lng], mapRef.current.getZoom());
+      }).catch(() => { /* default center stays */ });
+    }
+
+    // Layer swap — runs on first mount AND on every layerKey change.
     const map = mapRef.current;
-    if (!map) return;
     const layers = layerMapRef.current;
-    if (Object.keys(layers).length === 0) return;
-    Object.values(layers).forEach((l) => { if (map.hasLayer(l)) map.removeLayer(l); });
-    const key = layerKey ?? 'osm';
-    if (layers[key]) layers[key].addTo(map);
+    if (map && Object.keys(layers).length > 0) {
+      Object.values(layers).forEach((l) => { if (map.hasLayer(l)) map.removeLayer(l); });
+      const key = layerKey ?? 'osm';
+      (layers[key] ?? layers.osm).addTo(map);
+    }
+    // No cleanup here: layerKey-change reruns must not tear the map down.
+    // True unmount teardown lives in the dedicated `[]`-deps effect below
+    // so it fires exactly once when the component is being destroyed.
   }, [layerKey]);
 
-  // Initialize map
+  // Map teardown — separate from the layer-management effect so it fires
+  // only on real unmount (not on every layerKey change). All dependencies
+  // are refs, so this effect is genuinely empty-deps.
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
-
-    const map = L.map(mapContainerRef.current, {
-      center: [25.033, 121.5654],
-      zoom: 13,
-      zoomSnap: 1,
-      wheelPxPerZoomLevel: 120,
-      wheelDebounceTime: 60,
-      // Keep Leaflet's default control off so we can position our own
-      // zoom control below the EtaBar on the left (default top-left
-      // would collide with the overlay).
-      zoomControl: false,
-    });
-    // Nudge the whole topleft control cluster down below the FloatingPanel
-    // (panel sits at top ~56px, ~320px tall max). Position below panel area.
-    const topLeftEl = (map as any)._controlCorners?.topleft as HTMLElement | undefined;
-    if (topLeftEl) {
-      topLeftEl.style.marginTop = '56px';
-      topLeftEl.style.marginLeft = '0px';
-    }
-    const topRightEl = (map as any)._controlCorners?.topright as HTMLElement | undefined;
-    if (topRightEl) {
-      topRightEl.style.marginTop = '56px';
-    }
-
-    // Tile layers — three base maps with localStorage persistence.
-    // Electron main hooks a compliant User-Agent for tile hosts
-    // (see electron/main.js), otherwise tile.osm.org returns HTTP 418.
-    // NOTE: do NOT enable `detectRetina` here. On retina displays Leaflet
-    // bumps the tile URL zoom by +1 (via zoomOffset), which is applied
-    // AFTER `maxNativeZoom` clamping — so OSM (max z=19) ends up requesting
-    // z=20 at any display zoom past 18, all 404, and the dark container
-    // background (#0f1117) shows through as a fully black map. CARTO's
-    // `{r}` URL placeholder already handles retina via @2x tiles without
-    // this side effect.
-    // Neutral placeholder (warm gray 256x256 SVG) for tiles that ultimately
-    // fail to load. Without it, the dark .leaflet-container background bleeds
-    // through failed <img> slots as solid black squares.
-    const TILE_PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#d4d0c8"/></svg>'
-    );
-    const baseOpts: L.TileLayerOptions = {
-      updateWhenIdle: false,
-      updateWhenZooming: true,
-      keepBuffer: 4,
-      crossOrigin: true,
-      errorTileUrl: TILE_PLACEHOLDER,
-    };
-    // Use maxNativeZoom to cap real tile requests at each host's supported
-    // zoom, while letting Leaflet upscale those tiles past that cap. This
-    // prevents black/missing tiles at extreme zoom where servers 404 — the
-    // .leaflet-container dark background (#0f1117) would otherwise bleed
-    // through as solid black squares.
-    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      subdomains: 'abc',
-      maxNativeZoom: 19,
-      maxZoom: 21,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      ...baseOpts,
-    });
-    const cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd',
-      maxNativeZoom: 20,
-      maxZoom: 22,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-      ...baseOpts,
-    });
-    const esriLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxNativeZoom: 19,
-      maxZoom: 21,
-      attribution: '&copy; <a href="https://www.esri.com/">Esri</a>',
-      ...baseOpts,
-    });
-
-    const layers: Record<string, L.TileLayer> = { osm: osmLayer, carto: cartoLayer, esri: esriLayer };
-    layerMapRef.current = layers;
-
-    // Transient failures at high zoom (OSM 418/429 on rate limits, CDN cache
-    // misses, flaky network) are common. Retry each failed tile once with a
-    // cache-busted URL; if that also fails, Leaflet renders TILE_PLACEHOLDER.
-    const attachTileRetry = (layer: L.TileLayer) => {
-      layer.on('tileerror', (e: L.TileErrorEvent) => {
-        const img = e.tile as HTMLImageElement | undefined;
-        const coords = e.coords;
-        if (!img || !coords || img.dataset.retried === '1') return;
-        img.dataset.retried = '1';
-        const url = layer.getTileUrl(coords);
-        if (!url) return;
-        const sep = url.includes('?') ? '&' : '?';
-        setTimeout(() => { img.src = `${url}${sep}_r=${Date.now()}`; }, 450);
-      });
-    };
-    attachTileRetry(osmLayer);
-    attachTileRetry(cartoLayer);
-    attachTileRetry(esriLayer);
-
-    const activeLayer = layers[layerKey] || osmLayer;
-    activeLayer.addTo(map);
-
-    // Left-click on the map dismisses any open context menu.
-    // If the parent wires `onMapClick` (currently used by the "left-click
-    // to add waypoint" toggle in Loop / MultiStop modes), forward the
-    // coordinates there too.
-    map.on('click', (e: L.LeafletMouseEvent) => {
-      closeContextMenu();
-      try {
-        onMapClickRef.current?.(e.latlng.lat, e.latlng.lng);
-      } catch { /* ignore handler errors */ }
-    });
-
-    map.on('contextmenu', (e: L.LeafletMouseEvent) => {
-      e.originalEvent.preventDefault();
-      setContextMenu({
-        visible: true,
-        x: e.originalEvent.clientX,
-        y: e.originalEvent.clientY,
-        lat: e.latlng.lat,
-        lng: e.latlng.lng,
-      });
-    });
-
-    mapRef.current = map;
-    onMapReady?.(map);
-
-    // Ensure the map fills its container after layout settles and on resize.
-    const ro = new ResizeObserver(() => {
-      map.invalidateSize();
-    });
-    if (mapContainerRef.current) ro.observe(mapContainerRef.current);
-
-    // Fetch the user-saved initial position from the backend (once, on mount).
-    // If set, pan the map to it. Brief Taipei flash is acceptable.
-    getInitialPosition().then(({ position }) => {
-      if (!position || !mapRef.current) return;
-      if (prevPositionRef.current) return; // a real device position already arrived
-      mapRef.current.setView([position.lat, position.lng], mapRef.current.getZoom());
-    }).catch(() => { /* default center stays */ });
-
     return () => {
-      ro.disconnect();
-      map.remove();
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
+      mapRef.current?.remove();
       mapRef.current = null;
-      onMapReady?.(null);
+      onMapReadyRef.current?.(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Update current position marker — move existing marker instead of recreating.
@@ -279,7 +325,7 @@ function MapView({
     if (!map) return;
     if (!currentPosition) {
       if (currentMarkerRef.current) {
-        try { (currentMarkerRef.current as any).remove(); } catch { /* ignore */ }
+        try { currentMarkerRef.current.remove(); } catch { /* ignore */ }
         currentMarkerRef.current = null;
       }
       prevPositionRef.current = null;
@@ -299,11 +345,11 @@ function MapView({
     });
 
     if (currentMarkerRef.current) {
-      (currentMarkerRef.current as any).setLatLng(latlng);
+      currentMarkerRef.current.setLatLng(latlng);
       // Swap the icon so the pin reflects the current synced/unsynced state
       // without recreating the Leaflet marker (preserves tooltip binding).
-      (currentMarkerRef.current as any).setIcon(icon);
-      (currentMarkerRef.current as any).setTooltipContent(
+      currentMarkerRef.current.setIcon(icon);
+      currentMarkerRef.current.setTooltipContent(
         `${currentPosition.lat.toFixed(6)}, ${currentPosition.lng.toFixed(6)}`
       );
     } else {
@@ -317,7 +363,7 @@ function MapView({
         { direction: 'top', offset: [0, -20] }
       );
 
-      currentMarkerRef.current = marker as any;
+      currentMarkerRef.current = marker;
     }
 
     // Only auto-center on first position or teleport (jump beyond
@@ -346,7 +392,7 @@ function MapView({
 
     if (!pcPosition) {
       if (pcMarkerRef.current) {
-        try { (pcMarkerRef.current as any).remove(); } catch { /* ignore */ }
+        try { pcMarkerRef.current.remove(); } catch { /* ignore */ }
         pcMarkerRef.current = null;
       }
       return;
@@ -356,8 +402,8 @@ function MapView({
     const tooltip = `${pcPosition.lat.toFixed(6)}, ${pcPosition.lng.toFixed(6)}`;
 
     if (pcMarkerRef.current) {
-      (pcMarkerRef.current as any).setLatLng(latlng);
-      (pcMarkerRef.current as any).setTooltipContent(tooltip);
+      pcMarkerRef.current.setLatLng(latlng);
+      pcMarkerRef.current.setTooltipContent(tooltip);
       return;
     }
 
