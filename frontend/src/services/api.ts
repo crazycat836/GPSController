@@ -145,6 +145,8 @@ function formatError(error: unknown, fallback: string): string {
  *
  * The first call performs the IPC round-trip; subsequent calls return
  * the cached promise so the token isn't refetched on every request.
+ * The cache is invalidated on a 401 response (see `authedFetch`) so a
+ * rotated session token is picked up automatically without a reload.
  */
 let authTokenPromise: Promise<string> | null = null
 
@@ -164,13 +166,45 @@ function getAuthToken(): Promise<string> {
   return authTokenPromise
 }
 
+/** Force the next `getAuthToken()` call to re-fetch from the bridge. */
+function invalidateAuthToken(): void {
+  authTokenPromise = null
+}
+
+/**
+ * Issue a fetch with the current session token attached. If the server
+ * answers 401 we drop the cached token, fetch a fresh one, and retry
+ * exactly once. A second 401 (e.g. wrong shared secret) propagates to
+ * the caller as a normal error response — no infinite retry loop.
+ *
+ * `buildInit` is invoked per attempt so callers that need fresh request
+ * bodies / FormData per try can rebuild them. The argument receives the
+ * headers object pre-populated with `X-GPS-Token` so the caller only
+ * needs to layer on its own (e.g. `Content-Type`).
+ */
+async function authedFetch(
+  url: string,
+  buildInit: (headers: Record<string, string>) => RequestInit,
+): Promise<Response> {
+  const attempt = async (): Promise<Response> => {
+    const headers: Record<string, string> = {}
+    const token = await getAuthToken()
+    if (token) headers['X-GPS-Token'] = token
+    return fetchWithRetry(url, buildInit(headers))
+  }
+  const res = await attempt()
+  if (res.status !== 401) return res
+  invalidateAuthToken()
+  return attempt()
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const token = await getAuthToken()
-  if (token) headers['X-GPS-Token'] = token
-  const opts: RequestInit = { method, headers }
-  if (body !== undefined) opts.body = JSON.stringify(body)
-  const res = await fetchWithRetry(`${API}${path}`, opts)
+  const res = await authedFetch(`${API}${path}`, (headers) => {
+    headers['Content-Type'] = 'application/json'
+    const opts: RequestInit = { method, headers }
+    if (body !== undefined) opts.body = JSON.stringify(body)
+    return opts
+  })
   // Single .json() read regardless of status — the envelope shape is the
   // same on success and on failure (just `success`/`data`/`error` fields
   // flipped), so we don't need to branch before parsing.
@@ -397,12 +431,13 @@ export const renameRoute = (id: string, name: string) => request<SavedRoute>('PA
 
 // GPX import/export
 export async function importGpx(file: File): Promise<{ status: string; id: string; points: number }> {
-  const form = new FormData()
-  form.append('file', file)
-  const token = await getAuthToken()
-  const headers: Record<string, string> = {}
-  if (token) headers['X-GPS-Token'] = token
-  const res = await fetch(`${API}/api/route/gpx/import`, { method: 'POST', body: form, headers })
+  // Rebuild FormData per attempt — `authedFetch` may retry on 401 and
+  // a consumed body cannot be replayed safely.
+  const res = await authedFetch(`${API}/api/route/gpx/import`, (headers) => {
+    const form = new FormData()
+    form.append('file', file)
+    return { method: 'POST', body: form, headers }
+  })
   const parsed: unknown = await res.json().catch(() => null)
   if (!res.ok) {
     if (isEnvelope(parsed)) {
