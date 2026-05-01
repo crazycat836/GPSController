@@ -57,8 +57,11 @@ async def connect_device(udid: str):
                 "ios_version": info.ios_version if info else "",
                 "connection_type": info.connection_type if info else "USB",
             })
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "connect_device(%s): device_connected broadcast failed (%s)",
+                udid, exc.__class__.__name__, exc_info=True,
+            )
         return {"status": "connected", "udid": udid}
     except UnsupportedIosVersionError as e:
         raise HTTPException(
@@ -104,8 +107,11 @@ async def disconnect_device(udid: str):
     try:
         from api.websocket import broadcast
         await broadcast("device_disconnected", {"udid": udid, "udids": [udid], "reason": "user"})
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(
+            "disconnect_device(%s): device_disconnected broadcast failed (%s)",
+            udid, exc.__class__.__name__, exc_info=True,
+        )
     return {"status": "disconnected", "udid": udid}
 
 
