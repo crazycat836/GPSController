@@ -402,7 +402,12 @@ class BookmarkManager:
                 place_id = "default"
 
             known_tag_ids = {t.id for t in self.store.tags}
-            cleaned_tags = [t for t in (tags or []) if t in known_tag_ids]
+            # Filter unknown ids first, then dedupe preserving order — a
+            # bookmark's tag list is a set semantically; duplicates would
+            # double-render in the UI and waste storage.
+            cleaned_tags = list(dict.fromkeys(
+                t for t in (tags or []) if t in known_tag_ids
+            ))
 
             now = _now_iso()
             bm = Bookmark(
@@ -440,7 +445,10 @@ class BookmarkManager:
                     continue  # reject unknown place silently; keep current value
                 if key == "tags":
                     known = {t.id for t in self.store.tags}
-                    value = [t for t in value if t in known]  # type: ignore[union-attr]
+                    # Filter unknown ids + dedupe preserving order.
+                    value = list(dict.fromkeys(
+                        t for t in value if t in known  # type: ignore[union-attr]
+                    ))
                 updates[key] = value
 
             if updates:

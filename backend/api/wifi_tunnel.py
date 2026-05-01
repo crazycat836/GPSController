@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from api._errors import http_err
 from config import MAX_DEVICES
 from context import ctx
 from core.wifi_tunnel import TunnelRunner
@@ -20,16 +21,6 @@ _tunnel_watchdog_task: "asyncio.Task | None" = None
 
 _tunnel_logger = logging.getLogger("wifi_tunnel")
 logger = logging.getLogger(__name__)
-
-
-# duplicated in api/device.py
-def _http_err(status: int, code: str, message: str) -> HTTPException:
-    """Build a structured HTTPException with `{code, message}` detail.
-
-    Use this instead of raising `HTTPException(detail=str(e))` so internal
-    exception text never leaks to API clients.
-    """
-    return HTTPException(status_code=status, detail={"code": code, "message": message})
 
 
 def _validate_local_ip(value: str) -> str:
@@ -67,7 +58,7 @@ async def wifi_scan():
         return results
     except Exception:
         logger.exception("WiFi scan failed")
-        raise _http_err(500, "scan_failed", "WiFi 掃描失敗,請稍後再試")
+        raise http_err(500, "scan_failed", "WiFi 掃描失敗,請稍後再試")
 
 
 class WifiTunnelConnectRequest(BaseModel):
@@ -129,7 +120,7 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
         )
     except Exception:
         logger.exception("WiFi tunnel connect failed", extra={"rsd_address": req.rsd_address})
-        raise _http_err(500, "connect_failed", "連線失敗,請確認 tunnel 仍在執行並重試")
+        raise http_err(500, "connect_failed", "連線失敗,請確認 tunnel 仍在執行並重試")
 
 
 # ── WiFi Tunnel lifecycle (start / status / stop) ───────
@@ -162,7 +153,7 @@ async def wifi_repair():
         raw_devices = await mux_list_devices()
     except Exception:
         logger.exception("usbmux list_devices failed during /wifi/repair")
-        raise _http_err(500, "usbmux_unavailable", "無法列出 USB 裝置,請確認 usbmuxd 是否運作")
+        raise http_err(500, "usbmux_unavailable", "無法列出 USB 裝置,請確認 usbmuxd 是否運作")
 
     # Prefer a USB-attached device (Network entries won't help us regenerate
     # the RemotePairing record).
@@ -253,11 +244,17 @@ async def wifi_repair():
             remote_record_regenerated = True
         except Exception as e:
             _tunnel_logger.exception("Re-pair: RemotePairing handshake failed")
-            # `_msg` is used only for internal classification — never returned.
-            _msg = str(e)
-            if "PairingDialogResponsePending" in _msg or "consent" in _msg.lower():
+            # Use isinstance against pymobiledevice3's typed exceptions instead
+            # of substring-matching str(e) — the message wording drifts across
+            # versions but the class names are stable API.
+            from pymobiledevice3.exceptions import (
+                NotPairedError,
+                PairingDialogResponsePendingError,
+                PairingError,
+            )
+            if isinstance(e, PairingDialogResponsePendingError):
                 friendly = "請在 iPhone 解鎖螢幕上按「信任」後重試(timeout 只有幾秒)。"
-            elif "not paired" in _msg.lower() or "pairingerror" in _msg.lower():
+            elif isinstance(e, (NotPairedError, PairingError)):
                 friendly = "USB 配對失效,請拔 USB 重插一次並按信任。"
             else:
                 friendly = "RemotePairing 握手失敗,請查看後端記錄檔以取得詳細資訊。"
@@ -577,7 +574,7 @@ async def wifi_tunnel_start(req: WifiTunnelStartRequest):
                 "Tunnel spawn failed",
                 extra={"udid": resolved_udid, "ip": req.ip, "port": req.port},
             )
-            raise _http_err(500, "tunnel_spawn_failed", "無法啟動 tunnel,請查看後端記錄檔")
+            raise http_err(500, "tunnel_spawn_failed", "無法啟動 tunnel,請查看後端記錄檔")
 
         _tunnel_logger.info("WiFi tunnel started: %s", info)
         if _tunnel_watchdog_task is None or _tunnel_watchdog_task.done():
@@ -675,13 +672,13 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
     # Start the tunnel
     tunnel_result = await wifi_tunnel_start(req)
     if tunnel_result.get("status") not in ("started", "already_running"):
-        raise _http_err(500, "tunnel_failed", "Tunnel 啟動失敗")
+        raise http_err(500, "tunnel_failed", "Tunnel 啟動失敗")
 
     rsd_address = tunnel_result.get("rsd_address")
     rsd_port = tunnel_result.get("rsd_port")
 
     if not rsd_address or not rsd_port:
-        raise _http_err(500, "tunnel_no_rsd", "Tunnel 已啟動但無 RSD 資訊")
+        raise http_err(500, "tunnel_no_rsd", "Tunnel 已啟動但無 RSD 資訊")
 
     # Connect through the tunnel
     dm = _dm()
@@ -707,4 +704,4 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
             "Tunnel started but device connection failed",
             extra={"rsd_address": rsd_address, "rsd_port": rsd_port},
         )
-        raise _http_err(500, "connect_failed", "Tunnel 已啟動但裝置連線失敗")
+        raise http_err(500, "connect_failed", "Tunnel 已啟動但裝置連線失敗")

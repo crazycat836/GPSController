@@ -17,7 +17,7 @@ from models.schemas import (
     SimulationState,
     SimulationStatus,
 )
-from services.location_service import DeviceLostError, LocationService
+from services.location_service import DeviceLostError, LocationService, unwrap_device_lost
 from services.route_service import RouteService
 from config import SPEED_PROFILES, SpeedProfile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
 
@@ -30,6 +30,12 @@ from core.random_walk import RandomWalkHandler
 from core.restore import RestoreHandler
 
 logger = logging.getLogger(__name__)
+
+
+# Mask applied to the time-derived default random-walk seed so it stays
+# inside the signed-int32 range (max value Python's seeding accepts on
+# every platform / Random impl). Only used when the caller passes seed=None.
+_DEFAULT_RANDOM_WALK_SEED_MASK = 0x7FFFFFFF
 
 
 # Waypoint-pass detection thresholds (WP_HARD_HIT_M / WP_NEAR_M /
@@ -239,14 +245,9 @@ class SimulationEngine:
             device_lost = exc
         except Exception as exc:
             logger.exception("%s failed unexpectedly", label)
-            # Walk the cause chain — DeviceLostError is often re-raised
-            # wrapped (e.g. from pymobiledevice3 timeouts).
-            cause: BaseException | None = exc
-            while cause is not None:
-                if isinstance(cause, DeviceLostError):
-                    device_lost = cause
-                    break
-                cause = cause.__cause__
+            # DeviceLostError is often re-raised wrapped (e.g. from
+            # pymobiledevice3 timeouts) — walk the __cause__ chain.
+            device_lost = unwrap_device_lost(exc)
         finally:
             self._active_task = None
             # Force state back to IDLE if a handler crashed / was cancelled
@@ -424,7 +425,7 @@ class SimulationEngine:
         # replay the same destination sequence. Unseeded callers get a
         # time-based seed that's captured in the snapshot.
         if seed is None:
-            seed = int(time.time() * 1000) & 0x7FFFFFFF
+            seed = int(time.time() * 1000) & _DEFAULT_RANDOM_WALK_SEED_MASK
         self.snapshot = SimulationSnapshot(
             mode="random_walk",
             movement_mode=mode.value,

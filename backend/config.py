@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import TypedDict
 
@@ -14,11 +15,14 @@ ROUTES_FILE = DATA_DIR / "routes.json"
 # with mode 0600 so only the current user can read it.
 TOKEN_FILE = DATA_DIR / "token"
 
-# OSRM
-OSRM_BASE_URL = "https://router.project-osrm.org"
+# OSRM — overridable via $OSRM_BASE_URL for self-hosted / restricted-network
+# operators who can't reach the public demo server.
+OSRM_BASE_URL = os.environ.get("OSRM_BASE_URL", "https://router.project-osrm.org")
 
-# Nominatim
-NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org"
+# Nominatim — overridable via $NOMINATIM_BASE_URL for the same reason.
+NOMINATIM_BASE_URL = os.environ.get(
+    "NOMINATIM_BASE_URL", "https://nominatim.openstreetmap.org"
+)
 NOMINATIM_USER_AGENT = f"GPSController/{__version__}"
 
 

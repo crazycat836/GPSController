@@ -27,6 +27,23 @@ class DeviceLostError(RuntimeError):
     discover+connect on the next user action."""
 
 
+def unwrap_device_lost(exc: BaseException | None) -> DeviceLostError | None:
+    """Walk an exception's ``__cause__`` chain looking for a DeviceLostError.
+
+    DeviceLostError is often re-raised wrapped (e.g. from pymobiledevice3
+    timeouts or the simulation engine retry loop). Callers use this to detect
+    a lost device after catching a generic Exception so they can run the
+    standard cleanup + ``device_disconnected`` broadcast flow instead of
+    treating it as a generic 500.
+    """
+    cause: BaseException | None = exc
+    while cause is not None:
+        if isinstance(cause, DeviceLostError):
+            return cause
+        cause = cause.__cause__
+    return None
+
+
 class LocationService(ABC):
     """
     Abstract base for location simulation services.

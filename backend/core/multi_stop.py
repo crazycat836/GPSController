@@ -14,6 +14,12 @@ from utils.geo import haversine_m
 logger = logging.getLogger(__name__)
 
 
+# If the device is more than this far from the first waypoint when the
+# multi-stop run begins, route there first so the leg sequence starts at
+# the user-specified origin rather than the current GPS pin.
+_FIRST_WAYPOINT_REACH_THRESHOLD_M = 50.0
+
+
 class MultiStopNavigator:
     """Navigate through a series of waypoints with optional pauses at each stop."""
 
@@ -114,7 +120,7 @@ class MultiStopNavigator:
         first = waypoints[0]
         start_pos = engine.current_position
         start_dist = self._quick_distance(start_pos, first)
-        if start_dist > 50:  # more than 50m away, route to the first waypoint
+        if start_dist > _FIRST_WAYPOINT_REACH_THRESHOLD_M:  # route to the first waypoint
             route_data = await engine.route_service.get_route(
                 start_pos.lat, start_pos.lng,
                 first.lat, first.lng,

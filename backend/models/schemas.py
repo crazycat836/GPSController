@@ -205,7 +205,7 @@ class Bookmark(BaseModel):
     lng: float = Field(ge=-180.0, le=180.0)
     address: str = Field(default="", max_length=1024)
     place_id: str = "default"
-    tags: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list, max_length=64)
     created_at: str = ""
     last_used_at: str = ""
     # Populated by the backend when the bookmark is first created or edited.

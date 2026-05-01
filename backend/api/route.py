@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import re
 import urllib.parse
@@ -12,7 +11,7 @@ from config import ROUTES_FILE
 from models.schemas import RoutePlanRequest, SavedRoute, Coordinate
 from services.route_service import RouteService
 from services.gpx_service import GpxService
-from services.json_safe import safe_load_json, safe_write_json
+from services.saved_routes import SavedRoutesStore
 
 logger = logging.getLogger(__name__)
 
@@ -27,29 +26,9 @@ gpx_service = GpxService()
 _MAX_GPX_BYTES = 10 * 1024 * 1024
 
 
-def _load_saved_routes() -> dict[str, SavedRoute]:
-    raw = safe_load_json(ROUTES_FILE)
-    if raw is None:
-        return {}
-    out: dict[str, SavedRoute] = {}
-    for item in raw.get("routes", []):
-        try:
-            route = SavedRoute(**item)
-            out[route.id] = route
-        except Exception as e:
-            logger.warning("skip malformed saved route: %s", e)
-    return out
-
-
-def _persist_saved_routes() -> None:
-    payload = {"routes": [r.model_dump(mode="json") for r in _saved_routes.values()]}
-    safe_write_json(ROUTES_FILE, payload)
-
-
-_saved_routes: dict[str, SavedRoute] = _load_saved_routes()
-# Serialise all mutations (and the persist fsync) so concurrent writes
-# can't interleave and corrupt the JSON file.
-_saved_routes_lock = asyncio.Lock()
+# Single store instance for the process. The class owns the dict + lock +
+# persist cycle so the route handlers stay thin.
+_store = SavedRoutesStore(ROUTES_FILE)
 
 
 @router.post("/plan")
@@ -60,26 +39,18 @@ async def plan_route(req: RoutePlanRequest):
 
 @router.get("/saved", response_model=list[SavedRoute])
 async def list_saved():
-    return list(_saved_routes.values())
+    return _store.list()
 
 
 @router.post("/saved", response_model=SavedRoute)
 async def save_route(route: SavedRoute):
-    route.id = str(uuid.uuid4())
-    route.created_at = datetime.now(timezone.utc).isoformat()
-    async with _saved_routes_lock:
-        _saved_routes[route.id] = route
-        _persist_saved_routes()
-    return route
+    return await _store.add(route)
 
 
 @router.delete("/saved/{route_id}")
 async def delete_saved(route_id: str):
-    async with _saved_routes_lock:
-        if route_id not in _saved_routes:
-            raise HTTPException(status_code=404, detail="Route not found")
-        del _saved_routes[route_id]
-        _persist_saved_routes()
+    if not await _store.delete(route_id):
+        raise HTTPException(status_code=404, detail="Route not found")
     return {"status": "deleted"}
 
 
@@ -92,18 +63,16 @@ async def rename_saved(route_id: str, req: _RouteRenameRequest):
     name = req.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail={"code": "invalid_name", "message": "路線名稱不可為空"})
-    async with _saved_routes_lock:
-        if route_id not in _saved_routes:
-            raise HTTPException(status_code=404, detail="Route not found")
-        _saved_routes[route_id].name = name
-        _persist_saved_routes()
-        return _saved_routes[route_id]
+    route = await _store.rename(route_id, name)
+    if route is None:
+        raise HTTPException(status_code=404, detail="Route not found")
+    return route
 
 
 @router.get("/saved/export")
 async def export_all_saved_routes():
     """Export every saved route as a single JSON bundle."""
-    payload = {"routes": [r.model_dump(mode="json") for r in _saved_routes.values()]}
+    payload = {"routes": [r.model_dump(mode="json") for r in _store.list()]}
     from fastapi.responses import Response
     import json as _json
     body = _json.dumps(payload, ensure_ascii=False, indent=2)
@@ -118,15 +87,7 @@ class _RouteImportBody(BaseModel):
 @router.post("/saved/import")
 async def import_all_saved_routes(body: _RouteImportBody):
     """Merge imported routes into saved. Imports get fresh ids so they never collide."""
-    imported = 0
-    async with _saved_routes_lock:
-        for r in body.routes:
-            r.id = str(uuid.uuid4())
-            r.created_at = datetime.now(timezone.utc).isoformat()
-            _saved_routes[r.id] = r
-            imported += 1
-        if imported:
-            _persist_saved_routes()
+    imported = await _store.import_all(body.routes)
     return {"imported": imported}
 
 
@@ -178,10 +139,9 @@ async def import_gpx(file: UploadFile = File(...)):
         profile="walking",
         created_at=datetime.now(timezone.utc).isoformat(),
     )
-    async with _saved_routes_lock:
-        _saved_routes[route.id] = route
-        _persist_saved_routes()
-    return {"status": "imported", "id": route.id, "points": len(coords)}
+    # _store.add() reassigns a fresh id + created_at and persists.
+    saved = await _store.add(route)
+    return {"status": "imported", "id": saved.id, "points": len(coords)}
 
 
 def _ascii_safe_filename(name: str) -> str:
@@ -198,9 +158,9 @@ def _ascii_safe_filename(name: str) -> str:
 
 @router.get("/gpx/export/{route_id}")
 async def export_gpx(route_id: str):
-    if route_id not in _saved_routes:
+    route = _store.get(route_id)
+    if route is None:
         raise HTTPException(status_code=404, detail="Route not found")
-    route = _saved_routes[route_id]
     points = [{"lat": c.lat, "lng": c.lng} for c in route.waypoints]
     gpx_xml = gpx_service.generate_gpx(points, name=route.name)
     # RFC 5987 / RFC 6266: emit both a plain ASCII `filename` for legacy
