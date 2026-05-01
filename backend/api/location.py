@@ -29,51 +29,51 @@ logger = logging.getLogger("gpscontroller")
 router = APIRouter(prefix="/api/location", tags=["location"])
 
 
-async def _engine(udid: str | None = None):
-    """Return the active SimulationEngine for *udid* (or the primary one if
-    unspecified), lazily rebuilding when the slot is empty. On the first
-    attempt we just rebuild the engine; if that fails we force a full
-    disconnect + reconnect + engine rebuild (covers the common iOS 17+ case
-    where the RSD tunnel is alive but the DVT channel has silently gone stale)."""
-    app_state = ctx.app_state
-    import logging as _logging
-    _log = _logging.getLogger("gpscontroller")
+# Number of times to poll discover_devices when no UDID is known yet —
+# covers the brief window after `usbmuxd` learns a freshly-plugged iPhone.
+_DISCOVER_RETRY_ATTEMPTS = 10
+_DISCOVER_RETRY_DELAY_S = 1.0
 
-    # Direct hit on the requested udid.
-    if udid is not None:
-        eng = app_state.get_engine(udid)
-        if eng is not None:
-            return eng
 
-    if udid is None and app_state.simulation_engine is not None:
-        return app_state.simulation_engine
+async def _resolve_target_udid(app_state, dm, requested_udid: str | None) -> str:
+    """Pick the UDID to operate on, polling discover_devices if needed.
 
-    dm = app_state.device_manager
+    Preference order: explicit *requested_udid* → first already-connected
+    device → first discovered device (with retries). Raises an HTTPException
+    with code ``no_device`` when nothing is reachable.
+    """
+    import asyncio as _asyncio
+    _log = logging.getLogger("gpscontroller")
 
-    # Pick a target UDID — requested udid first, then already-connected, then any discoverable device.
     connected = dm.connected_udids
-    target_udid = udid or (connected[0] if connected else None)
-    if target_udid is None:
-        import asyncio as _asyncio
-        for attempt in range(10):
-            try:
-                discovered = await dm.discover_devices()
-                if discovered:
-                    target_udid = discovered[0].udid
-                    if attempt > 0:
-                        _log.info("discover_devices returned device on attempt %d", attempt + 1)
-                    break
-            except Exception:
-                _log.exception("discover_devices failed during lazy rebuild (attempt %d)", attempt + 1)
-            await _asyncio.sleep(1.0)
+    target_udid = requested_udid or (connected[0] if connected else None)
+    if target_udid is not None:
+        return target_udid
 
-    if target_udid is None:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "no_device", "message": "尚未連接任何 iOS 裝置,請先透過 USB 連線"},
-        )
+    for attempt in range(_DISCOVER_RETRY_ATTEMPTS):
+        try:
+            discovered = await dm.discover_devices()
+            if discovered:
+                if attempt > 0:
+                    _log.info("discover_devices returned device on attempt %d", attempt + 1)
+                return discovered[0].udid
+        except Exception:
+            _log.exception("discover_devices failed during lazy rebuild (attempt %d)", attempt + 1)
+        await _asyncio.sleep(_DISCOVER_RETRY_DELAY_S)
 
-    # Attempt 1: rebuild engine on top of existing connection
+    raise HTTPException(
+        status_code=400,
+        detail={"code": "no_device", "message": "尚未連接任何 iOS 裝置,請先透過 USB 連線"},
+    )
+
+
+async def _get_or_rebuild_engine(app_state, target_udid: str):
+    """First-attempt rebuild on top of the existing connection.
+
+    Returns the rebuilt engine on success, or None if the rebuild raised
+    so the caller can fall through to a hard reset.
+    """
+    _log = logging.getLogger("gpscontroller")
     _log.info("simulation_engine missing; attempt 1 (rebuild) for %s", target_udid)
     try:
         await app_state.create_engine_for_device(target_udid)
@@ -82,8 +82,16 @@ async def _engine(udid: str | None = None):
             return app_state.simulation_engine
     except Exception:
         _log.exception("Engine rebuild (attempt 1) failed for %s", target_udid)
+    return None
 
-    # Attempt 2: hard reset — disconnect + reconnect + rebuild
+
+async def _force_reconnect(app_state, dm, target_udid: str):
+    """Hard reset: disconnect → reconnect → rebuild. Last-resort recovery
+    for the iOS 17+ "RSD tunnel alive but DVT channel stale" case.
+
+    Returns the rebuilt engine on success or None if reconnect/rebuild fails.
+    """
+    _log = logging.getLogger("gpscontroller")
     _log.info("attempt 2 (hard reset) for %s", target_udid)
     try:
         try:
@@ -97,6 +105,29 @@ async def _engine(udid: str | None = None):
             return app_state.simulation_engine
     except Exception:
         _log.exception("Engine rebuild (attempt 2, hard reset) failed for %s", target_udid)
+    return None
+
+
+async def _engine(udid: str | None = None):
+    """Return the active SimulationEngine for *udid* (or the primary one if
+    unspecified), lazily rebuilding when the slot is empty."""
+    app_state = ctx.app_state
+    if udid is not None:
+        eng = app_state.get_engine(udid)
+        if eng is not None:
+            return eng
+    if udid is None and app_state.simulation_engine is not None:
+        return app_state.simulation_engine
+
+    dm = app_state.device_manager
+    target_udid = await _resolve_target_udid(app_state, dm, udid)
+
+    engine = await _get_or_rebuild_engine(app_state, target_udid)
+    if engine is not None:
+        return engine
+    engine = await _force_reconnect(app_state, dm, target_udid)
+    if engine is not None:
+        return engine
 
     raise HTTPException(
         status_code=400,
