@@ -8,6 +8,7 @@ import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
+import { isDefaultPlace } from '../../lib/bookmarks'
 import { copyToClipboard } from '../../lib/clipboard'
 import ListRow from '../ui/ListRow'
 import SearchField from '../ui/SearchField'
@@ -61,11 +62,10 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
 
-  const displayPlace = useCallback((name: string) => (
-    name === '預設' || name === 'Default' ? t('bm.default') :
-    name === 'Uncategorized' ? t('bm.uncategorized') :
-    name
-  ), [t])
+  const displayPlace = useCallback((name: string) => {
+    if (!isDefaultPlace(name)) return name
+    return name === 'Uncategorized' ? t('bm.uncategorized') : t('bm.default')
+  }, [t])
 
   const placeMap = useMemo(() => {
     const m = new Map<string, BookmarkPlace>()

@@ -18,6 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import type { BookmarkPlace } from '../../hooks/useBookmarks'
 import { ICON_SIZE } from '../../lib/icons'
+import { isDefaultPlace } from '../../lib/bookmarks'
 import { useT } from '../../i18n'
 import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
@@ -54,7 +55,7 @@ export function getPlaceColor(name: string): string {
 }
 
 const isDefault = (p: BookmarkPlace) =>
-  p.id === 'default' || p.name === 'Default' || p.name === '預設'
+  p.id === 'default' || isDefaultPlace(p.name)
 
 interface SortableRowProps {
   place: BookmarkPlace
