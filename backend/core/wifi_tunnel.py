@@ -20,6 +20,12 @@ class TunnelRunner:
         self.info: dict | None = None
         self.task: asyncio.Task | None = None
         self.lock = asyncio.Lock()
+        # Monotonic counter bumped on every successful start(). The
+        # watchdog snapshots this when it spawns and bails if the
+        # current value drifts — survives stop+start cycles (which a
+        # bare `task is task` identity check cannot, because `task`
+        # transiently goes None between the two).
+        self.generation: int = 0
         self._stop: asyncio.Event = asyncio.Event()
         self._ready: asyncio.Event = asyncio.Event()
         self._error: BaseException | None = None
@@ -84,6 +90,11 @@ class TunnelRunner:
             exc = self._error
             self.task = None
             raise exc
+        # Successful handshake — advance the generation epoch so the
+        # watchdog can detect "the tunnel I was watching has been
+        # replaced" without relying on Task identity (which goes None
+        # in the gap between stop() and the next start()).
+        self.generation += 1
         return dict(self.info or {})
 
     async def stop(self) -> None:

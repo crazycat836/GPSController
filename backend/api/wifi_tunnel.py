@@ -469,11 +469,19 @@ async def _cleanup_wifi_connections() -> list[str]:
     return udids
 
 
-async def _tunnel_watchdog(task: asyncio.Task) -> None:
+async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
     """Watch the tunnel task; if it dies unexpectedly (WiFi blip, iPhone
     locked, admin revoked), clean up any dependent WiFi connections so the
     UI can recover gracefully. A 5s grace window allows the user to restart
-    the tunnel before we tear down engines."""
+    the tunnel before we tear down engines.
+
+    *gen* is the tunnel epoch we were spawned to watch. Comparing the
+    live ``_tunnel.generation`` against this snapshot survives a
+    stop + start cycle inside the grace window — the previous identity
+    check against ``_tunnel.task`` (which transiently goes None between
+    ``stop()`` and the next ``start()``) would have torn down the
+    brand-new tunnel's resources by mistake.
+    """
     try:
         try:
             await task
@@ -482,9 +490,14 @@ async def _tunnel_watchdog(task: asyncio.Task) -> None:
         except BaseException:
             pass
 
-        # Task has ended. If stop() already cleared _tunnel.task, this was an
-        # explicit shutdown — nothing to do.
-        if _tunnel.task is not task:
+        # Task has ended. If a newer tunnel has already replaced ours,
+        # this watchdog is stale — nothing to do.
+        if _tunnel.generation != gen:
+            _tunnel_logger.info(
+                "watchdog: generation mismatch (current=%d, expected=%d); "
+                "stale watchdog exiting without cleanup",
+                _tunnel.generation, gen,
+            )
             return
 
         _tunnel_logger.warning("Tunnel task exited unexpectedly; 5s grace period")
@@ -497,23 +510,31 @@ async def _tunnel_watchdog(task: asyncio.Task) -> None:
         await asyncio.sleep(5.0)
 
         async with _tunnel.lock:
-            if _tunnel.is_running() and _tunnel.task is not task:
-                _tunnel_logger.info("Tunnel recovered within grace period")
-                try:
-                    from api.websocket import broadcast
-                    await broadcast("tunnel_recovered", {})
-                except Exception:
-                    pass
+            # Generation gate is the post-sleep authority. If anything
+            # ran start() inside the grace window the epoch will have
+            # moved on and we must not tear down the new tunnel — even
+            # if our original task identity also happens to be None.
+            if _tunnel.generation != gen:
+                _tunnel_logger.info(
+                    "watchdog: generation mismatch after grace "
+                    "(current=%d, expected=%d); bailing without cleanup",
+                    _tunnel.generation, gen,
+                )
+                if _tunnel.is_running():
+                    try:
+                        from api.websocket import broadcast
+                        await broadcast("tunnel_recovered", {})
+                    except Exception:
+                        pass
                 return
-            if _tunnel.task is task or _tunnel.task is None:
-                await _cleanup_wifi_connections()
-                _tunnel.task = None
-                _tunnel.info = None
-                try:
-                    from api.websocket import broadcast
-                    await broadcast("tunnel_lost", {"reason": "task_exited"})
-                except Exception:
-                    _tunnel_logger.exception("Failed to emit tunnel_lost event")
+            await _cleanup_wifi_connections()
+            _tunnel.task = None
+            _tunnel.info = None
+            try:
+                from api.websocket import broadcast
+                await broadcast("tunnel_lost", {"reason": "task_exited"})
+            except Exception:
+                _tunnel_logger.exception("Failed to emit tunnel_lost event")
     except asyncio.CancelledError:
         raise
 
@@ -560,7 +581,9 @@ async def wifi_tunnel_start(req: WifiTunnelStartRequest):
 
         _tunnel_logger.info("WiFi tunnel started: %s", info)
         if _tunnel_watchdog_task is None or _tunnel_watchdog_task.done():
-            _tunnel_watchdog_task = asyncio.create_task(_tunnel_watchdog(_tunnel.task))
+            _tunnel_watchdog_task = asyncio.create_task(
+                _tunnel_watchdog(_tunnel.task, _tunnel.generation)
+            )
         return {"status": "started", **info}
 
 
