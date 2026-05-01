@@ -58,7 +58,7 @@ async def wifi_scan():
         return results
     except Exception:
         logger.exception("WiFi scan failed")
-        raise http_err(500, "scan_failed", "WiFi 掃描失敗,請稍後再試")
+        raise http_err(500, "scan_failed", "WiFi scan failed; please retry shortly")
 
 
 class WifiTunnelConnectRequest(BaseModel):
@@ -82,7 +82,7 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
     if dm.connected_count >= MAX_DEVICES:
         raise HTTPException(
             status_code=409,
-            detail={"code": "max_devices_reached", "message": f"已連接最多 {MAX_DEVICES} 台裝置"},
+            detail={"code": "max_devices_reached", "message": f"Maximum {MAX_DEVICES} devices connected"},
         )
     try:
         info = await dm.connect_wifi_tunnel(req.rsd_address, req.rsd_port)
@@ -113,9 +113,9 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
             detail={
                 "code": "ios_unsupported",
                 "message": (
-                    f"偵測到 iOS {e.version},GPSController 自 v0.1.49 起僅支援 "
-                    f"iOS {UnsupportedIosVersionError.MIN_VERSION} 以上。"
-                    f"請將裝置升級至 iOS {UnsupportedIosVersionError.MIN_VERSION} 或更新版本後再連線。"
+                    f"Detected iOS {e.version}; GPSController v0.1.49+ requires "
+                    f"iOS {UnsupportedIosVersionError.MIN_VERSION} or newer. "
+                    f"Please update to iOS {UnsupportedIosVersionError.MIN_VERSION}+ before connecting."
                 ),
                 "ios_version": e.version,
                 "min_version": UnsupportedIosVersionError.MIN_VERSION,
@@ -123,7 +123,7 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
         )
     except Exception:
         logger.exception("WiFi tunnel connect failed", extra={"rsd_address": req.rsd_address})
-        raise http_err(500, "connect_failed", "連線失敗,請確認 tunnel 仍在執行並重試")
+        raise http_err(500, "connect_failed", "Connection failed; ensure the tunnel is still running and retry")
 
 
 # ── WiFi Tunnel lifecycle (start / status / stop) ───────
@@ -156,7 +156,7 @@ async def wifi_repair():
         raw_devices = await mux_list_devices()
     except Exception:
         logger.exception("usbmux list_devices failed during /wifi/repair")
-        raise http_err(500, "usbmux_unavailable", "無法列出 USB 裝置,請確認 usbmuxd 是否運作")
+        raise http_err(500, "usbmux_unavailable", "Could not list USB devices; check that usbmuxd is running")
 
     # Prefer a USB-attached device (Network entries won't help us regenerate
     # the RemotePairing record).
@@ -166,7 +166,7 @@ async def wifi_repair():
             status_code=400,
             detail={
                 "code": "repair_needs_usb",
-                "message": "請先用 USB 線連接 iPhone。重新配對需要 USB 觸發『信任這台電腦』提示。",
+                "message": "Please connect the iPhone via USB first. Re-pairing needs USB to trigger the \"Trust This Computer\" prompt.",
             },
         )
 
@@ -182,7 +182,7 @@ async def wifi_repair():
             status_code=500,
             detail={
                 "code": "trust_failed",
-                "message": "USB 信任失敗 — 請在 iPhone 解鎖畫面上點「信任」後再試",
+                "message": "USB trust failed — tap \"Trust\" on the iPhone unlock screen and retry",
                 "udid": udid,
             },
         )
@@ -256,11 +256,11 @@ async def wifi_repair():
                 PairingError,
             )
             if isinstance(e, PairingDialogResponsePendingError):
-                friendly = "請在 iPhone 解鎖螢幕上按「信任」後重試(timeout 只有幾秒)。"
+                friendly = "Tap \"Trust\" on the iPhone unlock screen and retry (the timeout is only a few seconds)."
             elif isinstance(e, (NotPairedError, PairingError)):
-                friendly = "USB 配對失效,請拔 USB 重插一次並按信任。"
+                friendly = "USB pairing invalid; unplug and re-plug USB, then tap Trust."
             else:
-                friendly = "RemotePairing 握手失敗,請查看後端記錄檔以取得詳細資訊。"
+                friendly = "RemotePairing handshake failed; check the backend log for details."
             raise HTTPException(
                 status_code=500,
                 detail={
@@ -588,14 +588,14 @@ async def wifi_tunnel_start(req: WifiTunnelStartRequest):
         except asyncio.TimeoutError:
             raise HTTPException(
                 status_code=500,
-                detail={"code": "tunnel_timeout", "message": "Tunnel 啟動逾時(20 秒)"},
+                detail={"code": "tunnel_timeout", "message": "Tunnel startup timed out (20 s)"},
             )
         except Exception:
             logger.exception(
                 "Tunnel spawn failed",
                 extra={"udid": resolved_udid, "ip": req.ip, "port": req.port},
             )
-            raise http_err(500, "tunnel_spawn_failed", "無法啟動 tunnel,請查看後端記錄檔")
+            raise http_err(500, "tunnel_spawn_failed", "Could not start the tunnel; see the backend log")
 
         _tunnel_logger.info("WiFi tunnel started: %s", info)
         if _tunnel_watchdog_task is None or _tunnel_watchdog_task.done():
@@ -702,20 +702,20 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
     # Start the tunnel
     tunnel_result = await wifi_tunnel_start(req)
     if tunnel_result.get("status") not in ("started", "already_running"):
-        raise http_err(500, "tunnel_failed", "Tunnel 啟動失敗")
+        raise http_err(500, "tunnel_failed", "Tunnel startup failed")
 
     rsd_address = tunnel_result.get("rsd_address")
     rsd_port = tunnel_result.get("rsd_port")
 
     if not rsd_address or not rsd_port:
-        raise http_err(500, "tunnel_no_rsd", "Tunnel 已啟動但無 RSD 資訊")
+        raise http_err(500, "tunnel_no_rsd", "Tunnel started but RSD info is missing")
 
     # Connect through the tunnel
     dm = _dm()
     if dm.connected_count >= MAX_DEVICES:
         raise HTTPException(
             status_code=409,
-            detail={"code": "max_devices_reached", "message": f"已連接最多 {MAX_DEVICES} 台裝置"},
+            detail={"code": "max_devices_reached", "message": f"Maximum {MAX_DEVICES} devices connected"},
         )
     try:
         info = await dm.connect_wifi_tunnel(rsd_address, rsd_port)
@@ -734,4 +734,4 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
             "Tunnel started but device connection failed",
             extra={"rsd_address": rsd_address, "rsd_port": rsd_port},
         )
-        raise http_err(500, "connect_failed", "Tunnel 已啟動但裝置連線失敗")
+        raise http_err(500, "connect_failed", "Tunnel started but device connection failed")
