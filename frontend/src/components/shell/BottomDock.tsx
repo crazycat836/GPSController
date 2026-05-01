@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import {
   Play, Square, Pause, Footprints, Rabbit, Car, ArrowRight,
-  Repeat, Star, MapPin, Crosshair, Plus, Dices,
+  Repeat, Star, MapPin, Crosshair,
   Navigation, Route, Shuffle, Gamepad2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -679,7 +679,3 @@ function buildDockContext(
   }
 }
 
-// Silence unused imports retained for future variants.
-void Repeat
-void Dices
-void Plus
