@@ -556,12 +556,16 @@ function ActionBtn({ tone, onClick, disabled, children }: ActionBtnProps) {
       ? { bg: 'var(--color-surface-ghost)', border: '1px solid var(--color-border)', color: 'var(--color-text-1)', hover: 'rgba(255,255,255,0.08)' }
       : { bg: 'var(--color-accent)', border: 'none', color: 'var(--color-surface-0)', hover: 'var(--color-accent-hover)' }
 
+  // Hover lives in `.dock-action-btn:hover` (legacy.css), driven by the
+  // `--dock-bg` / `--dock-hover-bg` custom properties below — keeps tone
+  // palettes per-instance while keeping the hover transition in CSS.
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       className={[
+        'dock-action-btn',
         'inline-flex items-center justify-center gap-2 h-11 px-[18px] rounded-xl',
         'text-[13px] font-semibold whitespace-nowrap',
         'transition-[background,opacity,box-shadow] duration-150 cursor-pointer',
@@ -569,13 +573,12 @@ function ActionBtn({ tone, onClick, disabled, children }: ActionBtnProps) {
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] focus-visible:outline-offset-2',
       ].join(' ')}
       style={{
-        background: palette.bg,
+        ['--dock-bg' as string]: palette.bg,
+        ['--dock-hover-bg' as string]: palette.hover,
         border: palette.border,
         color: palette.color,
         boxShadow: tone === 'accent' && !disabled ? 'var(--shadow-glow)' : undefined,
-      }}
-      onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLElement).style.background = palette.hover }}
-      onMouseLeave={(e) => { if (!disabled) (e.currentTarget as HTMLElement).style.background = palette.bg }}
+      } as React.CSSProperties}
     >
       {children}
     </button>
