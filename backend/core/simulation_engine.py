@@ -32,6 +32,12 @@ from core.restore import RestoreHandler
 logger = logging.getLogger(__name__)
 
 
+# Mask applied to the time-derived default random-walk seed so it stays
+# inside the signed-int32 range (max value Python's seeding accepts on
+# every platform / Random impl). Only used when the caller passes seed=None.
+_DEFAULT_RANDOM_WALK_SEED_MASK = 0x7FFFFFFF
+
+
 # Waypoint-pass detection thresholds (WP_HARD_HIT_M / WP_NEAR_M /
 # WP_RECEDE_M) live in core.movement_loop alongside the only function
 # that uses them.
@@ -419,7 +425,7 @@ class SimulationEngine:
         # replay the same destination sequence. Unseeded callers get a
         # time-based seed that's captured in the snapshot.
         if seed is None:
-            seed = int(time.time() * 1000) & 0x7FFFFFFF
+            seed = int(time.time() * 1000) & _DEFAULT_RANDOM_WALK_SEED_MASK
         self.snapshot = SimulationSnapshot(
             mode="random_walk",
             movement_mode=mode.value,

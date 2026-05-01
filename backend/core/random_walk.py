@@ -15,6 +15,15 @@ from config import resolve_speed_profile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_M
 logger = logging.getLogger(__name__)
 
 
+# Error budgets and reconnect backoff for the random-walk loop.
+# Generic errors trip the limit fast; connection errors get a much higher
+# budget so the walk can survive screen-lock / WiFi blips for ~30 minutes
+# at the capped backoff.
+_MAX_CONSECUTIVE_ERRORS = 5
+_MAX_CONSECUTIVE_CONN_ERRORS = 60
+_RECONNECT_BACKOFF_CAP_S = 30.0
+
+
 class RandomWalkHandler:
     """Picks random destinations within a radius, routes to them,
     pauses briefly, then picks another destination. Repeats until stopped."""
@@ -79,11 +88,11 @@ class RandomWalkHandler:
 
         walk_count = 0
         consecutive_errors = 0
-        max_consecutive_errors = 5
+        max_consecutive_errors = _MAX_CONSECUTIVE_ERRORS
         # Connection errors get a much higher retry budget so the walk
         # can survive screen-lock / WiFi blips without dying.
         consecutive_conn_errors = 0
-        max_consecutive_conn_errors = 60  # ~30 min at max backoff
+        max_consecutive_conn_errors = _MAX_CONSECUTIVE_CONN_ERRORS  # ~30 min at max backoff
 
         # Seeded RNG for group-mode sync: both devices pass the same seed from
         # the frontend and therefore pick the exact same sequence of
@@ -149,7 +158,7 @@ class RandomWalkHandler:
                 # Device connection lost (WiFi drop, screen lock, etc.)
                 # Use longer backoff and higher retry limit.
                 consecutive_conn_errors += 1
-                backoff = min(5.0 * (2 ** min(consecutive_conn_errors - 1, 5)), 30.0)
+                backoff = min(5.0 * (2 ** min(consecutive_conn_errors - 1, 5)), _RECONNECT_BACKOFF_CAP_S)
                 logger.warning(
                     "Random walk leg %d: connection lost (%s), "
                     "retry %d/%d in %.0fs",

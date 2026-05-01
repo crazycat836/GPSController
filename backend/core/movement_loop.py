@@ -28,6 +28,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Linear backoff base for retrying a single position push after a transient
+# ConnectionError / OSError. Sleep is `_RECONNECT_BACKOFF_BASE_S * (attempt + 1)`
+# across the 3-attempt loop, so total worst-case stall is ~3.0s.
+_RECONNECT_BACKOFF_BASE_S = 0.5
+
+
 # Waypoint-pass detection thresholds (meters).
 #
 # OSRM snaps off-road taps onto the nearest road, so the routed polyline
@@ -166,7 +172,7 @@ async def move_along_route(
                     logger.warning(
                         "position push failed (attempt %d/3): %s", attempt + 1, exc,
                     )
-                    await asyncio.sleep(0.5 * (attempt + 1))
+                    await asyncio.sleep(_RECONNECT_BACKOFF_BASE_S * (attempt + 1))
                 except asyncio.CancelledError:
                     raise
                 except DeviceLostError:
