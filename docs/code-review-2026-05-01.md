@@ -31,6 +31,23 @@
 
 ---
 
+> **Post-HIGH MEDIUM batch (commits on `main`, unreleased):** 17 of ~25 MEDIUM items shipped via 3 parallel worktree agents:
+> - **Backend bulk (9):** `_http_err` → shared `api/_errors.py`, `unwrap_device_lost` helper, OSRM/Nominatim env-var overrides, 5 movement-loop magic numbers → named constants, WS broadcast `asyncio.gather` + per-client 1s timeout, `SavedRoutesStore` class (was module-level singleton), pymobiledevice3 exception-class isinstance (was message substring matching), `Bookmark.tags` `Field(max_length=64)` + dedupe-on-write, `_engine` 76-line orchestrator split into 3 helpers.
+> - **Frontend DRY/env (6):** `lib/dev-log.ts` (devLog + devWarn), `lib/clipboard.ts`, `DEFAULT_PAUSE` from `lib/constants` (replaces local re-declarations), drop duplicate `MODE_LABEL_KEYS` in BottomDock, `VITE_API_HOST` env override, frontend visual magic numbers named.
+> - **MapView typed/effect (2):** 10 `as any` casts → typed `LeafletMapInternal` alias + corrected ref type (8 of the 10 were bandaids around `currentMarkerRef` being typed `L.CircleMarker` when runtime creates `L.Marker`); two tile-layer effects collapsed into one (the original `[]` init effect was reading `layerKey` without subscribing — silent prop-swallow bug fixed in passing).
+>
+> **Remaining MEDIUM items (~6, deferred for careful planning):**
+> - Modal anatomy unified `<Modal>` primitive (4+ duplicate implementations)
+> - SimContext into 3 focused contexts (state / handlers / derived) — 16-file consumer migration
+> - SimulationEngine `__init__` 25-attr dataclass split
+> - Backend Chinese-message i18n leak (30+ sites — focused i18n migration)
+> - Frontend leaked strings (`'預設'` / `'Default'` / `'Uncategorized'` / `'中文'` / `'English'`)
+> - Per-handler fan-out branching repeated in SimContext (`runWithFanout` helper)
+
+**Combined score**: **22 HIGH (88%)** + **17 of ~25 MEDIUM (~68%)** = **39 of ~50 high+medium items resolved.**
+
+---
+
 ## HIGH Priority
 
 ### Architecture / God modules
@@ -203,21 +220,25 @@
 
 ### DRY violations / duplicated logic
 
-- **[MEDIUM] `_http_err` defined identically in three files**
+- **[DONE] [MEDIUM] `_http_err` defined identically in three files**
   - `backend/api/wifi_tunnel.py:26`, `backend/api/device.py:19`, `backend/api/location.py:31`
   - Fix: hoist to `backend/api/_errors.py`.
+  - **Fixed**: new `backend/api/_errors.py` exports `http_err`; 3 local copies removed.
 
-- **[MEDIUM] `DeviceLostError` cause-walking duplicated**
+- **[DONE] [MEDIUM] `DeviceLostError` cause-walking duplicated**
   - `backend/core/simulation_engine.py:236-242`, `backend/api/location.py:236-242`, `:265-269`, `:292-300`
   - Fix: extract `_unwrap_device_lost(exc) -> DeviceLostError | None`.
+  - **Fixed**: `unwrap_device_lost` exported from `services/location_service.py` (renamed without leading underscore — it's a public cross-module helper); 4 inline `__cause__` walks replaced.
 
-- **[MEDIUM] `_IS_DEV` + `devLog` reimplemented per file**
+- **[DONE] [MEDIUM] `_IS_DEV` + `devLog` reimplemented per file**
   - `frontend/src/contexts/BookmarkContext.tsx:8`, `frontend/src/hooks/useDevice.ts:21`, `frontend/src/hooks/useBookmarks.ts:4` — three near-identical implementations.
   - Fix: single `frontend/src/lib/dev-log.ts`.
+  - **Fixed**: new `lib/dev-log.ts` exports `devLog` (`console.error`) + `devWarn` (`console.warn` — preserves `useDevice`'s intentional `console.warn` semantic for recoverable failures). 3 local copies removed.
 
-- **[MEDIUM] Clipboard fallback duplicated**
+- **[DONE] [MEDIUM] Clipboard fallback duplicated**
   - `frontend/src/components/library/BookmarksPanel.tsx:210`, `frontend/src/components/MapContextMenu.tsx:252`
   - Fix: `frontend/src/lib/clipboard.ts`.
+  - **Fixed**: new `lib/clipboard.ts` exports `copyToClipboard(text) → Promise<boolean>`; defensive outer try/catch around the textarea-fallback path (slightly stronger than either inline original).
 
 - **[DONE v0.14.1] [MEDIUM] Two parallel translation tables**
   - `frontend/src/services/api.ts:84-107` (`ERROR_I18N`) vs `frontend/src/i18n/strings.ts`
@@ -225,9 +246,10 @@
   - Fix: move every `ERROR_I18N` entry into `i18n/strings.ts` under an `err.*` namespace, pass `t` into `formatError`.
   - **v0.14.1**: `ERROR_I18N` removed; 7 missing keys added under `err.*`. `formatError` looks up `STRINGS['err.<code>']`.
 
-- **[MEDIUM] Default pause object hardcoded in three places**
+- **[DONE] [MEDIUM] Default pause object hardcoded in three places**
   - `frontend/src/hooks/useSimulation.ts:387,394,396,406` (`{ enabled: true, min: 5, max: 20 }`), `frontend/src/services/api.ts:218-219`, plus `frontend/src/lib/constants.ts:35` (which already exports `DEFAULT_PAUSE` but is unused)
   - Fix: import `DEFAULT_PAUSE` from constants everywhere.
+  - **Fixed**: `usePauseSettings.ts` now imports `DEFAULT_PAUSE` from `lib/constants` instead of redeclaring locally. (`useSimulation.ts` references already cleaned up by the earlier `usePauseSettings` extraction.)
 
 - **[MEDIUM] Per-handler fan-out branching repeated**
   - `frontend/src/contexts/SimContext.tsx:339, 356, 465, 480, 495, 505` — every handler does `if (udids.length >= 2) toast(t('multi.start')) ; … else single` with the same toast wrapping.
@@ -237,9 +259,10 @@
   - `App.tsx:337-388`, `SettingsMenu.tsx:301-384`, `BookmarkEditDialog.tsx`, `AvatarPicker.tsx` each define their own overlay + Esc handling + focus trap.
   - Fix: one `<Modal title body actions />` primitive that uses existing `useModalDismiss` + `useFocusTrap`.
 
-- **[MEDIUM] `MODE_LABEL_KEYS` duplicated**
+- **[DONE] [MEDIUM] `MODE_LABEL_KEYS` duplicated**
   - `frontend/src/components/shell/BottomDock.tsx:184` hardcodes a SimMode→label-key map; `frontend/src/hooks/useSimulation.ts:233` already exports `MODE_LABEL_KEYS`.
   - Fix: import the existing constant.
+  - **Fixed**: BottomDock now imports `MODE_LABEL_KEYS` from `useSimulation`; local copy removed.
 
 ### Response format inconsistency
 
@@ -263,33 +286,38 @@
 
 ### Magic numbers / hardcoded config
 
-- **[MEDIUM] No env-var override for backend external services**
+- **[DONE] [MEDIUM] No env-var override for backend external services**
   - `backend/config.py:18` (`OSRM_BASE_URL`), `:21` (`NOMINATIM_BASE_URL`)
   - Operators on restricted networks / self-hosted OSRM must fork the file.
   - Fix: `os.environ.get("OSRM_BASE_URL", "https://router.project-osrm.org")`.
+  - **Fixed**: both URLs respect `$OSRM_BASE_URL` / `$NOMINATIM_BASE_URL` env vars.
 
-- **[MEDIUM] No env-var override for the frontend API host**
+- **[DONE] [MEDIUM] No env-var override for the frontend API host**
   - `frontend/src/lib/constants.ts:29` (`API_HOST = '127.0.0.1:8777'`)
   - Fix: `import.meta.env.VITE_API_HOST ?? '127.0.0.1:8777'`.
+  - **Fixed**: `API_HOST` reads `import.meta.env.VITE_API_HOST` with fallback. `vite-env.d.ts` extended via declaration merge (Vite-recommended).
 
-- **[MEDIUM] Movement / random-walk thresholds are inline literals**
+- **[DONE] [MEDIUM] Movement / random-walk thresholds are inline literals**
   - `backend/core/multi_stop.py:117` (`> 50` first-waypoint distance).
   - `backend/core/random_walk.py:82, 86, 152` (error budgets, backoff cap).
   - `backend/core/movement_loop.py:169` (`asyncio.sleep(0.5 * (attempt + 1))`).
   - `backend/core/simulation_engine.py:420` (`int(time.time() * 1000) & 0x7FFFFFFF`).
   - Fix: promote to module-level named constants (`_FIRST_WAYPOINT_REACH_THRESHOLD_M`, `_MAX_CONSECUTIVE_ERRORS`, `_RECONNECT_BACKOFF_BASE_S`, `_DEFAULT_RANDOM_WALK_SEED_MASK`).
+  - **Fixed**: 5 module-level constants promoted with the requested names.
 
-- **[MEDIUM] Frontend visual constants inline**
+- **[DONE] [MEDIUM] Frontend visual constants inline**
   - `frontend/src/components/library/BookmarksPanel.tsx:145` (`1e-5` coord match), `:223` (`1200` flash ms), `:536` (`5` visible cap), `:478-480` (`2` stripe).
   - `frontend/src/components/MapView.tsx:323` (`> 500` auto-recenter), `:323` (`latScale = 111320`).
   - Fix: extract `BOOKMARK_MATCH_EPSILON`, `COPIED_FLASH_MS`, `PLACE_CHIPS_VISIBLE_CAP`, `AUTO_RECENTER_THRESHOLD_M`, `METERS_PER_DEGREE_LAT` (latter likely shared with `geo.ts`).
+  - **Fixed**: all 6 named constants promoted; `METERS_PER_DEGREE_LAT` lives in `lib/geo.ts`. Stripe constant required moving from Tailwind arbitrary class to inline `style={{}}` to reference the JS const.
 
 ### Tight coupling / leaky abstractions
 
-- **[MEDIUM] `as any` casts: 12 sites, 10 in `MapView.tsx`**
+- **[DONE] [MEDIUM] `as any` casts: 12 sites, 10 in `MapView.tsx`**
   - File: `frontend/src/components/MapView.tsx` (lines `135, 140, 274, 294, 297, 298, 312, 339, 349, 350`); plus `useSimulation.ts` and `useDevice.ts` (1 each).
   - Most reach into Leaflet private API (`_controlCorners`); the rest cast public methods (`setLatLng`, `setIcon`) that are already typed.
   - Fix: define `type LeafletMapInternal = L.Map & { _controlCorners?: { topleft?: HTMLElement; topright?: HTMLElement } }`, cast once, drop the rest.
+  - **Fixed**: actual count was 10 (audit confirmed `useSimulation` / `useDevice` had zero — the review tally was off). 2 Leaflet-private casts moved to a typed `LeafletMapInternal` alias. The other 8 were bandaids around `currentMarkerRef` being typed `L.CircleMarker` when the runtime creates `L.Marker` — fixing the ref type let `setLatLng` / `setIcon` / `setTooltipContent` / `remove` resolve from public Leaflet typings, casts deleted.
 
 - **[MEDIUM] `value` memoization in SimContext gives almost nothing**
   - File: `frontend/src/contexts/SimContext.tsx:576-646`
@@ -300,35 +328,41 @@
   - File: `backend/core/simulation_engine.py:150-209`
   - Fix: split into a `@dataclass` of "runtime tracking" fields and a separate state container.
 
-- **[MEDIUM] Two effects manage the same Leaflet layer**
+- **[DONE] [MEDIUM] Two effects manage the same Leaflet layer**
   - File: `frontend/src/components/MapView.tsx:108` (reacts to layerKey) and `:119` (initial mount with `[]` deps + `eslint-disable` at `:264`).
   - Race: fast user clicks during initial mount can interleave.
   - Fix: collapse into one effect or guard the layerKey one to no-op until the init effect committed.
+  - **Fixed**: collapsed into a single `[layerKey]`-deps effect. Bonus: the original `[]` init effect was reading `layerKey` without subscribing — any prop change between commit and the swap effect's first run was silently swallowed. Map + ResizeObserver teardown extracted to its own `[]` effect (deps captured via refs). `eslint-disable` comment fully removed.
 
 ### Other functional issues
 
-- **[MEDIUM] WS broadcast is sequential**
+- **[DONE] [MEDIUM] WS broadcast is sequential**
   - File: `backend/api/websocket.py:25-35`
   - One slow client blocks all others.
   - Fix: `asyncio.gather` with per-client `asyncio.wait_for(ws.send_text(...), 1.0)` and dead-list pruning.
+  - **Fixed**: `_send_one(ws)` per-client coro with `asyncio.wait_for(..., _BROADCAST_PER_CLIENT_TIMEOUT_S=1.0)`; `asyncio.gather` fans out; dead clients pruned post-gather. Slow clients no longer block the rest.
 
-- **[MEDIUM] `_engine` orchestration function (76 lines, two retry loops, exception walking)**
+- **[DONE] [MEDIUM] `_engine` orchestration function (76 lines, two retry loops, exception walking)**
   - File: `backend/api/location.py:41-116`
   - Fix: split into `_get_or_rebuild_engine`, `_resolve_target_udid`, `_force_reconnect`.
+  - **Fixed**: split into the requested 3 helpers + a 19-line orchestrator (`_engine`).
 
-- **[MEDIUM] Saved routes module-level singleton with no isolation**
+- **[DONE] [MEDIUM] Saved routes module-level singleton with no isolation**
   - File: `backend/api/route.py:30, 49` (`_saved_routes`, `_saved_routes_lock`)
   - Fix: hide behind a `SavedRoutesStore` class so tests can construct a fresh instance.
+  - **Fixed**: new `backend/services/saved_routes.py` exports `SavedRoutesStore` (`add`, `get`, `delete`, `rename`, `list`, `import_all`); `api/route.py` instantiates one at module level. Tests can now build their own.
 
-- **[MEDIUM] String-match exception classification**
+- **[DONE] [MEDIUM] String-match exception classification**
   - File: `backend/api/wifi_tunnel.py:74-75, 162, 254, 257-263`
   - `_msg.lower()` matched against `"PairingDialogResponsePending"`, `"consent"`, `"not paired"`, `"pairingerror"`. Brittle across pymobiledevice3 versions.
   - Fix: match on exception classes from pymobiledevice3.
+  - **Fixed**: actual count was 1 block (audit; review tally was over-stated). Replaced with `isinstance(exc, (PairingDialogResponsePendingError, NotPairedError, PairingError))`.
 
-- **[MEDIUM] No `Bookmark.tags` length cap or uniqueness**
+- **[DONE] [MEDIUM] No `Bookmark.tags` length cap or uniqueness**
   - File: `backend/models/schemas.py:208`
   - A POST with 10K tags is accepted.
   - Fix: `Field(max_items=64)` and dedupe on write.
+  - **Fixed**: `Field(max_length=64)` (Pydantic v2 syntax). `BookmarkManager.create_bookmark` / `update_bookmark` dedupe via `list(dict.fromkeys(...))` after the known-tag-id filter — preserves order of first occurrence.
 
 ---
 
