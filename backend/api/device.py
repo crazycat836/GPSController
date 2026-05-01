@@ -42,7 +42,7 @@ async def connect_device(udid: str):
     if not dm.is_connected(udid) and dm.connected_count >= MAX_DEVICES:
         raise HTTPException(
             status_code=409,
-            detail={"code": "max_devices_reached", "message": f"已連接最多 {MAX_DEVICES} 台裝置"},
+            detail={"code": "max_devices_reached", "message": f"Maximum {MAX_DEVICES} devices connected"},
         )
     try:
         await dm.connect(udid)
@@ -69,9 +69,9 @@ async def connect_device(udid: str):
             detail={
                 "code": "ios_unsupported",
                 "message": (
-                    f"偵測到 iOS {e.version},GPSController 自 v0.1.49 起僅支援 "
-                    f"iOS {UnsupportedIosVersionError.MIN_VERSION} 以上。"
-                    f"請將裝置升級至 iOS {UnsupportedIosVersionError.MIN_VERSION} 或更新版本後再連線。"
+                    f"Detected iOS {e.version}; GPSController v0.1.49+ requires "
+                    f"iOS {UnsupportedIosVersionError.MIN_VERSION} or newer. "
+                    f"Please update to iOS {UnsupportedIosVersionError.MIN_VERSION}+ before connecting."
                 ),
                 "ios_version": e.version,
                 "min_version": UnsupportedIosVersionError.MIN_VERSION,
@@ -79,7 +79,7 @@ async def connect_device(udid: str):
         )
     except Exception:
         logger.exception("Device connect failed", extra={"udid": udid})
-        raise http_err(500, "connect_failed", "裝置連線失敗,請重試")
+        raise http_err(500, "connect_failed", "Device connection failed; please retry")
 
 
 @router.post("/auto-reconnect/reset")
@@ -202,10 +202,10 @@ async def forget_device(udid: str):
             "Forget device %s failed: could not remove any pair record (%d attempted)",
             udid, len(failed),
         )
-        raise _http_err(
+        raise http_err(
             500,
             "forget_failed",
-            "無法移除任何信任記錄,可能需要管理員權限,請以 sudo 重啟後端後再試",
+            "Could not remove any trust record; admin privileges may be required — restart the backend with sudo and retry",
         )
 
     status = "partial" if failed else "forgotten"
@@ -243,7 +243,7 @@ async def amfi_reveal_developer_mode(udid: str):
     if conn is None:
         raise HTTPException(
             status_code=404,
-            detail={"code": "device_not_connected", "message": "裝置目前未連線"},
+            detail={"code": "device_not_connected", "message": "Device is not currently connected"},
         )
 
     # iOS 15 and below have no Developer Mode concept, so the AMFI
@@ -255,7 +255,7 @@ async def amfi_reveal_developer_mode(udid: str):
             status_code=400,
             detail={
                 "code": "ios_version_unsupported",
-                "message": "需要 iOS 16 或更新版本才能使用開發者模式",
+                "message": "iOS 16 or newer is required to use Developer Mode",
                 "ios_version": conn.ios_version,
             },
         )
@@ -268,7 +268,7 @@ async def amfi_reveal_developer_mode(udid: str):
             status_code=400,
             detail={
                 "code": "usb_required",
-                "message": "AMFI 需要 USB 連線(WiFi tunnel 不會轉發此服務)",
+                "message": "AMFI requires a USB connection (WiFi tunnel does not forward this service)",
             },
         )
 
@@ -276,13 +276,13 @@ async def amfi_reveal_developer_mode(udid: str):
         from pymobiledevice3.services.amfi import AmfiService
     except ImportError:
         logger.exception("pymobiledevice3 AMFI module import failed", extra={"udid": udid})
-        raise http_err(500, "amfi_unavailable", "pymobiledevice3 AMFI 服務無法載入")
+        raise http_err(500, "amfi_unavailable", "pymobiledevice3 AMFI service failed to load")
 
     try:
         AmfiService(conn.lockdown).reveal_developer_mode_option_in_ui()
     except Exception:
         logger.exception("AMFI reveal failed for %s", udid)
-        raise http_err(500, "amfi_reveal_failed", "AMFI 操作失敗,請確認裝置已解鎖並信任這台電腦")
+        raise http_err(500, "amfi_reveal_failed", "AMFI operation failed; ensure the device is unlocked and trusts this computer")
 
     # Invalidate the cached status so the next discover pays a fresh
     # lockdown query and the frontend sees the toggle flip.
