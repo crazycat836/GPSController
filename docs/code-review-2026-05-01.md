@@ -11,17 +11,23 @@
 
 ## Status
 
-> **v0.14.1 (2026-05-01)** — released [v0.14.1](https://github.com/crazycat836/GPSController/releases/tag/v0.14.1). 5 HIGH items fully resolved + 1 partial. Fixed items inline below are marked **[DONE v0.14.1]**; partial progress is marked **[PARTIAL v0.14.1]**.
+> **v0.14.1 (2026-05-01)** — released [v0.14.1](https://github.com/crazycat836/GPSController/releases/tag/v0.14.1). 5 HIGH items fully resolved + 1 partial.
 >
-> **Post-release quick-win batch (commits on `main`, unreleased):**
-> 5 more HIGH items fixed inline — marked **[DONE]** below — covering: `noopener`, GPX UTF-8 fallback, subnet-scan semaphore, `setCooldownEnabled` StrictMode rollback, `LegacyLocationService.clear` raising `DeviceLostError`. Will roll into the next release.
+> **Post-v0.14.1 quick-win batch (commits on `main`, unreleased):** 5 more HIGH items shipped — `noopener`, GPX UTF-8 fallback, subnet-scan semaphore, `setCooldownEnabled` StrictMode rollback, `LegacyLocationService.clear` raising `DeviceLostError`.
 >
-> **Remaining HIGH items by category (12):**
-> - Architecture / God modules: 3 outstanding (oversize components, `wifi_tunnel.py`, backend movement loops)
-> - Bugs / correctness: 6 outstanding (DevicesPopover ×2, useDevice ordering, MapContextMenu ×2, wifi_tunnel watchdog race)
-> - Security: 1 outstanding (`forget_device` partial-success — also import body validation)
-> - Error handling: 1 outstanding (silent excepts ×37)
-> - Auth / token: 2 outstanding (401 invalidation, export-URL token)
+> **Parallel-agent batch (commits on `main`, unreleased):** 11 more HIGH items shipped via 4 parallel worktree agents:
+> - Frontend bug sweep (5): DevicesPopover ×2, useDevice ordering, MapContextMenu ×2
+> - Auth cleanup (2): 401 token invalidation + 1-retry, export URLs as Blob downloads (URL helpers removed)
+> - Backend security (3): `forget_device` partial-success, bookmark-import ID regeneration, tunnel-watchdog generation epoch
+> - Silent-`except` sweep (8 sites): `core/ddi_mount.py` ×6, `core/device_manager.py` ×2; 10 sites in scope correctly skipped as intentional control flow (`wait_for` tick timeouts, cancel-drain pattern, file-already-gone unlink)
+>
+> **PARTIAL → DONE (final form):** the `useSimulation` god-hook split is complete at the **656-line / 4-of-7-sub-hook** form. Further splits (`useSimGroupFanout` / `useSimSingle`) deferred — they would funnel 30+ setters through a bundle pattern without reducing complexity. The truly different next step is the SimContext-into-3-contexts refactor (separate item, listed under MEDIUM).
+>
+> **Remaining HIGH items: 4** (all deferred deliberately — large or judgment-heavy):
+> - **Architecture (3)**: oversize components (BottomDock 689 / BookmarksPanel 886 / DevicesPopover 735 / SimContext 670 / MapView 568 / useDevice 556), `backend/api/wifi_tunnel.py` (673 with deeply-nested `wifi_tunnel_stop` / 165-line `wifi_repair`), backend movement loops (movement_loop / multi_stop / random_walk — 200+ LOC each)
+> - **Error handling (1)**: ~13 remaining silent-`except` sites in the wifi-tunnel cluster (`backend/api/wifi_tunnel.py`, `backend/api/device.py`, `backend/core/wifi_tunnel.py`); the non-cluster sites have been swept
+
+**Score**: **21 of 25 HIGH items resolved (84%)** + 1 partial → DONE = **22/25 (88%)**.
 
 ---
 
@@ -29,11 +35,12 @@
 
 ### Architecture / God modules
 
-- **[PARTIAL v0.14.1] [HIGH] Architecture — `useSimulation.ts` is a 1126-line god hook**
+- **[DONE — final form] [HIGH] Architecture — `useSimulation.ts` is a 1126-line god hook**
   - File: `frontend/src/hooks/useSimulation.ts:1-1126`
   - Bundles seven concerns: WS dispatch, per-device runtimes, group fan-out, single-device actions, pause persistence, straight-line toggle, error translator. Returns 50+ values; consumers re-render on every WS tick.
   - Fix: split into `useSimWsDispatcher`, `useSimRuntimes`, `useSimGroupFanout`, `useSimSingle`, `usePauseSettings`, `useStraightLineToggle`, `useSimErrorTranslator`. `useSimulation` becomes a thin aggregator.
-  - **v0.14.1**: extracted `useSimWsDispatcher` + `useSimRuntimes` + `usePauseSettings` + `useStraightLineToggle` to `hooks/sim/`. File now 656 lines (down from 1134). `useSimGroupFanout` / `useSimSingle` deferred — would funnel 30+ setters through a bundle pattern without reducing complexity.
+  - **v0.14.1**: extracted `useSimWsDispatcher` + `useSimRuntimes` + `usePauseSettings` + `useStraightLineToggle` to `hooks/sim/`. File now 656 lines (down from 1134) — well below the 800-line cap.
+  - **Status closed**: `useSimGroupFanout` / `useSimSingle` deferred indefinitely — they would require funneling 30+ setters through a bundle pattern, which shuffles complexity rather than reducing it. The genuinely different next step is splitting SimContext into focused state/handlers/derived contexts (separate item under MEDIUM `value` memoization). The 656-line / 4-of-7-sub-hook form is the accepted final shape for this item.
 
 - **[HIGH] Architecture — `BottomDock.tsx` (689), `BookmarksPanel.tsx` (886), `DevicesPopover.tsx` (735), `SimContext.tsx` (670), `MapView.tsx` (568), `useDevice.ts` (556) all approach or exceed the 800-line cap**
   - Files listed above
@@ -54,20 +61,23 @@
 
 ### Bugs (correctness)
 
-- **[HIGH] Stale ref read — scan result count is read before React commits**
+- **[DONE] [HIGH] Stale ref read — scan result count is read before React commits**
   - File: `frontend/src/components/device/DevicesPopover.tsx:66`
   - `setScanResult(devicesRef.current.length)` runs in `finally` after the awaited scan, but `devicesRef.current` is updated by an effect that hasn't run yet → stale count.
   - Fix: have `device.scan()` return the list (it already does at `useDevice.ts:324`) and use the return value: `const list = await device.scan(); setScanResult(list.length)`.
+  - **Fixed**: scan-result count now reads the awaited list. Bonus cleanup: dropped the now-dead `devicesRef` (was created via `useRef` and updated every render but never read elsewhere).
 
-- **[HIGH] Effect re-runs on identity change — `view` resets every parent render**
+- **[DONE] [HIGH] Effect re-runs on identity change — `view` resets every parent render**
   - File: `frontend/src/components/device/DevicesPopover.tsx:48`
   - `useEffect(() => { if (anchor) setView('list') }, [anchor])` — `anchor: DOMRect` is a fresh object identity each open or window resize.
   - Fix: depend on the boolean: `useEffect(() => { if (anchor) setView('list') }, [!!anchor])`.
+  - **Fixed**: dep widened to open/closed boolean.
 
-- **[HIGH] Order-losing setDevices**
+- **[DONE] [HIGH] Order-losing setDevices**
   - Files: `frontend/src/hooks/useDevice.ts:443` (and same pattern at `:487`)
   - `setDevices(prev => [...prev.filter(d => d.udid !== info.udid), info])` always appends — known devices jump to the end whenever they re-arrive via WS.
   - Fix: `findIndex` then in-place replace; append only when not found.
+  - **Fixed**: both sites use `findIndex` + immutable in-place replace; only append when device is new.
 
 - **[DONE v0.14.1] [HIGH] Optimistic state without rollback**
   - File: `frontend/src/hooks/useSimulation.ts:809-853` (`pause`/`resume`/`joystickStart`/`joystickStop`); same shape in `navigate`/`startLoop`/`multiStop`/`randomWalk` (lines 730-805).
@@ -75,20 +85,23 @@
   - Fix: only update state after successful await, or revert in `catch`.
   - **v0.14.1**: `navigate` / `startLoop` / `multiStop` / `randomWalk` / `joystickStart` capture pre-call mode via `modeRef.current` and revert on rejection; `pause`/`resume`/`joystickStop` were already post-await (no fix needed).
 
-- **[HIGH] Click handler installed before menu paints**
+- **[DONE] [HIGH] Click handler installed before menu paints**
   - File: `frontend/src/components/MapContextMenu.tsx:75`
   - `document.addEventListener('click', handler)` registered synchronously; the right-click that opened the menu can immediately bubble to `document` and close it on browsers that synthesize a `click` after `contextmenu`.
   - Fix: register inside `setTimeout(..., 0)` or use `mousedown` + ref-bounds check (see `DevicesPopover` for the pattern).
+  - **Fixed**: outside-click listener attaches inside `setTimeout(..., 0)`; cleanup clears the timeout if the effect tears down early.
 
-- **[HIGH] Async fetch with no abort/unmount guard**
+- **[DONE] [HIGH] Async fetch with no abort/unmount guard**
   - File: `frontend/src/components/MapContextMenu.tsx:103`
   - `await reverseGeocode(lat, lng)` — closing the menu doesn't cancel the request; `setWhatsHere` may run on unmounted tree.
   - Fix: AbortController + `if (cancelled) return` guard.
+  - **Fixed**: token-ref pattern (since `reverseGeocode` doesn't accept `AbortSignal`). Token bumps on close AND on every new `handleWhatsHere` call, so re-clicking cancels the prior in-flight request too.
 
-- **[HIGH] `wifi_repair` / `wifi_tunnel_stop` race**
+- **[DONE] [HIGH] `wifi_repair` / `wifi_tunnel_stop` race**
   - File: `backend/api/wifi_tunnel.py:458-504` (`_tunnel_watchdog`)
   - After 5s sleep, the watchdog re-acquires `_tunnel.lock` and checks `_tunnel.task is task`. If `wifi_tunnel_stop()` has run and a fresh `wifi_tunnel_start()` is mid-flight, `_tunnel.task` could be transiently `None` and the watchdog will tear down healthy resources.
   - Fix: track tunnel generation (monotonic counter) and bail when generation changed.
+  - **Fixed**: `TunnelRunner.generation: int = 0` bumps on successful `start()`. Watchdog captures `gen` at spawn; both early-bail (after `await task`) and post-sleep critical section gate on `_tunnel.generation == gen`. Logs mismatch and returns without teardown.
 
 - **[DONE v0.14.1] [HIGH] `apply_speed` mutates engine without lock**
   - File: `backend/core/simulation_engine.py:552-578`
@@ -116,10 +129,12 @@
   - Fix: `window.open(url, '_blank', 'noopener,noreferrer')`. (The pattern in `lib/fileIo.ts:45` uses `a.rel = 'noopener'` correctly — apply the same here.)
   - **Fixed**: `handleGpxExport` now passes `'noopener,noreferrer'` features arg.
 
-- **[HIGH] Unvalidated `dict` POST body**
+- **[DONE] [HIGH] Unvalidated `dict` POST body**
   - File: `backend/api/bookmarks.py:240` (`import_bookmarks`), `backend/services/bookmarks.py:532-579` (`import_json`)
   - Endpoint accepts `data: dict` then round-trips through `bm.import_json(json.dumps(data))`. A malicious export can re-use IDs that collide with default place IDs (defended in part by `existing_bm_ids` check, but tags/places aren't equally guarded).
   - Fix: bind a Pydantic schema; regenerate IDs on import (the way `api/route.py:124` does for `import_all_saved_routes`).
+  - **Fixed**: every imported place / tag / bookmark gets a fresh `uuid.uuid4()`; `place_id` and `tags` references remapped via `place_id_map` / `tag_id_map`. Closes the preset-shadow attack surface.
+  - **Side effect**: re-importing the same export now produces duplicates (intentional — payload IDs can no longer be trusted). Content-hash dedup `(name, lat, lng)` is the right follow-up if users complain.
 
 - **[DONE] [HIGH] Subnet scan is unrate-limited (~254 concurrent connects)**
   - File: `backend/api/wifi_tunnel.py:331-363` (`_tcp_probe`, `_scan_subnet_for_port`)
@@ -127,17 +142,22 @@
   - Fix: gate with `asyncio.Semaphore(32)`.
   - **Fixed**: `_scan_subnet_for_port` now wraps each probe in `async with sem` (`asyncio.Semaphore(32)`); worst-case latency capped at ~3.2 s.
 
-- **[HIGH] `forget_device` partial-success silently masked**
+- **[DONE — backend; UI follow-up pending] [HIGH] `forget_device` partial-success silently masked**
   - File: `backend/api/device.py:137-195`, `_pair_record_candidates` (`:121-133`)
   - On macOS without root, `path.unlink()` on `/var/db/lockdown/*.plist` raises and is logged at WARNING (`:179`) but the endpoint still returns `{"status": "forgotten", "udid": udid, "removed": removed}` — UI thinks the device was forgotten while the iPhone still trusts the host.
   - Fix: surface aggregate `{"removed": [...], "failed": [...]}` and include `"failed"` in the success response so the UI can prompt for sudo / show a warning.
+  - **Fixed (backend)**: tracks `failed: list[{path, error}]` alongside `removed`; returns `status: "partial"` (200) when at least one record was unlinked, raises `forget_failed` (500) only when every candidate errored. Frontend `forgetDevice` return type widened with `failed?: { path: string; error: string }[]`.
+  - **Pending (frontend)**: UI toast on `status === 'partial'` — type is ready; `useDevice.ts:417` discards the response today. Trivial follow-up.
 
 ### Error handling
 
-- **[HIGH] 37 silent `except: pass` blocks in backend**
+- **[PARTIAL] [HIGH] 37 silent `except: pass` blocks in backend**
   - Files (clusters): `backend/api/wifi_tunnel.py` (10×: `:108`, `:285`, `:295`, `:340`, `:469`, `:492`, `:524`, etc.), `backend/api/device.py:70`, `:117`, `:177`, `backend/main.py:616`, `backend/core/ddi_mount.py` (5×), `backend/core/wifi_tunnel.py:80`, `:103`, `:105`, others.
   - Many wrap WS broadcasts (acceptable best-effort) but several wrap real cleanup that hides bugs (e.g. teardown in `wifi_tunnel.py:273-295`).
   - Fix: change every `except Exception: pass` to at least `logger.debug(..., exc_info=True)`. Promote anything in non-best-effort paths to `logger.warning`.
+  - **Done (8 sites)**: `backend/core/ddi_mount.py` ×6 (mounter close + WS broadcasts) and `backend/core/device_manager.py` ×2 (discover-shield fall-through, RSD close after failed connect). All upgraded to `logger.debug(..., exc_info=True)`.
+  - **Skipped intentionally (10 sites)**: `wait_for(stop_event, timeout=tick)` `asyncio.TimeoutError` (the timeout IS the next-tick signal — logging would emit per tick), shutdown drain `(asyncio.CancelledError, Exception)`, file-already-gone `unlink()`. These are correct Python idioms.
+  - **Remaining (~13 sites)**: the wifi-tunnel cluster (`backend/api/wifi_tunnel.py`, `backend/api/device.py`, `backend/core/wifi_tunnel.py`) — deferred to a follow-up sweep so it doesn't conflict with the parallel-agent backend-security batch.
 
 - **[DONE] [HIGH] `LegacyLocationService.clear` swallows DeviceLost**
   - File: `backend/services/location_service.py:252-258`
@@ -165,15 +185,17 @@
 
 ### Auth / token edge cases
 
-- **[HIGH] Auth-token cache never invalidates on 401**
+- **[DONE] [HIGH] Auth-token cache never invalidates on 401**
   - File: `frontend/src/services/api.ts:142-156`
   - `authTokenPromise` is cached for the page lifetime. Server-side token rotation (currently doesn't happen, but is a documented future risk) → indefinite 401 with no recovery.
   - Fix: on a 401 response, set `authTokenPromise = null` and retry once.
+  - **Fixed**: new `authedFetch` wraps every call; on 401 invalidates `authTokenPromise` and retries exactly once. Second 401 propagates normally — no infinite loop. `importGpx()` rebuilds `FormData` per attempt (consumed bodies cannot replay).
 
-- **[HIGH] Export URLs bypass the token**
+- **[DONE] [HIGH] Export URLs bypass the token**
   - File: `frontend/src/services/api.ts:336` (`bookmarksExportUrl`), `:391` (`exportGpxUrl`), `:396` (`exportAllRoutesUrl`)
   - URL-only helpers fed into `<a href>` / `window.open` (`BookmarkContext.tsx:189`). With `X-GPS-Token` enforced, these requests get a 401 and the user gets a blank tab.
   - Fix: route through `request()` and trigger a Blob download client-side, or have the backend mint short-lived signed URLs.
+  - **Fixed**: removed all 3 URL helpers. New `downloadAuthed(path, filename)` private helper does `authedFetch GET → res.blob() → hidden anchor click → URL.revokeObjectURL`. Public exports `downloadBookmarksExport`, `downloadGpx`, `downloadAllRoutes`. `BookmarkContext.handleGpxExport` / `handleBookmarkExport` / `handleRoutesExportAll` restructured from URL fields to async handlers; consumers (`LibraryDrawer`, `RoutesPanel`) updated. New `toast.export_failed` i18n key. Dead `lib/fileIo.downloadUrl` removed.
 
 ---
 
