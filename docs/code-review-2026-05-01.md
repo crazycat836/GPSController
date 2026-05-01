@@ -117,10 +117,11 @@
   - Endpoint accepts `data: dict` then round-trips through `bm.import_json(json.dumps(data))`. A malicious export can re-use IDs that collide with default place IDs (defended in part by `existing_bm_ids` check, but tags/places aren't equally guarded).
   - Fix: bind a Pydantic schema; regenerate IDs on import (the way `api/route.py:124` does for `import_all_saved_routes`).
 
-- **[HIGH] Subnet scan is unrate-limited (~254 concurrent connects)**
+- **[DONE] [HIGH] Subnet scan is unrate-limited (~254 concurrent connects)**
   - File: `backend/api/wifi_tunnel.py:331-363` (`_tcp_probe`, `_scan_subnet_for_port`)
   - Fires 254 parallel TCP probes every scan. On corporate networks this looks like reconnaissance.
   - Fix: gate with `asyncio.Semaphore(32)`.
+  - **Fixed**: `_scan_subnet_for_port` now wraps each probe in `async with sem` (`asyncio.Semaphore(32)`); worst-case latency capped at ~3.2 s.
 
 - **[HIGH] `forget_device` partial-success silently masked**
   - File: `backend/api/device.py:137-195`, `_pair_record_candidates` (`:121-133`)
