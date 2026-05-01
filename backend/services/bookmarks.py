@@ -555,8 +555,16 @@ class BookmarkManager:
         """Import bookmarks (and places/tags) from a JSON string.
 
         Accepts both v0 (`categories` + `category_id`) and v1 payloads — v0
-        blobs are run through the same migration as on-disk loads. Merges
-        by ID; duplicates are skipped.
+        blobs are run through the same migration as on-disk loads.
+
+        Every imported place/tag/bookmark gets a freshly-minted UUID
+        before it is appended, and the bookmark's `place_id` / `tags`
+        references are remapped through the old→new id translation. This
+        prevents a crafted payload from re-using preset ids (e.g.
+        ``default``, ``preset_scanner``) to shadow built-in places/tags,
+        and also avoids silent collisions when the same export is
+        imported twice. Mirrors the regenerate-on-import behaviour of
+        ``api/route.py:import_all_saved_routes``.
 
         Returns the number of bookmarks imported.
         """
@@ -569,31 +577,52 @@ class BookmarkManager:
             return 0
 
         async with self._lock:
-            existing_place_ids = {p.id for p in self.store.places}
+            # ── Places ────────────────────────────────────────────────
+            # Build an old_id → new_id translation so bookmark.place_id
+            # references survive the UUID remint. If the payload re-uses
+            # an id that already lives in our store (preset like
+            # ``default`` or a real entry from a previous import), we
+            # redirect bookmarks at the *live* entry instead of cloning.
+            place_id_map: dict[str, str] = {}
+            live_place_ids = {p.id for p in self.store.places}
             for place in incoming.places:
-                if place.id not in existing_place_ids:
-                    self.store.places.append(place)
-                    existing_place_ids.add(place.id)
+                if place.id in live_place_ids:
+                    place_id_map[place.id] = place.id
+                    continue
+                new_id = str(uuid.uuid4())
+                place_id_map[place.id] = new_id
+                self.store.places.append(place.model_copy(update={"id": new_id}))
 
-            existing_tag_ids = {t.id for t in self.store.tags}
+            # ── Tags ──────────────────────────────────────────────────
+            tag_id_map: dict[str, str] = {}
+            live_tag_ids = {t.id for t in self.store.tags}
             for tag in incoming.tags:
-                if tag.id not in existing_tag_ids:
-                    self.store.tags.append(tag)
-                    existing_tag_ids.add(tag.id)
+                if tag.id in live_tag_ids:
+                    tag_id_map[tag.id] = tag.id
+                    continue
+                new_id = str(uuid.uuid4())
+                tag_id_map[tag.id] = new_id
+                self.store.tags.append(tag.model_copy(update={"id": new_id}))
 
-            existing_bm_ids = {b.id for b in self.store.bookmarks}
+            # ── Bookmarks ─────────────────────────────────────────────
+            # Refresh post-import id sets so a bookmark pointing at an
+            # un-declared place/tag id collapses cleanly to default /
+            # gets dropped instead of carrying a dangling reference.
+            valid_place_ids = {p.id for p in self.store.places}
+            valid_tag_ids = {t.id for t in self.store.tags}
             imported = 0
             for bm in incoming.bookmarks:
-                if bm.id in existing_bm_ids:
-                    continue
-                updates: dict[str, object] = {
-                    "tags": [t for t in bm.tags if t in existing_tag_ids],
-                }
-                if bm.place_id not in existing_place_ids:
-                    updates["place_id"] = "default"
-                new_bm = bm.model_copy(update=updates)
+                mapped_place = place_id_map.get(bm.place_id, bm.place_id)
+                if mapped_place not in valid_place_ids:
+                    mapped_place = "default"
+                mapped_tags = [tag_id_map.get(t, t) for t in bm.tags]
+                mapped_tags = [t for t in mapped_tags if t in valid_tag_ids]
+                new_bm = bm.model_copy(update={
+                    "id": str(uuid.uuid4()),
+                    "place_id": mapped_place,
+                    "tags": mapped_tags,
+                })
                 self.store.bookmarks.append(new_bm)
-                existing_bm_ids.add(new_bm.id)
                 imported += 1
 
             if imported:
