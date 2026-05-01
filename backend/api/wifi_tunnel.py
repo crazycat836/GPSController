@@ -244,11 +244,17 @@ async def wifi_repair():
             remote_record_regenerated = True
         except Exception as e:
             _tunnel_logger.exception("Re-pair: RemotePairing handshake failed")
-            # `_msg` is used only for internal classification — never returned.
-            _msg = str(e)
-            if "PairingDialogResponsePending" in _msg or "consent" in _msg.lower():
+            # Use isinstance against pymobiledevice3's typed exceptions instead
+            # of substring-matching str(e) — the message wording drifts across
+            # versions but the class names are stable API.
+            from pymobiledevice3.exceptions import (
+                NotPairedError,
+                PairingDialogResponsePendingError,
+                PairingError,
+            )
+            if isinstance(e, PairingDialogResponsePendingError):
                 friendly = "請在 iPhone 解鎖螢幕上按「信任」後重試(timeout 只有幾秒)。"
-            elif "not paired" in _msg.lower() or "pairingerror" in _msg.lower():
+            elif isinstance(e, (NotPairedError, PairingError)):
                 friendly = "USB 配對失效,請拔 USB 重插一次並按信任。"
             else:
                 friendly = "RemotePairing 握手失敗,請查看後端記錄檔以取得詳細資訊。"
