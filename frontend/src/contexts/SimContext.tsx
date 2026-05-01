@@ -56,6 +56,45 @@ export function toastForFanout<T>(
   })
 }
 
+// Threshold at which a list of connected devices switches the action
+// from "single device call" to "fan-out across all devices". Kept here
+// (rather than as a magic `>= 2` in every handler) so the rule has one
+// definition.
+const FANOUT_MIN_DEVICES = 2
+
+// Most "do an action" handlers in this file share the same shape:
+//   if 2+ devices → await sim.xAll(udids, …) → showToast(toastForFanout(…))
+//   else          → sim.x(…)  (sometimes async, sometimes sync)
+//
+// `runWithFanout` collapses that branch into one call site. Callers
+// supply the resolved udids/devices, the toast label, and two thunks:
+// `single` for the 1-device path and `multi` for the fan-out. Anything
+// outside that shape (optimistic writes, pre-gates like
+// `confirmStartFromCached`, success toasts on the single path, custom
+// outcome handling) stays in the caller — that's intentional, the
+// helper exists for the common case, not to be a do-everything wrapper.
+async function runWithFanout<T>(params: {
+  udids: string[]
+  devices: { udid: string }[]
+  action: string
+  // `single` may be sync (e.g. `sim.pause()`) or async (e.g.
+  // `sim.teleport(...)` which returns `Promise<StatusResponse>`). The
+  // return value is intentionally ignored — the helper only cares that
+  // the call has finished before resolving.
+  single: () => unknown
+  multi: (udids: string[]) => Promise<FanoutOutcome<T>>
+  t: (k: StringKey, v?: Record<string, string | number>) => string
+  showToast: (msg: string) => void
+}): Promise<void> {
+  const { udids, devices, action, single, multi, t, showToast } = params
+  if (udids.length >= FANOUT_MIN_DEVICES) {
+    const outcome = await multi(udids)
+    showToast(toastForFanout(t, action, outcome, devices))
+  } else {
+    await single()
+  }
+}
+
 // km/h. Must stay in sync with `BottomDock.SPEED_PRESETS`,
 // `SpeedControls.SPEED_PRESETS`, and backend `SPEED_PROFILES`.
 export const SPEED_MAP: Record<MoveMode, number> = {
@@ -349,13 +388,22 @@ export function SimProvider({ children }: SimProviderProps) {
     const lng = normalizeLng(lngIn)
     const udids = device.connectedDevices.map((d) => d.udid)
     try {
-      if (udids.length >= 2) {
-        sim.setCurrentPosition({ lat, lng })
-        const outcome = await sim.teleportAll(udids, lat, lng)
-        showToast(toastForFanout(t, t('mode.teleport'), outcome, device.connectedDevices))
-      } else {
-        await sim.teleport(lat, lng)
-      }
+      await runWithFanout({
+        udids,
+        devices: device.connectedDevices,
+        action: t('mode.teleport'),
+        single: () => sim.teleport(lat, lng),
+        multi: (us) => {
+          // Optimistic write — only on the multi path, where `teleport`
+          // doesn't update currentPosition itself the way the single
+          // path does. Lives in the multi thunk so it only runs when
+          // the multi branch is taken.
+          sim.setCurrentPosition({ lat, lng })
+          return sim.teleportAll(us, lat, lng)
+        },
+        t,
+        showToast,
+      })
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : t('err.teleport_failed'))
     }
@@ -366,13 +414,22 @@ export function SimProvider({ children }: SimProviderProps) {
     const lng = normalizeLng(lngIn)
     const udids = device.connectedDevices.map((d) => d.udid)
     try {
-      if (udids.length >= 2) {
-        const outcome = await sim.navigateAll(udids, lat, lng)
-        showToast(toastForFanout(t, t('mode.navigate'), outcome, device.connectedDevices))
-      } else {
-        if (!(await confirmStartFromCached())) return
-        await sim.navigate(lat, lng)
-      }
+      await runWithFanout({
+        udids,
+        devices: device.connectedDevices,
+        action: t('mode.navigate'),
+        // Single-device path is gated on `confirmStartFromCached` so
+        // the user has to consent before we teleport from a cached
+        // position. The multi path runs its own preSyncStart inside
+        // `navigateAll`, so the gate is single-only.
+        single: async () => {
+          if (!(await confirmStartFromCached())) return
+          await sim.navigate(lat, lng)
+        },
+        multi: (us) => sim.navigateAll(us, lat, lng),
+        t,
+        showToast,
+      })
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : t('err.no_position'))
     }
@@ -408,60 +465,85 @@ export function SimProvider({ children }: SimProviderProps) {
     }
     const udids = device.connectedDevices.map((d) => d.udid)
     if (sim.mode === SimMode.Loop) {
-      if (udids.length >= 2) {
-        const outcome = await sim.startLoopAll(udids, route)
-        showToast(toastForFanout(t, t('mode.loop'), outcome, device.connectedDevices))
-      } else {
-        sim.startLoop(route)
-      }
+      await runWithFanout({
+        udids,
+        devices: device.connectedDevices,
+        action: t('mode.loop'),
+        single: () => sim.startLoop(route),
+        multi: (us) => sim.startLoopAll(us, route),
+        t,
+        showToast,
+      })
     } else if (sim.mode === SimMode.MultiStop) {
-      if (udids.length >= 2) {
-        const outcome = await sim.multiStopAll(udids, route, 0, false)
-        showToast(toastForFanout(t, t('mode.multi_stop'), outcome, device.connectedDevices))
-      } else {
-        if (!(await confirmStartFromCached())) return
-        sim.multiStop(route, 0, false)
-      }
+      await runWithFanout({
+        udids,
+        devices: device.connectedDevices,
+        action: t('mode.multi_stop'),
+        // Single-device multi-stop is gated on the cached-position
+        // confirm prompt; the multi path runs preSyncStart server-side.
+        single: async () => {
+          if (!(await confirmStartFromCached())) return
+          sim.multiStop(route, 0, false)
+        },
+        multi: (us) => sim.multiStopAll(us, route, 0, false),
+        t,
+        showToast,
+      })
     }
   }, [sim, device, showToast, t, confirmStartFromCached])
 
   const handleStart = useCallback(async () => {
     const udids = device.connectedDevices.map((d) => d.udid)
     if (sim.mode === SimMode.Joystick) {
-      if (udids.length >= 2) {
-        const outcome = await sim.joystickStartAll(udids)
-        showToast(toastForFanout(t, t('mode.joystick'), outcome, device.connectedDevices))
-      } else {
-        sim.joystickStart()
-      }
+      await runWithFanout({
+        udids,
+        devices: device.connectedDevices,
+        action: t('mode.joystick'),
+        single: () => sim.joystickStart(),
+        multi: (us) => sim.joystickStartAll(us),
+        t,
+        showToast,
+      })
     } else if (sim.mode === SimMode.RandomWalk) {
       if (!sim.currentPosition) {
         showToast(t('toast.no_position_random'))
         return
       }
-      if (udids.length >= 2) {
-        const outcome = await sim.randomWalkAll(udids, sim.currentPosition, randomWalkRadius)
-        showToast(toastForFanout(t, t('mode.random_walk'), outcome, device.connectedDevices))
-      } else {
-        if (!(await confirmStartFromCached())) return
-        // Re-read position after the confirm path has resolved — teleport
-        // above updates currentPosition to the confirmed coordinate.
-        const pos = sim.currentPosition
-        if (pos) sim.randomWalk(pos, randomWalkRadius)
-      }
+      const startPos = sim.currentPosition
+      await runWithFanout({
+        udids,
+        devices: device.connectedDevices,
+        action: t('mode.random_walk'),
+        // Single-device path: gate on confirm, then re-read position
+        // (the confirm flow may have teleported to a confirmed cached
+        // coord, so `sim.currentPosition` may differ from `startPos`).
+        single: async () => {
+          if (!(await confirmStartFromCached())) return
+          const pos = sim.currentPosition
+          if (pos) sim.randomWalk(pos, randomWalkRadius)
+        },
+        multi: (us) => sim.randomWalkAll(us, startPos, randomWalkRadius),
+        t,
+        showToast,
+      })
     } else if (sim.mode === SimMode.Navigate) {
       const dest = sim.destination
       if (!dest) {
         showToast(t('toast.no_destination'))
         return
       }
-      if (udids.length >= 2) {
-        const outcome = await sim.navigateAll(udids, dest.lat, dest.lng)
-        showToast(toastForFanout(t, t('mode.navigate'), outcome, device.connectedDevices))
-      } else {
-        if (!(await confirmStartFromCached())) return
-        await sim.navigate(dest.lat, dest.lng)
-      }
+      await runWithFanout({
+        udids,
+        devices: device.connectedDevices,
+        action: t('mode.navigate'),
+        single: async () => {
+          if (!(await confirmStartFromCached())) return
+          await sim.navigate(dest.lat, dest.lng)
+        },
+        multi: (us) => sim.navigateAll(us, dest.lat, dest.lng),
+        t,
+        showToast,
+      })
     } else if (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) {
       // `handleStartWaypointRoute` performs an async fan-out + may await
       // a confirm prompt. Await so any rejection propagates into this
@@ -472,29 +554,42 @@ export function SimProvider({ children }: SimProviderProps) {
 
   const handleStop = useCallback(async () => {
     const udids = device.connectedDevices.map((d) => d.udid)
+    // Joystick fan-out has no single-device fallback in this handler
+    // (single-device joystick stop happens via the joystick UI itself),
+    // so it stays inline rather than going through `runWithFanout`.
     if (sim.mode === SimMode.Joystick && udids.length >= 2) {
       const outcome = await sim.joystickStopAll(udids)
       showToast(toastForFanout(t, t('mode.joystick'), outcome, device.connectedDevices))
       return
     }
-    if (udids.length >= 2) {
-      const outcome = await sim.stopAll(udids)
-      showToast(toastForFanout(t, 'stop', outcome, device.connectedDevices))
-    } else {
-      sim.stop()
-    }
+    await runWithFanout({
+      udids,
+      devices: device.connectedDevices,
+      action: 'stop',
+      single: () => sim.stop(),
+      multi: (us) => sim.stopAll(us),
+      t,
+      showToast,
+    })
   }, [sim, device, t, showToast])
 
   const handleApplySpeed = useCallback(async () => {
     const udids = device.connectedDevices.map((d) => d.udid)
     try {
-      if (udids.length >= 2) {
-        const outcome = await sim.applySpeedAll(udids)
-        showToast(toastForFanout(t, t('panel.apply_speed_success'), outcome, device.connectedDevices))
-      } else {
-        await sim.applySpeed()
-        showToast(t('panel.apply_speed_success'))
-      }
+      await runWithFanout({
+        udids,
+        devices: device.connectedDevices,
+        action: t('panel.apply_speed_success'),
+        // Single-device path needs an explicit success toast — the multi
+        // path gets one through toastForFanout, single does not.
+        single: async () => {
+          await sim.applySpeed()
+          showToast(t('panel.apply_speed_success'))
+        },
+        multi: (us) => sim.applySpeedAll(us),
+        t,
+        showToast,
+      })
     } catch (err: unknown) {
       showToast(t('panel.apply_speed_failed') + (err instanceof Error ? `: ${err.message}` : ''))
     }
@@ -502,22 +597,28 @@ export function SimProvider({ children }: SimProviderProps) {
 
   const handlePause = useCallback(async () => {
     const udids = device.connectedDevices.map((d) => d.udid)
-    if (udids.length >= 2) {
-      const outcome = await sim.pauseAll(udids)
-      showToast(toastForFanout(t, 'pause', outcome, device.connectedDevices))
-    } else {
-      sim.pause()
-    }
+    await runWithFanout({
+      udids,
+      devices: device.connectedDevices,
+      action: 'pause',
+      single: () => sim.pause(),
+      multi: (us) => sim.pauseAll(us),
+      t,
+      showToast,
+    })
   }, [sim, device, t, showToast])
 
   const handleResume = useCallback(async () => {
     const udids = device.connectedDevices.map((d) => d.udid)
-    if (udids.length >= 2) {
-      const outcome = await sim.resumeAll(udids)
-      showToast(toastForFanout(t, 'resume', outcome, device.connectedDevices))
-    } else {
-      sim.resume()
-    }
+    await runWithFanout({
+      udids,
+      devices: device.connectedDevices,
+      action: 'resume',
+      single: () => sim.resume(),
+      multi: (us) => sim.resumeAll(us),
+      t,
+      showToast,
+    })
   }, [sim, device, t, showToast])
 
   const handleOpenLog = useCallback(async () => {
