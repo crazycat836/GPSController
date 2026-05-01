@@ -2,9 +2,17 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useT } from '../i18n';
 import { getInitialPosition } from '../services/api';
 import { MARKER_HEX, ACCENT_HEX, DEVICE_COLORS_HEX } from '../lib/constants';
+import { METERS_PER_DEGREE_LAT } from '../lib/geo';
 import L from 'leaflet';
 import MapControls from './shell/MapControls';
 import MapContextMenu, { type ContextMenuState } from './MapContextMenu';
+
+/**
+ * Min jump distance (m) between two consecutive `currentPosition` updates
+ * that triggers the camera to re-centre. Below this we keep the user's
+ * pan/zoom intact — only teleports / large drifts grab focus.
+ */
+const AUTO_RECENTER_THRESHOLD_M = 500;
 
 interface Position {
   lat: number;
@@ -312,15 +320,17 @@ function MapView({
       currentMarkerRef.current = marker as any;
     }
 
-    // Only auto-center on first position or teleport (large jump > 500m)
+    // Only auto-center on first position or teleport (jump beyond
+    // AUTO_RECENTER_THRESHOLD_M). Cheap planar approximation is fine
+    // for a binary > threshold check.
     const prev = prevPositionRef.current;
     if (!prev) {
       map.setView(latlng, map.getZoom());
     } else {
-      const dlat = (currentPosition.lat - prev.lat) * 111320;
-      const dlng = (currentPosition.lng - prev.lng) * 111320 * Math.cos(currentPosition.lat * Math.PI / 180);
+      const dlat = (currentPosition.lat - prev.lat) * METERS_PER_DEGREE_LAT;
+      const dlng = (currentPosition.lng - prev.lng) * METERS_PER_DEGREE_LAT * Math.cos(currentPosition.lat * Math.PI / 180);
       const distM = Math.sqrt(dlat * dlat + dlng * dlng);
-      if (distM > 500) {
+      if (distM > AUTO_RECENTER_THRESHOLD_M) {
         map.setView(latlng, map.getZoom());
       }
     }
