@@ -53,7 +53,7 @@ interface BookmarkContextValue {
 
   // Bookmark import/export
   handleBookmarkImport: (file: File) => Promise<void>
-  bookmarkExportUrl: string
+  handleBookmarkExport: () => Promise<void>
 
   // Saved routes
   savedRoutes: readonly SavedRoute[]
@@ -64,11 +64,11 @@ interface BookmarkContextValue {
 
   // GPX
   handleGpxImport: (file: File) => Promise<void>
-  handleGpxExport: (id: string) => void
+  handleGpxExport: (id: string) => Promise<void>
 
   // Bulk route import/export
   handleRoutesImportAll: (file: File) => Promise<void>
-  routesExportAllUrl: string
+  handleRoutesExportAll: () => Promise<void>
 }
 
 const BookmarkContext = createContext<BookmarkContextValue | null>(null)
@@ -184,14 +184,45 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [showToast, t])
 
-  const handleGpxExport = useCallback((id: string) => {
-    const url = api.exportGpxUrl(id)
-    // 'noopener,noreferrer' prevents reverse-tabnabbing — without it the
-    // opened tab gets a window.opener handle and can call
-    // opener.location = phishingUrl. Electron mitigates in production but
-    // Vite dev mode in a browser does not.
-    window.open(url, '_blank', 'noopener,noreferrer')
+  // Slugify a route name into a filename-safe stem. Falls back to the
+  // route id when the name has no usable characters left.
+  // (Replaces the prior window.open(url, '_blank', 'noopener,noreferrer')
+  // approach: the new Blob-download path through api.downloadGpx supersedes
+  // it entirely — auth-required exports can't be done via window.open
+  // anyway because the browser's GET wouldn't carry the X-GPS-Token header.)
+  const safeStem = useCallback((name: string, fallback: string) => {
+    const cleaned = name.trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_')
+    return cleaned || fallback
   }, [])
+
+  const handleGpxExport = useCallback(async (id: string) => {
+    const route = savedRoutes.find((r) => r.id === id)
+    const stem = safeStem(route?.name ?? '', id)
+    try {
+      await api.downloadGpx(id, `${stem}.gpx`)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.export_failed', { msg: message }))
+    }
+  }, [savedRoutes, safeStem, showToast, t])
+
+  const handleBookmarkExport = useCallback(async () => {
+    try {
+      await api.downloadBookmarksExport('bookmarks.json')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.export_failed', { msg: message }))
+    }
+  }, [showToast, t])
+
+  const handleRoutesExportAll = useCallback(async () => {
+    try {
+      await api.downloadAllRoutes('gpscontroller-routes.json')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.export_failed', { msg: message }))
+    }
+  }, [showToast, t])
 
   const handleRoutesImportAll = useCallback(async (file: File) => {
     try {
@@ -275,7 +306,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     submitAddBookmark,
 
     handleBookmarkImport,
-    bookmarkExportUrl: api.bookmarksExportUrl(),
+    handleBookmarkExport,
 
     savedRoutes,
     handleRouteLoad,
@@ -287,7 +318,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     handleGpxExport,
 
     handleRoutesImportAll,
-    routesExportAllUrl: api.exportAllRoutesUrl(),
+    handleRoutesExportAll,
   }
 
   return (
