@@ -8,6 +8,7 @@ import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
+import { copyToClipboard } from '../../lib/clipboard'
 import ListRow from '../ui/ListRow'
 import SearchField from '../ui/SearchField'
 import ChipFilterBar, { type Chip } from '../ui/ChipFilterBar'
@@ -209,16 +210,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
 
   const handleCopy = useCallback(async (b: Bookmark) => {
     const text = `${b.name} ${b.lat.toFixed(6)}, ${b.lng.toFixed(6)}`
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      const ta = document.createElement('textarea')
-      ta.value = text
-      document.body.appendChild(ta)
-      ta.select()
-      try { document.execCommand('copy') } catch { /* ignore */ }
-      document.body.removeChild(ta)
-    }
+    await copyToClipboard(text)
     setCopiedId(b.id)
     setTimeout(() => setCopiedId((prev) => (prev === b.id ? null : prev)), 1200)
   }, [])
