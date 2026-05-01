@@ -442,9 +442,16 @@ export function useDevice(subscribe?: WsSubscribe) {
           is_connected: true,
         }
         setConnectedDevice(info)
+        // Preserve list ordering: replace in-place if already present,
+        // append only when the udid is new. The previous filter+append
+        // pattern always re-appended a known device to the end, which
+        // made WS-arrived ordering and WiFi-arrived ordering disagree.
         setDevices((prev) => {
-          const filtered = prev.filter((d) => d.udid !== info.udid)
-          return [...filtered, info]
+          const idx = prev.findIndex((d) => d.udid === info.udid)
+          if (idx === -1) return [...prev, info]
+          const next = [...prev]
+          next[idx] = info
+          return next
         })
         return info
       } catch (err) {
@@ -484,9 +491,13 @@ export function useDevice(subscribe?: WsSubscribe) {
           is_connected: true,
         }
         setConnectedDevice(info)
+        // Preserve list ordering — see `connectWifi` for rationale.
         setDevices((prev) => {
-          const filtered = prev.filter((d) => d.udid !== info.udid)
-          return [...filtered, info]
+          const idx = prev.findIndex((d) => d.udid === info.udid)
+          if (idx === -1) return [...prev, info]
+          const next = [...prev]
+          next[idx] = info
+          return next
         })
         setTunnelStatus({ running: true, rsd_address: res.rsd_address, rsd_port: res.rsd_port })
         return info

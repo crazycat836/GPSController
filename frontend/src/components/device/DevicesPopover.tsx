@@ -45,14 +45,16 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
   const [view, setView] = useState<DevView>('list')
   // Reset to the list view whenever the popover is re-opened, so it
   // doesn't reappear stuck on a previous nested view.
-  useEffect(() => { if (anchor) setView('list') }, [anchor])
+  // Depend on the boolean (open vs. closed), NOT on the DOMRect itself —
+  // the parent passes a fresh getBoundingClientRect() on every open and
+  // on viewport resize. Using `anchor` as the dep would wipe in-progress
+  // sub-view interactions (Manage / Add) on an unrelated re-anchor.
+  useEffect(() => { if (anchor) setView('list') }, [!!anchor])
 
   // ─── Scan state (list-view header button) ────────────────────
   const [scanning, setScanning] = useState(false)
   const [scanResult, setScanResult] = useState<number | null>(null)
   const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const devicesRef = useRef(device.devices)
-  devicesRef.current = device.devices
 
   useEffect(() => () => { if (scanTimer.current) clearTimeout(scanTimer.current) }, [])
 
@@ -60,10 +62,17 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
     if (scanTimer.current) clearTimeout(scanTimer.current)
     setScanning(true)
     setScanResult(null)
-    try { await device.scan() }
-    finally {
+    // Consume the awaited list directly — `device.devices` is updated
+    // by a setState the React effect commits on the next render, so
+    // reading it from a ref in `finally` would yield a stale count for
+    // the freshly-scanned devices.
+    let count = 0
+    try {
+      const list = await device.scan()
+      count = list.length
+    } finally {
       setScanning(false)
-      setScanResult(devicesRef.current.length)
+      setScanResult(count)
       scanTimer.current = setTimeout(() => setScanResult(null), SCAN_RESULT_VISIBLE_MS)
     }
   }, [device])

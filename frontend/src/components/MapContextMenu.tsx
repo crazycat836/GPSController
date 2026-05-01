@@ -59,21 +59,37 @@ function MapContextMenu({
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [whatsHere, setWhatsHere] = useState<WhatsHereState>(WHATS_HERE_IDLE);
+  // Token bumped each time we want to invalidate any in-flight
+  // reverseGeocode resolution — the awaited callback compares its
+  // captured token against the live ref and bails when they differ.
+  // Bumped on close (via the reset effect below) and on a new click.
+  const whatsHereTokenRef = useRef(0);
 
   // Reset transient menu state when the menu hides.
   useEffect(() => {
     if (!state.visible) {
+      whatsHereTokenRef.current += 1;
       setMenuPos(null);
       setWhatsHere(WHATS_HERE_IDLE);
     }
   }, [state.visible]);
 
-  // Close context menu on outside click.
+  // Close context menu on outside click. Registering on the next tick
+  // (setTimeout 0) avoids the right-click that opened the menu from
+  // immediately auto-closing it — some browsers synthesize a `click`
+  // right after `contextmenu`, and that synthetic event would bubble
+  // to `document` before the user ever sees the menu. Same pattern
+  // used by DevicesPopover's outside-click effect.
   useEffect(() => {
     if (!state.visible) return;
     const handler = () => onClose();
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
+    const tid = setTimeout(() => {
+      document.addEventListener('click', handler);
+    }, 0);
+    return () => {
+      clearTimeout(tid);
+      document.removeEventListener('click', handler);
+    };
   }, [state.visible, onClose]);
 
   // Clamp the context menu to the viewport. Running in useLayoutEffect lets
@@ -98,9 +114,16 @@ function MapContextMenu({
   const handleWhatsHere = useCallback(async () => {
     const lat = state.lat;
     const lng = state.lng;
+    // Bump + capture; if the menu closes (or the user clicks again)
+    // before we resolve, the captured token won't match the live ref
+    // and we skip the setWhatsHere — preventing stray updates after
+    // the menu has been dismissed.
+    whatsHereTokenRef.current += 1;
+    const token = whatsHereTokenRef.current;
     setWhatsHere({ loading: true, label: '', address: '', error: false });
     try {
       const res = await reverseGeocode(lat, lng);
+      if (whatsHereTokenRef.current !== token) return;
       if (!res) {
         setWhatsHere({ loading: false, label: '', address: '', error: true });
         return;
@@ -112,6 +135,7 @@ function MapContextMenu({
         error: false,
       });
     } catch {
+      if (whatsHereTokenRef.current !== token) return;
       setWhatsHere({ loading: false, label: '', address: '', error: true });
     }
   }, [state.lat, state.lng]);
