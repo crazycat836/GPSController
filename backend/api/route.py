@@ -146,7 +146,25 @@ async def import_gpx(file: UploadFile = File(...)):
             status_code=413,
             detail={"code": "gpx_too_large", "message": f"GPX exceeds {_MAX_GPX_BYTES // (1024 * 1024)} MiB limit"},
         )
-    text = content.decode("utf-8")
+    # Most GPX exporters write UTF-8, but real-world devices ship UTF-16
+    # and latin-1 too. Try the common encodings before giving up so the
+    # user gets a structured 400 they can act on instead of an opaque 500
+    # from an uncaught UnicodeDecodeError.
+    text: str | None = None
+    for encoding in ("utf-8", "utf-16", "latin-1"):
+        try:
+            text = content.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "gpx_decode_failed",
+                "message": "GPX file is not valid UTF-8, UTF-16, or latin-1",
+            },
+        )
     coords = gpx_service.parse_gpx(text)
     # Strip the .gpx extension from the filename so the rename input
     # doesn't show "myroute.gpx" — the format suffix is irrelevant to the

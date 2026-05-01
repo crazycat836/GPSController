@@ -139,10 +139,11 @@
   - `clear()` catches the reconnect-retry failure and only logs; `set()` correctly raises `DeviceLostError`. Result: a `clear()` failure on a dead device never propagates and the engine thinks everything is fine.
   - Fix: raise `DeviceLostError` in both paths.
 
-- **[HIGH] `import_gpx` 500s on non-UTF-8 GPX**
+- **[DONE] [HIGH] `import_gpx` 500s on non-UTF-8 GPX**
   - File: `backend/api/route.py:149` (`text = content.decode("utf-8")`)
   - Real-world devices export UTF-16 / latin-1 GPX. Current behaviour: 500 with raw decode error on the wire.
   - Fix: try `utf-8` then fall back to `latin-1`, or raise a structured `{"code": "gpx_decode_failed"}` 400.
+  - **Fixed**: tries UTF-8 → UTF-16 → latin-1 in order; on all-three failure raises `400 gpx_decode_failed` via the standard envelope.
 
 - **[DONE v0.14.1] [HIGH] `try { … } catch (err) { throw err }` boilerplate**
   - File: `frontend/src/hooks/useSimulation.ts:711-901` (12 occurrences in action callbacks)
