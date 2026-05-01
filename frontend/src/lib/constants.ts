@@ -25,8 +25,15 @@ export const ACCENT_HEX = '#a78bfa'
 
 export type DeviceLetter = (typeof DEVICE_LETTERS)[number]
 
-/** Network defaults — no imports to avoid circular dependency chains. */
-export const API_HOST = '127.0.0.1:8777'
+/**
+ * Network defaults — no imports to avoid circular dependency chains.
+ *
+ * `API_HOST` accepts a build-time override via `VITE_API_HOST` so dev
+ * builds against a remote backend (LAN tunnel, Docker host, etc.) don't
+ * have to fork the source. `API_BASE` and `WS_BASE` are derived, so a
+ * single override covers both transports.
+ */
+export const API_HOST = import.meta.env.VITE_API_HOST ?? '127.0.0.1:8777'
 export const API_BASE = `http://${API_HOST}`
 export const WS_BASE = `ws://${API_HOST}/ws/status`
 export const DEFAULT_TUNNEL_PORT = 49152
