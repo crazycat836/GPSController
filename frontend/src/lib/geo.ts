@@ -3,6 +3,13 @@ interface LatLng {
   lng: number
 }
 
+/**
+ * Approx. metres per degree of latitude (mean meridional length).
+ * Use for cheap planar distance estimates when full Haversine is
+ * overkill — e.g. small-delta thresholds where ~0.5% accuracy is fine.
+ */
+export const METERS_PER_DEGREE_LAT = 111320
+
 /** Great-circle distance in metres (Haversine formula). */
 export function haversineM(a: LatLng, b: LatLng): number {
   const R = 6371000

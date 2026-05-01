@@ -8,6 +8,7 @@ import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
+import { copyToClipboard } from '../../lib/clipboard'
 import ListRow from '../ui/ListRow'
 import SearchField from '../ui/SearchField'
 import ChipFilterBar, { type Chip } from '../ui/ChipFilterBar'
@@ -26,6 +27,19 @@ interface BookmarksPanelProps {
 
 const ALL_ID = '__all__' as const
 type SortMode = 'recent' | 'by_place'
+
+/** Lat/lng tolerance for flagging a bookmark as the current location.
+ *  ~1.1 m at the equator — tighter than any user-perceptible jitter. */
+const BOOKMARK_MATCH_EPSILON = 1e-5
+
+/** "Copied" toast/icon flash duration (ms) after the copy-coords action. */
+const COPIED_FLASH_MS = 1200
+
+/** Number of place chips kept visible before the bar collapses into a "+N" overflow. */
+const PLACE_CHIPS_VISIBLE_CAP = 5
+
+/** Width / left-offset (px) of the accent stripe marking the active bookmark row. */
+const ACTIVE_INDICATOR_STRIPE_PX = 2
 
 export default function BookmarksPanel({ onBookmarkClick, currentPosition }: BookmarksPanelProps) {
   const t = useT()
@@ -142,8 +156,8 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   // Match by coordinate to flag the currently-loaded bookmark.
   const isBookmarkActive = useCallback((b: Bookmark): boolean => {
     if (!currentPosition) return false
-    return Math.abs(b.lat - currentPosition.lat) < 1e-5
-      && Math.abs(b.lng - currentPosition.lng) < 1e-5
+    return Math.abs(b.lat - currentPosition.lat) < BOOKMARK_MATCH_EPSILON
+      && Math.abs(b.lng - currentPosition.lng) < BOOKMARK_MATCH_EPSILON
   }, [currentPosition])
 
   const placeChips = useMemo<Chip<string>[]>(() => {
@@ -209,18 +223,9 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
 
   const handleCopy = useCallback(async (b: Bookmark) => {
     const text = `${b.name} ${b.lat.toFixed(6)}, ${b.lng.toFixed(6)}`
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      const ta = document.createElement('textarea')
-      ta.value = text
-      document.body.appendChild(ta)
-      ta.select()
-      try { document.execCommand('copy') } catch { /* ignore */ }
-      document.body.removeChild(ta)
-    }
+    await copyToClipboard(text)
     setCopiedId(b.id)
-    setTimeout(() => setCopiedId((prev) => (prev === b.id ? null : prev)), 1200)
+    setTimeout(() => setCopiedId((prev) => (prev === b.id ? null : prev)), COPIED_FLASH_MS)
   }, [])
 
   const confirmDeleteOne = useCallback((b: Bookmark) => {
@@ -475,8 +480,12 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         {isActive && (
           <span
             aria-hidden="true"
-            className="absolute left-[2px] top-[14px] bottom-[14px] w-[2px] rounded-[2px]"
-            style={{ background: 'var(--color-accent)' }}
+            className="absolute top-[14px] bottom-[14px] rounded-[2px]"
+            style={{
+              left: ACTIVE_INDICATOR_STRIPE_PX,
+              width: ACTIVE_INDICATOR_STRIPE_PX,
+              background: 'var(--color-accent)',
+            }}
           />
         )}
         <ListRow
@@ -533,7 +542,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
           activeId={activePlaceId}
           onChange={setActivePlaceId}
           ariaLabel={t('bm.place_filter_aria')}
-          visibleCap={5}
+          visibleCap={PLACE_CHIPS_VISIBLE_CAP}
         />
       )}
 

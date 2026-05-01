@@ -6,6 +6,7 @@ import {
   wifiConnect, wifiScan,
   wifiTunnelStartAndConnect, wifiTunnelStatus, wifiTunnelStop,
 } from '../services/api'
+import { devWarn } from '../lib/dev-log'
 import type { WsMessage } from './useWebSocket'
 
 // Coalesce burst scans (visibility-change + WS-reconnect debounce can
@@ -13,18 +14,10 @@ import type { WsMessage } from './useWebSocket'
 // within SCAN_COALESCE_MS, skip — manual scans always go through.
 const SCAN_COALESCE_MS = 1500
 
-// Only log to the DevTools console in dev builds; production (packaged
-// Electron) has no attached console and these would add noise if anyone
-// ever attached one. Uses console.warn so informational "scan failed /
-// connect failed" lines don't light up red + trigger the DevTools error
-// overlay — they're recoverable, not faults.
-const _IS_DEV = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true
-function devLog(...args: unknown[]): void {
-  if (_IS_DEV) {
-    // eslint-disable-next-line no-console
-    console.warn(...args)
-  }
-}
+// Device-side errors are logged via `devWarn` (console.warn) instead of
+// console.error so informational "scan failed / connect failed" lines
+// don't light up red + trigger the DevTools error overlay — they're
+// recoverable, not faults.
 
 export interface DeviceInfo {
   udid: string
@@ -162,7 +155,7 @@ export function useDevice(subscribe?: WsSubscribe) {
   // for auto-reconnect again. Endpoint is idempotent + fire-and-forget,
   // so the StrictMode double-mount in dev is harmless.
   useEffect(() => {
-    clearAutoReconnectBlocks().catch((err) => devLog('clearAutoReconnectBlocks failed', err))
+    clearAutoReconnectBlocks().catch((err) => devWarn('clearAutoReconnectBlocks failed', err))
   }, [])
 
   // React to real-time device state broadcasts via the subscribe callback.
@@ -323,7 +316,7 @@ export function useDevice(subscribe?: WsSubscribe) {
       }
       return list
     } catch (err) {
-      devLog('Failed to scan devices:', err)
+      devWarn('Failed to scan devices:', err)
       return []
     } finally {
       if (!isPoll) setScanning(false)
@@ -387,7 +380,7 @@ export function useDevice(subscribe?: WsSubscribe) {
         setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
         return active
       } catch (err) {
-        devLog('Failed to connect device:', err)
+        devWarn('Failed to connect device:', err)
         throw err
       }
     },
@@ -403,7 +396,7 @@ export function useDevice(subscribe?: WsSubscribe) {
         // no need to re-list. The WS handler is also race-safe via
         // bumpWsGen.
       } catch (err) {
-        devLog('Failed to disconnect device:', err)
+        devWarn('Failed to disconnect device:', err)
         throw err
       }
     },
@@ -423,7 +416,7 @@ export function useDevice(subscribe?: WsSubscribe) {
           setConnectedDevice((prev) => (prev && prev.udid === udid ? null : prev))
         }
       } catch (err) {
-        devLog('Failed to forget device:', err)
+        devWarn('Failed to forget device:', err)
         throw err
       }
     },
@@ -455,7 +448,7 @@ export function useDevice(subscribe?: WsSubscribe) {
         })
         return info
       } catch (err) {
-        devLog('WiFi connect failed:', err)
+        devWarn('WiFi connect failed:', err)
         throw err
       }
     },
@@ -470,7 +463,7 @@ export function useDevice(subscribe?: WsSubscribe) {
       setWifiDevices(list)
       return list
     } catch (err) {
-      devLog('WiFi scan failed:', err)
+      devWarn('WiFi scan failed:', err)
       return []
     } finally {
       setWifiScanning(false)
@@ -502,7 +495,7 @@ export function useDevice(subscribe?: WsSubscribe) {
         setTunnelStatus({ running: true, rsd_address: res.rsd_address, rsd_port: res.rsd_port })
         return info
       } catch (err) {
-        devLog('WiFi tunnel failed:', err)
+        devWarn('WiFi tunnel failed:', err)
         throw err
       }
     },
@@ -525,7 +518,7 @@ export function useDevice(subscribe?: WsSubscribe) {
       await wifiTunnelStop()
       setTunnelStatus({ running: false })
     } catch (err) {
-      devLog('Failed to stop tunnel:', err)
+      devWarn('Failed to stop tunnel:', err)
     }
   }, [])
 

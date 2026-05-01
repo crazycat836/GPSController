@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { reverseGeocode } from '../services/api';
+import { copyToClipboard } from '../lib/clipboard';
 
 export interface ContextMenuState {
   visible: boolean;
@@ -275,16 +276,7 @@ function MapContextMenu({
         onMouseLeave={unhighlightItem}
         onClick={async () => {
           const txt = `${state.lat.toFixed(6)}, ${state.lng.toFixed(6)}`;
-          try {
-            await navigator.clipboard.writeText(txt);
-          } catch {
-            const ta = document.createElement('textarea');
-            ta.value = txt;
-            document.body.appendChild(ta);
-            ta.select();
-            try { document.execCommand('copy'); } catch { /* ignore */ }
-            document.body.removeChild(ta);
-          }
+          await copyToClipboard(txt);
           if (onShowToast) onShowToast(tRef.current('map.coords_copied'));
           onClose();
         }}
