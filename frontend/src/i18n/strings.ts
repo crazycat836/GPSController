@@ -267,6 +267,7 @@ export const STRINGS = {
   'toast.route_rename_failed': { zh: '重新命名失敗', en: 'Rename failed' },
   'toast.gpx_imported': { zh: '已匯入 {n} 個路徑點', en: 'Imported {n} waypoints' },
   'toast.gpx_import_failed': { zh: '匯入失敗: {msg}', en: 'Import failed: {msg}' },
+  'toast.export_failed': { zh: '匯出失敗: {msg}', en: 'Export failed: {msg}' },
 
   // ── Error codes (backend → i18n) ────────────
   'err.python313_missing': { zh: '需要 Python 3.13+ 才能啟動 WiFi Tunnel', en: 'Python 3.13+ is required to start the Wi-Fi tunnel' },

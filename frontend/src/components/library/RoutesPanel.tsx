@@ -6,7 +6,7 @@ import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useSimContext } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
-import { pickFile, downloadUrl } from '../../lib/fileIo'
+import { pickFile } from '../../lib/fileIo'
 import ListRow from '../ui/ListRow'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
 import EmptyState from '../ui/EmptyState'
@@ -79,7 +79,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       label: t('panel.routes_export_all'),
       icon: <Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
       disabled: savedRoutes.length === 0,
-      onSelect: () => downloadUrl(bm.routesExportAllUrl, 'gpscontroller-routes.json'),
+      onSelect: () => { void bm.handleRoutesExportAll() },
     },
   ], [t, bm, savedRoutes.length])
 
@@ -95,7 +95,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       id: 'gpx-export',
       label: t('route.gpx_export'),
       icon: <Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
-      onSelect: () => bm.handleGpxExport(route.id),
+      onSelect: () => { void bm.handleGpxExport(route.id) },
     },
     {
       id: 'delete',

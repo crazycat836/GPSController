@@ -4,7 +4,7 @@ import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useSimContext } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
-import { pickFile, downloadUrl } from '../../lib/fileIo'
+import { pickFile } from '../../lib/fileIo'
 import Drawer from '../shell/Drawer'
 import PanelTabs, { panelPropsForTab, type PanelTab } from '../ui/PanelTabs'
 import GlassIconButton from '../ui/GlassIconButton'
@@ -54,7 +54,7 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
           <GlassIconButton
             label={t('bm.export')}
             disabled={bm.bookmarks.length === 0}
-            onClick={() => downloadUrl(bm.bookmarkExportUrl, 'bookmarks.json')}
+            onClick={() => { void bm.handleBookmarkExport() }}
             icon={<Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
           />
         </>
@@ -82,7 +82,7 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
         <GlassIconButton
           label={t('panel.routes_export_all')}
           disabled={savedRoutes.length === 0}
-          onClick={() => downloadUrl(bm.routesExportAllUrl, 'gpscontroller-routes.json')}
+          onClick={() => { void bm.handleRoutesExportAll() }}
           icon={<Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
         />
       </>

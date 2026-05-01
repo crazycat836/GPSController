@@ -389,7 +389,41 @@ export const deleteTag = (id: string) => request<StatusResponse>('DELETE', `/api
 export const reorderTags = (orderedIds: string[]) =>
   request<{ reordered: number }>('POST', '/api/bookmarks/tags/reorder', { ordered_ids: orderedIds })
 
-export const bookmarksExportUrl = () => `${API}/api/bookmarks/export`
+/**
+ * Download an authenticated GET as a file. Goes through `authedFetch`
+ * so the `X-GPS-Token` header is attached and stale-token retry kicks
+ * in — `<a href>` / `window.open` cannot do either, so the URL-only
+ * helpers we used to expose 401'd silently and the user got a blank
+ * tab. The Blob URL is revoked once the click is dispatched so we
+ * don't leak per-export memory.
+ */
+async function downloadAuthed(path: string, filename: string): Promise<void> {
+  const res = await authedFetch(`${API}${path}`, (headers) => ({ method: 'GET', headers }))
+  if (!res.ok) {
+    // Try to surface a structured error from the standard envelope
+    // first; fall back to the bare HTTP status if the response isn't
+    // JSON (e.g. a proxy intercepted it).
+    const parsed: unknown = await res.json().catch(() => null)
+    if (isEnvelope(parsed)) {
+      throw new Error(formatError(parsed.error, res.statusText))
+    }
+    throw new Error(res.statusText || `HTTP ${res.status}`)
+  }
+  const blob = await res.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  try {
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = filename
+    a.rel = 'noopener'
+    a.click()
+  } finally {
+    URL.revokeObjectURL(blobUrl)
+  }
+}
+
+export const downloadBookmarksExport = (filename: string) =>
+  downloadAuthed('/api/bookmarks/export', filename)
 export const importBookmarks = (data: BookmarkStore) => request<{ imported: number }>('POST', '/api/bookmarks/import', data)
 
 export const getInitialPosition = () =>
@@ -451,14 +485,12 @@ export async function importGpx(file: File): Promise<{ status: string; id: strin
   return parsed.data as { status: string; id: string; points: number }
 }
 
-export function exportGpxUrl(routeId: string): string {
-  return `${API}/api/route/gpx/export/${routeId}`
-}
+export const downloadGpx = (routeId: string, filename: string) =>
+  downloadAuthed(`/api/route/gpx/export/${encodeURIComponent(routeId)}`, filename)
 
 // Bulk JSON export / import for saved routes
-export function exportAllRoutesUrl(): string {
-  return `${API}/api/route/saved/export`
-}
+export const downloadAllRoutes = (filename: string) =>
+  downloadAuthed('/api/route/saved/export', filename)
 
 export const importAllRoutes = (data: { routes: SavedRoute[] }) =>
   request<{ imported: number }>('POST', '/api/route/saved/import', data)

@@ -1,11 +1,14 @@
 /**
- * Browser-file helpers shared by import / export UI.
+ * Browser-file helper for the import / export UI.
  *
- * Both shapes were repeated literally in LibraryDrawer (×5),
- * RoutesPanel (×3), and BookmarksPanel — the same
- * `document.createElement('input'); input.type = 'file'; ...` dance
- * for opening a file picker and the same anchor-click pattern for
- * triggering a download.
+ * The file-picker dance (`document.createElement('input'); input.type =
+ * 'file'; ...`) was repeated literally in LibraryDrawer, RoutesPanel,
+ * and BookmarksPanel — this module collapses it to a single utility.
+ *
+ * Downloads used to live here too, but every consumer now hits an
+ * authenticated endpoint via `api.downloadGpx` /
+ * `api.downloadBookmarksExport` / `api.downloadAllRoutes`, which build
+ * their own anchor-click — see `services/api.ts:downloadAuthed`.
  */
 
 /**
@@ -32,16 +35,4 @@ export function pickFile(accept: string): Promise<File | null> {
     input.oncancel = () => settle(null)
     input.click()
   })
-}
-
-/**
- * Trigger a browser download of *url* with the suggested *filename*.
- * Works for both ``blob:`` URLs and same-origin static URLs.
- */
-export function downloadUrl(url: string, filename: string): void {
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.rel = 'noopener'
-  a.click()
 }
