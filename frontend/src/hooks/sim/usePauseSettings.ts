@@ -9,14 +9,13 @@
 
 import { useState } from 'react'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
+import { DEFAULT_PAUSE } from '../../lib/constants'
 
 export interface PauseSetting {
   enabled: boolean
   min: number
   max: number
 }
-
-const DEFAULT_PAUSE: PauseSetting = { enabled: true, min: 5, max: 20 }
 
 function loadPause(key: string): PauseSetting {
   try {

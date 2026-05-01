@@ -1,6 +1,7 @@
 import { STORAGE_KEYS } from '../lib/storage-keys'
 import {
   API_BASE,
+  DEFAULT_PAUSE,
   DEFAULT_TUNNEL_PORT,
   RETRY_BACKOFF_INITIAL_MS,
   RETRY_BACKOFF_MAX_MS,
@@ -236,9 +237,9 @@ const sp = (o?: SpeedOpts) => ({
   speed_max_kmh: o?.speed_max_kmh ?? null,
 })
 const pp = (o?: PauseOpts) => (o ? {
-  pause_enabled: o.pause_enabled ?? true,
-  pause_min: o.pause_min ?? 5,
-  pause_max: o.pause_max ?? 20,
+  pause_enabled: o.pause_enabled ?? DEFAULT_PAUSE.enabled,
+  pause_min: o.pause_min ?? DEFAULT_PAUSE.min,
+  pause_max: o.pause_max ?? DEFAULT_PAUSE.max,
 } : {})
 const sl = (v?: boolean) => (v ? { straight_line: true } : {})
 export const navigate = (lat: number, lng: number, mode: string, speed?: SpeedOpts, udid?: string, straightLine?: boolean) =>
