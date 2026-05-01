@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from api._errors import http_err
 from config import MAX_DEVICES
 from context import ctx
 from models.schemas import DeviceInfo
@@ -13,16 +14,6 @@ from models.schemas import DeviceInfo
 router = APIRouter(prefix="/api/device", tags=["device"])
 
 logger = logging.getLogger(__name__)
-
-
-# duplicated in api/wifi_tunnel.py
-def _http_err(status: int, code: str, message: str) -> HTTPException:
-    """Build a structured HTTPException with `{code, message}` detail.
-
-    Use this instead of raising `HTTPException(detail=str(e))` so internal
-    exception text never leaks to API clients.
-    """
-    return HTTPException(status_code=status, detail={"code": code, "message": message})
 
 
 def _dm():
@@ -85,7 +76,7 @@ async def connect_device(udid: str):
         )
     except Exception:
         logger.exception("Device connect failed", extra={"udid": udid})
-        raise _http_err(500, "connect_failed", "裝置連線失敗,請重試")
+        raise http_err(500, "connect_failed", "裝置連線失敗,請重試")
 
 
 @router.post("/auto-reconnect/reset")
@@ -255,13 +246,13 @@ async def amfi_reveal_developer_mode(udid: str):
         from pymobiledevice3.services.amfi import AmfiService
     except ImportError:
         logger.exception("pymobiledevice3 AMFI module import failed", extra={"udid": udid})
-        raise _http_err(500, "amfi_unavailable", "pymobiledevice3 AMFI 服務無法載入")
+        raise http_err(500, "amfi_unavailable", "pymobiledevice3 AMFI 服務無法載入")
 
     try:
         AmfiService(conn.lockdown).reveal_developer_mode_option_in_ui()
     except Exception:
         logger.exception("AMFI reveal failed for %s", udid)
-        raise _http_err(500, "amfi_reveal_failed", "AMFI 操作失敗,請確認裝置已解鎖並信任這台電腦")
+        raise http_err(500, "amfi_reveal_failed", "AMFI 操作失敗,請確認裝置已解鎖並信任這台電腦")
 
     # Invalidate the cached status so the next discover pays a fresh
     # lockdown query and the frontend sees the toggle flip.

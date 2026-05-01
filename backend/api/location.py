@@ -4,6 +4,7 @@ import traceback
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from api._errors import http_err
 from services.location_service import DeviceLostError
 from context import ctx
 
@@ -26,16 +27,6 @@ from models.schemas import (
 logger = logging.getLogger("gpscontroller")
 
 router = APIRouter(prefix="/api/location", tags=["location"])
-
-
-def _http_err(status_code: int, code: str, message: str) -> HTTPException:
-    """Build an HTTPException with the project's standard {code, message}
-    detail envelope. Use this instead of leaking ``str(e)`` into responses —
-    internal error text belongs in logs (logger.exception), not on the wire."""
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": code, "message": message},
-    )
 
 
 async def _engine(udid: str | None = None):
@@ -240,7 +231,7 @@ async def teleport(req: TeleportRequest):
             if isinstance(cause, DeviceLostError):
                 raise (await _handle_device_lost(cause))
             cause = cause.__cause__
-        raise _http_err(500, "teleport_failed", "跳點失敗,請查看 ~/.gpscontroller/logs/backend.log")
+        raise http_err(500, "teleport_failed", "跳點失敗,請查看 ~/.gpscontroller/logs/backend.log")
 
     # Start cooldown if enabled and there was a previous position.
     # Skipped in dual mode for the same reason the check above is skipped.
@@ -375,7 +366,7 @@ async def joystick_start(req: JoystickStartRequest):
         raise
     except Exception:
         logger.exception("joystick_start failed")
-        raise _http_err(500, "joystick_start_failed", "搖桿啟動失敗,請查看 ~/.gpscontroller/logs/backend.log")
+        raise http_err(500, "joystick_start_failed", "搖桿啟動失敗,請查看 ~/.gpscontroller/logs/backend.log")
     return {"status": "started", "mode": req.mode}
 
 
@@ -521,7 +512,7 @@ async def set_initial_position(req: _InitialPosRequest):
     else:
         from utils.geo import validate_coords
         if not validate_coords(req.lat, req.lng):
-            raise _http_err(400, "invalid_coord", "lat must be in [-90, 90], lng in [-180, 180]")
+            raise http_err(400, "invalid_coord", "lat must be in [-90, 90], lng in [-180, 180]")
         new_pos = {"lat": float(req.lat), "lng": float(req.lng)}
     app_state.set_initial_position(new_pos)
     app_state.save_settings()
