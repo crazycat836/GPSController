@@ -7,6 +7,7 @@ import {
   RETRY_BACKOFF_MAX_MS,
   RETRY_BACKOFF_STEP_MS,
 } from '../lib/constants'
+import { devWarn } from '../lib/dev-log'
 import { STRINGS } from '../i18n/strings'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../hooks/useBookmarks'
 import type { DeviceInfo } from '../hooks/useDevice'
@@ -81,11 +82,20 @@ async function fetchWithRetry(url: string, opts: RequestInit, maxAttempts = 15):
   throw lastErr ?? new Error('fetch failed')
 }
 
+// Latched once when localStorage throws so the navigator-language fallback
+// path doesn't silently hide a sandboxed-storage misconfiguration in dev.
+let warnedLocalStorage = false
+
 function currentLang(): 'zh' | 'en' {
   try {
     const v = localStorage.getItem(STORAGE_KEYS.lang)
     if (v === 'en' || v === 'zh') return v
-  } catch { /* ignore */ }
+  } catch (e) {
+    if (!warnedLocalStorage) {
+      warnedLocalStorage = true
+      devWarn('[api.currentLang] localStorage unavailable, falling back to navigator.language', e)
+    }
+  }
   return (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('zh')) ? 'zh' : 'en'
 }
 
