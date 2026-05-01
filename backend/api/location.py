@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import traceback
 
@@ -5,8 +6,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from api._errors import http_err
+from api.websocket import broadcast
+from config import resolve_speed_profile
 from services.location_service import DeviceLostError, unwrap_device_lost
 from context import ctx
+from utils.geo import validate_coords
 
 from models.schemas import (
     MovementMode,
@@ -42,7 +46,6 @@ async def _resolve_target_udid(app_state, dm, requested_udid: str | None) -> str
     device → first discovered device (with retries). Raises an HTTPException
     with code ``no_device`` when nothing is reachable.
     """
-    import asyncio as _asyncio
     _log = logging.getLogger("gpscontroller")
 
     connected = dm.connected_udids
@@ -59,7 +62,7 @@ async def _resolve_target_udid(app_state, dm, requested_udid: str | None) -> str
                 return discovered[0].udid
         except Exception:
             _log.exception("discover_devices failed during lazy rebuild (attempt %d)", attempt + 1)
-        await _asyncio.sleep(_DISCOVER_RETRY_DELAY_S)
+        await asyncio.sleep(_DISCOVER_RETRY_DELAY_S)
 
     raise HTTPException(
         status_code=400,
@@ -144,8 +147,6 @@ async def _handle_device_lost(exc: Exception) -> "HTTPException":
     `device_disconnected` WebSocket event so the frontend can banner it.
     Returns an HTTPException the caller should raise."""
     app_state = ctx.app_state
-    from api.websocket import broadcast
-
     dm = app_state.device_manager
     lost_udids = dm.connected_udids
     for udid in lost_udids:
@@ -205,7 +206,6 @@ async def apply_speed(req: ApplySpeedRequest):
     """Hot-swap the active navigation's speed profile. The current
     _move_along_route loop re-interpolates from the current position
     with the new speed; already-completed progress is kept."""
-    from config import resolve_speed_profile
     engine = await _engine(req.udid)
     profile = resolve_speed_profile(
         req.mode.value,
@@ -295,7 +295,6 @@ _bg_tasks: set = set()
 
 
 def _spawn(coro):
-    import asyncio
     task = asyncio.create_task(coro)
     _bg_tasks.add(task)
 
@@ -309,13 +308,11 @@ def _spawn(coro):
         # device_disconnected instead of a silently-dead engine.
         nested = unwrap_device_lost(exc)
         if nested is not None:
-            import asyncio as _asyncio
-            cleanup = _asyncio.create_task(_handle_device_lost(nested))
+            cleanup = asyncio.create_task(_handle_device_lost(nested))
             _bg_tasks.add(cleanup)
             cleanup.add_done_callback(lambda t: _bg_tasks.discard(t))
             return
-        import logging as _logging
-        _logging.getLogger("gpscontroller").exception(
+        logging.getLogger("gpscontroller").exception(
             "background task crashed: %s", exc, exc_info=exc
         )
 
@@ -535,7 +532,6 @@ async def set_initial_position(req: _InitialPosRequest):
         # frontend still gets the device's last-known coordinate on relaunch.
         new_pos: dict | None = None
     else:
-        from utils.geo import validate_coords
         if not validate_coords(req.lat, req.lng):
             raise http_err(400, "invalid_coord", "lat must be in [-90, 90], lng in [-180, 180]")
         new_pos = {"lat": float(req.lat), "lng": float(req.lng)}
