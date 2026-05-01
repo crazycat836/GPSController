@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from api._errors import http_err
-from services.location_service import DeviceLostError
+from services.location_service import DeviceLostError, unwrap_device_lost
 from context import ctx
 
 from models.schemas import (
@@ -226,11 +226,9 @@ async def teleport(req: TeleportRequest):
         logger.exception("Teleport failed")
         # Also inspect the cause — nested DeviceLostError (e.g. re-raised from
         # the simulation engine retry loop) should still trigger cleanup.
-        cause = e
-        while cause is not None:
-            if isinstance(cause, DeviceLostError):
-                raise (await _handle_device_lost(cause))
-            cause = cause.__cause__
+        nested = unwrap_device_lost(e)
+        if nested is not None:
+            raise (await _handle_device_lost(nested))
         raise http_err(500, "teleport_failed", "跳點失敗,請查看 ~/.gpscontroller/logs/backend.log")
 
     # Start cooldown if enabled and there was a previous position.
@@ -253,11 +251,9 @@ async def _guard(coro):
     except DeviceLostError as exc:
         raise (await _handle_device_lost(exc))
     except Exception as exc:
-        cause = exc
-        while cause is not None:
-            if isinstance(cause, DeviceLostError):
-                raise (await _handle_device_lost(cause))
-            cause = cause.__cause__
+        nested = unwrap_device_lost(exc)
+        if nested is not None:
+            raise (await _handle_device_lost(nested))
         raise
 
 
@@ -277,18 +273,16 @@ def _spawn(coro):
         exc = t.exception()
         if exc is None:
             return
-        # Walk __cause__ chain — DeviceLostError is often re-raised wrapped.
-        # Trigger the same cleanup teleport already does so the frontend
-        # gets device_disconnected instead of a silently-dead engine.
-        cause = exc
-        while cause is not None:
-            if isinstance(cause, DeviceLostError):
-                import asyncio as _asyncio
-                cleanup = _asyncio.create_task(_handle_device_lost(cause))
-                _bg_tasks.add(cleanup)
-                cleanup.add_done_callback(lambda t: _bg_tasks.discard(t))
-                return
-            cause = cause.__cause__
+        # DeviceLostError is often re-raised wrapped — trigger the same
+        # cleanup teleport already does so the frontend gets
+        # device_disconnected instead of a silently-dead engine.
+        nested = unwrap_device_lost(exc)
+        if nested is not None:
+            import asyncio as _asyncio
+            cleanup = _asyncio.create_task(_handle_device_lost(nested))
+            _bg_tasks.add(cleanup)
+            cleanup.add_done_callback(lambda t: _bg_tasks.discard(t))
+            return
         import logging as _logging
         _logging.getLogger("gpscontroller").exception(
             "background task crashed: %s", exc, exc_info=exc
