@@ -157,7 +157,10 @@ class DeviceManager:
             try:
                 return await asyncio.shield(inflight)
             except Exception:
-                pass
+                logger.debug(
+                    "in-flight discover_devices raised; retrying with fresh task",
+                    exc_info=True,
+                )
 
         task = asyncio.create_task(self._discover_devices_uncached())
         self._discover_inflight = task
@@ -552,7 +555,11 @@ class DeviceManager:
                 try:
                     await rsd.close()
                 except (OSError, ConnectionError):
-                    pass
+                    logger.debug(
+                        "rsd.close() failed after connect attempt %d (likely already closed)",
+                        attempt,
+                        exc_info=True,
+                    )
                 await _asyncio.sleep(min(0.5 * attempt, 2.0))
 
         if last_exc is not None:
