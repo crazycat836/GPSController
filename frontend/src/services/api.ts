@@ -196,7 +196,16 @@ export const listDevices = () => request<DeviceInfo[]>('GET', '/api/device/list'
 export const connectDevice = (udid: string) => request<StatusResponse>('POST', `/api/device/${udid}/connect`)
 export const disconnectDevice = (udid: string) => request<StatusResponse>('DELETE', `/api/device/${udid}/connect`)
 export const forgetDevice = (udid: string) =>
-  request<{ status: string; udid: string; removed: string[] }>('DELETE', `/api/device/${udid}/pair`)
+  request<{
+    status: string
+    udid: string
+    removed: string[]
+    // Populated when at least one pair-record path could not be unlinked
+    // (e.g. /var/db/lockdown needs root on macOS). When present and non-
+    // empty the backend returns status: "partial" — the UI can warn the
+    // user that the iPhone still trusts this host until the file goes.
+    failed?: { path: string; error: string }[]
+  }>('DELETE', `/api/device/${udid}/pair`)
 export const clearAutoReconnectBlocks = () =>
   request<{ status: string }>('POST', '/api/device/auto-reconnect/reset')
 export interface WifiConnectResponse {

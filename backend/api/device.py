@@ -168,15 +168,20 @@ async def forget_device(udid: str):
         await dm.disconnect(udid)
 
     # One syscall per candidate — atomic, no TOCTOU. FileNotFoundError
-    # means the path already absent (fine); other OSErrors are logged.
+    # means the path already absent (fine); other OSErrors are tracked so
+    # the response can flag partial-success (e.g. /var/db/lockdown needs
+    # root on macOS — without sudo the unlink raises and the iPhone keeps
+    # trusting us even though the route used to claim "forgotten").
     removed: list[str] = []
+    failed: list[dict[str, str]] = []
     for p in _pair_record_candidates(udid):
         try:
             p.unlink()
         except FileNotFoundError:
             pass
-        except OSError:
+        except OSError as exc:
             logger.warning("Could not remove pair record %s", p, exc_info=True)
+            failed.append({"path": str(p), "error": exc.strerror or str(exc)})
         else:
             removed.append(str(p))
 
@@ -191,8 +196,27 @@ async def forget_device(udid: str):
     except Exception:
         logger.warning("forget_device: device_disconnected broadcast failed", exc_info=True)
 
-    logger.info("Forgot device %s (removed %d pair-record file(s))", udid, len(removed))
-    return {"status": "forgotten", "udid": udid, "removed": removed}
+    # Only treat the request as a hard failure when *every* candidate that
+    # existed errored out. If at least one record was actually removed we
+    # surface a 200 partial-success envelope so the UI can warn the user
+    # about the leftover paths instead of silently lying about the state.
+    if failed and not removed:
+        logger.error(
+            "Forget device %s failed: could not remove any pair record (%d attempted)",
+            udid, len(failed),
+        )
+        raise _http_err(
+            500,
+            "forget_failed",
+            "無法移除任何信任記錄,可能需要管理員權限,請以 sudo 重啟後端後再試",
+        )
+
+    status = "partial" if failed else "forgotten"
+    logger.info(
+        "Forgot device %s (status=%s, removed %d, failed %d pair-record file(s))",
+        udid, status, len(removed), len(failed),
+    )
+    return {"status": status, "udid": udid, "removed": removed, "failed": failed}
 
 
 @router.get("/{udid}/info", response_model=DeviceInfo | None)
