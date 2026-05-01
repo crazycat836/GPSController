@@ -240,6 +240,11 @@ class LegacyLocationService(LocationService):
         Always sends clear to the device even when _active is False —
         the device may hold a stale simulated location from a prior
         session or backend restart.
+
+        Raises DeviceLostError on retry-after-reconnect failure, matching
+        the discipline in set(). Without this, a clear() on a dead device
+        would silently log + return, leaving the engine task convinced
+        the simulation was cleanly torn down.
         """
         try:
             svc = self._ensure_service()
@@ -254,8 +259,9 @@ class LegacyLocationService(LocationService):
                 svc = self._ensure_service()
                 await self._maybe_await(svc.clear())
                 self._active = False
-            except Exception:
-                logger.exception("Legacy clear failed after reconnect")
+            except Exception as retry_exc:
+                logger.error("Legacy clear failed after reconnect — device likely lost (%s)", retry_exc)
+                raise DeviceLostError(f"Legacy clear failed: {retry_exc}") from retry_exc
         except Exception:
             logger.exception("Failed to clear legacy simulated location")
             raise

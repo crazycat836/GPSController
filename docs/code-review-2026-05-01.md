@@ -11,13 +11,16 @@
 
 ## Status
 
-> **v0.14.1 (2026-05-01)** — released [v0.14.1](https://github.com/crazycat836/GPSController/releases/tag/v0.14.1). 5 HIGH items fully resolved + 1 partial. 17 HIGH items remain outstanding. Fixed items inline below are marked **[DONE v0.14.1]**; partial progress is marked **[PARTIAL v0.14.1]**.
+> **v0.14.1 (2026-05-01)** — released [v0.14.1](https://github.com/crazycat836/GPSController/releases/tag/v0.14.1). 5 HIGH items fully resolved + 1 partial. Fixed items inline below are marked **[DONE v0.14.1]**; partial progress is marked **[PARTIAL v0.14.1]**.
 >
-> **Remaining HIGH items by category:**
+> **Post-release quick-win batch (commits on `main`, unreleased):**
+> 5 more HIGH items fixed inline — marked **[DONE]** below — covering: `noopener`, GPX UTF-8 fallback, subnet-scan semaphore, `setCooldownEnabled` StrictMode rollback, `LegacyLocationService.clear` raising `DeviceLostError`. Will roll into the next release.
+>
+> **Remaining HIGH items by category (12):**
 > - Architecture / God modules: 3 outstanding (oversize components, `wifi_tunnel.py`, backend movement loops)
-> - Bugs / correctness: 7 outstanding (DevicesPopover ×2, useDevice ordering, MapContextMenu ×2, wifi_tunnel watchdog race, setCooldownEnabled StrictMode)
-> - Security: 4 outstanding (`noopener`, import body validation, subnet semaphore, `forget_device` partial-success)
-> - Error handling: 3 outstanding (silent excepts ×37, `LegacyLocationService.clear`, GPX UTF-8)
+> - Bugs / correctness: 6 outstanding (DevicesPopover ×2, useDevice ordering, MapContextMenu ×2, wifi_tunnel watchdog race)
+> - Security: 1 outstanding (`forget_device` partial-success — also import body validation)
+> - Error handling: 1 outstanding (silent excepts ×37)
 > - Auth / token: 2 outstanding (401 invalidation, export-URL token)
 
 ---
@@ -136,10 +139,11 @@
   - Many wrap WS broadcasts (acceptable best-effort) but several wrap real cleanup that hides bugs (e.g. teardown in `wifi_tunnel.py:273-295`).
   - Fix: change every `except Exception: pass` to at least `logger.debug(..., exc_info=True)`. Promote anything in non-best-effort paths to `logger.warning`.
 
-- **[HIGH] `LegacyLocationService.clear` swallows DeviceLost**
+- **[DONE] [HIGH] `LegacyLocationService.clear` swallows DeviceLost**
   - File: `backend/services/location_service.py:252-258`
   - `clear()` catches the reconnect-retry failure and only logs; `set()` correctly raises `DeviceLostError`. Result: a `clear()` failure on a dead device never propagates and the engine thinks everything is fine.
   - Fix: raise `DeviceLostError` in both paths.
+  - **Fixed**: retry-after-reconnect failure now `raise DeviceLostError(...) from retry_exc`, matching `set()`'s discipline. Existing `DeviceLostError` catchers in engine `_run_handler` / movement_loop / `api.location._handle_device_lost` propagate cleanly.
 
 - **[DONE] [HIGH] `import_gpx` 500s on non-UTF-8 GPX**
   - File: `backend/api/route.py:149` (`text = content.decode("utf-8")`)
