@@ -6,7 +6,6 @@ from version import __version__
 
 # Paths
 DATA_DIR = Path.home() / ".gpscontroller"
-DATA_DIR.mkdir(exist_ok=True)
 SETTINGS_FILE = DATA_DIR / "settings.json"
 BOOKMARKS_FILE = DATA_DIR / "bookmarks.json"
 ROUTES_FILE = DATA_DIR / "routes.json"
@@ -14,6 +13,15 @@ ROUTES_FILE = DATA_DIR / "routes.json"
 # and WebSocket call. Regenerated on each backend startup and written
 # with mode 0600 so only the current user can read it.
 TOKEN_FILE = DATA_DIR / "token"
+
+
+def ensure_data_dir() -> None:
+    """Create ``DATA_DIR`` if missing. Call once from app startup.
+
+    Kept out of module load so importing ``config`` (e.g. from tests) is a
+    pure operation with no filesystem side effects.
+    """
+    DATA_DIR.mkdir(exist_ok=True)
 
 # OSRM — overridable via $OSRM_BASE_URL for self-hosted / restricted-network
 # operators who can't reach the public demo server.
