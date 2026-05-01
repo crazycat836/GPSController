@@ -106,10 +106,11 @@
 
 ### Security
 
-- **[HIGH] `window.open` without `noopener`/`noreferrer` (reverse-tabnabbing)**
+- **[DONE] [HIGH] `window.open` without `noopener`/`noreferrer` (reverse-tabnabbing)**
   - File: `frontend/src/contexts/BookmarkContext.tsx:189`
   - In Electron the renderer is sandboxed; in browser dev mode the new tab gets `window.opener`.
   - Fix: `window.open(url, '_blank', 'noopener,noreferrer')`. (The pattern in `lib/fileIo.ts:45` uses `a.rel = 'noopener'` correctly — apply the same here.)
+  - **Fixed**: `handleGpxExport` now passes `'noopener,noreferrer'` features arg.
 
 - **[HIGH] Unvalidated `dict` POST body**
   - File: `backend/api/bookmarks.py:240` (`import_bookmarks`), `backend/services/bookmarks.py:532-579` (`import_json`)

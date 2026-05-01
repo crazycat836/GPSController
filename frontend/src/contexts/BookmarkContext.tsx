@@ -186,7 +186,11 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
 
   const handleGpxExport = useCallback((id: string) => {
     const url = api.exportGpxUrl(id)
-    window.open(url, '_blank')
+    // 'noopener,noreferrer' prevents reverse-tabnabbing — without it the
+    // opened tab gets a window.opener handle and can call
+    // opener.location = phishingUrl. Electron mitigates in production but
+    // Vite dev mode in a browser does not.
+    window.open(url, '_blank', 'noopener,noreferrer')
   }, [])
 
   const handleRoutesImportAll = useCallback(async (file: File) => {
