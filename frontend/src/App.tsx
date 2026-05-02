@@ -47,6 +47,7 @@ import JoystickPanel from './components/panels/JoystickPanel'
 // Modals/Drawers
 import DevicesPopover from './components/device/DevicesPopover'
 import LibraryDrawer from './components/modals/LibraryDrawer'
+import Modal from './components/Modal'
 
 // Root component — just providers.
 //
@@ -334,17 +335,25 @@ function AppShell() {
         )}
 
         {/* Add bookmark dialog */}
-        {bm.addBmDialog && createPortal(
-          <div
-            data-fc="modal.bookmark-add"
-            onClick={(e) => e.stopPropagation()}
-            className="anim-scale-in surface-popup"
-            style={{
-              position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)',
-              zIndex: 'var(--z-float)', borderRadius: 'var(--radius-lg)', padding: 16, width: 300,
-            }}
+        {bm.addBmDialog && (
+          <Modal
+            open
+            onClose={() => bm.setAddBmDialog(null)}
+            title={t('bm.add')}
+            size="sm"
+            dataFc="modal.bookmark-add"
+            actions={
+              <>
+                <button
+                  className="action-btn primary"
+                  style={{ flex: 1 }}
+                  disabled={!bm.addBmDialog.name.trim()}
+                  onClick={bm.submitAddBookmark}
+                >{t('generic.add')}</button>
+                <button className="action-btn" onClick={() => bm.setAddBmDialog(null)}>{t('generic.cancel')}</button>
+              </>
+            }
           >
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{t('bm.add')}</div>
             <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 8 }}>
               {bm.addBmDialog.lat.toFixed(5)}, {bm.addBmDialog.lng.toFixed(5)}
             </div>
@@ -357,7 +366,6 @@ function AppShell() {
               onChange={(e) => bm.setAddBmDialog({ ...bm.addBmDialog!, name: e.target.value })}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.nativeEvent.isComposing) bm.submitAddBookmark()
-                if (e.key === 'Escape') bm.setAddBmDialog(null)
               }}
               style={{ width: '100%', marginBottom: 8 }}
             />
@@ -374,17 +382,7 @@ function AppShell() {
                 <option key={p.id} value={p.name}>{p.name}</option>
               ))}
             </select>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                className="action-btn primary"
-                style={{ flex: 1 }}
-                disabled={!bm.addBmDialog.name.trim()}
-                onClick={bm.submitAddBookmark}
-              >{t('generic.add')}</button>
-              <button className="action-btn" onClick={() => bm.setAddBmDialog(null)}>{t('generic.cancel')}</button>
-            </div>
-          </div>,
-          document.body,
+          </Modal>
         )}
 
         {sim.error && (
