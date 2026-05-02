@@ -8,6 +8,7 @@ import MapContextMenu, { type ContextMenuState } from './MapContextMenu';
 import type { LeafletMapInternal, Position, Waypoint } from './map/types';
 import { useCurrentPositionMarker } from './map/useCurrentPositionMarker';
 import { usePcMarker } from './map/usePcMarker';
+import { useDestinationMarker } from './map/useDestinationMarker';
 
 interface MapViewProps {
   currentPosition: Position | null;
@@ -78,7 +79,6 @@ function MapView({
   useEffect(() => { onMapReadyRef.current = onMapReady; }, [onMapReady]);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const destMarkerRef = useRef<L.Marker | null>(null);
   const waypointMarkersRef = useRef<L.Marker[]>([]);
   const polylineRef = useRef<L.Polyline | null>(null);
   // clickMarkerRef removed — left-click no longer drops a pin.
@@ -287,45 +287,7 @@ function MapView({
 
   usePcMarker(mapRef, pcPosition);
 
-  // Update destination marker
-  const destSigRef = useRef<string | null>(null);
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const sig = destination ? `${destination.lat.toFixed(7)},${destination.lng.toFixed(7)}` : null;
-    if (sig === destSigRef.current) return;
-    destSigRef.current = sig;
-
-    if (destMarkerRef.current) {
-      destMarkerRef.current.remove();
-      destMarkerRef.current = null;
-    }
-
-    if (destination) {
-      // Flat teardrop — accent stroke over semi-transparent dark fill,
-      // inner ring. Mirrors redesign/Home `.pin.dest-flat` SVG verbatim.
-      const icon = L.divIcon({
-        className: 'dest-marker',
-        html: `<div data-fc="map.dest-marker" class="map-pin-dest">
-          <svg width="28" height="38" viewBox="0 0 28 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 2C8.477 2 4 6.477 4 12c0 7.732 10 24 10 24s10-16.268 10-24c0-5.523-4.477-10-10-10z"
-                  fill="rgba(10,10,12,0.6)" stroke="${ACCENT_HEX}" stroke-width="2" stroke-linejoin="round"/>
-            <circle cx="14" cy="12" r="4" fill="none" stroke="${ACCENT_HEX}" stroke-width="2"/>
-          </svg>
-        </div>`,
-        iconSize: [28, 38],
-        iconAnchor: [14, 38],
-      });
-
-      const marker = L.marker([destination.lat, destination.lng], {
-        icon,
-      }).addTo(map);
-
-      marker.bindTooltip(t('map.destination'), { direction: 'top', offset: [0, -38] });
-      destMarkerRef.current = marker;
-    }
-  }, [destination]);
+  useDestinationMarker(mapRef, destination, t('map.destination'));
 
   // Update waypoint markers
   const waypointSigRef = useRef<string>('');
