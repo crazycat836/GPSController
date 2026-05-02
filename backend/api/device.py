@@ -7,8 +7,10 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from api._errors import http_err
+from api.websocket import broadcast
 from config import MAX_DEVICES
 from context import ctx
+from core.device_manager import UnsupportedIosVersionError, _parse_ios_version
 from models.schemas import DeviceInfo
 
 router = APIRouter(prefix="/api/device", tags=["device"])
@@ -33,7 +35,6 @@ async def list_devices():
 @router.post("/{udid}/connect")
 async def connect_device(udid: str):
     app_state = ctx.app_state
-    from core.device_manager import UnsupportedIosVersionError
     dm = _dm()
     # User-initiated connect is the canonical "I want this device on"
     # signal — clear any prior auto-reconnect block for this UDID.
@@ -48,7 +49,6 @@ async def connect_device(udid: str):
         await dm.connect(udid)
         await app_state.create_engine_for_device(udid)
         try:
-            from api.websocket import broadcast
             devs = await dm.discover_devices()
             info = next((d for d in devs if d.udid == udid), None)
             await broadcast("device_connected", {
@@ -105,7 +105,6 @@ async def disconnect_device(udid: str):
     await app_state.terminate_engine(udid)
     await dm.disconnect(udid)
     try:
-        from api.websocket import broadcast
         await broadcast("device_disconnected", {"udid": udid, "udids": [udid], "reason": "user"})
     except Exception as exc:
         logger.debug(
@@ -188,7 +187,6 @@ async def forget_device(udid: str):
     app_state.unblock_auto_reconnect(udid)
 
     try:
-        from api.websocket import broadcast
         await broadcast("device_disconnected", {"udid": udid, "udids": [udid], "reason": "forget"})
     except Exception:
         logger.warning("forget_device: device_disconnected broadcast failed", exc_info=True)
@@ -248,7 +246,6 @@ async def amfi_reveal_developer_mode(udid: str):
 
     # iOS 15 and below have no Developer Mode concept, so the AMFI
     # service call would fail with a misleading error.
-    from core.device_manager import _parse_ios_version
     ios_major = _parse_ios_version(conn.ios_version or "0")[0]
     if ios_major < 16:
         raise HTTPException(

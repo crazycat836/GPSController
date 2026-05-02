@@ -1,5 +1,6 @@
 """System utility endpoints — open files / folders for the user."""
 
+import ctypes
 import logging
 import os
 import subprocess
@@ -25,7 +26,6 @@ def _open_native(path: Path) -> None:
     """
     if sys.platform == "win32":
         try:
-            import ctypes
             ASFW_ANY = -1
             ctypes.windll.user32.AllowSetForegroundWindow(ASFW_ANY)
         except Exception:
