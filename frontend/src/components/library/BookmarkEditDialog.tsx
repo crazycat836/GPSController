@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { useModalDismiss } from '../../hooks/useModalDismiss'
-import { useFocusTrap } from '../../hooks/useFocusTrap'
-import { createPortal } from 'react-dom'
 import { MapPin, Crosshair } from 'lucide-react'
 import type { BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
 import { ICON_SIZE } from '../../lib/icons'
 import { isDefaultPlace } from '../../lib/bookmarks'
 import { useT } from '../../i18n'
+import Modal from '../Modal'
 
 export interface BookmarkEditValues {
   name: string
@@ -82,7 +80,6 @@ export default function BookmarkEditDialog(props: Props) {
   const [note, setNote] = useState('')
 
   const nameRef = useRef<HTMLInputElement>(null)
-  const dialogRef = useRef<HTMLDivElement>(null)
   const wasOpenRef = useRef(false)
   // Edge-detector for the "use current position" toggle. Re-snapshot from
   // `currentPosition` only on the OFF→ON transition.
@@ -159,31 +156,39 @@ export default function BookmarkEditDialog(props: Props) {
     })
   }, [canSubmit, name, effectiveLat, effectiveLng, placeId, tagIds, note, onSubmit])
 
-  useModalDismiss({ open, onDismiss: onClose })
-  useFocusTrap(dialogRef, open)
-
-  if (!open) return null
-
   const title = mode === 'edit' ? t('bm.edit') : t('bm.add')
   const submitLabel = mode === 'edit' ? t('generic.save') : t('generic.add')
 
-  return createPortal(
-    <div data-fc="modal.bookmark-edit" className="modal-overlay anim-fade-in" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={typeof title === 'string' ? title : undefined}
-        className="modal-dialog anim-scale-in"
-        style={{ width: 380 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-title flex items-center gap-2">
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      ariaLabel={typeof title === 'string' ? title : undefined}
+      dataFc="modal.bookmark-edit"
+      dialogStyle={{ width: 380 }}
+      title={
+        <span className="flex items-center gap-2">
           <MapPin width={ICON_SIZE.md} height={ICON_SIZE.md} className="text-[var(--color-accent)]" />
           {title}
-        </div>
-
-        <div className="flex flex-col gap-3 mt-2">
+        </span>
+      }
+      actions={
+        <>
+          <button type="button" className="action-btn" onClick={onClose}>
+            {t('generic.cancel')}
+          </button>
+          <button
+            type="button"
+            className="action-btn primary"
+            disabled={!canSubmit}
+            onClick={submit}
+          >
+            {submitLabel}
+          </button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3 mt-2">
           {/* Name */}
           <label className="flex flex-col gap-1.5">
             <span className="text-[11px] text-[var(--color-text-3)]">{t('bm.name_label')}</span>
@@ -319,22 +324,6 @@ export default function BookmarkEditDialog(props: Props) {
             />
           </label>
         </div>
-
-        <div className="modal-actions">
-          <button type="button" className="action-btn" onClick={onClose}>
-            {t('generic.cancel')}
-          </button>
-          <button
-            type="button"
-            className="action-btn primary"
-            disabled={!canSubmit}
-            onClick={submit}
-          >
-            {submitLabel}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+    </Modal>
   )
 }
