@@ -11,17 +11,20 @@ from config import SPEED_PROFILES
 
 logger = logging.getLogger(__name__)
 
-# How often the joystick loop ticks (seconds)
-_TICK_INTERVAL = 0.2
+# How often the joystick loop ticks (seconds). 80 ms ≈ 12.5 Hz nominal,
+# ~8-10 Hz effective after each tick's device-write + WS emit overhead.
+# Lower than this risks queueing the location-set call on slow WiFi
+# tunnels; higher values feel visibly choppy for a real-time input.
+_TICK_INTERVAL = 0.08
 
 
 class JoystickHandler:
     """Provides realtime joystick-style movement control.
 
     The user sends direction (0-360 degrees) and intensity (0-1) inputs.
-    A background loop runs at ~200 ms intervals, calculating a new position
-    based on the current input and speed profile, then pushing the update
-    to the device.
+    A background loop runs at the ``_TICK_INTERVAL`` cadence, calculating
+    a new position based on the current input and speed profile, then
+    pushing the update to the device.
     """
 
     def __init__(self, engine):
