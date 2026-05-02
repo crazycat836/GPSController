@@ -79,7 +79,7 @@
 
 ---
 
-> **Post-v0.14.4 batch (commits on `main`, unreleased):** 5 commits across 3 parallel worktree agents (E/F/G). All structural — no behavior, wire-format, or public-API changes.
+> **v0.14.5 (2026-05-02)** — released [v0.14.5](https://github.com/crazycat836/GPSController/releases/tag/v0.14.5). 5 commits across 3 parallel worktree agents (E/F/G). All structural — no behavior, wire-format, or public-API changes.
 > - **wifi_tunnel_stop state machine (1 commit, agent E):** Replaces the 8-level nested try/except pyramid with an ordered `_TeardownStep` dataclass + `_run_teardown_steps(steps)` helper. `wifi_tunnel_stop` body **74 → 32 LOC** (-57%). USB-fallback rollback path also restructured via the same helper. Response shape byte-identical.
 > - **SimulationEngine `__init__` clustered dataclasses (1 commit, agent F):** `__init__` body **63 → 18 LOC**. Two private dataclasses (`_RuntimeLocks` 3 fields, `_RuntimeState` 18 fields) with a `_spread()` helper that bulk-`setattr`s onto `self`. Public attribute surface byte-identical — zero caller migration.
 > - **DevicesPopover split (3 commits, agent G):** `DevicesPopover.tsx` orchestrator **744 → 132 LOC**. Three new subview files: `DeviceListView` (174), `DeviceManageView` (242), `DeviceAddView` (203), plus shared `deviceRowParts` (103) for DRY row primitives. Subviews pull from context/hooks directly instead of receiving god-bag props. `tsc --noEmit` + `vite build` green throughout.
@@ -91,7 +91,7 @@
 - **MEDIUM (4)**: Modal primitive (4+ duplicate implementations), SimContext into 3 contexts (16-file consumer migration — overlaps with the SimContext god-component split), deeper backend i18n migration (move `code → message` table out of backend), residual frontend leaked strings.
 - **LOW (1)**: `pickFields` / parser duplication (defer until Zod adoption).
 
-**Score after post-v0.14.4 batch**: **24 of 25 HIGH (96%)** + **21 of ~25 MEDIUM (~84%)** + **9 of 10 LOW (90%)** + DevicesPopover sub-credit on the god-component HIGH item = **55 of ~60 review items resolved (~92%)**.
+**Score after v0.14.5**: **24 of 25 HIGH (96%)** + **21 of ~25 MEDIUM (~84%)** + **9 of 10 LOW (90%)** + DevicesPopover sub-credit on the god-component HIGH item = **55 of ~60 review items resolved (~92%)**.
 
 ---
 
@@ -110,7 +110,7 @@
   - Files listed above
   - Each hosts 3+ subviews / multi-step state machines. Large reach for any single edit; high regression surface.
   - Fix: extract subview components (`DeviceListView`, `DeviceManageView`, `DeviceAddView` for the popover; `BookmarkRow`, `BookmarksToolbar`, `BookmarkFooter` for the panel) into per-file modules.
-  - **DONE (agent G, post-v0.14.4)**: `DevicesPopover.tsx` 744 → **132** LOC. Three new subview files at `frontend/src/components/device/`: `DeviceListView.tsx` (174), `DeviceManageView.tsx` (242), `DeviceAddView.tsx` (203), plus shared `deviceRowParts.tsx` (103) for DRY row primitives. Subviews call `useDeviceContext()` / `useToastContext()` / `useT()` directly rather than receiving god-bag props. Public `<DevicesPopover>` API unchanged. `tsc --noEmit` + `vite build` green.
+  - **DONE (agent G, v0.14.5)**: `DevicesPopover.tsx` 744 → **132** LOC. Three new subview files at `frontend/src/components/device/`: `DeviceListView.tsx` (174), `DeviceManageView.tsx` (242), `DeviceAddView.tsx` (203), plus shared `deviceRowParts.tsx` (103) for DRY row primitives. Subviews call `useDeviceContext()` / `useToastContext()` / `useT()` directly rather than receiving god-bag props. Public `<DevicesPopover>` API unchanged. `tsc --noEmit` + `vite build` green.
   - **Remaining**: `BottomDock` (689) / `BookmarksPanel` (886) / `SimContext` (670) / `MapView` (568) / `useDevice` (556). Each is its own dedicated split; tackle individually rather than batched.
 
 - **[DONE] [HIGH] Architecture — `backend/api/wifi_tunnel.py` 673 lines with 165-line `wifi_repair` and 69-line `wifi_tunnel_stop` functions**
@@ -118,7 +118,7 @@
   - `wifi_tunnel_stop` reaches 8 levels of nested `try/except`. `wifi_repair` mixes USB selection, lockdown autopair, RemotePairing handshake, teardown.
   - Fix: extract `_select_usb_device`, `_perform_remote_pair_handshake`, `_close_remote_pair_resources`; replace nested catches with a state machine.
   - **DONE (helpers, agent B v0.14.4)**: `_select_usb_device` + `_perform_remote_pair_handshake` (with bonus `_purge_stale_remote_pair_record` companion) + `_close_remote_pair_resources` extracted; `wifi_repair` body shrank 165→~60 LOC and is now a linear sequencer (USB autopair → iOS gate → handshake in try/finally → teardown).
-  - **DONE (state machine, agent E post-v0.14.4)**: `wifi_tunnel_stop` body **74 → 32 LOC** (-57%). Replaced 8-level nested try/except with ordered `_TeardownStep` dataclass + `_run_teardown_steps` helper (Phase 1 under lock: `cancel_watchdog` + `tunnel_stop`; Phase 2 outside lock: `usb_fallback` which itself uses the same helper for its 3-step rollback). Each step's failure logged at `logger.debug(..., exc_info=True)`; response shape (`{"status": "stopped"|"not_running"}`) byte-identical to original. Follow-up noted: `_cleanup_wifi_connections()` is the next candidate for the same helper (out of scope here).
+  - **DONE (state machine, agent E v0.14.5)**: `wifi_tunnel_stop` body **74 → 32 LOC** (-57%). Replaced 8-level nested try/except with ordered `_TeardownStep` dataclass + `_run_teardown_steps` helper (Phase 1 under lock: `cancel_watchdog` + `tunnel_stop`; Phase 2 outside lock: `usb_fallback` which itself uses the same helper for its 3-step rollback). Each step's failure logged at `logger.debug(..., exc_info=True)`; response shape (`{"status": "stopped"|"not_running"}`) byte-identical to original. Follow-up noted: `_cleanup_wifi_connections()` is the next candidate for the same helper (out of scope here).
 
 - **[DONE] [HIGH] Architecture — Multiple 200+ line single-responsibility-violating loops**
   - `backend/core/movement_loop.py:42-291` `move_along_route` (~250 lines)
@@ -376,7 +376,7 @@
   - Deps include `sim` and `joystick` whole objects — their identity changes on most state updates → all consumers re-render on every WS event.
   - Fix: deconstruct only the fields the value actually consumes, or split SimContext into focused contexts (state vs handlers vs derived).
 
-- **[DONE post-v0.14.4] [MEDIUM] `__init__` of SimulationEngine sets ~25 attributes**
+- **[DONE v0.14.5] [MEDIUM] `__init__` of SimulationEngine sets ~25 attributes**
   - File: `backend/core/simulation_engine.py:150-209`
   - Fix: split into a `@dataclass` of "runtime tracking" fields and a separate state container.
   - **Fixed (agent F)**: `__init__` body **63 → 18 LOC**. Two private dataclasses introduced: `_RuntimeLocks` (3 fields: `_pause_event`, `_stop_event`, `_apply_speed_lock`; `__post_init__` presets `_pause_event` to preserve "set = running" invariant) and `_RuntimeState` (18 fields: state, current_position, snapshot, route/waypoint/lap/segment/speed tracking). A small `_spread(target, source)` helper bulk-`setattr`s every dataclass field onto `self`, so the public attribute access surface is byte-identical — zero caller migration needed across `movement_loop` / `multi_stop` / `random_walk` / `api/location`. Long-lived service handles + sub-handlers stay assigned directly. Future migration to `engine._state.foo` access is straightforward but deferred (would touch 6+ files).
