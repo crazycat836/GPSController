@@ -7,13 +7,9 @@ import {
   wifiTunnelStartAndConnect, wifiTunnelStatus, wifiTunnelStop,
 } from '../services/api'
 import { devWarn } from '../lib/dev-log'
-import {
-  deviceListEqual,
-  parseDeviceConnected,
-  parseDeviceDisconnected,
-  parseDeviceReconnected,
-} from './device/parsers'
+import { deviceListEqual } from './device/parsers'
 import type { DeviceInfo, WifiScanResult, WsSubscribe } from './device/parsers'
+import { useDeviceWs } from './device/useDeviceWs'
 
 export type { DeviceInfo, WifiScanResult, WsSubscribe } from './device/parsers'
 
@@ -54,111 +50,7 @@ export function useDevice(subscribe?: WsSubscribe) {
     clearAutoReconnectBlocks().catch((err) => devWarn('clearAutoReconnectBlocks failed', err))
   }, [])
 
-  // React to real-time device state broadcasts via the subscribe callback.
-  // See useWebSocket.ts for the rationale vs the old useState pattern.
-  //
-  // We update `devices` from the broadcast payload directly rather than
-  // re-fetching /api/device/list. Every event that reaches this handler
-  // already carries the udid + (for connect) name / ios_version /
-  // connection_type, which is enough to keep the list in sync. An
-  // earlier revision re-fetched after every event; in dev with multiple
-  // WS clients that produced dozens of /api/device/list requests per
-  // second. If a field we don't receive here is needed (e.g.
-  // developer_mode_enabled), fetch it lazily at the point of use.
-  useEffect(() => {
-    if (!subscribe) return
-    return subscribe((msg) => {
-      if (msg.type === 'device_disconnected') {
-        bumpWsGen()
-        // Group mode: only mark the specific udid disconnected when provided;
-        // fall back to clearing all for legacy single-device disconnect events.
-        const payload = parseDeviceDisconnected(msg.data)
-        const udids: readonly string[] = payload.udids ?? (payload.udid ? [payload.udid] : [])
-        // user-initiated disconnects don't warrant a "lost" pill
-        const involuntary = payload.reason !== 'user'
-        if (udids.length === 0) {
-          setConnectedDevice(null)
-          setDevices((prev) => {
-            if (involuntary) {
-              const prevConnected = prev.filter((d) => d.is_connected).map((d) => d.udid)
-              if (prevConnected.length > 0) {
-                setLostUdids((s) => { const n = new Set(s); prevConnected.forEach((u) => n.add(u)); return n })
-              }
-            }
-            return prev.map((d) => ({ ...d, is_connected: false }))
-          })
-        } else {
-          setDevices((prev) => prev.map((d) => udids.includes(d.udid) ? { ...d, is_connected: false } : d))
-          setConnectedDevice((prev) => (prev && udids.includes(prev.udid)) ? null : prev)
-          if (involuntary) {
-            setLostUdids((s) => { const n = new Set(s); udids.forEach((u) => n.add(u)); return n })
-          }
-        }
-      } else if (msg.type === 'device_connected') {
-        const payload = parseDeviceConnected(msg.data)
-        if (!payload) return
-        bumpWsGen()
-        const incoming: DeviceInfo = {
-          udid: payload.udid,
-          name: payload.name ?? '',
-          ios_version: payload.ios_version ?? '',
-          connection_type: payload.connection_type ?? 'USB',
-          is_connected: true,
-        }
-        // `merged` holds the post-update entry for this udid; we thread
-        // the same reference into both `devices` and `connectedDevice`
-        // so consumers can't observe a split where one has
-        // `developer_mode_*` fields and the other doesn't.
-        let merged: DeviceInfo = incoming
-        setDevices((prev) => {
-          const idx = prev.findIndex((d) => d.udid === payload.udid)
-          if (idx === -1) {
-            merged = incoming
-            return [...prev, incoming]
-          }
-          const existing = prev[idx]
-          // Short-circuit: if every visible field already matches, keep
-          // the existing reference so downstream useMemo / render trees
-          // don't invalidate on a no-op re-broadcast.
-          if (
-            existing.is_connected &&
-            existing.name === incoming.name &&
-            existing.ios_version === incoming.ios_version &&
-            existing.connection_type === incoming.connection_type
-          ) {
-            merged = existing
-            return prev
-          }
-          // Preserve developer_mode_* fields we may already have cached
-          // from an earlier scan — they aren't in the broadcast payload.
-          merged = { ...existing, ...incoming }
-          const next = prev.slice()
-          next[idx] = merged
-          return next
-        })
-        setConnectedDevice((prev) => prev ?? merged)
-        setLostUdids((s) => { if (!s.has(payload.udid)) return s; const n = new Set(s); n.delete(payload.udid); return n })
-      } else if (msg.type === 'device_reconnected') {
-        const payload = parseDeviceReconnected(msg.data)
-        if (!payload) return
-        bumpWsGen()
-        const { udid } = payload
-        setDevices((prev) => {
-          const idx = prev.findIndex((d) => d.udid === udid)
-          if (idx === -1) return prev
-          if (prev[idx].is_connected) return prev
-          const next = prev.slice()
-          next[idx] = { ...prev[idx], is_connected: true }
-          return next
-        })
-        setConnectedDevice((prev) => {
-          if (prev && prev.udid === udid) return { ...prev, is_connected: true }
-          return prev
-        })
-        setLostUdids((s) => { if (!s.has(udid)) return s; const n = new Set(s); n.delete(udid); return n })
-      }
-    })
-  }, [subscribe, bumpWsGen])
+  useDeviceWs(subscribe, { setDevices, setConnectedDevice, setLostUdids, bumpWsGen })
   const [scanning, setScanning] = useState(false)
   const [wifiScanning, setWifiScanning] = useState(false)
   const [wifiDevices, setWifiDevices] = useState<WifiScanResult[]>([])
