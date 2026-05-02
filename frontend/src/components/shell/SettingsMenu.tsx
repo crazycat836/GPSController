@@ -81,10 +81,13 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
       }
     }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('mousedown', handler)
+    // pointerdown (not mousedown) so the dismissal also fires for touch and
+    // pen input — Electron windows running on a touchscreen wouldn't close
+    // otherwise. Same `event.target` semantics across all input types.
+    document.addEventListener('pointerdown', handler)
     document.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('pointerdown', handler)
       document.removeEventListener('keydown', onKey)
     }
   }, [open, onClose])
@@ -209,11 +212,11 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
             <ChoiceRow
               icon={<Languages className="w-[14px] h-[14px]" />}
               label={t('settings.language')}
-              value={lang === 'zh' ? '中文' : 'English'}
+              value={lang === 'zh' ? t('lang.zh_native') : t('lang.en_native')}
               ariaLabel={t('settings.language_aria')}
               items={[
-                { id: 'zh', label: '中文', onSelect: () => setLang('zh' as Lang) },
-                { id: 'en', label: 'English', onSelect: () => setLang('en' as Lang) },
+                { id: 'zh', label: t('lang.zh_native'), onSelect: () => setLang('zh' as Lang) },
+                { id: 'en', label: t('lang.en_native'), onSelect: () => setLang('en' as Lang) },
               ]}
             />
 

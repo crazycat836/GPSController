@@ -224,8 +224,6 @@ function MapContextMenu({
           <div
             className="context-menu-item"
             style={contextMenuItemStyle}
-            onMouseEnter={highlightItem}
-            onMouseLeave={unhighlightItem}
             onClick={() => {
               onTeleport(state.lat, state.lng);
               onClose();
@@ -243,8 +241,6 @@ function MapContextMenu({
           <div
             className="context-menu-item"
             style={contextMenuItemStyle}
-            onMouseEnter={highlightItem}
-            onMouseLeave={unhighlightItem}
             onClick={() => {
               onNavigate(state.lat, state.lng);
               onClose();
@@ -272,8 +268,6 @@ function MapContextMenu({
       <div
         className="context-menu-item"
         style={contextMenuItemStyle}
-        onMouseEnter={highlightItem}
-        onMouseLeave={unhighlightItem}
         onClick={async () => {
           const txt = `${state.lat.toFixed(6)}, ${state.lng.toFixed(6)}`;
           await copyToClipboard(txt);
@@ -292,8 +286,6 @@ function MapContextMenu({
       <div
         className="context-menu-item"
         style={contextMenuItemStyle}
-        onMouseEnter={highlightItem}
-        onMouseLeave={unhighlightItem}
         onClick={() => {
           onAddBookmark(state.lat, state.lng);
           onClose();
@@ -312,8 +304,6 @@ function MapContextMenu({
           <div
             className="context-menu-item"
             style={contextMenuItemStyle}
-            onMouseEnter={highlightItem}
-            onMouseLeave={unhighlightItem}
             onClick={() => {
               onAddWaypoint(state.lat, state.lng);
               onClose();
@@ -334,22 +324,12 @@ function MapContextMenu({
   );
 }
 
+// Per-row layout overrides only. Hover state lives in `.context-menu-item:hover`
+// (legacy.css) — keeping it in CSS lets us drop the JS mouse-enter / mouse-leave
+// handlers that were both redundant and clobbering the CSS `:hover` rule with
+// an inline `style.background`.
 const contextMenuItemStyle: React.CSSProperties = {
   padding: '8px 16px',
-  cursor: 'pointer',
-  color: 'var(--color-text-1)',
-  fontSize: 13,
-  display: 'flex',
-  alignItems: 'center',
-  transition: 'background 0.15s',
 };
-
-function highlightItem(e: React.MouseEvent<HTMLDivElement>) {
-  (e.currentTarget as HTMLDivElement).style.background = 'var(--color-surface-hover)';
-}
-
-function unhighlightItem(e: React.MouseEvent<HTMLDivElement>) {
-  (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-}
 
 export default MapContextMenu;

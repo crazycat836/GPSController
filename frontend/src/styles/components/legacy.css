@@ -215,6 +215,19 @@
 .action-btn.warning { background: var(--color-warning-dim); color: var(--color-warning); border-color: rgba(255, 217, 61, 0.3); }
 .action-btn.warning:hover:not(:disabled) { background: rgba(255, 217, 61, 0.25); border-color: rgba(255, 217, 61, 0.5); }
 
+/* ── Dock action button ─────────────────────────────────────
+   BottomDock's per-tone action buttons. Tone-specific colours
+   are passed in via the `--dock-bg` / `--dock-hover-bg` CSS
+   custom properties so the hover transition can live in CSS
+   instead of JS mouse-enter/leave handlers that clobber the
+   `:hover` rule with inline `style.background`. */
+.dock-action-btn {
+  background: var(--dock-bg);
+}
+.dock-action-btn:hover:not(:disabled) {
+  background: var(--dock-hover-bg);
+}
+
 /* ── Device status ──────────────────────────────────────────── */
 .device-status {
   padding: 10px;

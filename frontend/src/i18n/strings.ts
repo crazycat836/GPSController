@@ -606,6 +606,11 @@ export const STRINGS = {
   // ── Settings (new) ─────────────────────────────
   'settings.language': { zh: '語言', en: 'Language' },
   'settings.language_aria': { zh: '語言選擇', en: 'Language selection' },
+  // Language picker labels rendered as their native script in BOTH locales —
+  // a Chinese user looking at "English" still wants to see "English", and an
+  // English user looking at the Chinese option still wants to see "中文".
+  'lang.zh_native': { zh: '中文', en: '中文' },
+  'lang.en_native': { zh: 'English', en: 'English' },
   'settings.choose_option': { zh: '選擇選項', en: 'Choose option' },
   'settings.lat_placeholder': { zh: '緯度', en: 'Lat' },
   'settings.lng_placeholder': { zh: '經度', en: 'Lng' },

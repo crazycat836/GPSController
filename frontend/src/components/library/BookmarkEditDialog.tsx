@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { MapPin, Crosshair } from 'lucide-react'
 import type { BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
 import { ICON_SIZE } from '../../lib/icons'
+import { isDefaultPlace } from '../../lib/bookmarks'
 import { useT } from '../../i18n'
 
 export interface BookmarkEditValues {
@@ -265,7 +266,7 @@ export default function BookmarkEditDialog(props: Props) {
             >
               {places.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name === '預設' || p.name === 'Default' ? t('bm.default') : p.name}
+                  {isDefaultPlace(p.name) ? t('bm.default') : p.name}
                 </option>
               ))}
             </select>
