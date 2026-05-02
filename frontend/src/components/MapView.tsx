@@ -10,6 +10,7 @@ import { useCurrentPositionMarker } from './map/useCurrentPositionMarker';
 import { usePcMarker } from './map/usePcMarker';
 import { useDestinationMarker } from './map/useDestinationMarker';
 import { useWaypointMarkers } from './map/useWaypointMarkers';
+import { useRoutePolyline } from './map/useRoutePolyline';
 
 interface MapViewProps {
   currentPosition: Position | null;
@@ -75,7 +76,6 @@ function MapView({
   useEffect(() => { onMapReadyRef.current = onMapReady; }, [onMapReady]);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const polylineRef = useRef<L.Polyline | null>(null);
   // clickMarkerRef removed — left-click no longer drops a pin.
   const radiusCircleRef = useRef<L.Circle | null>(null);
 
@@ -286,50 +286,7 @@ function MapView({
 
   useWaypointMarkers(mapRef, waypoints, t);
 
-  // Route polyline: base solid line + overlay white dashed line with a CSS
-  // stroke-dashoffset animation, giving the subtle "flowing arrow" look
-  // that locwarp ships in v0.2.48.
-  const polylineOverlayRef = useRef<L.Polyline | null>(null);
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    if (polylineRef.current) {
-      polylineRef.current.remove();
-      polylineRef.current = null;
-    }
-    if (polylineOverlayRef.current) {
-      polylineOverlayRef.current.remove();
-      polylineOverlayRef.current = null;
-    }
-
-    if (routePath.length > 1) {
-      const latlngs: L.LatLngExpression[] = routePath.map((p) => [p.lat, p.lng]);
-      // Wide faint glow (design: stroke-width 0.022, opacity 0.08).
-      // ACCENT_HEX mirrors `--color-accent`; Leaflet writes it to an SVG
-      // `stroke` attribute which doesn't resolve CSS vars.
-      const glow = L.polyline(latlngs, {
-        color: ACCENT_HEX,
-        weight: 12,
-        opacity: 0.08,
-        lineCap: 'round',
-        interactive: false,
-      }).addTo(map);
-      polylineRef.current = glow;
-      // Thin accent dashed main line (design: stroke-width 0.005,
-      // stroke-dasharray "0.012 0.016" with stroke-linecap round).
-      const main = L.polyline(latlngs, {
-        color: ACCENT_HEX,
-        weight: 2.5,
-        opacity: 0.95,
-        dashArray: '6 8',
-        lineCap: 'round',
-        className: 'route-line-flow',
-        interactive: false,
-      }).addTo(map);
-      polylineOverlayRef.current = main;
-    }
-  }, [routePath]);
+  useRoutePolyline(mapRef, routePath);
 
   // Update random walk radius circle
   useEffect(() => {
