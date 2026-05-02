@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useT } from '../i18n';
 import { getInitialPosition } from '../services/api';
-import { MARKER_HEX, ACCENT_HEX, DEVICE_COLORS_HEX } from '../lib/constants';
+import { ACCENT_HEX, DEVICE_COLORS_HEX } from '../lib/constants';
 import L from 'leaflet';
 import MapControls from './shell/MapControls';
 import MapContextMenu, { type ContextMenuState } from './MapContextMenu';
@@ -9,6 +9,7 @@ import type { LeafletMapInternal, Position, Waypoint } from './map/types';
 import { useCurrentPositionMarker } from './map/useCurrentPositionMarker';
 import { usePcMarker } from './map/usePcMarker';
 import { useDestinationMarker } from './map/useDestinationMarker';
+import { useWaypointMarkers } from './map/useWaypointMarkers';
 
 interface MapViewProps {
   currentPosition: Position | null;
@@ -67,11 +68,6 @@ function MapView({
   // route through a ref so toggling the prop mid-session takes effect.
   const onMapClickRef = useRef(onMapClick);
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
-  // The map-init useEffect only runs once, so its click handler captures the
-  // first-render `t`. Language switches then don't reach the tooltip hint.
-  // Route lookups through a ref that we keep in sync every render.
-  const tRef = useRef(t);
-  tRef.current = t;
   // onMapReady is invoked from both the init and the unmount-teardown
   // effect; routing through a ref means parents can re-render with a new
   // callback identity without retriggering either effect.
@@ -79,7 +75,6 @@ function MapView({
   useEffect(() => { onMapReadyRef.current = onMapReady; }, [onMapReady]);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const waypointMarkersRef = useRef<L.Marker[]>([]);
   const polylineRef = useRef<L.Polyline | null>(null);
   // clickMarkerRef removed — left-click no longer drops a pin.
   const radiusCircleRef = useRef<L.Circle | null>(null);
@@ -289,53 +284,7 @@ function MapView({
 
   useDestinationMarker(mapRef, destination, t('map.destination'));
 
-  // Update waypoint markers
-  const waypointSigRef = useRef<string>('');
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const sig = waypoints.map((w) => `${w.lat.toFixed(7)},${w.lng.toFixed(7)}`).join('|');
-    if (sig === waypointSigRef.current) return;
-    waypointSigRef.current = sig;
-
-    waypointMarkersRef.current.forEach((m) => m.remove());
-    waypointMarkersRef.current = [];
-
-    waypoints.forEach((wp) => {
-      // index 0 is the implicit start point; show it as "S" in green so the
-      // map matches the side panel ("起點 / Start"), and number the rest 1..N.
-      const isStart = wp.index === 0;
-      const label = isStart ? 'S' : String(wp.index);
-      // Subway-station vocabulary: thick ring + solid inner + short
-      // downward tail + soft ground shadow. Palette keeps the start/way
-      // contrast but drops the heavy gradient pin body for a flatter,
-      // more modern look.
-      const ringFill = isStart ? MARKER_HEX.start : MARKER_HEX.end;
-      const innerFill = isStart ? MARKER_HEX.startInner : MARKER_HEX.endInner;
-      const textFill = '#ffffff';
-      const wpIcon = L.divIcon({
-        className: 'waypoint-marker waypoint-marker-subway',
-        html: `<svg width="36" height="42" viewBox="0 0 36 42">
-          <ellipse cx="18" cy="39" rx="8" ry="2" fill="#000" opacity="0.18"/>
-          <path d="M18 24 L14 32 L22 32 Z" fill="${ringFill}" opacity="0.95"/>
-          <circle cx="18" cy="16" r="14" fill="#ffffff" opacity="0.96"/>
-          <circle cx="18" cy="16" r="14" fill="none" stroke="${ringFill}" stroke-width="4"/>
-          <circle cx="18" cy="16" r="9" fill="${innerFill}"/>
-          <text x="18" y="20" text-anchor="middle" fill="${textFill}" font-size="12" font-weight="600" font-family="system-ui">${label}</text>
-        </svg>`,
-        iconSize: [36, 42],
-        iconAnchor: [18, 39],
-      });
-
-      const marker = L.marker([wp.lat, wp.lng], { icon: wpIcon }).addTo(map);
-      marker.bindTooltip(
-        isStart ? tRef.current('panel.waypoint_start') : tRef.current('panel.waypoint_num', { n: wp.index }),
-        { direction: 'top', offset: [0, -14] },
-      );
-      waypointMarkersRef.current.push(marker);
-    });
-  }, [waypoints]);
+  useWaypointMarkers(mapRef, waypoints, t);
 
   // Route polyline: base solid line + overlay white dashed line with a CSS
   // stroke-dashoffset animation, giving the subtle "flowing arrow" look
