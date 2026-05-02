@@ -1,6 +1,8 @@
 import asyncio
 import ipaddress
 import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -21,6 +23,41 @@ _tunnel_watchdog_task: "asyncio.Task | None" = None
 
 _tunnel_logger = logging.getLogger("wifi_tunnel")
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _TeardownStep:
+    """One ordered step in a tunnel teardown / fallback rollback chain.
+
+    `name` shows up in debug logs when the step raises. `fn` may be sync or
+    async — `_run_teardown_steps` awaits the result if it's a coroutine.
+    """
+    name: str
+    fn: Callable[[], Awaitable[None] | None]
+
+
+async def _run_teardown_steps(steps: list[_TeardownStep]) -> list[dict[str, str]]:
+    """Run *steps* in order with a single flat try/except per step.
+
+    Errors are collected (for callers that want to inspect or surface them)
+    and logged at DEBUG with `exc_info=True` — preserving this module's
+    silent-`except` discipline. `asyncio.CancelledError` is treated as
+    expected (e.g. the cancel-and-await teardown step) and never collected.
+    """
+    errors: list[dict[str, str]] = []
+    for step in steps:
+        try:
+            result = step.fn()
+            if asyncio.iscoroutine(result):
+                await result
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            errors.append({"step": step.name, "error": str(exc)})
+            _tunnel_logger.debug(
+                "Teardown step %s failed", step.name, exc_info=True,
+            )
+    return errors
 
 
 def _validate_local_ip(value: str) -> str:
@@ -660,15 +697,78 @@ async def wifi_tunnel_status():
     return {"running": True, **(_tunnel.info or {})}
 
 
+def _cancel_watchdog() -> None:
+    """Cancel + drop the module-level watchdog task if it's still alive."""
+    global _tunnel_watchdog_task
+    task = _tunnel_watchdog_task
+    if task is None or task.done():
+        _tunnel_watchdog_task = None
+        return
+    task.cancel()
+    _tunnel_watchdog_task = None
+
+
+async def _broadcast_usb_fallback_error(udid: str) -> None:
+    from api.websocket import broadcast
+    await broadcast("device_error", {
+        "udid": udid,
+        "stage": "usb_fallback",
+        "error": "USB fallback engine creation failed",
+    })
+
+
+async def _rollback_usb_fallback(app_state, dm, udid: str) -> None:
+    """Undo a partially-completed USB fallback: terminate engine, disconnect,
+    notify the frontend. Each sub-step runs as an independent teardown step
+    so a failure in one does not skip the others."""
+    rollback_steps: list[_TeardownStep] = [
+        _TeardownStep("usb_fallback_terminate_engine",
+                      lambda: app_state.terminate_engine(udid)),
+        _TeardownStep("usb_fallback_disconnect",
+                      lambda: dm.disconnect(udid)),
+        _TeardownStep("usb_fallback_broadcast_error",
+                      lambda: _broadcast_usb_fallback_error(udid)),
+    ]
+    await _run_teardown_steps(rollback_steps)
+
+
+async def _attempt_usb_fallback(app_state, dm) -> None:
+    """If a non-Network device is still attached, reconnect it over USB and
+    spin up a new simulation engine. On engine-creation failure, roll back
+    the half-built connection so the device list never advertises a
+    connected device without a backing engine."""
+    devices = await dm.discover_devices()
+    usb_dev = next((d for d in devices if d.connection_type != "Network"), None)
+    if usb_dev is None:
+        return
+
+    udid = usb_dev.udid
+    try:
+        await dm.connect(udid)
+    except Exception:
+        _tunnel_logger.exception("USB fallback: connect failed for %s", udid)
+        return
+
+    try:
+        await app_state.create_engine_for_device(udid)
+        _tunnel_logger.info("Switched back to USB connection: %s", udid)
+    except Exception:
+        _tunnel_logger.exception(
+            "USB fallback: engine creation failed for %s; rolling back", udid,
+        )
+        await _rollback_usb_fallback(app_state, dm, udid)
+
+
 @router.post("/wifi/tunnel/stop")
 async def wifi_tunnel_stop():
     """Stop the WiFi tunnel and clean up any network-based device
     connections that were routed through it."""
-    global _tunnel_watchdog_task
     app_state = ctx.app_state
     dm = _dm()
 
     async with _tunnel.lock:
+        # Always disconnect Network devices first — even when the tunnel
+        # isn't running we may still hold stale Network entries.
         await _cleanup_wifi_connections()
 
         if not _tunnel.is_running():
@@ -676,66 +776,23 @@ async def wifi_tunnel_stop():
             _tunnel.task = None
             return {"status": "not_running"}
 
-        # Cancel watchdog first so it doesn't race on our cleanup
-        if _tunnel_watchdog_task and not _tunnel_watchdog_task.done():
-            _tunnel_watchdog_task.cancel()
-            _tunnel_watchdog_task = None
+        # Order matters: cancel the watchdog *before* tearing down the
+        # tunnel so it can't race on our cleanup; then close the tunnel
+        # task itself (TunnelRunner.stop encapsulates cancel + await +
+        # service/RSD/tunnel-ctx close).
+        shutdown_steps: list[_TeardownStep] = [
+            _TeardownStep("cancel_watchdog", _cancel_watchdog),
+            _TeardownStep("tunnel_stop", _tunnel.stop),
+        ]
+        await _run_teardown_steps(shutdown_steps)
 
-        try:
-            await _tunnel.stop()
-        except Exception:
-            _tunnel_logger.exception("Failed to stop tunnel task cleanly")
-
-    # Try to fall back to USB if a device is still plugged in.
-    # Keep both connect() and engine creation atomic under the tunnel lock —
-    # if engine creation fails, roll back the connection so the device list
-    # doesn't advertise a connected device with no engine behind it.
-    try:
-        devices = await dm.discover_devices()
-        usb_dev = next((d for d in devices if d.connection_type != "Network"), None)
-        if usb_dev:
-            try:
-                await dm.connect(usb_dev.udid)
-            except Exception:
-                _tunnel_logger.exception("USB fallback: connect failed for %s", usb_dev.udid)
-                usb_dev = None
-            if usb_dev is not None:
-                try:
-                    await app_state.create_engine_for_device(usb_dev.udid)
-                    _tunnel_logger.info("Switched back to USB connection: %s", usb_dev.udid)
-                except Exception:
-                    _tunnel_logger.exception(
-                        "USB fallback: engine creation failed for %s; rolling back",
-                        usb_dev.udid,
-                    )
-                    try:
-                        await app_state.terminate_engine(usb_dev.udid)
-                    except Exception as exc:
-                        _tunnel_logger.warning(
-                            "USB fallback rollback: terminate_engine(%s) failed (%s)",
-                            usb_dev.udid, exc.__class__.__name__, exc_info=True,
-                        )
-                    try:
-                        await dm.disconnect(usb_dev.udid)
-                    except Exception as exc:
-                        _tunnel_logger.warning(
-                            "USB fallback rollback: disconnect(%s) failed (%s)",
-                            usb_dev.udid, exc.__class__.__name__, exc_info=True,
-                        )
-                    try:
-                        from api.websocket import broadcast
-                        await broadcast("device_error", {
-                            "udid": usb_dev.udid,
-                            "stage": "usb_fallback",
-                            "error": "USB fallback engine creation failed",
-                        })
-                    except Exception as exc:
-                        _tunnel_logger.debug(
-                            "USB fallback rollback: device_error broadcast failed (%s)",
-                            exc.__class__.__name__, exc_info=True,
-                        )
-    except Exception:
-        _tunnel_logger.exception("USB fallback after tunnel stop failed")
+    # USB fallback runs outside the tunnel lock — it acquires its own
+    # device-manager locks and we don't want to hold _tunnel.lock across
+    # a network/USB discovery + connect roundtrip.
+    fallback_steps: list[_TeardownStep] = [
+        _TeardownStep("usb_fallback", lambda: _attempt_usb_fallback(app_state, dm)),
+    ]
+    await _run_teardown_steps(fallback_steps)
 
     return {"status": "stopped"}
 
