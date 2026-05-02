@@ -1,8 +1,6 @@
-import React, { useMemo } from 'react'
-import { Play, Square, Pause, ArrowRight } from 'lucide-react'
+import { useMemo } from 'react'
 import { useSimContext } from '../../contexts/SimContext'
 import { SimMode } from '../../hooks/useSimulation'
-import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT } from '../../i18n'
 import WaypointChain, { type ChainPoint } from '../WaypointChain'
 import { haversineM, polylineDistanceM } from '../../lib/geo'
@@ -11,6 +9,7 @@ import DockRouteCard from './dock/DockRouteCard'
 import RadiusRow from './dock/RadiusRow'
 import JoyPreview from './dock/JoyPreview'
 import SpeedToggle from './dock/SpeedToggle'
+import ActionGroup from './dock/ActionGroup'
 
 // Bottom dock-panel — renders the redesign/Home anatomy verbatim:
 // glass `.dock-panel` with a `panel-body` two-column grid containing
@@ -22,11 +21,9 @@ export default function BottomDock() {
   const t = useT()
   const simCtx = useSimContext()
   const {
-    sim, handleStart, handleStop, handlePause, handleResume, handleTeleport,
-    isRunning, isPaused, currentPos, destPos,
+    sim, currentPos, destPos,
     handleRemoveWaypoint, handleGenerateRandomWaypoints,
   } = simCtx
-  const { handleAddBookmark } = useBookmarkContext()
 
   const ctx = useMemo(
     () => buildDockContext(sim.mode, sim, currentPos, destPos, t),
@@ -98,134 +95,9 @@ export default function BottomDock() {
             (direction-driven) modes — hide rather than dim so the
             dock reads cleanly. */}
         {!speedToggleDisabled && <SpeedToggle />}
-        <ActionGroup
-          mode={sim.mode}
-          isRunning={isRunning}
-          isPaused={isPaused}
-          destPos={destPos}
-          waypointCount={sim.waypoints.length}
-          onStart={handleStart}
-          onStop={handleStop}
-          onPause={handlePause}
-          onResume={handleResume}
-          onTeleport={handleTeleport}
-          t={t}
-        />
+        <ActionGroup />
       </div>
     </div>
-  )
-}
-
-// ─── Action group (Start / Stop / Pause / Resume cluster) ─────
-
-interface ActionGroupProps {
-  mode: SimMode
-  isRunning: boolean
-  isPaused: boolean
-  destPos: { lat: number; lng: number } | null
-  waypointCount: number
-  onStart: () => void
-  onStop: () => void
-  onPause: () => void
-  onResume: () => void
-  onTeleport: (lat: number, lng: number) => void
-  t: ReturnType<typeof useT>
-}
-
-function ActionGroup(p: ActionGroupProps) {
-  // Teleport = one-shot "Move", disabled without dest.
-  if (p.mode === SimMode.Teleport) {
-    return (
-      <div className="flex gap-1.5">
-        <ActionBtn
-          tone="accent"
-          disabled={!p.destPos}
-          onClick={() => { if (p.destPos) p.onTeleport(p.destPos.lat, p.destPos.lng) }}
-        >
-          <ArrowRight className="w-3 h-3" strokeWidth={3} />
-          {p.t('teleport.move')}
-        </ActionBtn>
-      </div>
-    )
-  }
-
-  // Running — Pause/Resume + Stop cluster (design order: Pause first, Stop last).
-  if (p.isRunning) {
-    return (
-      <div className="flex gap-1.5">
-        {p.isPaused ? (
-          <ActionBtn tone="accent" onClick={p.onResume}>
-            <Play className="w-3 h-3" fill="currentColor" />
-            {p.t('generic.resume')}
-          </ActionBtn>
-        ) : (
-          <ActionBtn tone="ghost" onClick={p.onPause}>
-            <Pause className="w-3 h-3" fill="currentColor" />
-            {p.t('generic.pause')}
-          </ActionBtn>
-        )}
-        <ActionBtn tone="danger" onClick={p.onStop}>
-          <Square className="w-[10px] h-[10px]" fill="currentColor" />
-          {p.t('generic.stop')}
-        </ActionBtn>
-      </div>
-    )
-  }
-
-  // Idle — Start (disabled until setup is valid).
-  let disabled = false
-  if (p.mode === SimMode.Navigate) disabled = !p.destPos
-  if (p.mode === SimMode.Loop || p.mode === SimMode.MultiStop) disabled = p.waypointCount < 2
-  return (
-    <div className="flex gap-1.5">
-      <ActionBtn tone="accent" disabled={disabled} onClick={p.onStart}>
-        <Play className="w-3 h-3" fill="currentColor" />
-        {p.t('generic.start')}
-      </ActionBtn>
-    </div>
-  )
-}
-
-interface ActionBtnProps {
-  tone: 'accent' | 'danger' | 'ghost'
-  onClick: () => void
-  disabled?: boolean
-  children: React.ReactNode
-}
-
-function ActionBtn({ tone, onClick, disabled, children }: ActionBtnProps) {
-  const palette = tone === 'danger'
-    ? { bg: 'var(--color-danger-dim)', border: '1px solid rgba(255,71,87,0.35)', color: 'var(--color-danger-text)', hover: 'rgba(255,71,87,0.22)' }
-    : tone === 'ghost'
-      ? { bg: 'var(--color-surface-ghost)', border: '1px solid var(--color-border)', color: 'var(--color-text-1)', hover: 'rgba(255,255,255,0.08)' }
-      : { bg: 'var(--color-accent)', border: 'none', color: 'var(--color-surface-0)', hover: 'var(--color-accent-hover)' }
-
-  // Hover lives in `.dock-action-btn:hover` (legacy.css), driven by the
-  // `--dock-bg` / `--dock-hover-bg` custom properties below — keeps tone
-  // palettes per-instance while keeping the hover transition in CSS.
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={[
-        'dock-action-btn',
-        'inline-flex items-center justify-center gap-2 h-11 px-[18px] rounded-xl',
-        'text-[13px] font-semibold whitespace-nowrap',
-        'transition-[background,opacity,box-shadow] duration-150 cursor-pointer',
-        'disabled:opacity-40 disabled:cursor-not-allowed',
-        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] focus-visible:outline-offset-2',
-      ].join(' ')}
-      style={{
-        ['--dock-bg' as string]: palette.bg,
-        ['--dock-hover-bg' as string]: palette.hover,
-        border: palette.border,
-        color: palette.color,
-        boxShadow: tone === 'accent' && !disabled ? 'var(--shadow-glow)' : undefined,
-      } as React.CSSProperties}
-    >
-      {children}
-    </button>
   )
 }
 
