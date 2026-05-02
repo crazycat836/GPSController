@@ -2,14 +2,14 @@ import { useMemo } from 'react'
 import { useSimContext } from '../../contexts/SimContext'
 import { SimMode } from '../../hooks/useSimulation'
 import { useT } from '../../i18n'
-import WaypointChain, { type ChainPoint } from '../WaypointChain'
-import { haversineM, polylineDistanceM } from '../../lib/geo'
+import WaypointChain from '../WaypointChain'
 import Eyebrow from './dock/Eyebrow'
 import DockRouteCard from './dock/DockRouteCard'
 import RadiusRow from './dock/RadiusRow'
 import JoyPreview from './dock/JoyPreview'
 import SpeedToggle from './dock/SpeedToggle'
 import ActionGroup from './dock/ActionGroup'
+import { buildDockContext } from './dock/buildDockContext'
 
 // Bottom dock-panel — renders the redesign/Home anatomy verbatim:
 // glass `.dock-panel` with a `panel-body` two-column grid containing
@@ -99,99 +99,5 @@ export default function BottomDock() {
       </div>
     </div>
   )
-}
-
-// ─── Mode-specific meta derivation (title + subtitle) ─────────
-
-interface DockCtx {
-  title: string
-  subtitle: string
-  chainPoints: ChainPoint[]
-  loop: boolean
-}
-
-function buildDockContext(
-  mode: SimMode,
-  sim: ReturnType<typeof useSimContext>['sim'],
-  currentPos: { lat: number; lng: number } | null,
-  destPos: { lat: number; lng: number } | null,
-  t: ReturnType<typeof useT>,
-): DockCtx {
-  const wp = sim.waypoints
-  const toChain = (pts: { lat: number; lng: number }[]): ChainPoint[] =>
-    pts.map((p, i) => ({
-      id: `wp-${i}`,
-      label: i === 0 ? t('teleport.my_location') : t('panel.waypoint_num', { n: i + 1 }),
-      position: p,
-    }))
-
-  switch (mode) {
-    case SimMode.Teleport:
-      return {
-        title: destPos
-          ? `${destPos.lat.toFixed(5)}°N · ${destPos.lng.toFixed(5)}°E`
-          : t('teleport.add_destination'),
-        subtitle: t('panel.teleport_hint'),
-        chainPoints: [], loop: false,
-      }
-    case SimMode.Navigate: {
-      if (!destPos) {
-        return {
-          title: t('teleport.add_destination'),
-          subtitle: t('panel.navigate_hint'),
-          chainPoints: [], loop: false,
-        }
-      }
-      const distM = currentPos ? haversineM(currentPos, destPos) : 0
-      const distLabel = distM >= 1000 ? `${(distM / 1000).toFixed(2)} km` : `${Math.round(distM)} m`
-      return {
-        title: `${t('teleport.destination')} · ${distLabel}`,
-        subtitle: t('panel.navigate_hint'),
-        chainPoints: [], loop: false,
-      }
-    }
-    case SimMode.Loop: {
-      const count = wp.length
-      const totalDist = count >= 2 ? polylineDistanceM(wp) + haversineM(wp[count - 1], wp[0]) : 0
-      const distLabel = totalDist > 0
-        ? (totalDist >= 1000 ? ` · ${(totalDist / 1000).toFixed(1)} km` : ` · ${Math.round(totalDist)} m`)
-        : ''
-      return {
-        title: count === 0
-          ? t('panel.waypoints_none')
-          : `${t('mode.loop')} · ${count} ${t('panel.pts_short')}${distLabel}`,
-        subtitle: count === 0 ? t('panel.waypoints_empty') : t('pause.loop'),
-        chainPoints: toChain(wp),
-        loop: true,
-      }
-    }
-    case SimMode.MultiStop: {
-      const count = wp.length
-      const totalDist = count >= 2 ? polylineDistanceM(wp) : 0
-      const distLabel = totalDist > 0
-        ? (totalDist >= 1000 ? ` · ${(totalDist / 1000).toFixed(1)} km` : ` · ${Math.round(totalDist)} m`)
-        : ''
-      return {
-        title: count === 0
-          ? t('panel.waypoints_none')
-          : `${t('mode.multi_stop')} · ${count} ${t('panel.pts_short')}${distLabel}`,
-        subtitle: count === 0 ? t('panel.waypoints_empty') : t('pause.multi_stop'),
-        chainPoints: toChain(wp),
-        loop: false,
-      }
-    }
-    case SimMode.RandomWalk:
-      return {
-        title: t('mode.random_walk'),
-        subtitle: t('pause.random_walk'),
-        chainPoints: [], loop: false,
-      }
-    case SimMode.Joystick:
-      return {
-        title: t('mode.joystick'),
-        subtitle: t('panel.joystick_hint'),
-        chainPoints: [], loop: false,
-      }
-  }
 }
 
