@@ -1,5 +1,5 @@
 import { Star, MapPin, Crosshair } from 'lucide-react'
-import { useSimContext } from '../../../contexts/SimContext'
+import { useSimDerived } from '../../../contexts/SimDerivedContext'
 import { useBookmarkContext } from '../../../contexts/BookmarkContext'
 import { SimMode } from '../../../hooks/useSimulation'
 import { useT } from '../../../i18n'
@@ -16,7 +16,7 @@ interface DockRouteCardProps {
 // pins either point to bookmarks.
 export default function DockRouteCard({ mode }: DockRouteCardProps) {
   const t = useT()
-  const { currentPos, destPos } = useSimContext()
+  const { currentPos, destPos } = useSimDerived()
   const { handleAddBookmark } = useBookmarkContext()
   const showOrigin = mode === SimMode.Navigate
   return (
