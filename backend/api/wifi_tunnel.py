@@ -49,6 +49,32 @@ def _dm():
 # /wifi/connect (legacy direct-IP WiFi for iOS <17) removed in v0.1.49.
 
 
+async def _select_usb_device() -> str:
+    """Return the UDID of the first USB-attached iOS device.
+
+    Raises a structured HTTPException when usbmux is unreachable or when no
+    USB-connected device is plugged in (Network entries cannot regenerate the
+    RemotePairing record).
+    """
+    from pymobiledevice3.usbmux import list_devices as mux_list_devices
+    try:
+        raw_devices = await mux_list_devices()
+    except Exception:
+        logger.exception("usbmux list_devices failed during /wifi/repair")
+        raise http_err(500, "usbmux_unavailable", "Could not list USB devices; check that usbmuxd is running")
+
+    usb_dev = next((d for d in raw_devices if getattr(d, "connection_type", "USB") == "USB"), None)
+    if usb_dev is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "repair_needs_usb",
+                "message": "Please connect the iPhone via USB first. Re-pairing needs USB to trigger the \"Trust This Computer\" prompt.",
+            },
+        )
+    return usb_dev.serial
+
+
 @router.get("/wifi/scan")
 async def wifi_scan():
     """Scan the local network for iOS devices."""
@@ -145,32 +171,13 @@ async def wifi_repair():
          ~/.pymobiledevice3/ as a side effect of the RSD handshake.
     """
     from pymobiledevice3.lockdown import create_using_usbmux
-    from pymobiledevice3.usbmux import list_devices as mux_list_devices
     from pymobiledevice3.remote.tunnel_service import (
         CoreDeviceTunnelProxy,
         create_core_device_tunnel_service_using_rsd,
     )
     from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
 
-    try:
-        raw_devices = await mux_list_devices()
-    except Exception:
-        logger.exception("usbmux list_devices failed during /wifi/repair")
-        raise http_err(500, "usbmux_unavailable", "Could not list USB devices; check that usbmuxd is running")
-
-    # Prefer a USB-attached device (Network entries won't help us regenerate
-    # the RemotePairing record).
-    usb_dev = next((d for d in raw_devices if getattr(d, "connection_type", "USB") == "USB"), None)
-    if usb_dev is None:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "repair_needs_usb",
-                "message": "Please connect the iPhone via USB first. Re-pairing needs USB to trigger the \"Trust This Computer\" prompt.",
-            },
-        )
-
-    udid = usb_dev.serial
+    udid = await _select_usb_device()
     _tunnel_logger.info("Re-pair requested for USB device %s", udid)
 
     # Step 1: USB lockdown autopair — pops Trust prompt if USB record missing.
