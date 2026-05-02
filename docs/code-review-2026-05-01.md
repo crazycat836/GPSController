@@ -63,7 +63,7 @@
 
 ---
 
-> **Post-v0.14.3 batch (commits on `main`, unreleased):** 9 commits across 3 parallel worktree agents (A/B/C). All structural — no behavior, wire-format, or public-API changes.
+> **v0.14.4 (2026-05-02)** — released [v0.14.4](https://github.com/crazycat836/GPSController/releases/tag/v0.14.4). 9 commits across 3 parallel worktree agents (A/B/C). All structural — no behavior, wire-format, or public-API changes.
 > - **Movement loops extract (3 commits, agent A):** `movement_loop.move_along_route` body 250→178 LOC (helpers `_push_position_with_retry`, `_emit_position_update`, `_check_waypoint_progress`, `_replan_for_speed_swap`); `MultiStopNavigator.start` body 215→144 (helpers `_emit_full_route_preview`, `_navigate_to_first_waypoint`, `_run_leg`, `_pause_at_stop`, plus pure `_resolve_pause_seconds`); `RandomWalkHandler.start` body 222→137 (helpers `_run_leg`, `_pick_speed_profile`, `_handle_connection_error`, `_pause_after_arrival`; the 5-branch try/except now confined to `_run_leg` returning sentinels). 7 magic numbers promoted to module constants.
 > - **wifi_repair extract (3 commits, agent B):** `wifi_repair` body 165→~60 LOC. Extracted `_select_usb_device`, `_perform_remote_pair_handshake` (with bonus `_purge_stale_remote_pair_record` companion), `_close_remote_pair_resources` (idempotent reverse-order teardown). Caller is now a linear sequencer. The `wifi_tunnel_stop` 8-level pyramid is still untouched — deferred to a separate state-machine session.
 > - **Inline imports cleanup (3 commits, agent C):** `api/device.py` +5 hoists, `api/system.py` +1, `api/route.py` +3. `api/websocket.py` correctly skipped — `import main as _main` is a circular-import break (main.py imports websocket.router at load).
@@ -75,7 +75,7 @@
 - **MEDIUM (5)**: Modal primitive, SimContext into 3 contexts, SimulationEngine `__init__` dataclass, deeper backend i18n migration (move `code → message` table out of backend), residual frontend leaked strings.
 - **LOW (1)**: `pickFields` / parser duplication (defer until Zod adoption). Inline-imports cleanup is now FULLY DONE.
 
-**Score after post-v0.14.3 batch**: **24 of 25 HIGH (96%)** + **20 of ~25 MEDIUM (~80%)** + **9 of 10 LOW (90%)** = **53 of ~60 review items resolved (~88%)**.
+**Score after v0.14.4**: **24 of 25 HIGH (96%)** + **20 of ~25 MEDIUM (~80%)** + **9 of 10 LOW (90%)** = **53 of ~60 review items resolved (~88%)**.
 
 ---
 
@@ -108,7 +108,7 @@
   - `backend/core/random_walk.py:25-246` `RandomWalkHandler.start` (~222 lines)
   - Each contains hot-swap re-interp + per-leg execution + emit logic in one function with deep nesting.
   - Fix: extract `_run_iteration`, `_handle_pending_speed`, `_emit_position_update`, `_run_leg`, `_pause_at_stop`.
-  - **Fixed (agent A, post-v0.14.3)**: `move_along_route` body 250→178 (`_push_position_with_retry`, `_emit_position_update`, `_check_waypoint_progress`, `_replan_for_speed_swap`); `MultiStopNavigator.start` body 215→144 (`_emit_full_route_preview`, `_navigate_to_first_waypoint`, `_run_leg`, `_pause_at_stop`, plus pure `_resolve_pause_seconds`); `RandomWalkHandler.start` body 222→137 (`_run_leg` returning `_LEG_*` sentinels confines the 5-branch try/except, `_pick_speed_profile`, `_handle_connection_error`, `_pause_after_arrival`). 7 magic numbers promoted to module constants. Public signatures unchanged. Cross-cutting follow-ups noted (engine waypoint-tracker abstraction, shared `pick_speed_profile` helper) — left as judgment calls for a future pass.
+  - **Fixed (agent A, v0.14.4)**: `move_along_route` body 250→178 (`_push_position_with_retry`, `_emit_position_update`, `_check_waypoint_progress`, `_replan_for_speed_swap`); `MultiStopNavigator.start` body 215→144 (`_emit_full_route_preview`, `_navigate_to_first_waypoint`, `_run_leg`, `_pause_at_stop`, plus pure `_resolve_pause_seconds`); `RandomWalkHandler.start` body 222→137 (`_run_leg` returning `_LEG_*` sentinels confines the 5-branch try/except, `_pick_speed_profile`, `_handle_connection_error`, `_pause_after_arrival`). 7 magic numbers promoted to module constants. Public signatures unchanged. Cross-cutting follow-ups noted (engine waypoint-tracker abstraction, shared `pick_speed_profile` helper) — left as judgment calls for a future pass.
 
 ### Bugs (correctness)
 
@@ -422,10 +422,10 @@
   - `frontend/src/components/shell/SettingsMenu.tsx:84` — touch-based Electron windows may not close.
   - **Fixed**: `mousedown` → `pointerdown`. `MouseEvent`-typed handler still type-checks since `PointerEvent extends MouseEvent`.
 
-- **[DONE post-v0.14.3] [LOW] Inline imports inside functions**
+- **[DONE v0.14.4] [LOW] Inline imports inside functions**
   - `backend/api/location.py:48-49, 66, 125, 153, 186, 280, 295, 522`; `backend/api/device.py:45, 60, 114, 189, 230, 255`. Pull to top of file for readability.
   - **Done**: `api/location.py` (agent A, v0.14.3).
-  - **Done (agent C, post-v0.14.3)**: `api/device.py` +5 hoists (1 left inline: `AmfiService` — guarded by `try/except ImportError`, optional dep); `api/system.py` +1 (`ctypes`); `api/route.py` +3 (`json`, `Response` ×2 → 1).
+  - **Done (agent C, v0.14.4)**: `api/device.py` +5 hoists (1 left inline: `AmfiService` — guarded by `try/except ImportError`, optional dep); `api/system.py` +1 (`ctypes`); `api/route.py` +3 (`json`, `Response` ×2 → 1).
   - **Skipped intentionally**: `api/websocket.py:_main` — the inline `import main as _main` breaks a circular: `main.py` imports `api.websocket.router` at module load, so hoisting would deadlock the import graph and leave `main.API_TOKEN` undefined at first reference.
 
 - **[N/A — premise incorrect] [LOW] `safe_write_json` runs `json.dumps` outside the protected try**
