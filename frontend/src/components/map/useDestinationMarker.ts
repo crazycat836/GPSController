@@ -16,10 +16,8 @@ export function useDestinationMarker(
 ): void {
   const markerRef = useRef<L.Marker | null>(null);
   const sigRef = useRef<string | null>(null);
-  // Mirror the orchestrator's `tRef` pattern: stash the latest label so the
-  // destination-deps effect picks it up without subscribing to label changes.
-  // Preserves the original behavior where the tooltip text is captured at
-  // marker-creation time only.
+  // Snapshot the label via ref so locale switches between destination
+  // changes don't rebuild the marker (avoids visible flicker).
   const labelRef = useRef(destinationLabel);
   labelRef.current = destinationLabel;
 

@@ -1,7 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useT } from '../i18n';
 import { getInitialPosition } from '../services/api';
-import { ACCENT_HEX } from '../lib/constants';
 import L from 'leaflet';
 import MapControls from './shell/MapControls';
 import MapContextMenu, { type ContextMenuState } from './MapContextMenu';

@@ -71,11 +71,10 @@ function attachTileRetry(layer: L.TileLayer): void {
 }
 
 /**
- * Owns the tile-layer registry plus the swap that runs whenever `layerKey`
- * changes. The map itself must be created upstream (in the orchestrator's
- * init effect) before this hook fires — the registry is built lazily on
- * the first run that finds `mapRef.current` populated, mirroring the
- * historic init+layerKey collapse that prevents the registry-empty race.
+ * Owns the tile-layer registry and the swap that runs when `layerKey`
+ * changes. The map itself must be created upstream before this hook
+ * fires; the registry is built lazily on the first run that finds
+ * `mapRef.current` populated, which prevents a registry-empty race.
  */
 export function useMapTiles(
   mapRef: RefObject<L.Map | null>,

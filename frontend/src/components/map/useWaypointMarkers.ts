@@ -8,10 +8,9 @@ type Translator = (key: StringKey, vars?: Record<string, string | number>) => st
 
 /**
  * Owns the lifecycle of the numbered subway-station waypoint markers.
- * Skips redundant rebuilds via a position-signature hash and routes the
- * translator through a ref so language switches between waypoint changes
- * don't fight the `[waypoints]`-deps effect (mirrors the orchestrator's
- * historic `tRef` pattern).
+ * Skips redundant rebuilds via a position-signature hash. Translator
+ * goes through a ref so locale switches don't rebuild markers (avoids
+ * visible flicker).
  */
 export function useWaypointMarkers(
   mapRef: RefObject<L.Map | null>,

@@ -125,6 +125,11 @@ function AppShell() {
   const { connected: wsConnected } = useWebSocketContext()
   const { sim, joystick, handlePause, handleResume } = simCtx
 
+  const mapWaypoints = useMemo(
+    () => sim.waypoints.map((w: LatLng, i: number) => ({ ...w, index: i })),
+    [sim.waypoints],
+  )
+
   // Static preview for the ETA bar before simulation starts.
   // Only makes sense for routed modes (Navigate / Loop / MultiStop).
   const plannedDistanceM = useMemo(() => {
@@ -307,7 +312,7 @@ function AppShell() {
           currentPosition={simCtx.currentPos}
           currentPositionUnsynced={!!simCtx.currentPos && !sim.backendPositionSynced}
           destination={simCtx.destPos}
-          waypoints={sim.waypoints.map((w: LatLng, i: number) => ({ ...w, index: i }))}
+          waypoints={mapWaypoints}
           routePath={sim.routePath}
           randomWalkRadius={
             sim.mode === SimMode.RandomWalk ? simCtx.randomWalkRadius :

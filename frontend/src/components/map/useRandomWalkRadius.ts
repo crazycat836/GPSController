@@ -15,29 +15,42 @@ export function useRandomWalkRadius(
 ): void {
   const circleRef = useRef<L.Circle | null>(null);
 
+  const lat = currentPosition?.lat;
+  const lng = currentPosition?.lng;
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    if (circleRef.current) {
-      circleRef.current.remove();
-      circleRef.current = null;
+    const visible = randomWalkRadius != null && randomWalkRadius > 0 && lat != null && lng != null;
+
+    if (!visible) {
+      if (circleRef.current) {
+        circleRef.current.remove();
+        circleRef.current = null;
+      }
+      return;
     }
 
-    if (randomWalkRadius && randomWalkRadius > 0 && currentPosition) {
-      const circle = L.circle(
-        [currentPosition.lat, currentPosition.lng],
-        {
-          radius: randomWalkRadius,
-          color: DEVICE_COLORS_HEX[0],
-          weight: 2,
-          opacity: 0.6,
-          fillColor: DEVICE_COLORS_HEX[0],
-          fillOpacity: 0.08,
-          dashArray: '6, 6',
-        }
-      ).addTo(map);
-      circleRef.current = circle;
+    if (circleRef.current) {
+      circleRef.current.setLatLng([lat, lng]);
+      circleRef.current.setRadius(randomWalkRadius);
+      return;
     }
-  }, [mapRef, randomWalkRadius, currentPosition]);
+
+    circleRef.current = L.circle([lat, lng], {
+      radius: randomWalkRadius,
+      color: DEVICE_COLORS_HEX[0],
+      weight: 2,
+      opacity: 0.6,
+      fillColor: DEVICE_COLORS_HEX[0],
+      fillOpacity: 0.08,
+      dashArray: '6, 6',
+    }).addTo(map);
+
+    return () => {
+      circleRef.current?.remove();
+      circleRef.current = null;
+    };
+  }, [mapRef, randomWalkRadius, lat, lng]);
 }

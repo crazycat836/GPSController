@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import L from 'leaflet';
-import { METERS_PER_DEGREE_LAT } from '../../lib/geo';
+import { haversineM } from '../../lib/geo';
 import type { Position } from './types';
 
 /**
@@ -72,15 +72,8 @@ export function useCurrentPositionMarker(
     }
 
     const prev = prevPositionRef.current;
-    if (!prev) {
+    if (!prev || haversineM(prev, currentPosition) > AUTO_RECENTER_THRESHOLD_M) {
       map.setView(latlng, map.getZoom());
-    } else {
-      const dlat = (currentPosition.lat - prev.lat) * METERS_PER_DEGREE_LAT;
-      const dlng = (currentPosition.lng - prev.lng) * METERS_PER_DEGREE_LAT * Math.cos(currentPosition.lat * Math.PI / 180);
-      const distM = Math.sqrt(dlat * dlat + dlng * dlng);
-      if (distM > AUTO_RECENTER_THRESHOLD_M) {
-        map.setView(latlng, map.getZoom());
-      }
     }
     prevPositionRef.current = currentPosition;
   }, [mapRef, currentPosition, currentPositionUnsynced]);
