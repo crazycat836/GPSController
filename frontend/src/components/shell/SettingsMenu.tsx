@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import {
   RotateCcw, FileText, MapPin, Timer, Languages, Layers, Info,
   Sun, ChevronRight, UserCircle2,
@@ -13,6 +12,7 @@ import * as api from '../../services/api'
 import AvatarPicker from './AvatarPicker'
 import Toggle from '../ui/Toggle'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
+import Modal from '../Modal'
 import { AVATAR_PRESETS } from '../../lib/avatars'
 import pkg from '../../../package.json'
 
@@ -301,90 +301,80 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
       )}
 
       {/* Set Initial Position modal */}
-      {initialOpen && createPortal(
-        <div
-          data-fc="modal.set-initial-position"
-          onClick={() => { if (!initialBusy) setInitialOpen(false) }}
-          className="fixed inset-0 z-[var(--z-modal)] bg-black/55 backdrop-blur-sm flex items-center justify-center"
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="set-initial-position-title"
-            onClick={(e) => e.stopPropagation()}
+      <Modal
+        open={initialOpen}
+        onClose={() => setInitialOpen(false)}
+        busy={initialBusy}
+        ariaLabelledBy="set-initial-position-title"
+        dataFc="modal.set-initial-position"
+        surfaceClass="surface-popup"
+        dialogClassName="text-[var(--color-text-1)]"
+        dialogStyle={{ width: 360, padding: 24, borderRadius: 16 }}
+        actions={
+          <>
+            <button
+              onClick={() => setInitialOpen(false)}
+              disabled={initialBusy}
+              className="px-4 py-1.5 text-xs rounded-lg border border-[var(--color-border)] text-[var(--color-text-3)] hover:bg-white/5 transition-colors cursor-pointer"
+            >
+              {t('generic.cancel')}
+            </button>
+            <button
+              onClick={handleInitialSave}
+              disabled={initialBusy}
+              className={[
+                'px-4 py-1.5 text-xs font-semibold rounded-lg cursor-pointer',
+                'bg-[var(--color-accent)] text-white',
+                'hover:opacity-90 transition-opacity',
+                initialBusy ? 'opacity-60' : '',
+              ].join(' ')}
+            >
+              {t('generic.save')}
+            </button>
+          </>
+        }
+      >
+        <h3 id="set-initial-position-title" className="text-[15px] font-semibold mb-2">{t('status.set_initial')}</h3>
+        <p className="text-xs text-[var(--color-text-3)] mb-4 leading-relaxed">
+          {t('status.set_initial_prompt')}
+        </p>
+        <div className="flex gap-2 mb-2">
+          <input
+            type="text"
+            value={initialLat}
+            onChange={(e) => { setInitialLat(e.target.value); setInitialError(null) }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing && !initialBusy) handleInitialSave()
+            }}
+            autoFocus
+            placeholder={t('settings.lat_placeholder')}
             className={[
-              'w-[360px] p-6 rounded-2xl',
-              'surface-popup',
-              'text-[var(--color-text-1)]',
+              'flex-1 px-3 py-2 rounded-lg font-mono text-sm',
+              'bg-black/30 border border-[var(--color-border)]',
+              'text-[var(--color-text-1)] outline-none',
+              'focus:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors',
             ].join(' ')}
-          >
-            <h3 id="set-initial-position-title" className="text-[15px] font-semibold mb-2">{t('status.set_initial')}</h3>
-            <p className="text-xs text-[var(--color-text-3)] mb-4 leading-relaxed">
-              {t('status.set_initial_prompt')}
-            </p>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={initialLat}
-                onChange={(e) => { setInitialLat(e.target.value); setInitialError(null) }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing && !initialBusy) handleInitialSave()
-                  if (e.key === 'Escape' && !initialBusy) setInitialOpen(false)
-                }}
-                autoFocus
-                placeholder={t('settings.lat_placeholder')}
-                className={[
-                  'flex-1 px-3 py-2 rounded-lg font-mono text-sm',
-                  'bg-black/30 border border-[var(--color-border)]',
-                  'text-[var(--color-text-1)] outline-none',
-                  'focus:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors',
-                ].join(' ')}
-              />
-              <input
-                type="text"
-                value={initialLng}
-                onChange={(e) => { setInitialLng(e.target.value); setInitialError(null) }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing && !initialBusy) handleInitialSave()
-                  if (e.key === 'Escape' && !initialBusy) setInitialOpen(false)
-                }}
-                placeholder={t('settings.lng_placeholder')}
-                className={[
-                  'flex-1 px-3 py-2 rounded-lg font-mono text-sm',
-                  'bg-black/30 border border-[var(--color-border)]',
-                  'text-[var(--color-text-1)] outline-none',
-                  'focus:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors',
-                ].join(' ')}
-              />
-            </div>
-            {initialError && (
-              <p className="text-[var(--color-error-text)] text-[11px] mt-1 mb-2">{initialError}</p>
-            )}
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                onClick={() => setInitialOpen(false)}
-                disabled={initialBusy}
-                className="px-4 py-1.5 text-xs rounded-lg border border-[var(--color-border)] text-[var(--color-text-3)] hover:bg-white/5 transition-colors cursor-pointer"
-              >
-                {t('generic.cancel')}
-              </button>
-              <button
-                onClick={handleInitialSave}
-                disabled={initialBusy}
-                className={[
-                  'px-4 py-1.5 text-xs font-semibold rounded-lg cursor-pointer',
-                  'bg-[var(--color-accent)] text-white',
-                  'hover:opacity-90 transition-opacity',
-                  initialBusy ? 'opacity-60' : '',
-                ].join(' ')}
-              >
-                {t('generic.save')}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
+          />
+          <input
+            type="text"
+            value={initialLng}
+            onChange={(e) => { setInitialLng(e.target.value); setInitialError(null) }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing && !initialBusy) handleInitialSave()
+            }}
+            placeholder={t('settings.lng_placeholder')}
+            className={[
+              'flex-1 px-3 py-2 rounded-lg font-mono text-sm',
+              'bg-black/30 border border-[var(--color-border)]',
+              'text-[var(--color-text-1)] outline-none',
+              'focus:border-[var(--color-accent)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors',
+            ].join(' ')}
+          />
+        </div>
+        {initialError && (
+          <p className="text-[var(--color-error-text)] text-[11px] mt-1 mb-2">{initialError}</p>
+        )}
+      </Modal>
     </>
   )
 }
