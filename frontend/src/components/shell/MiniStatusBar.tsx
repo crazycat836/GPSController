@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react'
 import { Copy, Check, Smartphone, Usb, Wifi, MapPinOff } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
+import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useConnectionHealth } from '../../contexts/ConnectionHealthContext'
 import { useI18n, useT } from '../../i18n'
@@ -19,7 +20,8 @@ import type { DeviceInfo } from '../../hooks/useDevice'
 export default function MiniStatusBar() {
   const t = useT()
   const { lang } = useI18n()
-  const { sim, currentPos, isRunning } = useSimContext()
+  const { sim } = useSimContext()
+  const { currentPos, isRunning } = useSimDerived()
   const device = useDeviceContext()
   const health = useConnectionHealth()
   const { countryCode, country } = useReverseGeocode(currentPos, lang, { paused: isRunning })
