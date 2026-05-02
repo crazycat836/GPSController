@@ -6,6 +6,7 @@ import { METERS_PER_DEGREE_LAT } from '../lib/geo';
 import L from 'leaflet';
 import MapControls from './shell/MapControls';
 import MapContextMenu, { type ContextMenuState } from './MapContextMenu';
+import type { LeafletMapInternal, Position, Waypoint } from './map/types';
 
 /**
  * Min jump distance (m) between two consecutive `currentPosition` updates
@@ -13,30 +14,6 @@ import MapContextMenu, { type ContextMenuState } from './MapContextMenu';
  * pan/zoom intact — only teleports / large drifts grab focus.
  */
 const AUTO_RECENTER_THRESHOLD_M = 500;
-
-// Typed view of Leaflet's private control-corner registry. Leaflet exposes
-// `_controlCorners` only on the runtime instance — its public d.ts omits it.
-// Keep this list MINIMAL: only the corners we actually nudge below the
-// FloatingPanel during map init.
-type LeafletMapInternal = L.Map & {
-  _controlCorners?: {
-    topleft?: HTMLElement;
-    topright?: HTMLElement;
-    bottomleft?: HTMLElement;
-    bottomright?: HTMLElement;
-  };
-};
-
-interface Position {
-  lat: number;
-  lng: number;
-}
-
-interface Waypoint {
-  lat: number;
-  lng: number;
-  index: number;
-}
 
 interface MapViewProps {
   currentPosition: Position | null;
