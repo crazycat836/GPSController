@@ -21,7 +21,15 @@ from api._envelope import (
     unauthorized_response,
     validation_exception_handler,
 )
-from config import API_HOST, API_PORT, SETTINGS_FILE, TOKEN_FILE, DEFAULT_LOCATION, MAX_DEVICES
+from config import (
+    API_HOST,
+    API_PORT,
+    SETTINGS_FILE,
+    TOKEN_FILE,
+    DEFAULT_LOCATION,
+    MAX_DEVICES,
+    ensure_data_dir,
+)
 from core.device_manager import DeviceManager
 from services.cooldown import CooldownTimer
 from services.bookmarks import BookmarkManager
@@ -613,6 +621,11 @@ async def lifespan(application: FastAPI):
     global API_TOKEN
 
     # ── Startup ──
+    # Create ~/.gpscontroller before anything tries to write inside it
+    # (TOKEN_FILE below, settings/bookmarks/routes via API). Deferred from
+    # config.py module load so tests that import config don't hit disk.
+    ensure_data_dir()
+
     if _is_auth_disabled():
         API_TOKEN = ""
         # Remove any stale token file so dev-mode frontends can't

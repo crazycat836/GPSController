@@ -27,9 +27,6 @@ _PROFILE_MAP = {
 _TIMEOUT = httpx.Timeout(8.0, connect=4.0)
 
 
-_haversine_m = haversine_m
-
-
 def _straight_line_fallback(
     waypoints: list[tuple[float, float]],
     walking_speed_mps: float = SPEED_PROFILES["walking"]["speed_mps"],
@@ -43,7 +40,7 @@ def _straight_line_fallback(
     for i in range(len(waypoints) - 1):
         a_lat, a_lng = waypoints[i]
         b_lat, b_lng = waypoints[i + 1]
-        seg_d = _haversine_m(a_lat, a_lng, b_lat, b_lng)
+        seg_d = haversine_m(a_lat, a_lng, b_lat, b_lng)
         steps = max(1, int(seg_d / step_m))
         for s in range(1, steps + 1):
             t = s / steps
