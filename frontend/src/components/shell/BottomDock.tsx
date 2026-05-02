@@ -8,9 +8,9 @@ import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT, type StringKey } from '../../i18n'
 import WaypointChain, { type ChainPoint } from '../WaypointChain'
 import { haversineM, polylineDistanceM } from '../../lib/geo'
-import { RADIUS_PRESETS } from '../../lib/constants'
 import Eyebrow from './dock/Eyebrow'
 import DockRouteCard from './dock/DockRouteCard'
+import RadiusRow from './dock/RadiusRow'
 
 // Speed preset rail. Icons map to design's Walk/Run/Drive glyphs;
 // lucide's Footprints / Rabbit / Car are the closest analogues.
@@ -35,7 +35,6 @@ export default function BottomDock() {
     sim, handleStart, handleStop, handlePause, handleResume, handleTeleport,
     isRunning, isPaused, currentPos, destPos,
     handleRemoveWaypoint, handleGenerateRandomWaypoints,
-    randomWalkRadius, setRandomWalkRadius,
   } = simCtx
   const { handleAddBookmark } = useBookmarkContext()
 
@@ -101,13 +100,7 @@ export default function BottomDock() {
           </div>
         )}
 
-        {sim.mode === SimMode.RandomWalk && (
-          <RadiusRow
-            value={randomWalkRadius}
-            onChange={setRandomWalkRadius}
-            t={t}
-          />
-        )}
+        {sim.mode === SimMode.RandomWalk && <RadiusRow />}
 
         {sim.mode === SimMode.Joystick && <JoyPreview t={t} />}
       </div>
@@ -144,60 +137,6 @@ export default function BottomDock() {
           t={t}
         />
       </div>
-    </div>
-  )
-}
-
-// ─── Radius row (Random Walk) ─────────────────────────────────
-
-function RadiusRow({
-  value,
-  onChange,
-  t,
-}: {
-  value: number
-  onChange: (v: number) => void
-  t: ReturnType<typeof useT>
-}) {
-  const valText = value >= 1000 ? `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)} km` : `${value} m`
-  return (
-    <div className="mt-3.5 flex items-center gap-2.5 flex-wrap">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-3)]">
-        {t('panel.waypoints_radius')}
-      </span>
-      <div
-        className="flex gap-1 p-[3px] rounded-[10px] border border-[var(--color-border)]"
-        style={{ background: 'var(--color-surface-ghost)' }}
-      >
-        {RADIUS_PRESETS.map((r) => {
-          const active = r === value
-          const label = r >= 1000 ? `${r / 1000}km` : `${r}m`
-          return (
-            <button
-              key={r}
-              type="button"
-              onClick={() => onChange(r)}
-              aria-pressed={active}
-              className={[
-                'h-8 px-3 rounded-[7px] font-mono text-[12px] font-medium',
-                'transition-colors duration-120 cursor-pointer',
-                active
-                  ? 'text-[var(--color-accent-strong)]'
-                  : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
-              ].join(' ')}
-              style={active ? {
-                background: 'var(--color-accent-dim)',
-                boxShadow: 'var(--shadow-avatar-ring-subtle)',
-              } : undefined}
-            >
-              {label}
-            </button>
-          )
-        })}
-      </div>
-      <span className="ml-auto font-mono text-[13px] text-[var(--color-text-1)] font-semibold">
-        {valText}
-      </span>
     </div>
   )
 }
