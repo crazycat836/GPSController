@@ -1,4 +1,5 @@
 import { useSimContext } from '../../contexts/SimContext'
+import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useT } from '../../i18n'
 
 interface LapCountControlProps {
@@ -17,7 +18,8 @@ interface LapCountControlProps {
  * edit stack.
  */
 export default function LapCountControl({ mode }: LapCountControlProps) {
-  const { sim, isRunning } = useSimContext()
+  const { sim } = useSimContext()
+  const { isRunning } = useSimDerived()
   const t = useT()
 
   const progress = sim.lapProgress
