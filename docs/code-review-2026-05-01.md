@@ -48,6 +48,21 @@
 
 ---
 
+> **v0.14.3 batch (commits on `main`, unreleased):** 19 commits across 4 parallel agents (A/B/C/D) closing the rest of the easy wins:
+> - **Backend wifi cluster cleanup (9 commits, agent A):** silent-`except` sweep in `wifi_tunnel.py` (10 sites) + `device.py` (2); English-ified Chinese error messages in 6 modules (`location.py`, `device.py`, `wifi_tunnel.py`, `system.py`, `route.py`, `core/device_manager.py`); inline-imports hoisted in `api/location.py`. (Agent stalled on idle-timeout mid `api/device.py` inline-imports — that file's cleanup deferred.)
+> - **Frontend strings + visual LOW (7 commits, agent B):** `lib/bookmarks.ts` `isDefaultPlace()` helper used in 3 library components; `lang.zh_native` / `lang.en_native` i18n keys; hover-style mutations in `MapContextMenu` + `BottomDock` moved to CSS `:hover` (caught a real design bug — JS handlers were clobbering the `:hover` rule); dead `Dices`/`Plus` icon retainers dropped (`Repeat` is actually used); avatar storage keys migrated to canonical `gpscontroller.*` prefix with one-shot migration in `main.tsx`; `SettingsMenu` outside-click `mousedown` → `pointerdown`; `currentLang()` one-time `devWarn` when localStorage throws.
+> - **SimContext `runWithFanout` (1 commit, agent C):** module-top helper collapses 8 fan-out branches across 7 handlers; `FANOUT_MIN_DEVICES = 2` constant. `handleRestore` + `handleStop:joystick` correctly skipped (don't fit the shape).
+> - **Backend pure LOW (2 commits, agent D):** drop redundant `_haversine_m` alias; defer `DATA_DIR.mkdir()` to lifespan startup with new `ensure_data_dir()` helper. (Skipped: `safe_write_json` `json.dumps` placement — agent verified the review premise was wrong; `dumps` is already inside the protected `try` since 2026-04-19.)
+>
+> **Remaining items:**
+> - **HIGH (3)**: oversize frontend god components (BottomDock 689 / BookmarksPanel 886 / DevicesPopover 735 / SimContext 670 / MapView 568 / useDevice 556), `backend/api/wifi_tunnel.py` (673 with deeply-nested `wifi_tunnel_stop`), backend movement loops (movement_loop / multi_stop / random_walk — 200+ LOC each). The wifi-cluster silent-except is now DONE.
+> - **MEDIUM (5)**: Modal primitive, SimContext into 3 contexts, SimulationEngine `__init__` dataclass, backend Chinese i18n migration (— agent A English-ified the Chinese fallbacks; the deeper migration is moving the `code → message` table out of backend entirely), frontend leaked strings (— mostly addressed by agent B's `isDefaultPlace` + `lang.*_native`; only minor stragglers remain).
+> - **LOW (2)**: `pickFields` / parser duplication (defer until Zod adoption), inline-imports cleanup for `api/device.py` / `api/system.py` / `api/route.py` / `api/websocket.py` (Agent A's deferred work).
+
+**Score after v0.14.3**: **22 HIGH (88%)** + **20 of ~25 MEDIUM (~80%)** + **8 of 10 LOW (~80%)** = **50 of ~60 review items resolved (~83%)**.
+
+---
+
 ## HIGH Priority
 
 ### Architecture / God modules
@@ -168,13 +183,13 @@
 
 ### Error handling
 
-- **[PARTIAL] [HIGH] 37 silent `except: pass` blocks in backend**
+- **[DONE] [HIGH] 37 silent `except: pass` blocks in backend**
   - Files (clusters): `backend/api/wifi_tunnel.py` (10×: `:108`, `:285`, `:295`, `:340`, `:469`, `:492`, `:524`, etc.), `backend/api/device.py:70`, `:117`, `:177`, `backend/main.py:616`, `backend/core/ddi_mount.py` (5×), `backend/core/wifi_tunnel.py:80`, `:103`, `:105`, others.
   - Many wrap WS broadcasts (acceptable best-effort) but several wrap real cleanup that hides bugs (e.g. teardown in `wifi_tunnel.py:273-295`).
   - Fix: change every `except Exception: pass` to at least `logger.debug(..., exc_info=True)`. Promote anything in non-best-effort paths to `logger.warning`.
-  - **Done (8 sites)**: `backend/core/ddi_mount.py` ×6 (mounter close + WS broadcasts) and `backend/core/device_manager.py` ×2 (discover-shield fall-through, RSD close after failed connect). All upgraded to `logger.debug(..., exc_info=True)`.
-  - **Skipped intentionally (10 sites)**: `wait_for(stop_event, timeout=tick)` `asyncio.TimeoutError` (the timeout IS the next-tick signal — logging would emit per tick), shutdown drain `(asyncio.CancelledError, Exception)`, file-already-gone `unlink()`. These are correct Python idioms.
-  - **Remaining (~13 sites)**: the wifi-tunnel cluster (`backend/api/wifi_tunnel.py`, `backend/api/device.py`, `backend/core/wifi_tunnel.py`) — deferred to a follow-up sweep so it doesn't conflict with the parallel-agent backend-security batch.
+  - **v0.14.2 (8 sites)**: `core/ddi_mount.py` ×6, `core/device_manager.py` ×2 — all `logger.debug(..., exc_info=True)`.
+  - **v0.14.3 (12 sites)**: `api/wifi_tunnel.py` ×10 + `api/device.py` ×2 — wifi cluster fully covered.
+  - **Skipped intentionally (10 sites)**: `wait_for(stop_event, timeout=tick)` `asyncio.TimeoutError` (the timeout IS the next-tick signal), shutdown drain `(asyncio.CancelledError, Exception)`, file-already-gone `unlink()` — correct Python idioms.
 
 - **[DONE] [HIGH] `LegacyLocationService.clear` swallows DeviceLost**
   - File: `backend/services/location_service.py:252-258`
@@ -251,7 +266,7 @@
   - Fix: import `DEFAULT_PAUSE` from constants everywhere.
   - **Fixed**: `usePauseSettings.ts` now imports `DEFAULT_PAUSE` from `lib/constants` instead of redeclaring locally. (`useSimulation.ts` references already cleaned up by the earlier `usePauseSettings` extraction.)
 
-- **[MEDIUM] Per-handler fan-out branching repeated**
+- **[DONE v0.14.3] [MEDIUM] Per-handler fan-out branching repeated**
   - `frontend/src/contexts/SimContext.tsx:339, 356, 465, 480, 495, 505` — every handler does `if (udids.length >= 2) toast(t('multi.start')) ; … else single` with the same toast wrapping.
   - Fix: a `runWithFanout(action, single, multi)` helper.
 
@@ -274,12 +289,12 @@
 
 ### Hardcoded user-facing strings (i18n leakage)
 
-- **[MEDIUM] Backend Chinese error messages in 30+ places**
+- **[DONE v0.14.3] [MEDIUM] Backend Chinese error messages in 30+ places**
   - Heaviest: `backend/api/location.py:82, 114, 156, 199, 222, 243, 524`; `backend/api/device.py:54, 78-83, 225, 237, 250, 264`; `backend/api/wifi_tunnel.py:70, 94, 121-128, 132, 191, 538, 545, 654, 673`; `backend/api/system.py:61, 75`; `backend/core/device_manager.py:378-380, 561-563`.
   - The `code` field is in English (good). The `message` is Chinese-only — non-zh users see Chinese.
   - Fix: keep `code` as the source of truth; let the frontend i18n layer pick the message. Drop or English-ify the backend-side `message` fields.
 
-- **[MEDIUM] Frontend leaked strings**
+- **[DONE v0.14.3] [MEDIUM] Frontend leaked strings**
   - `frontend/src/components/library/BookmarksPanel.tsx:51-53` (`'預設'`, `'Default'`, `'Uncategorized'`) — same magic at `PlaceManagerDialog.tsx:57`, `BookmarkEditDialog.tsx:268`.
   - `frontend/src/components/shell/SettingsMenu.tsx:212, 215` (`'中文'` / `'English'`).
   - Fix: a single `isDefaultPlace(name)` helper for the bookmark special-name; add `lang.zh_native` / `lang.en_native` to `i18n/strings.ts`.
@@ -368,32 +383,42 @@
 
 ## LOW Priority
 
-- **[LOW] Inline mouseEnter/Leave style mutation**
+- **[DONE v0.14.3] [LOW] Inline mouseEnter/Leave style mutation**
   - `frontend/src/components/MapContextMenu.tsx:331-337`, `frontend/src/components/shell/BottomDock.tsx:584-585`, `frontend/src/components/library/BookmarksPanel.tsx` (multiple sites). Direct DOM writes when CSS `:hover` would do.
+  - **Fixed**: MapContextMenu + BottomDock moved to CSS `:hover` via custom properties. BookmarksPanel had zero remaining sites at HEAD (already cleaned). MapContextMenu fix also corrected a clobbered hover colour — JS handlers were overriding the design's `:hover` rule.
 
-- **[LOW] Dead `void` retainers**
+- **[DONE v0.14.3] [LOW] Dead `void` retainers**
   - `frontend/src/components/shell/BottomDock.tsx:687-689` — `void Repeat; void Dices; void Plus` to silence unused-import lint. Either use them or remove.
+  - **Fixed**: `Repeat` is actually used at line 165 — preserved. `Dices` and `Plus` were dead — both removed along with all 3 `void` retainers.
 
-- **[LOW] `_haversine_m = haversine_m` redundant alias**
+- **[DONE v0.14.3] [LOW] `_haversine_m = haversine_m` redundant alias**
   - `backend/services/route_service.py:30`.
+  - **Fixed**: alias removed; single call site uses `haversine_m` directly.
 
-- **[LOW] Storage-key prefix inconsistency**
+- **[DONE v0.14.3] [LOW] Storage-key prefix inconsistency**
   - `frontend/src/lib/storage-keys.ts:15-16` — `gpsController.*` (camelCase) vs everything else `gpscontroller.*`. Comment explains the migration; add a one-shot rename and remove the camelCase entries.
+  - **Fixed**: keys renamed to canonical `gpscontroller.avatar_selection` / `gpscontroller.avatar_custom`. New `migrateAvatarKeys()` helper called from `main.tsx` once at startup copies legacy values then deletes them; idempotent on subsequent boots.
 
-- **[LOW] `SettingsMenu` outside-click uses `mousedown`, not `pointerdown`**
+- **[DONE v0.14.3] [LOW] `SettingsMenu` outside-click uses `mousedown`, not `pointerdown`**
   - `frontend/src/components/shell/SettingsMenu.tsx:84` — touch-based Electron windows may not close.
+  - **Fixed**: `mousedown` → `pointerdown`. `MouseEvent`-typed handler still type-checks since `PointerEvent extends MouseEvent`.
 
-- **[LOW] Inline imports inside functions**
+- **[PARTIAL v0.14.3] [LOW] Inline imports inside functions**
   - `backend/api/location.py:48-49, 66, 125, 153, 186, 280, 295, 522`; `backend/api/device.py:45, 60, 114, 189, 230, 255`. Pull to top of file for readability.
+  - **Done**: `api/location.py` (agent A).
+  - **Deferred**: `api/device.py` + `api/system.py` + `api/route.py` + `api/websocket.py` (agent A stalled on idle-timeout mid-cleanup; partial diff was discarded). Cheap follow-up.
 
-- **[LOW] `safe_write_json` runs `json.dumps` outside the protected try**
+- **[N/A — premise incorrect] [LOW] `safe_write_json` runs `json.dumps` outside the protected try**
   - `backend/services/json_safe.py:86-124` — a serialisation error short-circuits the cleanup path.
+  - **Verified**: the `try:` opens at line 93 and `body = json.dumps(payload, ...)` sits inside it at line 98 (verified at HEAD~2 too — layout unchanged since `1c0b1fb` 2026-04-19). Serialisation errors ARE caught by the outer `except Exception`; at that point `tmp_path is None` so the cleanup block is a safe no-op. No bug to fix.
 
-- **[LOW] Export `currentLang()` ignores localStorage failures silently**
+- **[DONE v0.14.3] [LOW] Export `currentLang()` ignores localStorage failures silently**
   - `frontend/src/services/api.ts:109-115` — Electron sandbox could disable storage; user gets nav-language fallback indefinitely with no log.
+  - **Fixed**: module-level `warnedLocalStorage` flag fires `devWarn` once on the first throw; subsequent calls skip the warn.
 
-- **[LOW] Module side-effect: `DATA_DIR.mkdir()` at import time**
+- **[DONE v0.14.3] [LOW] Module side-effect: `DATA_DIR.mkdir()` at import time**
   - `backend/config.py:8` — awkward for tests.
+  - **Fixed**: `DATA_DIR.mkdir()` removed from import path; new `ensure_data_dir()` helper called as the FIRST statement of `main.py` lifespan startup, before any file I/O. Tests no longer trigger a real `~/.gpscontroller/` creation just from importing `config`.
 
 - **[LOW] `pickFields` / parser duplication**
   - `frontend/src/hooks/useSimulation.ts:103-205` — each `parseXxx` has identical asObject / asString / asNumber pull pattern. Adopt Zod (already mandated by the TS rules).
