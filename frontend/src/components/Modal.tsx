@@ -1,0 +1,121 @@
+import { useCallback, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useModalDismiss } from '../hooks/useModalDismiss'
+
+export type ModalSize = 'sm' | 'md' | 'lg'
+
+export interface ModalProps {
+  open: boolean
+  onClose: () => void
+  /** Optional title rendered inside `.modal-title`. Pass JSX for icon+text rows. */
+  title?: ReactNode
+  children: ReactNode
+  /** Optional action bar (typically Cancel + Confirm); rendered in `.modal-actions`. */
+  actions?: ReactNode
+  size?: ModalSize
+  /** Default `true`. When `false`, backdrop clicks are ignored. */
+  closeOnBackdropClick?: boolean
+  /** Default `true`. When `false`, Escape key is ignored. */
+  closeOnEsc?: boolean
+  /** Default `true`. Wraps the dialog with Tab focus containment. */
+  focusTrap?: boolean
+  /** Blocks both backdrop dismiss and Escape — for in-flight async actions. */
+  busy?: boolean
+  /** Optional accessible label; falls back to `title` when it's a string. */
+  ariaLabel?: string
+  /** Element id used for `aria-labelledby` (when caller renders its own h-tag). */
+  ariaLabelledBy?: string
+  /** Extra class names appended to `.modal-dialog`; lets callers tune width or surface. */
+  dialogClassName?: string
+  /** Inline style override on `.modal-dialog` — used for one-off width tweaks. */
+  dialogStyle?: React.CSSProperties
+  /** Forwarded to the overlay's `data-fc` attribute (analytics breadcrumbs). */
+  dataFc?: string
+}
+
+const SIZE_WIDTH_PX: Record<ModalSize, number> = {
+  sm: 300,
+  md: 360,
+  lg: 420,
+}
+
+/**
+ * Reusable modal scaffold built on the existing `.modal-overlay` /
+ * `.modal-dialog` / `.modal-actions` styles. Reuses `useFocusTrap` and
+ * `useModalDismiss` so callers don't reimplement Tab containment, Escape
+ * dismissal, or focus restoration.
+ *
+ * `children` is the body; the optional `actions` prop renders the trailing
+ * button row. Pass `busy` to block dismissal while an async operation is
+ * mid-flight (e.g. saving).
+ */
+export default function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  actions,
+  size = 'md',
+  closeOnBackdropClick = true,
+  closeOnEsc = true,
+  focusTrap = true,
+  busy = false,
+  ariaLabel,
+  ariaLabelledBy,
+  dialogClassName,
+  dialogStyle,
+  dataFc,
+}: ModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  const handleBackdropClick = useCallback(() => {
+    if (busy || !closeOnBackdropClick) return
+    onClose()
+  }, [busy, closeOnBackdropClick, onClose])
+
+  // Disable Esc handling when caller opts out by passing `closeOnEsc=false`.
+  // Implemented via a noop dismiss + busy=true so we keep focus restoration.
+  useModalDismiss({
+    open,
+    onDismiss: closeOnEsc ? onClose : noop,
+    busy: busy || !closeOnEsc,
+  })
+  useFocusTrap(dialogRef, open && focusTrap)
+
+  if (!open) return null
+
+  const resolvedAriaLabel =
+    ariaLabel ?? (typeof title === 'string' ? title : undefined)
+  const widthPx = SIZE_WIDTH_PX[size]
+  const mergedStyle: React.CSSProperties = { width: widthPx, ...dialogStyle }
+  const mergedDialogClass = dialogClassName
+    ? `modal-dialog ${dialogClassName}`
+    : 'modal-dialog'
+
+  return createPortal(
+    <div
+      data-fc={dataFc}
+      className="modal-overlay anim-fade-in"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={resolvedAriaLabel}
+        aria-labelledby={ariaLabelledBy}
+        className={mergedDialogClass}
+        style={mergedStyle}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {title != null && <div className="modal-title">{title}</div>}
+        {children}
+        {actions != null && <div className="modal-actions">{actions}</div>}
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+function noop() {}
