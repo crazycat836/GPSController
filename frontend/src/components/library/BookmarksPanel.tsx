@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import {
   Plus, Bookmark as BookmarkIcon, Pencil, Trash2, Copy,
-  FolderInput, Layers, Tag as TagIconLucide, Check, X, ClipboardList, StickyNote,
+  FolderInput, Tag as TagIconLucide, Check, X, ClipboardList, StickyNote,
   ClipboardPaste, Clock, ListTree,
 } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
@@ -20,6 +20,7 @@ import BookmarkEditDialog, { type BookmarkEditValues } from './BookmarkEditDialo
 import PlaceManagerDialog, { getPlaceColor } from './PlaceManagerDialog'
 import TagManagerDialog, { getTagColor } from './TagManagerDialog'
 import BulkCoordsDialog from './BulkCoordsDialog'
+import BookmarksFooter from './BookmarksFooter'
 
 interface BookmarksPanelProps {
   onBookmarkClick: (lat: number, lng: number) => void
@@ -761,71 +762,12 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         onCancel={() => setConfirm(null)}
       />
 
-      {/* Fixed footer — manage-places + manage-tags + primary Add CTA. */}
-      <div
-        className="sticky bottom-0 left-0 right-0 -mx-4 px-4 pt-4 pb-4 flex gap-2 items-center"
-        style={{
-          background: 'linear-gradient(180deg, rgba(15,16,20,0) 0%, rgba(15,16,20,0.96) 30%)',
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => setPlaceMgrOpen(true)}
-          disabled={selectionMode}
-          className={[
-            'inline-flex items-center justify-center gap-1.5 h-11 px-3 rounded-[12px]',
-            'text-[12px] font-semibold shrink-0',
-            'bg-white/[0.04] border border-[var(--color-border)]',
-            'hover:bg-white/[0.08]',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
-            'transition-colors duration-150 cursor-pointer',
-          ].join(' ')}
-          style={{ color: 'var(--color-text-1)' }}
-          title={t('bm.manage_places')}
-        >
-          <Layers width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-          <span>{t('bm.manage_places')}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setTagMgrOpen(true)}
-          disabled={selectionMode}
-          className={[
-            'inline-flex items-center justify-center gap-1.5 h-11 px-3 rounded-[12px]',
-            'text-[12px] font-semibold shrink-0',
-            'bg-white/[0.04] border border-[var(--color-border)]',
-            'hover:bg-white/[0.08]',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
-            'transition-colors duration-150 cursor-pointer',
-          ].join(' ')}
-          style={{ color: 'var(--color-text-1)' }}
-          title={t('bm.manage_tags')}
-        >
-          <TagIconLucide width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-          <span>{t('bm.manage_tags')}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setEditing({ mode: 'create' })}
-          disabled={selectionMode}
-          className={[
-            'flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-[12px]',
-            'text-[13px] font-semibold',
-            'transition-[transform,box-shadow,opacity] duration-150',
-            'hover:-translate-y-px',
-            'disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0',
-            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)] focus-visible:outline-offset-2',
-          ].join(' ')}
-          style={{
-            background: 'var(--color-accent)',
-            color: 'white',
-            boxShadow: 'var(--shadow-glow)',
-          }}
-        >
-          <Plus width={ICON_SIZE.sm} height={ICON_SIZE.sm} strokeWidth={2.5} />
-          {t('bm.add')}
-        </button>
-      </div>
+      <BookmarksFooter
+        disabled={selectionMode}
+        onManagePlaces={() => setPlaceMgrOpen(true)}
+        onManageTags={() => setTagMgrOpen(true)}
+        onAdd={() => setEditing({ mode: 'create' })}
+      />
     </div>
   )
 }
