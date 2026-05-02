@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import urllib.parse
@@ -5,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from config import ROUTES_FILE
@@ -73,9 +75,7 @@ async def rename_saved(route_id: str, req: _RouteRenameRequest):
 async def export_all_saved_routes():
     """Export every saved route as a single JSON bundle."""
     payload = {"routes": [r.model_dump(mode="json") for r in _store.list()]}
-    from fastapi.responses import Response
-    import json as _json
-    body = _json.dumps(payload, ensure_ascii=False, indent=2)
+    body = json.dumps(payload, ensure_ascii=False, indent=2)
     return Response(content=body, media_type="application/json",
                     headers={"Content-Disposition": 'attachment; filename="gpscontroller-routes.json"'})
 
@@ -174,7 +174,6 @@ async def export_gpx(route_id: str):
         f'attachment; filename="{ascii_name}"; '
         f"filename*=UTF-8''{utf8_encoded}"
     )
-    from fastapi.responses import Response
     return Response(
         content=gpx_xml,
         media_type="application/gpx+xml",
