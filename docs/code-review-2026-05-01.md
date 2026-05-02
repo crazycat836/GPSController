@@ -63,6 +63,22 @@
 
 ---
 
+> **Post-v0.14.3 batch (commits on `main`, unreleased):** 9 commits across 3 parallel worktree agents (A/B/C). All structural — no behavior, wire-format, or public-API changes.
+> - **Movement loops extract (3 commits, agent A):** `movement_loop.move_along_route` body 250→178 LOC (helpers `_push_position_with_retry`, `_emit_position_update`, `_check_waypoint_progress`, `_replan_for_speed_swap`); `MultiStopNavigator.start` body 215→144 (helpers `_emit_full_route_preview`, `_navigate_to_first_waypoint`, `_run_leg`, `_pause_at_stop`, plus pure `_resolve_pause_seconds`); `RandomWalkHandler.start` body 222→137 (helpers `_run_leg`, `_pick_speed_profile`, `_handle_connection_error`, `_pause_after_arrival`; the 5-branch try/except now confined to `_run_leg` returning sentinels). 7 magic numbers promoted to module constants.
+> - **wifi_repair extract (3 commits, agent B):** `wifi_repair` body 165→~60 LOC. Extracted `_select_usb_device`, `_perform_remote_pair_handshake` (with bonus `_purge_stale_remote_pair_record` companion), `_close_remote_pair_resources` (idempotent reverse-order teardown). Caller is now a linear sequencer. The `wifi_tunnel_stop` 8-level pyramid is still untouched — deferred to a separate state-machine session.
+> - **Inline imports cleanup (3 commits, agent C):** `api/device.py` +5 hoists, `api/system.py` +1, `api/route.py` +3. `api/websocket.py` correctly skipped — `import main as _main` is a circular-import break (main.py imports websocket.router at load).
+>
+> **Verification:** `pytest -q` 10/10 green after every individual commit and after final 3-way merge into `main`.
+
+**Remaining items:**
+- **HIGH (2)**: oversize frontend god components (BottomDock 689 / BookmarksPanel 886 / DevicesPopover 735 / SimContext 670 / MapView 568 / useDevice 556); `wifi_tunnel_stop` state-machine refactor (the 8-level nested try/except — judgment-heavy, needs a design pass).
+- **MEDIUM (5)**: Modal primitive, SimContext into 3 contexts, SimulationEngine `__init__` dataclass, deeper backend i18n migration (move `code → message` table out of backend), residual frontend leaked strings.
+- **LOW (1)**: `pickFields` / parser duplication (defer until Zod adoption). Inline-imports cleanup is now FULLY DONE.
+
+**Score after post-v0.14.3 batch**: **24 of 25 HIGH (96%)** + **20 of ~25 MEDIUM (~80%)** + **9 of 10 LOW (90%)** = **53 of ~60 review items resolved (~88%)**.
+
+---
+
 ## HIGH Priority
 
 ### Architecture / God modules
@@ -79,17 +95,20 @@
   - Each hosts 3+ subviews / multi-step state machines. Large reach for any single edit; high regression surface.
   - Fix: extract subview components (`DeviceListView`, `DeviceManageView`, `DeviceAddView` for the popover; `BookmarkRow`, `BookmarksToolbar`, `BookmarkFooter` for the panel) into per-file modules.
 
-- **[HIGH] Architecture — `backend/api/wifi_tunnel.py` 673 lines with 165-line `wifi_repair` and 69-line `wifi_tunnel_stop` functions**
+- **[PARTIAL — helpers DONE; state-machine deferred] [HIGH] Architecture — `backend/api/wifi_tunnel.py` 673 lines with 165-line `wifi_repair` and 69-line `wifi_tunnel_stop` functions**
   - File: `backend/api/wifi_tunnel.py:138-303` (`wifi_repair`), `562-630` (`wifi_tunnel_stop`)
   - `wifi_tunnel_stop` reaches 8 levels of nested `try/except`. `wifi_repair` mixes USB selection, lockdown autopair, RemotePairing handshake, teardown.
   - Fix: extract `_select_usb_device`, `_perform_remote_pair_handshake`, `_close_remote_pair_resources`; replace nested catches with a state machine.
+  - **DONE (helpers, agent B)**: `_select_usb_device` + `_perform_remote_pair_handshake` (with bonus `_purge_stale_remote_pair_record` companion) + `_close_remote_pair_resources` extracted; `wifi_repair` body shrank 165→~60 LOC and is now a linear sequencer (USB autopair → iOS gate → handshake in try/finally → teardown).
+  - **Deferred**: the `wifi_tunnel_stop` 8-level nested try/except → state machine. Judgment-heavy enough that it deserves its own design pass rather than being parallel-dispatched.
 
-- **[HIGH] Architecture — Multiple 200+ line single-responsibility-violating loops**
+- **[DONE] [HIGH] Architecture — Multiple 200+ line single-responsibility-violating loops**
   - `backend/core/movement_loop.py:42-291` `move_along_route` (~250 lines)
   - `backend/core/multi_stop.py:23-237` `MultiStopNavigator.start` (~215 lines)
   - `backend/core/random_walk.py:25-246` `RandomWalkHandler.start` (~222 lines)
   - Each contains hot-swap re-interp + per-leg execution + emit logic in one function with deep nesting.
   - Fix: extract `_run_iteration`, `_handle_pending_speed`, `_emit_position_update`, `_run_leg`, `_pause_at_stop`.
+  - **Fixed (agent A, post-v0.14.3)**: `move_along_route` body 250→178 (`_push_position_with_retry`, `_emit_position_update`, `_check_waypoint_progress`, `_replan_for_speed_swap`); `MultiStopNavigator.start` body 215→144 (`_emit_full_route_preview`, `_navigate_to_first_waypoint`, `_run_leg`, `_pause_at_stop`, plus pure `_resolve_pause_seconds`); `RandomWalkHandler.start` body 222→137 (`_run_leg` returning `_LEG_*` sentinels confines the 5-branch try/except, `_pick_speed_profile`, `_handle_connection_error`, `_pause_after_arrival`). 7 magic numbers promoted to module constants. Public signatures unchanged. Cross-cutting follow-ups noted (engine waypoint-tracker abstraction, shared `pick_speed_profile` helper) — left as judgment calls for a future pass.
 
 ### Bugs (correctness)
 
@@ -403,10 +422,11 @@
   - `frontend/src/components/shell/SettingsMenu.tsx:84` — touch-based Electron windows may not close.
   - **Fixed**: `mousedown` → `pointerdown`. `MouseEvent`-typed handler still type-checks since `PointerEvent extends MouseEvent`.
 
-- **[PARTIAL v0.14.3] [LOW] Inline imports inside functions**
+- **[DONE post-v0.14.3] [LOW] Inline imports inside functions**
   - `backend/api/location.py:48-49, 66, 125, 153, 186, 280, 295, 522`; `backend/api/device.py:45, 60, 114, 189, 230, 255`. Pull to top of file for readability.
-  - **Done**: `api/location.py` (agent A).
-  - **Deferred**: `api/device.py` + `api/system.py` + `api/route.py` + `api/websocket.py` (agent A stalled on idle-timeout mid-cleanup; partial diff was discarded). Cheap follow-up.
+  - **Done**: `api/location.py` (agent A, v0.14.3).
+  - **Done (agent C, post-v0.14.3)**: `api/device.py` +5 hoists (1 left inline: `AmfiService` — guarded by `try/except ImportError`, optional dep); `api/system.py` +1 (`ctypes`); `api/route.py` +3 (`json`, `Response` ×2 → 1).
+  - **Skipped intentionally**: `api/websocket.py:_main` — the inline `import main as _main` breaks a circular: `main.py` imports `api.websocket.router` at module load, so hoisting would deadlock the import graph and leave `main.API_TOKEN` undefined at first reference.
 
 - **[N/A — premise incorrect] [LOW] `safe_write_json` runs `json.dumps` outside the protected try**
   - `backend/services/json_safe.py:86-124` — a serialisation error short-circuits the cleanup path.
