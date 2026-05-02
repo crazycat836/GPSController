@@ -1,6 +1,7 @@
 import asyncio
 import ipaddress
 import logging
+import socket
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -469,11 +470,32 @@ async def _scan_subnet_for_port(port: int = 49152) -> list[str]:
     return hits
 
 
+async def _resolve_hostname(ip: str, *, timeout: float = 2.0) -> str | None:
+    """Reverse-DNS lookup. Returns a friendly hostname or None on failure.
+
+    Strips trailing dots and the `.local` suffix that Bonjour-aware routers
+    typically advertise. Rejects names equal to the IP (no-op resolution)."""
+    loop = asyncio.get_running_loop()
+    try:
+        info = await asyncio.wait_for(
+            loop.run_in_executor(None, socket.gethostbyaddr, ip),
+            timeout=timeout,
+        )
+    except (socket.herror, socket.gaierror, OSError, asyncio.TimeoutError):
+        return None
+    name = (info[0] or "").rstrip(".").removesuffix(".local").rstrip(".")
+    if not name or name == ip:
+        return None
+    return name
+
+
 @router.get("/wifi/tunnel/discover")
 async def wifi_tunnel_discover():
     """Find iPhones on the local network. First tries mDNS (Bonjour RemotePairing
     broadcast); if that yields nothing, falls back to a /24 subnet TCP scan on the
-    standard RemotePairing port (49152)."""
+    standard RemotePairing port (49152). TCP-scan hits get a parallel reverse-DNS
+    lookup so devices broadcasting a hostname (e.g. `Johns-iPhone.local`) show a
+    real name instead of duplicating the IP."""
     results: list[dict] = []
 
     # --- 1) mDNS / Bonjour broadcast ---
@@ -499,12 +521,13 @@ async def wifi_tunnel_discover():
         _tunnel_logger.info("mDNS empty; falling back to /24 TCP scan on port 49152")
         try:
             hits = await _scan_subnet_for_port(49152)
-            for ip in hits:
+            names = await asyncio.gather(*(_resolve_hostname(ip) for ip in hits))
+            for ip, resolved in zip(hits, names):
                 results.append({
                     "ip": ip,
                     "port": 49152,
                     "host": ip,
-                    "name": ip,
+                    "name": resolved or ip,
                     "method": "tcp_scan",
                 })
         except Exception as e:
