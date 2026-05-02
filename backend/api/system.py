@@ -58,7 +58,7 @@ async def open_log():
     except Exception as exc:
         logger.exception("Failed to open log path %s", target)
         raise HTTPException(status_code=500, detail={"code": "open_log_failed",
-                                                     "message": f"無法開啟 log:{exc}"})
+                                                     "message": f"Could not open log: {exc}"})
     return {"status": "opened", "path": str(target)}
 
 
@@ -72,5 +72,5 @@ async def open_log_folder():
     except Exception as exc:
         logger.exception("Failed to open log folder %s", log_dir)
         raise HTTPException(status_code=500, detail={"code": "open_log_failed",
-                                                     "message": f"無法開啟資料夾:{exc}"})
+                                                     "message": f"Could not open folder: {exc}"})
     return {"status": "opened", "path": str(log_dir)}

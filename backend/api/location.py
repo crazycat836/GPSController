@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import traceback
 
@@ -5,8 +6,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from api._errors import http_err
+from api.websocket import broadcast
+from config import resolve_speed_profile
 from services.location_service import DeviceLostError, unwrap_device_lost
 from context import ctx
+from utils.geo import validate_coords
 
 from models.schemas import (
     MovementMode,
@@ -42,7 +46,6 @@ async def _resolve_target_udid(app_state, dm, requested_udid: str | None) -> str
     device → first discovered device (with retries). Raises an HTTPException
     with code ``no_device`` when nothing is reachable.
     """
-    import asyncio as _asyncio
     _log = logging.getLogger("gpscontroller")
 
     connected = dm.connected_udids
@@ -59,11 +62,11 @@ async def _resolve_target_udid(app_state, dm, requested_udid: str | None) -> str
                 return discovered[0].udid
         except Exception:
             _log.exception("discover_devices failed during lazy rebuild (attempt %d)", attempt + 1)
-        await _asyncio.sleep(_DISCOVER_RETRY_DELAY_S)
+        await asyncio.sleep(_DISCOVER_RETRY_DELAY_S)
 
     raise HTTPException(
         status_code=400,
-        detail={"code": "no_device", "message": "尚未連接任何 iOS 裝置,請先透過 USB 連線"},
+        detail={"code": "no_device", "message": "No iOS device connected; connect via USB first"},
     )
 
 
@@ -133,7 +136,7 @@ async def _engine(udid: str | None = None):
         status_code=400,
         detail={
             "code": "no_device",
-            "message": "裝置連線已失效,請嘗試重新插拔 USB 或重新啟動 GPSController(詳見 ~/.gpscontroller/logs/backend.log)",
+            "message": "Device connection invalid; try re-plugging USB or restarting GPSController (see ~/.gpscontroller/logs/backend.log)",
         },
     )
 
@@ -144,8 +147,6 @@ async def _handle_device_lost(exc: Exception) -> "HTTPException":
     `device_disconnected` WebSocket event so the frontend can banner it.
     Returns an HTTPException the caller should raise."""
     app_state = ctx.app_state
-    from api.websocket import broadcast
-
     dm = app_state.device_manager
     lost_udids = dm.connected_udids
     for udid in lost_udids:
@@ -175,7 +176,7 @@ async def _handle_device_lost(exc: Exception) -> "HTTPException":
         status_code=503,
         detail={
             "code": "device_lost",
-            "message": "裝置連線中斷(USB 拔除或 Tunnel 死亡),請重新插上 USB 後再操作",
+            "message": "Device connection lost (USB unplugged or tunnel died); please reconnect USB and try again",
         },
     )
 
@@ -205,7 +206,6 @@ async def apply_speed(req: ApplySpeedRequest):
     """Hot-swap the active navigation's speed profile. The current
     _move_along_route loop re-interpolates from the current position
     with the new speed; already-completed progress is kept."""
-    from config import resolve_speed_profile
     engine = await _engine(req.udid)
     profile = resolve_speed_profile(
         req.mode.value,
@@ -218,7 +218,7 @@ async def apply_speed(req: ApplySpeedRequest):
         raise HTTPException(
             status_code=400,
             detail={"code": "no_active_route",
-                    "message": "目前沒有進行中的路線,無法套用新速度"},
+                    "message": "No active route; cannot apply a new speed"},
         )
     return {"status": "applied", "speed_mps": profile["speed_mps"]}
 
@@ -241,7 +241,7 @@ async def teleport(req: TeleportRequest):
             status_code=429,
             detail={
                 "code": "cooldown_active",
-                "message": f"冷卻中,還需等待 {int(cooldown.remaining)} 秒",
+                "message": f"Cooldown active; wait {int(cooldown.remaining)} more seconds",
                 "remaining_seconds": cooldown.remaining,
             },
         )
@@ -260,7 +260,7 @@ async def teleport(req: TeleportRequest):
         nested = unwrap_device_lost(e)
         if nested is not None:
             raise (await _handle_device_lost(nested))
-        raise http_err(500, "teleport_failed", "跳點失敗,請查看 ~/.gpscontroller/logs/backend.log")
+        raise http_err(500, "teleport_failed", "Teleport failed; see ~/.gpscontroller/logs/backend.log")
 
     # Start cooldown if enabled and there was a previous position.
     # Skipped in dual mode for the same reason the check above is skipped.
@@ -295,7 +295,6 @@ _bg_tasks: set = set()
 
 
 def _spawn(coro):
-    import asyncio
     task = asyncio.create_task(coro)
     _bg_tasks.add(task)
 
@@ -309,13 +308,11 @@ def _spawn(coro):
         # device_disconnected instead of a silently-dead engine.
         nested = unwrap_device_lost(exc)
         if nested is not None:
-            import asyncio as _asyncio
-            cleanup = _asyncio.create_task(_handle_device_lost(nested))
+            cleanup = asyncio.create_task(_handle_device_lost(nested))
             _bg_tasks.add(cleanup)
             cleanup.add_done_callback(lambda t: _bg_tasks.discard(t))
             return
-        import logging as _logging
-        _logging.getLogger("gpscontroller").exception(
+        logging.getLogger("gpscontroller").exception(
             "background task crashed: %s", exc, exc_info=exc
         )
 
@@ -329,7 +326,7 @@ async def navigate(req: NavigateRequest):
     if engine.current_position is None:
         raise HTTPException(
             status_code=400,
-            detail={"code": "no_position", "message": "尚未取得目前位置,請先跳點到一個座標"},
+            detail={"code": "no_position", "message": "No current position; teleport to a coordinate first"},
         )
     _spawn(engine.navigate(
         Coordinate(lat=req.lat, lng=req.lng), req.mode,
@@ -391,7 +388,7 @@ async def joystick_start(req: JoystickStartRequest):
         raise
     except Exception:
         logger.exception("joystick_start failed")
-        raise http_err(500, "joystick_start_failed", "搖桿啟動失敗,請查看 ~/.gpscontroller/logs/backend.log")
+        raise http_err(500, "joystick_start_failed", "Joystick start failed; see ~/.gpscontroller/logs/backend.log")
     return {"status": "started", "mode": req.mode}
 
 
@@ -535,7 +532,6 @@ async def set_initial_position(req: _InitialPosRequest):
         # frontend still gets the device's last-known coordinate on relaunch.
         new_pos: dict | None = None
     else:
-        from utils.geo import validate_coords
         if not validate_coords(req.lat, req.lng):
             raise http_err(400, "invalid_coord", "lat must be in [-90, 90], lng in [-180, 180]")
         new_pos = {"lat": float(req.lat), "lng": float(req.lng)}
