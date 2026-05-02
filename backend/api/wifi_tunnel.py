@@ -148,6 +148,44 @@ async def _perform_remote_pair_handshake(
         )
 
 
+async def _close_remote_pair_resources(resources: dict) -> None:
+    """Idempotently close every resource opened by the RemotePairing handshake.
+
+    Safe to call when the handshake never started, succeeded fully, or failed
+    mid-way — each entry in *resources* may be ``None``. Closers run in
+    reverse-open order; close errors are swallowed (logged at DEBUG) so a
+    partial teardown can still finish the rest.
+    """
+    # Service / RSD / tunnel-context first; CoreDeviceTunnelProxy last.
+    for closer in (
+        lambda: resources["tunnel_svc"] and resources["tunnel_svc"].close(),
+        lambda: resources["rsd"] and resources["rsd"].close(),
+        lambda: resources["tunnel_ctx"] and resources["tunnel_ctx"].__aexit__(None, None, None),
+    ):
+        try:
+            r = closer()
+            if hasattr(r, "__await__"):
+                await r
+        except Exception as exc:
+            _tunnel_logger.debug(
+                "Re-pair cleanup: closer raised (%s); ignoring",
+                exc.__class__.__name__, exc_info=True,
+            )
+    try:
+        if resources["proxy"] is not None:
+            # CoreDeviceTunnelProxy.close() is a coroutine — mirror the
+            # await-if-awaitable pattern used for the closers above so we
+            # don't leak a "was never awaited" warning.
+            r = resources["proxy"].close()
+            if hasattr(r, "__await__"):
+                await r
+    except Exception as exc:
+        _tunnel_logger.debug(
+            "Re-pair cleanup: proxy.close() raised (%s); ignoring",
+            exc.__class__.__name__, exc_info=True,
+        )
+
+
 async def _select_usb_device() -> str:
     """Return the UDID of the first USB-attached iOS device.
 
@@ -306,34 +344,7 @@ async def wifi_repair():
                 lockdown, udid, ios_version, resources,
             )
         finally:
-            # Close everything in reverse order; ignore errors.
-            for closer in (
-                lambda: resources["tunnel_svc"] and resources["tunnel_svc"].close(),
-                lambda: resources["rsd"] and resources["rsd"].close(),
-                lambda: resources["tunnel_ctx"] and resources["tunnel_ctx"].__aexit__(None, None, None),
-            ):
-                try:
-                    r = closer()
-                    if hasattr(r, "__await__"):
-                        await r
-                except Exception as exc:
-                    _tunnel_logger.debug(
-                        "Re-pair cleanup: closer raised (%s); ignoring",
-                        exc.__class__.__name__, exc_info=True,
-                    )
-            try:
-                if resources["proxy"] is not None:
-                    # CoreDeviceTunnelProxy.close() is a coroutine — mirror
-                    # the await-if-awaitable pattern used for the closers
-                    # above so we don't leak a "was never awaited" warning.
-                    r = resources["proxy"].close()
-                    if hasattr(r, "__await__"):
-                        await r
-            except Exception as exc:
-                _tunnel_logger.debug(
-                    "Re-pair cleanup: proxy.close() raised (%s); ignoring",
-                    exc.__class__.__name__, exc_info=True,
-                )
+            await _close_remote_pair_resources(resources)
 
     return {
         "status": "paired",
