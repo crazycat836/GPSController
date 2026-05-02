@@ -2,18 +2,11 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useT } from '../i18n';
 import { getInitialPosition } from '../services/api';
 import { MARKER_HEX, ACCENT_HEX, DEVICE_COLORS_HEX } from '../lib/constants';
-import { METERS_PER_DEGREE_LAT } from '../lib/geo';
 import L from 'leaflet';
 import MapControls from './shell/MapControls';
 import MapContextMenu, { type ContextMenuState } from './MapContextMenu';
 import type { LeafletMapInternal, Position, Waypoint } from './map/types';
-
-/**
- * Min jump distance (m) between two consecutive `currentPosition` updates
- * that triggers the camera to re-centre. Below this we keep the user's
- * pan/zoom intact — only teleports / large drifts grab focus.
- */
-const AUTO_RECENTER_THRESHOLD_M = 500;
+import { useCurrentPositionMarker } from './map/useCurrentPositionMarker';
 
 interface MapViewProps {
   currentPosition: Position | null;
@@ -84,11 +77,6 @@ function MapView({
   useEffect(() => { onMapReadyRef.current = onMapReady; }, [onMapReady]);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  // Stores an `L.Marker` (not a CircleMarker) — the current-position pin is
-  // a div-icon marker (see the `L.marker(...)` call below), so we need the
-  // marker-specific API (setIcon, setLatLng) without `as any` bandaids.
-  const currentMarkerRef = useRef<L.Marker | null>(null);
-  const prevPositionRef = useRef<Position | null>(null);
   const destMarkerRef = useRef<L.Marker | null>(null);
   const waypointMarkersRef = useRef<L.Marker[]>([]);
   const pcMarkerRef = useRef<L.Marker | null>(null);
@@ -295,70 +283,7 @@ function MapView({
     };
   }, []);
 
-  // Update current position marker — move existing marker instead of recreating.
-  // When currentPosition becomes null (e.g. after Settings → 清除虛擬定位) remove the marker.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (!currentPosition) {
-      if (currentMarkerRef.current) {
-        try { currentMarkerRef.current.remove(); } catch { /* ignore */ }
-        currentMarkerRef.current = null;
-      }
-      prevPositionRef.current = null;
-      return;
-    }
-
-    const latlng: L.LatLngExpression = [currentPosition.lat, currentPosition.lng];
-
-    const pinClasses = currentPositionUnsynced
-      ? 'map-pin-current map-pin-current--unsynced'
-      : 'map-pin-current';
-    const icon = L.divIcon({
-      className: 'current-pos-marker',
-      html: `<div data-fc="map.position-marker" class="${pinClasses}"></div>`,
-      iconSize: [44, 44],
-      iconAnchor: [22, 22],
-    });
-
-    if (currentMarkerRef.current) {
-      currentMarkerRef.current.setLatLng(latlng);
-      // Swap the icon so the pin reflects the current synced/unsynced state
-      // without recreating the Leaflet marker (preserves tooltip binding).
-      currentMarkerRef.current.setIcon(icon);
-      currentMarkerRef.current.setTooltipContent(
-        `${currentPosition.lat.toFixed(6)}, ${currentPosition.lng.toFixed(6)}`
-      );
-    } else {
-      const marker = L.marker(latlng, {
-        icon,
-        zIndexOffset: 1000,
-      }).addTo(map);
-
-      marker.bindTooltip(
-        `${currentPosition.lat.toFixed(6)}, ${currentPosition.lng.toFixed(6)}`,
-        { direction: 'top', offset: [0, -20] }
-      );
-
-      currentMarkerRef.current = marker;
-    }
-
-    // Only auto-center on first position or teleport (jump beyond
-    // AUTO_RECENTER_THRESHOLD_M). Cheap planar approximation is fine
-    // for a binary > threshold check.
-    const prev = prevPositionRef.current;
-    if (!prev) {
-      map.setView(latlng, map.getZoom());
-    } else {
-      const dlat = (currentPosition.lat - prev.lat) * METERS_PER_DEGREE_LAT;
-      const dlng = (currentPosition.lng - prev.lng) * METERS_PER_DEGREE_LAT * Math.cos(currentPosition.lat * Math.PI / 180);
-      const distM = Math.sqrt(dlat * dlat + dlng * dlng);
-      if (distM > AUTO_RECENTER_THRESHOLD_M) {
-        map.setView(latlng, map.getZoom());
-      }
-    }
-    prevPositionRef.current = currentPosition;
-  }, [currentPosition, currentPositionUnsynced]);
+  const prevPositionRef = useCurrentPositionMarker(mapRef, currentPosition, currentPositionUnsynced);
 
   // PC geolocation marker — separate from the virtual GPS avatar. Added /
   // updated / removed in response to the LocatePcButton feature so users
