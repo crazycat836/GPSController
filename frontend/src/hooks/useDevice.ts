@@ -1,15 +1,13 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import { DEFAULT_TUNNEL_PORT } from '../lib/constants'
 import {
   listDevices, connectDevice, disconnectDevice, forgetDevice,
   clearAutoReconnectBlocks,
-  wifiConnect, wifiScan,
-  wifiTunnelStartAndConnect, wifiTunnelStatus, wifiTunnelStop,
 } from '../services/api'
 import { devWarn } from '../lib/dev-log'
 import { deviceListEqual } from './device/parsers'
-import type { DeviceInfo, WifiScanResult, WsSubscribe } from './device/parsers'
+import type { DeviceInfo, WsSubscribe } from './device/parsers'
 import { useDeviceWs } from './device/useDeviceWs'
+import { useWifiTunnel } from './device/useWifiTunnel'
 
 export type { DeviceInfo, WifiScanResult, WsSubscribe } from './device/parsers'
 
@@ -51,9 +49,10 @@ export function useDevice(subscribe?: WsSubscribe) {
   }, [])
 
   useDeviceWs(subscribe, { setDevices, setConnectedDevice, setLostUdids, bumpWsGen })
+
+  const wifi = useWifiTunnel({ setDevices, setConnectedDevice })
+
   const [scanning, setScanning] = useState(false)
-  const [wifiScanning, setWifiScanning] = useState(false)
-  const [wifiDevices, setWifiDevices] = useState<WifiScanResult[]>([])
 
   // See `SCAN_COALESCE_MS` at module top — coalesces burst polls.
   const lastPollAtRef = useRef(0)
@@ -211,105 +210,6 @@ export function useDevice(subscribe?: WsSubscribe) {
     [],
   )
 
-  const connectWifi = useCallback(
-    async (ip: string) => {
-      try {
-        const res = await wifiConnect(ip)
-        const info: DeviceInfo = {
-          udid: res.udid,
-          name: res.name,
-          ios_version: res.ios_version,
-          connection_type: 'Network',
-          is_connected: true,
-        }
-        setConnectedDevice(info)
-        // Preserve list ordering: replace in-place if already present,
-        // append only when the udid is new. The previous filter+append
-        // pattern always re-appended a known device to the end, which
-        // made WS-arrived ordering and WiFi-arrived ordering disagree.
-        setDevices((prev) => {
-          const idx = prev.findIndex((d) => d.udid === info.udid)
-          if (idx === -1) return [...prev, info]
-          const next = [...prev]
-          next[idx] = info
-          return next
-        })
-        return info
-      } catch (err) {
-        devWarn('WiFi connect failed:', err)
-        throw err
-      }
-    },
-    [],
-  )
-
-  const scanWifi = useCallback(async () => {
-    setWifiScanning(true)
-    try {
-      const results = await wifiScan()
-      const list: WifiScanResult[] = Array.isArray(results) ? results : []
-      setWifiDevices(list)
-      return list
-    } catch (err) {
-      devWarn('WiFi scan failed:', err)
-      return []
-    } finally {
-      setWifiScanning(false)
-    }
-  }, [])
-
-  const [tunnelStatus, setTunnelStatus] = useState<{ running: boolean; rsd_address?: string; rsd_port?: number }>({ running: false })
-
-  const startWifiTunnel = useCallback(
-    async (ip: string, port = DEFAULT_TUNNEL_PORT) => {
-      try {
-        const res = await wifiTunnelStartAndConnect(ip, port)
-        const info: DeviceInfo = {
-          udid: res.udid,
-          name: res.name,
-          ios_version: res.ios_version,
-          connection_type: 'Network',
-          is_connected: true,
-        }
-        setConnectedDevice(info)
-        // Preserve list ordering — see `connectWifi` for rationale.
-        setDevices((prev) => {
-          const idx = prev.findIndex((d) => d.udid === info.udid)
-          if (idx === -1) return [...prev, info]
-          const next = [...prev]
-          next[idx] = info
-          return next
-        })
-        setTunnelStatus({ running: true, rsd_address: res.rsd_address, rsd_port: res.rsd_port })
-        return info
-      } catch (err) {
-        devWarn('WiFi tunnel failed:', err)
-        throw err
-      }
-    },
-    [],
-  )
-
-  const checkTunnelStatus = useCallback(async () => {
-    try {
-      const res = await wifiTunnelStatus()
-      setTunnelStatus(res)
-      return res
-    } catch {
-      setTunnelStatus({ running: false })
-      return { running: false }
-    }
-  }, [])
-
-  const stopTunnel = useCallback(async () => {
-    try {
-      await wifiTunnelStop()
-      setTunnelStatus({ running: false })
-    } catch (err) {
-      devWarn('Failed to stop tunnel:', err)
-    }
-  }, [])
-
   // Group-mode derived state: every device in `devices` marked is_connected.
   // `primaryDevice` is the first one (ordering = connection order preserved
   // because scan() preserves backend list order).
@@ -329,6 +229,10 @@ export function useDevice(subscribe?: WsSubscribe) {
   // a listed value actually changes. Without this memo the Provider
   // value is a fresh object every render, and including `device` in
   // any useEffect dep array produces an infinite re-render loop.
+  const {
+    wifiScanning, wifiDevices, tunnelStatus,
+    scanWifi, connectWifi, startWifiTunnel, checkTunnelStatus, stopTunnel,
+  } = wifi
   return useMemo(
     () => ({
       devices, connectedDevice, scanning, scan, connect, disconnect, forget,
