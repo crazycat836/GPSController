@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 # ConnectionError / OSError. Sleep is `_RECONNECT_BACKOFF_BASE_S * (attempt + 1)`
 # across the 3-attempt loop, so total worst-case stall is ~3.0s.
 _RECONNECT_BACKOFF_BASE_S = 0.5
+_PUSH_RETRY_ATTEMPTS = 3
+_MIN_SPEED_FOR_ETA_MPS = 0.001
 
 
 # Waypoint-pass detection thresholds (meters).
@@ -43,6 +45,143 @@ _RECONNECT_BACKOFF_BASE_S = 0.5
 WP_HARD_HIT_M = 15.0   # within this radius, count it as a direct hit
 WP_NEAR_M = 60.0       # got close enough to plausibly count as visiting
 WP_RECEDE_M = 12.0     # how far past the running min before declaring passed
+
+
+async def _push_position_with_retry(
+    engine: "SimulationEngine", lat: float, lng: float,
+) -> bool:
+    """Push a single (lat, lng) to the device with linear-backoff retries.
+
+    Returns True if the push eventually succeeded. ``DeviceLostError`` and
+    ``CancelledError`` propagate so callers can stop the route cleanly.
+    """
+    for attempt in range(_PUSH_RETRY_ATTEMPTS):
+        try:
+            await engine._set_position(lat, lng)
+            return True
+        except (ConnectionError, OSError) as exc:
+            logger.warning(
+                "position push failed (attempt %d/%d): %s",
+                attempt + 1, _PUSH_RETRY_ATTEMPTS, exc,
+            )
+            await asyncio.sleep(_RECONNECT_BACKOFF_BASE_S * (attempt + 1))
+        except asyncio.CancelledError:
+            raise
+        except DeviceLostError:
+            # Bubble up so api.location._spawn() can broadcast
+            # device_disconnected. Silently swallowing here left
+            # the frontend showing "connected" after a lost tunnel.
+            raise
+        except Exception:
+            logger.exception("Unexpected error pushing position")
+            return False
+    return False
+
+
+async def _emit_position_update(
+    engine: "SimulationEngine",
+    *,
+    lat: float,
+    lng: float,
+    bearing: float,
+    speed_mps: float,
+    accumulated_distance: float,
+    total_distance: float,
+    idx: int,
+) -> None:
+    """Update tracking counters and emit a single ``position_update``."""
+    engine.distance_remaining = max(total_distance - accumulated_distance, 0.0)
+    engine.eta_tracker.update(accumulated_distance)
+    engine.segment_index = min(idx, engine.total_segments)
+
+    combined_remaining = engine.distance_remaining + engine._route_offset_remaining
+    combined_eta = combined_remaining / max(speed_mps, _MIN_SPEED_FOR_ETA_MPS)
+
+    await engine._emit("position_update", {
+        "lat": lat,
+        "lng": lng,
+        "bearing": bearing,
+        "speed_mps": speed_mps,
+        "progress": engine.eta_tracker.progress,
+        "distance_remaining": combined_remaining,
+        "distance_traveled": engine.distance_traveled,
+        "eta_seconds": combined_eta,
+    })
+
+
+async def _check_waypoint_progress(
+    engine: "SimulationEngine",
+    *,
+    lat: float,
+    lng: float,
+    user_wps: list[Coordinate],
+    wp_min_dist: float,
+) -> float:
+    """Detect when the device has passed the next user-named waypoint.
+
+    Returns the (possibly reset) running minimum distance to the next
+    waypoint. See WP_* constants above for the hit/pass heuristics.
+    """
+    if not user_wps or engine._user_waypoint_next >= len(user_wps):
+        return wp_min_dist
+
+    target = user_wps[engine._user_waypoint_next]
+    d = RouteInterpolator.haversine(lat, lng, target.lat, target.lng)
+    if d < wp_min_dist:
+        wp_min_dist = d
+    hit_close = d <= WP_HARD_HIT_M
+    hit_passed = (
+        wp_min_dist <= WP_NEAR_M
+        and d > wp_min_dist + WP_RECEDE_M
+    )
+    if hit_close or hit_passed:
+        engine._user_waypoint_next += 1
+        wp_min_dist = float("inf")
+        await engine._emit("waypoint_progress", {
+            "current_index": engine._user_waypoint_next - 1,
+            "next_index": min(engine._user_waypoint_next, len(user_wps) - 1),
+            "total": len(user_wps),
+        })
+    return wp_min_dist
+
+
+def _replan_for_speed_swap(
+    engine: "SimulationEngine",
+    timed_points: list[dict],
+    cutoff_idx: int,
+) -> list[Coordinate]:
+    """Build a fresh planned-coords list starting from the current device
+    position when ``apply_speed`` was called mid-route.
+
+    Also commits the pending speed profile to ``_active_speed_profile`` and
+    syncs ``_active_route_coords`` so a subsequent ``apply_speed`` slices
+    against the right list.
+    """
+    cutoff_seg = timed_points[cutoff_idx].get("seg_idx", 0)
+    tail_waypoints = engine._active_route_coords[cutoff_seg + 1:]
+    cur_pos = engine.current_position
+    if cur_pos is not None and tail_waypoints:
+        planned_coords = [Coordinate(lat=cur_pos.lat, lng=cur_pos.lng)] + list(tail_waypoints)
+    else:
+        # Nothing ahead — just let the loop exit naturally.
+        planned_coords = []
+
+    engine._active_speed_profile = engine._pending_speed_profile
+    engine._pending_speed_profile = None
+    # Critical: also sync _active_route_coords to the new plan so
+    # a *subsequent* apply_speed slices against the right list.
+    # Otherwise the next cutoff_seg (relative to the now-shorter
+    # planned_coords) would index back into the original full leg
+    # and the device would jump back toward the leg's start.
+    engine._active_route_coords = list(planned_coords)
+    logger.info(
+        "Hot-swapped speed to %.2f m/s; replanning %d remaining waypoints (cur=%s, cutoff_seg=%d)",
+        engine._active_speed_profile["speed_mps"],
+        len(planned_coords),
+        f"{cur_pos.lat:.6f},{cur_pos.lng:.6f}" if cur_pos else "None",
+        cutoff_seg,
+    )
+    return planned_coords
 
 
 async def move_along_route(
@@ -86,14 +225,7 @@ async def move_along_route(
     # polyline points. The next-target index lives on the engine so
     # multi-leg handlers (multi_stop, loop) can persist progress
     # across consecutive move_along_route calls.
-    #
-    # OSRM snaps off-road taps to the nearest road, so the routed path
-    # rarely passes within a strict radius of the user's literal click.
-    # We therefore track the minimum distance seen toward the next
-    # target and consider it "passed" when either we got *close enough*
-    # OR we got reasonably close and have started moving away.
     user_wps = list(engine._user_waypoints)
-    # Thresholds (WP_HARD_HIT_M / WP_NEAR_M / WP_RECEDE_M) live at module scope.
     wp_min_dist = float("inf")
     if user_wps:
         await engine._emit("waypoint_progress", {
@@ -162,72 +294,31 @@ async def move_along_route(
             # Add GPS jitter for realism
             jittered_lat, jittered_lng = RouteInterpolator.add_jitter(lat, lng, jitter)
 
-            pushed = False
-            for attempt in range(3):
-                try:
-                    await engine._set_position(jittered_lat, jittered_lng)
-                    pushed = True
-                    break
-                except (ConnectionError, OSError) as exc:
-                    logger.warning(
-                        "position push failed (attempt %d/3): %s", attempt + 1, exc,
-                    )
-                    await asyncio.sleep(_RECONNECT_BACKOFF_BASE_S * (attempt + 1))
-                except asyncio.CancelledError:
-                    raise
-                except DeviceLostError:
-                    # Bubble up so api.location._spawn() can broadcast
-                    # device_disconnected. Silently swallowing here left
-                    # the frontend showing "connected" after a lost tunnel.
-                    raise
-                except Exception:
-                    logger.exception("Unexpected error pushing position")
-                    break
-            if not pushed:
+            if not await _push_position_with_retry(engine, jittered_lat, jittered_lng):
                 logger.error("Giving up on this route after repeated push failures")
                 break
 
-            # Update tracking
             engine.distance_traveled += step_dist
-            engine.distance_remaining = max(total_distance - accumulated_distance, 0.0)
-            engine.eta_tracker.update(accumulated_distance)
-            engine.segment_index = min(idx, engine.total_segments)
-
-            combined_remaining = engine.distance_remaining + engine._route_offset_remaining
-            combined_eta = combined_remaining / max(speed_mps, 0.001)
-
-            await engine._emit("position_update", {
-                "lat": jittered_lat,
-                "lng": jittered_lng,
-                "bearing": bearing,
-                "speed_mps": speed_mps,
-                "progress": engine.eta_tracker.progress,
-                "distance_remaining": combined_remaining,
-                "distance_traveled": engine.distance_traveled,
-                "eta_seconds": combined_eta,
-            })
+            await _emit_position_update(
+                engine,
+                lat=jittered_lat,
+                lng=jittered_lng,
+                bearing=bearing,
+                speed_mps=speed_mps,
+                accumulated_distance=accumulated_distance,
+                total_distance=total_distance,
+                idx=idx,
+            )
 
             prev_lat, prev_lng = lat, lng
 
-            # Waypoint hit detection (see WP_* constants above).
-            if user_wps and engine._user_waypoint_next < len(user_wps):
-                target = user_wps[engine._user_waypoint_next]
-                d = RouteInterpolator.haversine(jittered_lat, jittered_lng, target.lat, target.lng)
-                if d < wp_min_dist:
-                    wp_min_dist = d
-                hit_close = d <= WP_HARD_HIT_M
-                hit_passed = (
-                    wp_min_dist <= WP_NEAR_M
-                    and d > wp_min_dist + WP_RECEDE_M
-                )
-                if hit_close or hit_passed:
-                    engine._user_waypoint_next += 1
-                    wp_min_dist = float("inf")
-                    await engine._emit("waypoint_progress", {
-                        "current_index": engine._user_waypoint_next - 1,
-                        "next_index": min(engine._user_waypoint_next, len(user_wps) - 1),
-                        "total": len(user_wps),
-                    })
+            wp_min_dist = await _check_waypoint_progress(
+                engine,
+                lat=jittered_lat,
+                lng=jittered_lng,
+                user_wps=user_wps,
+                wp_min_dist=wp_min_dist,
+            )
 
             # Wait for the next tick (unless this is the last point)
             if idx < len(timed_points) - 1:
@@ -245,31 +336,8 @@ async def move_along_route(
 
         # Did we break out to re-interpolate with a new speed?
         if reinterpolate_from_point is not None and engine._pending_speed_profile is not None:
-            # New plan: current position + the remaining original waypoints
-            # starting *after* the segment we were just traversing.
-            cutoff_seg = timed_points[reinterpolate_from_point].get("seg_idx", 0)
-            tail_waypoints = engine._active_route_coords[cutoff_seg + 1:]
-            cur_pos = engine.current_position
-            if cur_pos is not None and tail_waypoints:
-                planned_coords = [Coordinate(lat=cur_pos.lat, lng=cur_pos.lng)] + list(tail_waypoints)
-            else:
-                # Nothing ahead — just let the loop exit naturally.
-                planned_coords = []
-
-            engine._active_speed_profile = engine._pending_speed_profile
-            engine._pending_speed_profile = None
-            # Critical: also sync _active_route_coords to the new plan so
-            # a *subsequent* apply_speed slices against the right list.
-            # Otherwise the next cutoff_seg (relative to the now-shorter
-            # planned_coords) would index back into the original full leg
-            # and the device would jump back toward the leg's start.
-            engine._active_route_coords = list(planned_coords)
-            logger.info(
-                "Hot-swapped speed to %.2f m/s; replanning %d remaining waypoints (cur=%s, cutoff_seg=%d)",
-                engine._active_speed_profile["speed_mps"],
-                len(planned_coords),
-                f"{cur_pos.lat:.6f},{cur_pos.lng:.6f}" if cur_pos else "None",
-                cutoff_seg,
+            planned_coords = _replan_for_speed_swap(
+                engine, timed_points, reinterpolate_from_point,
             )
             if planned_coords:
                 continue  # outer while — build a fresh plan
