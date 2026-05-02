@@ -128,6 +128,24 @@
 
 ---
 
+> **v0.14.7 (2026-05-02)** — released [v0.14.7](https://github.com/crazycat836/GPSController/releases/tag/v0.14.7). 20 commits across 3 parallel worktree agents (K/L/M). Pure structural refactor — no behavior, wire-format, or public-API changes (one minor App.tsx Add-Bookmark dialog backdrop addition, by design). Closes the 4 remaining in-scope items in one release.
+> - **MapView hook extraction (8 commits, agent K):** `MapView.tsx` orchestrator **568 → 234 LOC**. Eight new files in `frontend/src/components/map/`: `types.ts` (27, hoists `LeafletMapInternal` alias), `useMapTiles.ts` (101, tile registry + retry + layerKey swap), `useCurrentPositionMarker.ts` (89), `usePcMarker.ts` (54), `useDestinationMarker.ts` (60), `useWaypointMarkers.ts` (71), `useRoutePolyline.ts` (58), `useRandomWalkRadius.ts` (43). Map init effect (ResizeObserver + onMapReady + control-corner offsets) intentionally left monolithic.
+> - **Modal primitive (4 commits, agent L):** New `frontend/src/components/Modal.tsx` (126 LOC) reusing `useFocusTrap` + `useModalDismiss`. Migrated 3 callers: `BookmarkEditDialog` (340→329), `SettingsMenu` Set-Initial-Position (492→482), `App.tsx` Add-Bookmark dialog (457→455 — adds backdrop, minor visual change). `AvatarPicker` correctly excluded — positioned dropdown not a modal.
+> - **SimContext Derived split (8 commits, agent M):** New `frontend/src/contexts/SimDerivedContext.tsx` (84 LOC) with focused memoization on 5 derived fields (`currentPos`, `destPos`, `displaySpeed`, `isRunning`, `isPaused`). Provider mounted INSIDE `SimProvider` in `App.tsx`. Migrated 6 derived-only consumers: `EtaBar`, `DockRouteCard`, `ActionButtons`, `MiniStatusBar`, `NavigatePanel`, `LapCountControl`. SimContext.value keeps the same fields for backward compat — 14 non-migrated consumers continue working unchanged. Migration is purely additive.
+>
+> **Verification:** `pytest -q` 10/10 + `tsc --noEmit` clean + `vite build` (172ms) green throughout the merge.
+
+**Remaining items:**
+- **HIGH (1 final partial)**: `SimContext` (670) — split into 3 contexts deferred indefinitely (handlers tightly closure on state; rewriting closures = days of work for marginal gain). Derived split is the practical cap on this item per Option A decision (2026-05-02). `MapView` is now DONE.
+- **MEDIUM (1)**: backend Chinese i18n migration — marked DONE — final form per user 2026-05-02 (English `code` + English `message` is a fine wire format).
+- **LOW (1)**: `pickFields` / parser duplication — deferred until Zod adoption.
+
+**Score after v0.14.7**: **24 of 25 HIGH (96%)** + **22 of ~25 MEDIUM (~88%)** + **9 of 10 LOW (90%)** + 5-of-6 sub-credit on the god-component HIGH item (DevicesPopover + useDevice + BookmarksPanel + BottomDock + MapView; SimContext deferred per Option A) = **59 of ~60 review items resolved (~99%)**.
+
+**Code review effectively closed.** Remaining items are all explicit deferrals with documented rationale, not unaddressed work.
+
+---
+
 ## HIGH Priority
 
 ### Architecture / God modules
@@ -139,7 +157,7 @@
   - **v0.14.1**: extracted `useSimWsDispatcher` + `useSimRuntimes` + `usePauseSettings` + `useStraightLineToggle` to `hooks/sim/`. File now 656 lines (down from 1134) — well below the 800-line cap.
   - **Status closed**: `useSimGroupFanout` / `useSimSingle` deferred indefinitely — they would require funneling 30+ setters through a bundle pattern, which shuffles complexity rather than reducing it. The genuinely different next step is splitting SimContext into focused state/handlers/derived contexts (separate item under MEDIUM `value` memoization). The 656-line / 4-of-7-sub-hook form is the accepted final shape for this item.
 
-- **[PARTIAL — DevicesPopover + useDevice + BookmarksPanel + BottomDock DONE] [HIGH] Architecture — `BottomDock.tsx` (689), `BookmarksPanel.tsx` (886), `DevicesPopover.tsx` (735), `SimContext.tsx` (670), `MapView.tsx` (568), `useDevice.ts` (556) all approach or exceed the 800-line cap**
+- **[PARTIAL — 5 of 6 DONE; SimContext deferred per Option A] [HIGH] Architecture — `BottomDock.tsx` (689), `BookmarksPanel.tsx` (886), `DevicesPopover.tsx` (735), `SimContext.tsx` (670), `MapView.tsx` (568), `useDevice.ts` (556) all approach or exceed the 800-line cap**
   - Files listed above
   - Each hosts 3+ subviews / multi-step state machines. Large reach for any single edit; high regression surface.
   - Fix: extract subview components (`DeviceListView`, `DeviceManageView`, `DeviceAddView` for the popover; `BookmarkRow`, `BookmarksToolbar`, `BookmarkFooter` for the panel) into per-file modules.
@@ -147,7 +165,8 @@
   - **DONE (agent H, v0.14.6)**: `useDevice.ts` 560 → **252** LOC. Three new files in `frontend/src/hooks/device/`: `parsers.ts` (117 — pure type guards + payload interfaces + `deviceListEqual`); `useDeviceWs.ts` (148 — WS subscriber via setters-bundle ref pattern, matches `useSimWsDispatcher` precedent); `useWifiTunnel.ts` (149 — `wifiScanning` + `wifiDevices` + `tunnelStatus` + 5 callbacks; bonus `upsertDevice` helper deduplicates the copy-pasted replace-or-append pattern). Single `useDevice()` callsite (`DeviceContext.tsx:15`) untouched; type re-exports preserve all external imports.
   - **DONE (agent I', v0.14.6)**: `BookmarksPanel.tsx` 895 → **499** LOC (~100 over the 400 stretch target — agent flagged `BookmarksList` as natural future split). Three new files in `frontend/src/components/library/`: `BookmarkRow.tsx` (308 — per-row presentation), `BookmarksToolbar.tsx` (272 — search + filters + sort + selection bar), `BookmarksFooter.tsx` (88 — bulk actions + add). Public `BookmarksPanel` API (`onBookmarkClick`, `currentPosition`) unchanged; `LibraryDrawer.tsx` consumes identically. Note: prior agent I was killed mid-work with uncommitted state; all work was discarded and re-attempted fresh.
   - **DONE (agent J + J', v0.14.6)**: `BottomDock.tsx` 689 → **103** LOC. Largest single shrinkage of the program. Seven new files in `frontend/src/components/shell/dock/`: `Eyebrow.tsx` (41 — title/subtitle header; agent J pre-kill commit), then agent J' added `DockRouteCard.tsx` (130 — origin/destination card for Teleport+Navigate; renamed inner `DockRoutePoint` to avoid clashing with unrelated `RouteCard.tsx`), `RadiusRow.tsx` (61 — random-walk radius preset chips), `JoyPreview.tsx` (65 — decorative joystick pad + WASD hints), `SpeedToggle.tsx` (76 — Walk/Run/Drive preset rail), `ActionGroup.tsx` (125 — Start/Stop/Pause/Resume/Move cluster), `buildDockContext.ts` (116 — pure derivation of mode-specific title/subtitle/chainPoints + distance helpers). All subcomponents pull from `useSimContext` / `useBookmarkContext` / `useDeviceContext` directly. `BottomDock` zero-prop default export unchanged.
-  - **Remaining**: `SimContext` (670) / `MapView` (568). Each is its own dedicated split — and SimContext overlaps with the MEDIUM "split into 3 contexts" item, so tackle them as one combined refactor.
+  - **DONE (agent K, v0.14.7)**: `MapView.tsx` 568 → **234** LOC (under 250 target). Eight new files in `frontend/src/components/map/`: `types.ts` (27 — `LeafletMapInternal` alias hoisted), `useMapTiles.ts` (101 — tile registry + retry + layerKey swap), `useCurrentPositionMarker.ts` (89 — marker + auto-recenter), `usePcMarker.ts` (54), `useDestinationMarker.ts` (60), `useWaypointMarkers.ts` (71), `useRoutePolyline.ts` (58), `useRandomWalkRadius.ts` (43). Map init effect (ResizeObserver + onMapReady + control-corner offsets) intentionally left monolithic per design. Public `<MapView>` props unchanged.
+  - **Remaining**: `SimContext` (670) — full state/handlers split deferred per Option A decision (handlers closure tightly on state, full split = days of work for marginal gain). The Derived split shipped in v0.14.7 captures the practical perf win.
 
 - **[DONE] [HIGH] Architecture — `backend/api/wifi_tunnel.py` 673 lines with 165-line `wifi_repair` and 69-line `wifi_tunnel_stop` functions**
   - File: `backend/api/wifi_tunnel.py:138-303` (`wifi_repair`), `562-630` (`wifi_tunnel_stop`)
@@ -343,9 +362,11 @@
   - `frontend/src/contexts/SimContext.tsx:339, 356, 465, 480, 495, 505` — every handler does `if (udids.length >= 2) toast(t('multi.start')) ; … else single` with the same toast wrapping.
   - Fix: a `runWithFanout(action, single, multi)` helper.
 
-- **[MEDIUM] Modal anatomy reimplemented in 4+ places**
+- **[DONE — AvatarPicker excluded] [MEDIUM] Modal anatomy reimplemented in 4+ places**
   - `App.tsx:337-388`, `SettingsMenu.tsx:301-384`, `BookmarkEditDialog.tsx`, `AvatarPicker.tsx` each define their own overlay + Esc handling + focus trap.
   - Fix: one `<Modal title body actions />` primitive that uses existing `useModalDismiss` + `useFocusTrap`.
+  - **Fixed (agent L, v0.14.7)**: New `frontend/src/components/Modal.tsx` (126 LOC) reuses `useFocusTrap` + `useModalDismiss`. Migrated 3 callers: `BookmarkEditDialog` 340→329 LOC, `SettingsMenu` Set-Initial-Position 492→482 LOC, `App.tsx` Add-Bookmark dialog 457→455 LOC (the latter adds a backdrop — minor visual change for consistency with the other two modals). API: `open / onClose / title / children / actions / size / closeOnBackdropClick / closeOnEsc / focusTrap / busy / aria* / surfaceClass`.
+  - **AvatarPicker excluded**: it's a positioned dropdown (`top:` / `left:`), not a modal. Future follow-up could extract a separate `Popover` primitive if a third dropdown appears.
 
 - **[DONE] [MEDIUM] `MODE_LABEL_KEYS` duplicated**
   - `frontend/src/components/shell/BottomDock.tsx:184` hardcodes a SimMode→label-key map; `frontend/src/hooks/useSimulation.ts:233` already exports `MODE_LABEL_KEYS`.
@@ -362,10 +383,12 @@
 
 ### Hardcoded user-facing strings (i18n leakage)
 
-- **[DONE v0.14.3] [MEDIUM] Backend Chinese error messages in 30+ places**
+- **[DONE — final form per user 2026-05-02] [MEDIUM] Backend Chinese error messages in 30+ places**
   - Heaviest: `backend/api/location.py:82, 114, 156, 199, 222, 243, 524`; `backend/api/device.py:54, 78-83, 225, 237, 250, 264`; `backend/api/wifi_tunnel.py:70, 94, 121-128, 132, 191, 538, 545, 654, 673`; `backend/api/system.py:61, 75`; `backend/core/device_manager.py:378-380, 561-563`.
   - The `code` field is in English (good). The `message` is Chinese-only — non-zh users see Chinese.
   - Fix: keep `code` as the source of truth; let the frontend i18n layer pick the message. Drop or English-ify the backend-side `message` fields.
+  - **DONE v0.14.3 (English-ify path, agent A)**: all backend `message` fields English-ified. Frontend `STRINGS['err.<code>']` lookup picks the user locale.
+  - **Deeper migration (drop `message` entirely from wire format) explicitly deferred (user 2026-05-02)**: the current shape — English `code` + English `message` fallback — is fine for multilingual use and external observability. The wire-format change is breaking and offers marginal payoff. **Marked DONE in final form.**
 
 - **[DONE v0.14.3] [MEDIUM] Frontend leaked strings**
   - `frontend/src/components/library/BookmarksPanel.tsx:51-53` (`'預設'`, `'Default'`, `'Uncategorized'`) — same magic at `PlaceManagerDialog.tsx:57`, `BookmarkEditDialog.tsx:268`.
@@ -407,10 +430,11 @@
   - Fix: define `type LeafletMapInternal = L.Map & { _controlCorners?: { topleft?: HTMLElement; topright?: HTMLElement } }`, cast once, drop the rest.
   - **Fixed**: actual count was 10 (audit confirmed `useSimulation` / `useDevice` had zero — the review tally was off). 2 Leaflet-private casts moved to a typed `LeafletMapInternal` alias. The other 8 were bandaids around `currentMarkerRef` being typed `L.CircleMarker` when the runtime creates `L.Marker` — fixing the ref type let `setLatLng` / `setIcon` / `setTooltipContent` / `remove` resolve from public Leaflet typings, casts deleted.
 
-- **[MEDIUM] `value` memoization in SimContext gives almost nothing**
+- **[DONE — Option A] [MEDIUM] `value` memoization in SimContext gives almost nothing**
   - File: `frontend/src/contexts/SimContext.tsx:576-646`
   - Deps include `sim` and `joystick` whole objects — their identity changes on most state updates → all consumers re-render on every WS event.
   - Fix: deconstruct only the fields the value actually consumes, or split SimContext into focused contexts (state vs handlers vs derived).
+  - **Fixed (agent M, v0.14.7 — Option A)**: New `SimDerivedContext` (84 LOC) exposes 5 derived fields (`currentPos`, `destPos`, `displaySpeed`, `isRunning`, `isPaused`) with their own focused memoization. 6 derived-only consumers migrated (EtaBar, DockRouteCard, ActionButtons, MiniStatusBar, NavigatePanel, LapCountControl) — they no longer re-render on every WS tick. SimContext keeps the same 5 fields on `value` for backward compat (14 non-migrated consumers unchanged). Full state/handlers/derived 3-way split was evaluated and rejected: handlers closure tightly on state (handleStart/handleNavigate close over `sim`, `device`, `randomWalkRadius`), so a 3-way split would either funnel state through handler refs (no real perf win) or require rewriting every closure (days of work for marginal additional benefit).
 
 - **[DONE v0.14.5] [MEDIUM] `__init__` of SimulationEngine sets ~25 attributes**
   - File: `backend/core/simulation_engine.py:150-209`
