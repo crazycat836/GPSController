@@ -26,8 +26,12 @@ export interface ModalProps {
   ariaLabel?: string
   /** Element id used for `aria-labelledby` (when caller renders its own h-tag). */
   ariaLabelledBy?: string
-  /** Extra class names appended to `.modal-dialog`; lets callers tune width or surface. */
+  /** Extra class names appended to the dialog; lets callers tune width or surface. */
   dialogClassName?: string
+  /** Replaces the default `.modal-dialog` surface class. Use when a caller
+   *  needs a different surface treatment (e.g. `surface-popup` for the
+   *  Settings → Set-Initial-Position modal). */
+  surfaceClass?: string
   /** Inline style override on `.modal-dialog` — used for one-off width tweaks. */
   dialogStyle?: React.CSSProperties
   /** Forwarded to the overlay's `data-fc` attribute (analytics breadcrumbs). */
@@ -64,6 +68,7 @@ export default function Modal({
   ariaLabel,
   ariaLabelledBy,
   dialogClassName,
+  surfaceClass = 'modal-dialog',
   dialogStyle,
   dataFc,
 }: ModalProps) {
@@ -90,8 +95,8 @@ export default function Modal({
   const widthPx = SIZE_WIDTH_PX[size]
   const mergedStyle: React.CSSProperties = { width: widthPx, ...dialogStyle }
   const mergedDialogClass = dialogClassName
-    ? `modal-dialog ${dialogClassName}`
-    : 'modal-dialog'
+    ? `${surfaceClass} ${dialogClassName}`
+    : surfaceClass
 
   return createPortal(
     <div
