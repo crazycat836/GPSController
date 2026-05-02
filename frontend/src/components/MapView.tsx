@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useT } from '../i18n';
 import { getInitialPosition } from '../services/api';
-import { ACCENT_HEX, DEVICE_COLORS_HEX } from '../lib/constants';
+import { ACCENT_HEX } from '../lib/constants';
 import L from 'leaflet';
 import MapControls from './shell/MapControls';
 import MapContextMenu, { type ContextMenuState } from './MapContextMenu';
@@ -11,6 +11,7 @@ import { usePcMarker } from './map/usePcMarker';
 import { useDestinationMarker } from './map/useDestinationMarker';
 import { useWaypointMarkers } from './map/useWaypointMarkers';
 import { useRoutePolyline } from './map/useRoutePolyline';
+import { useRandomWalkRadius } from './map/useRandomWalkRadius';
 
 interface MapViewProps {
   currentPosition: Position | null;
@@ -77,7 +78,6 @@ function MapView({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   // clickMarkerRef removed — left-click no longer drops a pin.
-  const radiusCircleRef = useRef<L.Circle | null>(null);
 
   const layerMapRef = useRef<Record<string, L.TileLayer>>({});
   // Tracks the ResizeObserver created during first-mount init so the
@@ -288,34 +288,7 @@ function MapView({
 
   useRoutePolyline(mapRef, routePath);
 
-  // Update random walk radius circle
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    // Remove old circle
-    if (radiusCircleRef.current) {
-      radiusCircleRef.current.remove();
-      radiusCircleRef.current = null;
-    }
-
-    // Draw circle when radius is set and we have a position
-    if (randomWalkRadius && randomWalkRadius > 0 && currentPosition) {
-      const circle = L.circle(
-        [currentPosition.lat, currentPosition.lng],
-        {
-          radius: randomWalkRadius,
-          color: DEVICE_COLORS_HEX[0],
-          weight: 2,
-          opacity: 0.6,
-          fillColor: DEVICE_COLORS_HEX[0],
-          fillOpacity: 0.08,
-          dashArray: '6, 6',
-        }
-      ).addTo(map);
-      radiusCircleRef.current = circle;
-    }
-  }, [randomWalkRadius, currentPosition]);
+  useRandomWalkRadius(mapRef, randomWalkRadius, currentPosition);
 
   const recenter = useCallback(() => {
     const map = mapRef.current;
