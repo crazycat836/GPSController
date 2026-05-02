@@ -1,17 +1,16 @@
 import React, { useMemo } from 'react'
 import {
   Play, Square, Pause, Footprints, Rabbit, Car, ArrowRight,
-  Repeat, Star, MapPin, Crosshair,
-  Navigation, Route, Shuffle, Gamepad2,
+  Star, MapPin, Crosshair,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
-import { SimMode, MoveMode, MODE_LABEL_KEYS } from '../../hooks/useSimulation'
+import { SimMode, MoveMode } from '../../hooks/useSimulation'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useT, type StringKey } from '../../i18n'
 import WaypointChain, { type ChainPoint } from '../WaypointChain'
 import { haversineM, polylineDistanceM } from '../../lib/geo'
 import { RADIUS_PRESETS } from '../../lib/constants'
+import Eyebrow from './dock/Eyebrow'
 
 // Speed preset rail. Icons map to design's Walk/Run/Drive glyphs;
 // lucide's Footprints / Rabbit / Car are the closest analogues.
@@ -74,7 +73,7 @@ export default function BottomDock() {
     >
       {/* panel-meta */}
       <div className="min-w-0 flex flex-col">
-        <Eyebrow mode={sim.mode} t={t} />
+        <Eyebrow mode={sim.mode} />
         <div className="text-[22px] font-semibold tracking-[-0.02em] text-[var(--color-text-1)] leading-[1.2] truncate">
           {ctx.title}
         </div>
@@ -151,38 +150,6 @@ export default function BottomDock() {
           t={t}
         />
       </div>
-    </div>
-  )
-}
-
-// ─── Eyebrow (mode icon + label) ──────────────────────────────
-
-// Mirror the BottomModeBar icon mapping so the dock header and the mode
-// selector read as the same mode at a glance.
-const modeIconMap: Record<SimMode, LucideIcon> = {
-  [SimMode.Teleport]:   Crosshair,
-  [SimMode.Navigate]:   Navigation,
-  [SimMode.Loop]:       Repeat,
-  [SimMode.MultiStop]:  Route,
-  [SimMode.RandomWalk]: Shuffle,
-  [SimMode.Joystick]:   Gamepad2,
-}
-
-function Eyebrow({ mode, t }: { mode: SimMode; t: ReturnType<typeof useT> }) {
-  // Multi-stop gets a warning tint in the design to visually distinguish
-  // it from the otherwise-accent eyebrow family.
-  const accentColor = mode === SimMode.MultiStop
-    ? 'var(--color-warning-text)'
-    : 'var(--color-accent)'
-  const labelKey: StringKey = MODE_LABEL_KEYS[mode]
-  const Icon = modeIconMap[mode]
-  return (
-    <div
-      className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] mb-2"
-      style={{ color: accentColor }}
-    >
-      <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-      {t(labelKey)}
     </div>
   )
 }
