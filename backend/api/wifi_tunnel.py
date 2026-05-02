@@ -49,6 +49,169 @@ def _dm():
 # /wifi/connect (legacy direct-IP WiFi for iOS <17) removed in v0.1.49.
 
 
+def _purge_stale_remote_pair_record(udid: str) -> None:
+    """Best-effort delete of the cached RemotePairing record for *udid*.
+
+    Required so RemotePairingProtocol.connect() can't short-circuit through
+    a corrupt cached record and skip the actual _pair() handshake.
+    """
+    try:
+        from pymobiledevice3.common import get_home_folder
+        from pymobiledevice3.pair_records import (
+            PAIRING_RECORD_EXT,
+            get_remote_pairing_record_filename,
+        )
+        stale = get_home_folder() / f"{get_remote_pairing_record_filename(udid)}.{PAIRING_RECORD_EXT}"
+        if stale.exists():
+            stale.unlink()
+            _tunnel_logger.info("Re-pair: removed stale remote pair record %s", stale)
+    except Exception:
+        _tunnel_logger.debug("Re-pair: could not check/remove stale pair record", exc_info=True)
+
+
+async def _perform_remote_pair_handshake(
+    lockdown,
+    udid: str,
+    ios_version: str,
+    resources: dict,
+) -> bool:
+    """Run the iOS 17+ RemotePairing handshake and return whether the pair
+    record was regenerated.
+
+    Populates *resources* (mutable dict shared with the caller) as each step
+    succeeds, so the caller's finally can close whatever was opened — even
+    when this function raises mid-way.
+
+    Raises a structured HTTPException on handshake failure, mapping
+    pymobiledevice3's typed exceptions to user-friendly messages.
+    """
+    from pymobiledevice3.remote.tunnel_service import (
+        CoreDeviceTunnelProxy,
+        create_core_device_tunnel_service_using_rsd,
+    )
+    from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
+
+    _purge_stale_remote_pair_record(udid)
+
+    try:
+        # 1. Open a CoreDeviceTunnelProxy tunnel over USB.
+        resources["proxy"] = await CoreDeviceTunnelProxy.create(lockdown)
+        resources["tunnel_ctx"] = resources["proxy"].start_tcp_tunnel()
+        tunnel_result = await resources["tunnel_ctx"].__aenter__()
+
+        # 2. Construct an RSD on the tunnel.
+        resources["rsd"] = RemoteServiceDiscoveryService((tunnel_result.address, tunnel_result.port))
+        await resources["rsd"].connect()
+
+        # 3. This is the step that actually triggers the Trust dialog
+        #    (when no cached record) and persists the RemotePairing file
+        #    to ~/.pymobiledevice3/. RemotePairingProtocol.connect()
+        #    calls _pair() which runs _request_pair_consent() — Trust
+        #    prompt — then save_pair_record().
+        _tunnel_logger.info(
+            "Re-pair: opening CoreDeviceTunnelService over RSD %s:%s — "
+            "Trust prompt should appear on iPhone...",
+            tunnel_result.address, tunnel_result.port,
+        )
+        resources["tunnel_svc"] = await create_core_device_tunnel_service_using_rsd(
+            resources["rsd"], autopair=True,
+        )
+        _tunnel_logger.info(
+            "Re-pair: CoreDeviceTunnelService connected for %s — RemotePairing record written",
+            udid,
+        )
+        return True
+    except Exception as e:
+        _tunnel_logger.exception("Re-pair: RemotePairing handshake failed")
+        # Use isinstance against pymobiledevice3's typed exceptions instead
+        # of substring-matching str(e) — the message wording drifts across
+        # versions but the class names are stable API.
+        from pymobiledevice3.exceptions import (
+            NotPairedError,
+            PairingDialogResponsePendingError,
+            PairingError,
+        )
+        if isinstance(e, PairingDialogResponsePendingError):
+            friendly = "Tap \"Trust\" on the iPhone unlock screen and retry (the timeout is only a few seconds)."
+        elif isinstance(e, (NotPairedError, PairingError)):
+            friendly = "USB pairing invalid; unplug and re-plug USB, then tap Trust."
+        else:
+            friendly = "RemotePairing handshake failed; check the backend log for details."
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "remote_pair_failed",
+                "message": friendly,
+                "udid": udid,
+                "ios_version": ios_version,
+            },
+        )
+
+
+async def _close_remote_pair_resources(resources: dict) -> None:
+    """Idempotently close every resource opened by the RemotePairing handshake.
+
+    Safe to call when the handshake never started, succeeded fully, or failed
+    mid-way — each entry in *resources* may be ``None``. Closers run in
+    reverse-open order; close errors are swallowed (logged at DEBUG) so a
+    partial teardown can still finish the rest.
+    """
+    # Service / RSD / tunnel-context first; CoreDeviceTunnelProxy last.
+    for closer in (
+        lambda: resources["tunnel_svc"] and resources["tunnel_svc"].close(),
+        lambda: resources["rsd"] and resources["rsd"].close(),
+        lambda: resources["tunnel_ctx"] and resources["tunnel_ctx"].__aexit__(None, None, None),
+    ):
+        try:
+            r = closer()
+            if hasattr(r, "__await__"):
+                await r
+        except Exception as exc:
+            _tunnel_logger.debug(
+                "Re-pair cleanup: closer raised (%s); ignoring",
+                exc.__class__.__name__, exc_info=True,
+            )
+    try:
+        if resources["proxy"] is not None:
+            # CoreDeviceTunnelProxy.close() is a coroutine — mirror the
+            # await-if-awaitable pattern used for the closers above so we
+            # don't leak a "was never awaited" warning.
+            r = resources["proxy"].close()
+            if hasattr(r, "__await__"):
+                await r
+    except Exception as exc:
+        _tunnel_logger.debug(
+            "Re-pair cleanup: proxy.close() raised (%s); ignoring",
+            exc.__class__.__name__, exc_info=True,
+        )
+
+
+async def _select_usb_device() -> str:
+    """Return the UDID of the first USB-attached iOS device.
+
+    Raises a structured HTTPException when usbmux is unreachable or when no
+    USB-connected device is plugged in (Network entries cannot regenerate the
+    RemotePairing record).
+    """
+    from pymobiledevice3.usbmux import list_devices as mux_list_devices
+    try:
+        raw_devices = await mux_list_devices()
+    except Exception:
+        logger.exception("usbmux list_devices failed during /wifi/repair")
+        raise http_err(500, "usbmux_unavailable", "Could not list USB devices; check that usbmuxd is running")
+
+    usb_dev = next((d for d in raw_devices if getattr(d, "connection_type", "USB") == "USB"), None)
+    if usb_dev is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "repair_needs_usb",
+                "message": "Please connect the iPhone via USB first. Re-pairing needs USB to trigger the \"Trust This Computer\" prompt.",
+            },
+        )
+    return usb_dev.serial
+
+
 @router.get("/wifi/scan")
 async def wifi_scan():
     """Scan the local network for iOS devices."""
@@ -145,32 +308,8 @@ async def wifi_repair():
          ~/.pymobiledevice3/ as a side effect of the RSD handshake.
     """
     from pymobiledevice3.lockdown import create_using_usbmux
-    from pymobiledevice3.usbmux import list_devices as mux_list_devices
-    from pymobiledevice3.remote.tunnel_service import (
-        CoreDeviceTunnelProxy,
-        create_core_device_tunnel_service_using_rsd,
-    )
-    from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
 
-    try:
-        raw_devices = await mux_list_devices()
-    except Exception:
-        logger.exception("usbmux list_devices failed during /wifi/repair")
-        raise http_err(500, "usbmux_unavailable", "Could not list USB devices; check that usbmuxd is running")
-
-    # Prefer a USB-attached device (Network entries won't help us regenerate
-    # the RemotePairing record).
-    usb_dev = next((d for d in raw_devices if getattr(d, "connection_type", "USB") == "USB"), None)
-    if usb_dev is None:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "repair_needs_usb",
-                "message": "Please connect the iPhone via USB first. Re-pairing needs USB to trigger the \"Trust This Computer\" prompt.",
-            },
-        )
-
-    udid = usb_dev.serial
+    udid = await _select_usb_device()
     _tunnel_logger.info("Re-pair requested for USB device %s", udid)
 
     # Step 1: USB lockdown autopair — pops Trust prompt if USB record missing.
@@ -199,106 +338,13 @@ async def wifi_repair():
 
     remote_record_regenerated = False
     if major >= 17:
-        # Delete any stale remote pair record for this udid so the
-        # RemotePairingProtocol.connect() path can't short-circuit through
-        # the cached (possibly-corrupt) record and actually runs _pair().
+        resources: dict = {"proxy": None, "tunnel_ctx": None, "rsd": None, "tunnel_svc": None}
         try:
-            from pymobiledevice3.common import get_home_folder
-            from pymobiledevice3.pair_records import (
-                PAIRING_RECORD_EXT,
-                get_remote_pairing_record_filename,
-            )
-            stale = get_home_folder() / f"{get_remote_pairing_record_filename(udid)}.{PAIRING_RECORD_EXT}"
-            if stale.exists():
-                stale.unlink()
-                _tunnel_logger.info("Re-pair: removed stale remote pair record %s", stale)
-        except Exception:
-            _tunnel_logger.debug("Re-pair: could not check/remove stale pair record", exc_info=True)
-
-        proxy = None
-        tunnel_ctx = None
-        rsd = None
-        tunnel_svc = None
-        try:
-            # 1. Open a CoreDeviceTunnelProxy tunnel over USB.
-            proxy = await CoreDeviceTunnelProxy.create(lockdown)
-            tunnel_ctx = proxy.start_tcp_tunnel()
-            tunnel_result = await tunnel_ctx.__aenter__()
-
-            # 2. Construct an RSD on the tunnel.
-            rsd = RemoteServiceDiscoveryService((tunnel_result.address, tunnel_result.port))
-            await rsd.connect()
-
-            # 3. This is the step that actually triggers the Trust dialog
-            #    (when no cached record) and persists the RemotePairing file
-            #    to ~/.pymobiledevice3/. RemotePairingProtocol.connect()
-            #    calls _pair() which runs _request_pair_consent() — Trust
-            #    prompt — then save_pair_record().
-            _tunnel_logger.info(
-                "Re-pair: opening CoreDeviceTunnelService over RSD %s:%s — "
-                "Trust prompt should appear on iPhone...",
-                tunnel_result.address, tunnel_result.port,
-            )
-            tunnel_svc = await create_core_device_tunnel_service_using_rsd(rsd, autopair=True)
-            _tunnel_logger.info(
-                "Re-pair: CoreDeviceTunnelService connected for %s — RemotePairing record written",
-                udid,
-            )
-            remote_record_regenerated = True
-        except Exception as e:
-            _tunnel_logger.exception("Re-pair: RemotePairing handshake failed")
-            # Use isinstance against pymobiledevice3's typed exceptions instead
-            # of substring-matching str(e) — the message wording drifts across
-            # versions but the class names are stable API.
-            from pymobiledevice3.exceptions import (
-                NotPairedError,
-                PairingDialogResponsePendingError,
-                PairingError,
-            )
-            if isinstance(e, PairingDialogResponsePendingError):
-                friendly = "Tap \"Trust\" on the iPhone unlock screen and retry (the timeout is only a few seconds)."
-            elif isinstance(e, (NotPairedError, PairingError)):
-                friendly = "USB pairing invalid; unplug and re-plug USB, then tap Trust."
-            else:
-                friendly = "RemotePairing handshake failed; check the backend log for details."
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "code": "remote_pair_failed",
-                    "message": friendly,
-                    "udid": udid,
-                    "ios_version": ios_version,
-                },
+            remote_record_regenerated = await _perform_remote_pair_handshake(
+                lockdown, udid, ios_version, resources,
             )
         finally:
-            # Close everything in reverse order; ignore errors.
-            for closer in (
-                lambda: tunnel_svc and tunnel_svc.close(),
-                lambda: rsd and rsd.close(),
-                lambda: tunnel_ctx and tunnel_ctx.__aexit__(None, None, None),
-            ):
-                try:
-                    r = closer()
-                    if hasattr(r, "__await__"):
-                        await r
-                except Exception as exc:
-                    _tunnel_logger.debug(
-                        "Re-pair cleanup: closer raised (%s); ignoring",
-                        exc.__class__.__name__, exc_info=True,
-                    )
-            try:
-                if proxy is not None:
-                    # CoreDeviceTunnelProxy.close() is a coroutine — mirror
-                    # the await-if-awaitable pattern used for the closers
-                    # above so we don't leak a "was never awaited" warning.
-                    r = proxy.close()
-                    if hasattr(r, "__await__"):
-                        await r
-            except Exception as exc:
-                _tunnel_logger.debug(
-                    "Re-pair cleanup: proxy.close() raised (%s); ignoring",
-                    exc.__class__.__name__, exc_info=True,
-                )
+            await _close_remote_pair_resources(resources)
 
     return {
         "status": "paired",
