@@ -1,4 +1,5 @@
 import { useSimContext } from '../../contexts/SimContext'
+import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useT } from '../../i18n'
 import { useOriginDestPoints } from '../../hooks/useOriginDestPoints'
 import RouteCard from '../RouteCard'
@@ -6,7 +7,8 @@ import SpeedControls from './SpeedControls'
 import ActionButtons from './ActionButtons'
 
 export default function NavigatePanel() {
-  const { currentPos, destPos, handleClearTeleportDest } = useSimContext()
+  const { handleClearTeleportDest } = useSimContext()
+  const { currentPos, destPos } = useSimDerived()
   const t = useT()
   const points = useOriginDestPoints(currentPos, destPos)
 

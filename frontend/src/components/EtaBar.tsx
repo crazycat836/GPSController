@@ -2,6 +2,7 @@ import React from 'react'
 import { Pause, Play } from 'lucide-react'
 import { useT } from '../i18n'
 import { useSimContext } from '../contexts/SimContext'
+import { useSimDerived } from '../contexts/SimDerivedContext'
 import type { RuntimesMap } from '../hooks/useSimulation'
 
 interface EtaBarProps {
@@ -51,7 +52,8 @@ function EtaBar({
   runtimes,
 }: EtaBarProps) {
   const t = useT()
-  const { displaySpeed, isPaused, handlePause, handleResume } = useSimContext()
+  const { handlePause, handleResume } = useSimContext()
+  const { displaySpeed, isPaused } = useSimDerived()
 
   const activeRuntimes = runtimes
     ? Object.values(runtimes).filter((r) => ACTIVE_STATES.includes(r.state))

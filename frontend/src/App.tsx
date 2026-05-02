@@ -12,6 +12,7 @@ import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketCont
 import { DeviceProvider, useDeviceContext } from './contexts/DeviceContext'
 import { ConnectionHealthProvider } from './contexts/ConnectionHealthContext'
 import { SimProvider, useSimContext, SPEED_MAP } from './contexts/SimContext'
+import { SimDerivedProvider } from './contexts/SimDerivedContext'
 import { BookmarkProvider, useBookmarkContext } from './contexts/BookmarkContext'
 import { AvatarProvider } from './contexts/AvatarContext'
 
@@ -64,11 +65,13 @@ function App() {
         <DeviceProvider>
           <ConnectionHealthProvider>
             <SimProvider>
-              <BookmarkProvider>
-                <AvatarProvider>
-                  <AppShell />
-                </AvatarProvider>
-              </BookmarkProvider>
+              <SimDerivedProvider>
+                <BookmarkProvider>
+                  <AvatarProvider>
+                    <AppShell />
+                  </AvatarProvider>
+                </BookmarkProvider>
+              </SimDerivedProvider>
             </SimProvider>
           </ConnectionHealthProvider>
         </DeviceProvider>

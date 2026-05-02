@@ -1,6 +1,7 @@
 import React from 'react'
 import { Play, Square, Pause } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
+import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useDisabledByConnection } from '../../hooks/useDisabledByConnection'
 import { useT } from '../../i18n'
 
@@ -16,7 +17,8 @@ interface ActionButtonsProps {
 }
 
 export default function ActionButtons({ canStart = true, trailing }: ActionButtonsProps = {}) {
-  const { handleStart, handleStop, handlePause, handleResume, isRunning, isPaused } = useSimContext()
+  const { handleStart, handleStop, handlePause, handleResume } = useSimContext()
+  const { isRunning, isPaused } = useSimDerived()
   const conn = useDisabledByConnection()
   const t = useT()
 
