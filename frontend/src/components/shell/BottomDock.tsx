@@ -1,27 +1,16 @@
 import React, { useMemo } from 'react'
-import {
-  Play, Square, Pause, Footprints, Rabbit, Car, ArrowRight,
-} from 'lucide-react'
+import { Play, Square, Pause, ArrowRight } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
-import { SimMode, MoveMode } from '../../hooks/useSimulation'
+import { SimMode } from '../../hooks/useSimulation'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
-import { useT, type StringKey } from '../../i18n'
+import { useT } from '../../i18n'
 import WaypointChain, { type ChainPoint } from '../WaypointChain'
 import { haversineM, polylineDistanceM } from '../../lib/geo'
 import Eyebrow from './dock/Eyebrow'
 import DockRouteCard from './dock/DockRouteCard'
 import RadiusRow from './dock/RadiusRow'
 import JoyPreview from './dock/JoyPreview'
-
-// Speed preset rail. Icons map to design's Walk/Run/Drive glyphs;
-// lucide's Footprints / Rabbit / Car are the closest analogues.
-// Values in km/h. Must match `SimContext.SPEED_MAP` and backend
-// `SPEED_PROFILES` (m/s equivalents 3.0 / 5.5 / 16.667).
-const SPEED_PRESETS: Array<{ mode: MoveMode; Icon: typeof Footprints; labelKey: StringKey; value: number }> = [
-  { mode: MoveMode.Walking, Icon: Footprints, labelKey: 'move.walking', value: 10.8 },
-  { mode: MoveMode.Running, Icon: Rabbit,     labelKey: 'move.running', value: 19.8 },
-  { mode: MoveMode.Driving, Icon: Car,        labelKey: 'move.driving', value: 60 },
-]
+import SpeedToggle from './dock/SpeedToggle'
 
 // Bottom dock-panel — renders the redesign/Home anatomy verbatim:
 // glass `.dock-panel` with a `panel-body` two-column grid containing
@@ -43,9 +32,6 @@ export default function BottomDock() {
     () => buildDockContext(sim.mode, sim, currentPos, destPos, t),
     [sim.mode, sim.waypoints, currentPos, destPos, t],
   )
-
-  const presetActive = (mode: MoveMode) =>
-    sim.moveMode === mode && sim.customSpeedKmh == null && sim.speedMinKmh == null && sim.speedMaxKmh == null
 
   const speedToggleDisabled = sim.mode === SimMode.Teleport || sim.mode === SimMode.Joystick
 
@@ -111,19 +97,7 @@ export default function BottomDock() {
         {/* Speed is irrelevant in Teleport (instant) and Joystick
             (direction-driven) modes — hide rather than dim so the
             dock reads cleanly. */}
-        {!speedToggleDisabled && (
-          <SpeedToggle
-            presetActive={presetActive}
-            onPreset={(mode) => {
-              sim.setMoveMode(mode)
-              sim.setCustomSpeedKmh(null)
-              sim.setSpeedMinKmh(null)
-              sim.setSpeedMaxKmh(null)
-            }}
-            disabled={false}
-            t={t}
-          />
-        )}
+        {!speedToggleDisabled && <SpeedToggle />}
         <ActionGroup
           mode={sim.mode}
           isRunning={isRunning}
@@ -138,54 +112,6 @@ export default function BottomDock() {
           t={t}
         />
       </div>
-    </div>
-  )
-}
-
-// ─── Speed toggle ─────────────────────────────────────────────
-
-interface SpeedToggleProps {
-  presetActive: (mode: MoveMode) => boolean
-  onPreset: (mode: MoveMode) => void
-  disabled: boolean
-  t: ReturnType<typeof useT>
-}
-
-function SpeedToggle({ presetActive, onPreset, disabled, t }: SpeedToggleProps) {
-  return (
-    <div
-      role="group"
-      aria-label={t('panel.speed')}
-      className={[
-        'flex gap-0.5 p-[3px] h-11 rounded-xl border border-[var(--color-border)]',
-        disabled ? 'opacity-40 pointer-events-none' : '',
-      ].join(' ')}
-      style={{ background: 'var(--color-surface-ghost)' }}
-    >
-      {SPEED_PRESETS.map(({ mode, Icon, labelKey, value }) => {
-        const on = presetActive(mode)
-        return (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => onPreset(mode)}
-            aria-pressed={on}
-            className={[
-              'inline-flex items-center gap-1.5 px-3.5 rounded-[9px] text-[13px] font-medium',
-              'transition-colors duration-150',
-              on ? 'text-[var(--color-accent-strong)]' : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
-            ].join(' ')}
-            style={on ? {
-              background: 'var(--color-accent-dim)',
-              border: '1px solid rgba(255,255,255,0.06)',
-            } : undefined}
-          >
-            <Icon className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">{t(labelKey)}</span>
-            <span className="font-mono text-[11px] opacity-65 tabular-nums">{value}</span>
-          </button>
-        )
-      })}
     </div>
   )
 }
