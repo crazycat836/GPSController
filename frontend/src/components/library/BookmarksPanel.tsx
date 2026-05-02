@@ -1,8 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import {
   Plus, Bookmark as BookmarkIcon, Pencil, Trash2, Copy,
-  FolderInput, Tag as TagIconLucide, Check, X, ClipboardList, StickyNote,
-  ClipboardPaste, Clock, ListTree,
+  FolderInput, Check, ClipboardList, StickyNote, ClipboardPaste,
 } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
@@ -11,8 +10,7 @@ import { ICON_SIZE } from '../../lib/icons'
 import { isDefaultPlace } from '../../lib/bookmarks'
 import { copyToClipboard } from '../../lib/clipboard'
 import ListRow from '../ui/ListRow'
-import SearchField from '../ui/SearchField'
-import ChipFilterBar, { type Chip } from '../ui/ChipFilterBar'
+import { type Chip } from '../ui/ChipFilterBar'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
 import EmptyState from '../ui/EmptyState'
 import ConfirmDialog from '../ui/ConfirmDialog'
@@ -21,6 +19,7 @@ import PlaceManagerDialog, { getPlaceColor } from './PlaceManagerDialog'
 import TagManagerDialog, { getTagColor } from './TagManagerDialog'
 import BulkCoordsDialog from './BulkCoordsDialog'
 import BookmarksFooter from './BookmarksFooter'
+import BookmarksToolbar, { type SortMode } from './BookmarksToolbar'
 
 interface BookmarksPanelProps {
   onBookmarkClick: (lat: number, lng: number) => void
@@ -28,7 +27,6 @@ interface BookmarksPanelProps {
 }
 
 const ALL_ID = '__all__' as const
-type SortMode = 'recent' | 'by_place'
 
 /** Lat/lng tolerance for flagging a bookmark as the current location.
  *  ~1.1 m at the equator — tighter than any user-perceptible jitter. */
@@ -524,131 +522,29 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
 
   return (
     <div className="relative flex flex-col gap-3 p-4 pb-[92px]">
-      <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          <SearchField
-            value={search}
-            onChange={setSearch}
-            placeholder={t('bm.search_placeholder')}
-            clearLabel={t('bm.search_clear')}
-          />
-        </div>
-        <KebabMenu items={headerMenuItems} ariaLabel={t('bm.bookmark_actions_aria')} />
-      </div>
+      <BookmarksToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeChips={placeChips}
+        activePlaceId={activePlaceId}
+        onActivePlaceChange={setActivePlaceId}
+        placeChipsVisibleCap={PLACE_CHIPS_VISIBLE_CAP}
+        hasPlaces={places.length > 0}
+        tags={tags}
+        activeTagIds={activeTagIds}
+        onToggleTag={toggleTagFilter}
+        onClearTags={() => setActiveTagIds(new Set())}
+        sortMode={sortMode}
+        onSortModeChange={setSortMode}
+        hasBookmarks={bookmarks.length > 0}
+        selectionMode={selectionMode}
+        selectedCount={selectedIds.size}
+        onClearSelection={() => setSelectedIds(new Set())}
+        onConfirmBatchDelete={confirmBatchDelete}
+        onExitSelection={exitSelection}
+        headerMenuItems={headerMenuItems}
+      />
 
-      {/* Place chip filter — hidden while searching. Primary axis. */}
-      {!searching && places.length > 0 && (
-        <ChipFilterBar
-          chips={placeChips}
-          activeId={activePlaceId}
-          onChange={setActivePlaceId}
-          ariaLabel={t('bm.place_filter_aria')}
-          visibleCap={PLACE_CHIPS_VISIBLE_CAP}
-        />
-      )}
-
-      {/* Tag chip filter — secondary axis, multi-select, AND. Hidden while
-          searching (search already looks inside tag names). */}
-      {!searching && tags.length > 0 && (
-        <div
-          role="toolbar"
-          aria-label={t('bm.tag_filter_aria')}
-          className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin"
-          style={{ paddingBottom: 2 }}
-        >
-          <TagIconLucide width={12} height={12} className="text-[var(--color-text-3)] shrink-0" />
-          {tags.map((tag) => {
-            const selected = activeTagIds.has(tag.id)
-            return (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() => toggleTagFilter(tag.id)}
-                aria-pressed={selected}
-                style={{
-                  fontSize: 10.5,
-                  padding: '2px 8px',
-                  borderRadius: 999,
-                  border: '1px solid var(--color-border)',
-                  background: selected ? getTagColor(tag) : 'transparent',
-                  color: selected ? '#fff' : 'var(--color-text-2)',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                  transition: 'all var(--duration-fast, 150ms) ease',
-                }}
-              >
-                {tag.name}
-              </button>
-            )
-          })}
-          {activeTagIds.size > 0 && (
-            <button
-              type="button"
-              onClick={() => setActiveTagIds(new Set())}
-              className="kebab-btn"
-              aria-label={t('bm.search_clear')}
-              title={t('bm.search_clear')}
-              style={{ flexShrink: 0 }}
-            >
-              <X width={12} height={12} />
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Sort toggle. `by_place` preserves the sectioned view when no filter
-          is applied; `recent` always flattens the list. Hidden for empty. */}
-      {bookmarks.length > 0 && !searching && (
-        <div className="flex items-center gap-1 text-[11px]">
-          <span className="text-[var(--color-text-3)] mr-1">{t('generic.sort')}:</span>
-          <SortChip
-            active={sortMode === 'by_place'}
-            onClick={() => setSortMode('by_place')}
-            icon={<ListTree width={12} height={12} />}
-            label={t('bm.sort_by_place')}
-          />
-          <SortChip
-            active={sortMode === 'recent'}
-            onClick={() => setSortMode('recent')}
-            icon={<Clock width={12} height={12} />}
-            label={t('bm.sort_recent')}
-          />
-        </div>
-      )}
-
-      {/* Batch bar */}
-      {selectionMode && (
-        <div className="batch-bar" role="toolbar" aria-label={t('bm.selection_toolbar')}>
-          <span className="batch-bar-count">{t('bm.selected_count', { n: selectedIds.size })}</span>
-          <button
-            type="button"
-            className="action-btn"
-            disabled={selectedIds.size === 0}
-            onClick={() => setSelectedIds(new Set())}
-          >
-            {t('bm.clear_selection')}
-          </button>
-          <button
-            type="button"
-            className="action-btn danger"
-            disabled={selectedIds.size === 0}
-            onClick={confirmBatchDelete}
-          >
-            <Trash2 width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-            {t('generic.delete')}
-          </button>
-          <button
-            type="button"
-            className="kebab-btn"
-            aria-label={t('bm.select_cancel')}
-            title={t('bm.select_cancel')}
-            onClick={exitSelection}
-          >
-            <X width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-          </button>
-        </div>
-      )}
 
       {bookmarks.length === 0 ? (
         <EmptyState
@@ -805,33 +701,3 @@ function HoverAction({ onClick, label, danger, children }: HoverActionProps) {
   )
 }
 
-interface SortChipProps {
-  active: boolean
-  onClick: () => void
-  icon: React.ReactNode
-  label: string
-}
-
-function SortChip({ active, onClick, icon, label }: SortChipProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className="inline-flex items-center gap-1"
-      style={{
-        padding: '2px 8px',
-        borderRadius: 999,
-        border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
-        background: active ? 'color-mix(in srgb, var(--color-accent) 20%, transparent)' : 'transparent',
-        color: active ? 'var(--color-text-1)' : 'var(--color-text-3)',
-        fontSize: 10.5,
-        cursor: 'pointer',
-        transition: 'all var(--duration-fast, 150ms) ease',
-      }}
-    >
-      {icon}
-      {label}
-    </button>
-  )
-}
