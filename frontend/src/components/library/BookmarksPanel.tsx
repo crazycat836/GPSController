@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Plus, Bookmark as BookmarkIcon, Pencil, Trash2, Copy,
-  FolderInput, Check, ClipboardList, StickyNote, ClipboardPaste,
+  FolderInput, ClipboardList, ClipboardPaste,
 } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
@@ -9,17 +9,17 @@ import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
 import { isDefaultPlace } from '../../lib/bookmarks'
 import { copyToClipboard } from '../../lib/clipboard'
-import ListRow from '../ui/ListRow'
 import { type Chip } from '../ui/ChipFilterBar'
-import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
+import { type KebabMenuItem } from '../ui/KebabMenu'
 import EmptyState from '../ui/EmptyState'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import BookmarkEditDialog, { type BookmarkEditValues } from './BookmarkEditDialog'
 import PlaceManagerDialog, { getPlaceColor } from './PlaceManagerDialog'
-import TagManagerDialog, { getTagColor } from './TagManagerDialog'
+import TagManagerDialog from './TagManagerDialog'
 import BulkCoordsDialog from './BulkCoordsDialog'
 import BookmarksFooter from './BookmarksFooter'
 import BookmarksToolbar, { type SortMode } from './BookmarksToolbar'
+import BookmarkRow from './BookmarkRow'
 
 interface BookmarksPanelProps {
   onBookmarkClick: (lat: number, lng: number) => void
@@ -37,9 +37,6 @@ const COPIED_FLASH_MS = 1200
 
 /** Number of place chips kept visible before the bar collapses into a "+N" overflow. */
 const PLACE_CHIPS_VISIBLE_CAP = 5
-
-/** Width / left-offset (px) of the accent stripe marking the active bookmark row. */
-const ACTIVE_INDICATOR_STRIPE_PX = 2
 
 export default function BookmarksPanel({ onBookmarkClick, currentPosition }: BookmarksPanelProps) {
   const t = useT()
@@ -323,202 +320,35 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   const searching = search.trim().length > 0
   const anyFilter = searching || activePlaceId !== ALL_ID || activeTagIds.size > 0
 
-  const renderBookmarkRow = (b: Bookmark) => {
-    const place = placeMap.get(b.place_id || '')
-    const placeName = place?.name || ''
-    const placeColor = place ? getPlaceColor(placeName) : 'var(--color-text-3)'
-    const checked = selectedIds.has(b.id)
-    const isInlineEditing = inlineEditId === b.id
-    const isActive = isBookmarkActive(b)
-    const bookmarkTags = (b.tags ?? [])
-      .map((id) => tagMap.get(id))
-      .filter((tg): tg is BookmarkTag => !!tg)
+  const startInlineEdit = useCallback((b: Bookmark) => {
+    setInlineEditId(b.id)
+    setInlineEditName(b.name)
+  }, [])
 
-    // Gradient icon tile coloured by the bookmark's place. Selection mode
-    // swaps the tile for a checkbox.
-    const leading = selectionMode ? (
-      <span
-        aria-hidden="true"
-        className="w-9 h-9 rounded-[10px] border flex items-center justify-center shrink-0"
-        style={{
-          borderColor: checked ? 'var(--color-accent)' : 'var(--color-border-strong)',
-          background: checked ? 'var(--color-accent)' : 'rgba(255,255,255,0.02)',
-        }}
-      >
-        {checked && <Check width={ICON_SIZE.sm} height={ICON_SIZE.sm} className="text-white" strokeWidth={3} />}
-      </span>
-    ) : (
-      <span
-        aria-hidden="true"
-        className="w-9 h-9 rounded-[10px] grid place-items-center shrink-0"
-        style={{
-          background: `linear-gradient(135deg, color-mix(in srgb, ${placeColor} 22%, transparent), color-mix(in srgb, ${placeColor} 6%, transparent))`,
-          border: `1px solid color-mix(in srgb, ${placeColor} 32%, transparent)`,
-          color: placeColor,
-        }}
-      >
-        <BookmarkIcon width={ICON_SIZE.md} height={ICON_SIZE.md} strokeWidth={2} />
-      </span>
-    )
-
-    const titleNode = isInlineEditing ? (
-      <input
-        autoFocus
-        type="text"
-        className="search-input w-full"
-        value={inlineEditName}
-        onChange={(e) => setInlineEditName(e.target.value)}
-        onBlur={() => commitInlineRename(b.id)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitInlineRename(b.id)
-          else if (e.key === 'Escape') setInlineEditId(null)
-        }}
-        onClick={(e) => e.stopPropagation()}
-        style={{ paddingLeft: 8, height: 28 }}
-      />
-    ) : (
-      <>
-        <span className="truncate">{b.name}</span>
-        {copiedId === b.id && (
-          <span className="text-[10px] text-[var(--color-success-text)]">
-            <Check width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
-          </span>
-        )}
-        {b.note && (
-          <StickyNote
-            width={ICON_SIZE.xs}
-            height={ICON_SIZE.xs}
-            className="text-[var(--color-text-3)] opacity-60 shrink-0"
-            aria-label={t('bm.has_note')}
-          />
-        )}
-      </>
-    )
-
-    const subtitleNode = (
-      <span className="inline-flex items-center gap-1.5 min-w-0 flex-wrap">
-        {place && (
-          <span
-            className="inline-block uppercase"
-            style={{
-              padding: '1px 5px',
-              background: 'rgba(255,255,255,0.05)',
-              borderRadius: '3px',
-              fontFamily: 'Inter, sans-serif',
-              fontSize: '9.5px',
-              color: 'var(--color-text-2)',
-              fontWeight: 500,
-              letterSpacing: '0.03em',
-              lineHeight: 1.4,
-            }}
-          >
-            {displayPlace(placeName)}
-          </span>
-        )}
-        {bookmarkTags.map((tag) => (
-          <span
-            key={tag.id}
-            style={{
-              padding: '1px 6px',
-              background: `color-mix(in srgb, ${getTagColor(tag)} 22%, transparent)`,
-              borderRadius: '3px',
-              fontSize: '10px',
-              color: 'var(--color-text-1)',
-              fontWeight: 500,
-              lineHeight: 1.4,
-              border: `1px solid color-mix(in srgb, ${getTagColor(tag)} 40%, transparent)`,
-            }}
-          >
-            {tag.name}
-          </span>
-        ))}
-        <span className="font-mono truncate">
-          {b.lat.toFixed(6)}°, {b.lng.toFixed(6)}°
-        </span>
-        {b.country_code && (
-          <>
-            <span className="text-[var(--color-text-3)] opacity-50">·</span>
-            <img
-              src={`https://flagcdn.com/w40/${b.country_code}.png`}
-              alt={b.country_code.toUpperCase()}
-              width={14}
-              height={10}
-              className="rounded-[2px] shadow-[0_0_0_1px_rgba(255,255,255,0.08)] shrink-0"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-            />
-            {b.country && <span className="truncate max-w-[80px]">{b.country}</span>}
-          </>
-        )}
-      </span>
-    )
-
-    const trailing = selectionMode ? undefined : (
-      <span className="inline-flex items-center gap-1">
-        <HoverAction
-          onClick={(e) => { e.stopPropagation(); setEditing({ mode: 'edit', bookmark: b }) }}
-          label={t('bm.edit')}
-        >
-          <Pencil width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
-        </HoverAction>
-        <HoverAction
-          onClick={(e) => { e.stopPropagation(); confirmDeleteOne(b) }}
-          label={t('generic.delete')}
-          danger
-        >
-          <Trash2 width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
-        </HoverAction>
-        <KebabMenu
-          items={() => rowMenuItems(b)}
-          ariaLabel={t('bm.bookmark_actions')}
-        />
-      </span>
-    )
-
-    return (
-      <div key={b.id} className="relative">
-        {isActive && (
-          <span
-            aria-hidden="true"
-            className="absolute top-[14px] bottom-[14px] rounded-[2px]"
-            style={{
-              left: ACTIVE_INDICATOR_STRIPE_PX,
-              width: ACTIVE_INDICATOR_STRIPE_PX,
-              background: 'var(--color-accent)',
-            }}
-          />
-        )}
-        <ListRow
-          as="button"
-          density="compact"
-          className={['group', isActive ? 'pl-4' : ''].join(' ')}
-          selected={(selectionMode && checked) || isActive}
-          onClick={() => {
-            if (selectionMode) toggleSelected(b.id)
-            else if (!isInlineEditing) onBookmarkClick(b.lat, b.lng)
-          }}
-          onDoubleClick={(e) => {
-            if (selectionMode) return
-            e.preventDefault()
-            setInlineEditId(b.id)
-            setInlineEditName(b.name)
-          }}
-          onContextMenu={(e) => {
-            if (selectionMode || isInlineEditing) return
-            e.preventDefault()
-            const kebab = (e.currentTarget as HTMLElement)
-              .querySelector<HTMLButtonElement>('.list-row-trailing .kebab-btn')
-            kebab?.click()
-          }}
-          aria-label={b.name}
-          aria-pressed={selectionMode ? checked : undefined}
-          leading={leading}
-          title={titleNode}
-          subtitle={subtitleNode}
-          trailing={trailing}
-        />
-      </div>
-    )
-  }
+  const renderBookmarkRow = (b: Bookmark) => (
+    <BookmarkRow
+      key={b.id}
+      bookmark={b}
+      placeMap={placeMap}
+      tagMap={tagMap}
+      displayPlace={displayPlace}
+      selectionMode={selectionMode}
+      checked={selectedIds.has(b.id)}
+      onToggleSelected={toggleSelected}
+      isInlineEditing={inlineEditId === b.id}
+      inlineEditName={inlineEditName}
+      onInlineEditChange={setInlineEditName}
+      onInlineEditCommit={commitInlineRename}
+      onInlineEditCancel={() => setInlineEditId(null)}
+      onStartInlineEdit={startInlineEdit}
+      isActive={isBookmarkActive(b)}
+      isCopied={copiedId === b.id}
+      onActivate={onBookmarkClick}
+      onEdit={(bk) => setEditing({ mode: 'edit', bookmark: bk })}
+      onDelete={confirmDeleteOne}
+      rowMenuItems={rowMenuItems}
+    />
+  )
 
   return (
     <div className="relative flex flex-col gap-3 p-4 pb-[92px]">
@@ -544,7 +374,6 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         onExitSelection={exitSelection}
         headerMenuItems={headerMenuItems}
       />
-
 
       {bookmarks.length === 0 ? (
         <EmptyState
@@ -665,39 +494,6 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         onAdd={() => setEditing({ mode: 'create' })}
       />
     </div>
-  )
-}
-
-// ─── Hover-reveal quick action button ──────────────────────────────
-
-interface HoverActionProps {
-  onClick: (e: React.MouseEvent) => void
-  label: string
-  danger?: boolean
-  children: React.ReactNode
-}
-
-function HoverAction({ onClick, label, danger, children }: HoverActionProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={[
-        'w-7 h-7 rounded-[7px] grid place-items-center shrink-0',
-        'border border-[var(--color-border)] bg-white/[0.04]',
-        'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
-        'translate-x-1 group-hover:translate-x-0 focus-visible:translate-x-0',
-        'transition-[opacity,transform,background,color,border-color] duration-150',
-        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]',
-        danger
-          ? 'text-[var(--color-text-3)] hover:text-[var(--color-danger-text)] hover:bg-[var(--color-danger-dim)] hover:border-[rgba(255,71,87,0.3)]'
-          : 'text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-white/[0.1]',
-      ].join(' ')}
-    >
-      {children}
-    </button>
   )
 }
 
