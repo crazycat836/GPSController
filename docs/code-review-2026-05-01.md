@@ -95,6 +95,24 @@
 
 ---
 
+> **Post-v0.14.5 batch (commits on `main`, unreleased):** 3 commits from one focused agent (H). Structural refactor — no behavior, wire-format, or public-API changes.
+> - **`useDevice.ts` split (3 commits, agent H):** 560 → **252 LOC** (well under the 350 target). Three new files in `frontend/src/hooks/device/`:
+>   - `parsers.ts` (117) — pure type guards + `DeviceInfo`/`WifiScanResult`/`WsSubscribe` interfaces + `deviceListEqual` deep-compare. Zero React.
+>   - `useDeviceWs.ts` (148) — WS subscriber for `device_connected`/`device_disconnected`/`device_reconnected`. Setters-bundle ref pattern (matches `useSimWsDispatcher` precedent).
+>   - `useWifiTunnel.ts` (149) — `wifiScanning` + `wifiDevices` + `tunnelStatus` state + 5 callbacks. Bonus: `upsertDevice` helper deduplicates copy-pasted replace-or-append pattern between `connectWifi` and `startWifiTunnel`.
+>   - Public `useDevice()` return shape preserved (18 fields). Single callsite (`DeviceContext.tsx:15`) untouched. Type re-exports keep external `import type { DeviceInfo }` paths working.
+>
+> **Verification:** `tsc --noEmit` exits 0 after every commit; production `vite build` succeeds (192ms).
+
+**Remaining items:**
+- **HIGH (1 partial)**: 4 frontend god components left — `BottomDock` (689) / `BookmarksPanel` (886) / `SimContext` (670) / `MapView` (568). Each its own dedicated split.
+- **MEDIUM (4)**: Modal primitive, SimContext into 3 contexts (overlaps with the SimContext god-component split), deeper backend i18n migration, residual frontend leaked strings.
+- **LOW (1)**: `pickFields` / parser duplication (defer until Zod adoption).
+
+**Score after post-v0.14.5 batch**: **24 of 25 HIGH (96%)** + **21 of ~25 MEDIUM (~84%)** + **9 of 10 LOW (90%)** + 2-of-6 sub-credit on the god-component HIGH item (DevicesPopover + useDevice) = **56 of ~60 review items resolved (~93%)**.
+
+---
+
 ## HIGH Priority
 
 ### Architecture / God modules
@@ -106,12 +124,13 @@
   - **v0.14.1**: extracted `useSimWsDispatcher` + `useSimRuntimes` + `usePauseSettings` + `useStraightLineToggle` to `hooks/sim/`. File now 656 lines (down from 1134) — well below the 800-line cap.
   - **Status closed**: `useSimGroupFanout` / `useSimSingle` deferred indefinitely — they would require funneling 30+ setters through a bundle pattern, which shuffles complexity rather than reducing it. The genuinely different next step is splitting SimContext into focused state/handlers/derived contexts (separate item under MEDIUM `value` memoization). The 656-line / 4-of-7-sub-hook form is the accepted final shape for this item.
 
-- **[PARTIAL — DevicesPopover DONE] [HIGH] Architecture — `BottomDock.tsx` (689), `BookmarksPanel.tsx` (886), `DevicesPopover.tsx` (735), `SimContext.tsx` (670), `MapView.tsx` (568), `useDevice.ts` (556) all approach or exceed the 800-line cap**
+- **[PARTIAL — DevicesPopover + useDevice DONE] [HIGH] Architecture — `BottomDock.tsx` (689), `BookmarksPanel.tsx` (886), `DevicesPopover.tsx` (735), `SimContext.tsx` (670), `MapView.tsx` (568), `useDevice.ts` (556) all approach or exceed the 800-line cap**
   - Files listed above
   - Each hosts 3+ subviews / multi-step state machines. Large reach for any single edit; high regression surface.
   - Fix: extract subview components (`DeviceListView`, `DeviceManageView`, `DeviceAddView` for the popover; `BookmarkRow`, `BookmarksToolbar`, `BookmarkFooter` for the panel) into per-file modules.
   - **DONE (agent G, v0.14.5)**: `DevicesPopover.tsx` 744 → **132** LOC. Three new subview files at `frontend/src/components/device/`: `DeviceListView.tsx` (174), `DeviceManageView.tsx` (242), `DeviceAddView.tsx` (203), plus shared `deviceRowParts.tsx` (103) for DRY row primitives. Subviews call `useDeviceContext()` / `useToastContext()` / `useT()` directly rather than receiving god-bag props. Public `<DevicesPopover>` API unchanged. `tsc --noEmit` + `vite build` green.
-  - **Remaining**: `BottomDock` (689) / `BookmarksPanel` (886) / `SimContext` (670) / `MapView` (568) / `useDevice` (556). Each is its own dedicated split; tackle individually rather than batched.
+  - **DONE (agent H, post-v0.14.5)**: `useDevice.ts` 560 → **252** LOC. Three new files in `frontend/src/hooks/device/`: `parsers.ts` (117 — pure type guards + payload interfaces + `deviceListEqual`); `useDeviceWs.ts` (148 — WS subscriber via setters-bundle ref pattern, matches `useSimWsDispatcher` precedent); `useWifiTunnel.ts` (149 — `wifiScanning` + `wifiDevices` + `tunnelStatus` + 5 callbacks; bonus `upsertDevice` helper deduplicates the copy-pasted replace-or-append pattern). Single `useDevice()` callsite (`DeviceContext.tsx:15`) untouched; type re-exports preserve all external imports.
+  - **Remaining**: `BottomDock` (689) / `BookmarksPanel` (886) / `SimContext` (670) / `MapView` (568). Each is its own dedicated split; tackle individually rather than batched.
 
 - **[DONE] [HIGH] Architecture — `backend/api/wifi_tunnel.py` 673 lines with 165-line `wifi_repair` and 69-line `wifi_tunnel_stop` functions**
   - File: `backend/api/wifi_tunnel.py:138-303` (`wifi_repair`), `562-630` (`wifi_tunnel_stop`)
