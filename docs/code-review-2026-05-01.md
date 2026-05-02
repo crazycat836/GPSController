@@ -113,6 +113,21 @@
 
 ---
 
+> **Post-v0.14.5 round 2 (commits on `main`, unreleased):** 10 commits across 3 worktree agents (J pre-kill + I' + J'). Pure structural refactor — no behavior, wire-format, or public-API changes.
+> - **`BottomDock.tsx` split (1 + 6 commits, agents J & J'):** 689 → **103 LOC** — largest single shrinkage in the program. Seven new files in `frontend/src/components/shell/dock/`. Agent J extracted `Eyebrow` (41 LOC) before being killed mid-work; agent J' continued from the 648-LOC baseline and shipped six more: `DockRouteCard` (130), `RadiusRow` (61), `JoyPreview` (65), `SpeedToggle` (76), `ActionGroup` (125), `buildDockContext` (116). Subcomponents pull from contexts directly.
+> - **`BookmarksPanel.tsx` split (3 commits, agent I'):** 895 → **499 LOC** (~100 over the 400 stretch target — agent flagged `BookmarksList` as natural follow-up split that would drop to ~380). Three new files in `frontend/src/components/library/`: `BookmarkRow` (308), `BookmarksToolbar` (272), `BookmarksFooter` (88). Note: prior agent I was killed mid-work with uncommitted state; all work was discarded and re-attempted fresh on a clean tree.
+>
+> **Verification:** `tsc --noEmit` clean after every commit; production `vite build` succeeds.
+
+**Remaining items:**
+- **HIGH (1 partial)**: 2 frontend god components left — `SimContext` (670) and `MapView` (568). SimContext overlaps with the MEDIUM "split into 3 contexts" item; should be a combined refactor.
+- **MEDIUM (4)**: Modal primitive, SimContext into 3 contexts (combined with HIGH split above), deeper backend i18n migration, residual frontend leaked strings.
+- **LOW (1)**: `pickFields` / parser duplication (defer until Zod adoption).
+
+**Score after post-v0.14.5 round 2**: **24 of 25 HIGH (96%)** + **21 of ~25 MEDIUM (~84%)** + **9 of 10 LOW (90%)** + 4-of-6 sub-credit on the god-component HIGH item (DevicesPopover + useDevice + BookmarksPanel + BottomDock) = **58 of ~60 review items resolved (~97%)**.
+
+---
+
 ## HIGH Priority
 
 ### Architecture / God modules
@@ -124,13 +139,15 @@
   - **v0.14.1**: extracted `useSimWsDispatcher` + `useSimRuntimes` + `usePauseSettings` + `useStraightLineToggle` to `hooks/sim/`. File now 656 lines (down from 1134) — well below the 800-line cap.
   - **Status closed**: `useSimGroupFanout` / `useSimSingle` deferred indefinitely — they would require funneling 30+ setters through a bundle pattern, which shuffles complexity rather than reducing it. The genuinely different next step is splitting SimContext into focused state/handlers/derived contexts (separate item under MEDIUM `value` memoization). The 656-line / 4-of-7-sub-hook form is the accepted final shape for this item.
 
-- **[PARTIAL — DevicesPopover + useDevice DONE] [HIGH] Architecture — `BottomDock.tsx` (689), `BookmarksPanel.tsx` (886), `DevicesPopover.tsx` (735), `SimContext.tsx` (670), `MapView.tsx` (568), `useDevice.ts` (556) all approach or exceed the 800-line cap**
+- **[PARTIAL — DevicesPopover + useDevice + BookmarksPanel + BottomDock DONE] [HIGH] Architecture — `BottomDock.tsx` (689), `BookmarksPanel.tsx` (886), `DevicesPopover.tsx` (735), `SimContext.tsx` (670), `MapView.tsx` (568), `useDevice.ts` (556) all approach or exceed the 800-line cap**
   - Files listed above
   - Each hosts 3+ subviews / multi-step state machines. Large reach for any single edit; high regression surface.
   - Fix: extract subview components (`DeviceListView`, `DeviceManageView`, `DeviceAddView` for the popover; `BookmarkRow`, `BookmarksToolbar`, `BookmarkFooter` for the panel) into per-file modules.
   - **DONE (agent G, v0.14.5)**: `DevicesPopover.tsx` 744 → **132** LOC. Three new subview files at `frontend/src/components/device/`: `DeviceListView.tsx` (174), `DeviceManageView.tsx` (242), `DeviceAddView.tsx` (203), plus shared `deviceRowParts.tsx` (103) for DRY row primitives. Subviews call `useDeviceContext()` / `useToastContext()` / `useT()` directly rather than receiving god-bag props. Public `<DevicesPopover>` API unchanged. `tsc --noEmit` + `vite build` green.
   - **DONE (agent H, post-v0.14.5)**: `useDevice.ts` 560 → **252** LOC. Three new files in `frontend/src/hooks/device/`: `parsers.ts` (117 — pure type guards + payload interfaces + `deviceListEqual`); `useDeviceWs.ts` (148 — WS subscriber via setters-bundle ref pattern, matches `useSimWsDispatcher` precedent); `useWifiTunnel.ts` (149 — `wifiScanning` + `wifiDevices` + `tunnelStatus` + 5 callbacks; bonus `upsertDevice` helper deduplicates the copy-pasted replace-or-append pattern). Single `useDevice()` callsite (`DeviceContext.tsx:15`) untouched; type re-exports preserve all external imports.
-  - **Remaining**: `BottomDock` (689) / `BookmarksPanel` (886) / `SimContext` (670) / `MapView` (568). Each is its own dedicated split; tackle individually rather than batched.
+  - **DONE (agent I', post-v0.14.5)**: `BookmarksPanel.tsx` 895 → **499** LOC (~100 over the 400 stretch target — agent flagged `BookmarksList` as natural future split). Three new files in `frontend/src/components/library/`: `BookmarkRow.tsx` (308 — per-row presentation), `BookmarksToolbar.tsx` (272 — search + filters + sort + selection bar), `BookmarksFooter.tsx` (88 — bulk actions + add). Public `BookmarksPanel` API (`onBookmarkClick`, `currentPosition`) unchanged; `LibraryDrawer.tsx` consumes identically. Note: prior agent I was killed mid-work with uncommitted state; all work was discarded and re-attempted fresh.
+  - **DONE (agent J + J', post-v0.14.5)**: `BottomDock.tsx` 689 → **103** LOC. Largest single shrinkage of the program. Seven new files in `frontend/src/components/shell/dock/`: `Eyebrow.tsx` (41 — title/subtitle header; agent J pre-kill commit), then agent J' added `DockRouteCard.tsx` (130 — origin/destination card for Teleport+Navigate; renamed inner `DockRoutePoint` to avoid clashing with unrelated `RouteCard.tsx`), `RadiusRow.tsx` (61 — random-walk radius preset chips), `JoyPreview.tsx` (65 — decorative joystick pad + WASD hints), `SpeedToggle.tsx` (76 — Walk/Run/Drive preset rail), `ActionGroup.tsx` (125 — Start/Stop/Pause/Resume/Move cluster), `buildDockContext.ts` (116 — pure derivation of mode-specific title/subtitle/chainPoints + distance helpers). All subcomponents pull from `useSimContext` / `useBookmarkContext` / `useDeviceContext` directly. `BottomDock` zero-prop default export unchanged.
+  - **Remaining**: `SimContext` (670) / `MapView` (568). Each is its own dedicated split — and SimContext overlaps with the MEDIUM "split into 3 contexts" item, so tackle them as one combined refactor.
 
 - **[DONE] [HIGH] Architecture — `backend/api/wifi_tunnel.py` 673 lines with 165-line `wifi_repair` and 69-line `wifi_tunnel_stop` functions**
   - File: `backend/api/wifi_tunnel.py:138-303` (`wifi_repair`), `562-630` (`wifi_tunnel_stop`)
