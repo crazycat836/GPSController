@@ -18,7 +18,6 @@ import { AvatarProvider } from './contexts/AvatarContext'
 
 // Components
 import MapView from './components/MapView'
-import JoystickPad from './components/JoystickPad'
 import EtaBar from './components/EtaBar'
 import UpdateChecker from './components/UpdateChecker'
 // Shell components
@@ -332,15 +331,6 @@ function AppShell() {
           onMapReady={handleMapReady}
           pcPosition={pcMarkerCoord}
         />
-
-        {sim.mode === SimMode.Joystick && (
-          <JoystickPad
-            direction={joystick.direction}
-            intensity={joystick.intensity}
-            onMove={joystick.updateFromPad}
-            onRelease={() => joystick.updateFromPad(0, 0)}
-          />
-        )}
 
         {/* Add bookmark dialog */}
         {bm.addBmDialog && (
