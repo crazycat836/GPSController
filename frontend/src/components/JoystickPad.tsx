@@ -161,6 +161,19 @@ function JoystickPad({
   }, [onRelease, ensureAnimating]);
 
   // ── WASD / arrow keyboard control ───────────────────
+  // Refs let the keyboard effect mount ONCE and still see fresh callback
+  // identities on every render. Without these, an inline `onRelease` arrow
+  // in the parent (which re-creates each render) would cause this effect
+  // to tear down + re-attach listeners every WS tick — the `pressed` Set
+  // would be wiped mid-keystroke and a held key's `keyup` would fire
+  // against a fresh empty Set, never reaching `update()` → pad stuck.
+  const onMoveRef = useRef(onMove);
+  const onReleaseRef = useRef(onRelease);
+  const maxDistanceRef = useRef(maxDistance);
+  useEffect(() => { onMoveRef.current = onMove; }, [onMove]);
+  useEffect(() => { onReleaseRef.current = onRelease; }, [onRelease]);
+  useEffect(() => { maxDistanceRef.current = maxDistance; }, [maxDistance]);
+
   useEffect(() => {
     const pressed = new Set<string>();
     const KEY_DIR: Record<string, string> = {
@@ -196,18 +209,19 @@ function JoystickPad({
         setDragging(false);
         targetPosRef.current = { x: 0, y: 0 };
         ensureAnimating();
-        onRelease();
+        onReleaseRef.current();
         return;
       }
       setDragging(true);
-      onMove(r.deg, 1);
+      onMoveRef.current(r.deg, 1);
       // Update the *target*; the RAF loop glides the visual handle from
       // its current position to the combined direction. Diagonal keypresses
       // (e.g. W+D) glide straight to NE instead of visibly stopping at N first.
       const len = Math.sqrt(r.dx * r.dx + r.dy * r.dy);
+      const md = maxDistanceRef.current;
       targetPosRef.current = {
-        x: (r.dx / len) * maxDistance,
-        y: -(r.dy / len) * maxDistance,
+        x: (r.dx / len) * md,
+        y: -(r.dy / len) * md,
       };
       ensureAnimating();
     };
@@ -237,7 +251,7 @@ function JoystickPad({
         setDragging(false);
         targetPosRef.current = { x: 0, y: 0 };
         ensureAnimating();
-        onRelease();
+        onReleaseRef.current();
       }
     };
 
@@ -249,7 +263,10 @@ function JoystickPad({
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [onMove, onRelease, ensureAnimating, maxDistance]);
+    // Mount-once: callbacks are read via refs above so the listeners and
+    // their `pressed` Set survive consumer re-renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ensureAnimating]);
 
   // Compass direction labels around the pad.
   const arrows = [
