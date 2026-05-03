@@ -1,19 +1,24 @@
-import React from 'react'
-import { Gamepad2 } from 'lucide-react'
+import { Gauge } from 'lucide-react'
 import { useT } from '../../i18n'
-import SpeedControls from './SpeedControls'
+import { SpeedPresets } from './SpeedControls'
 import ActionButtons from './ActionButtons'
 
 export default function JoystickPanel() {
   const t = useT()
   return (
     <div className="seg-stack">
-      <SpeedControls />
-      <ActionButtons />
-      <div className="seg-hint">
-        <Gamepad2 className="w-3.5 h-3.5 shrink-0" />
-        <span>{t('panel.joystick_hint')}</span>
+      {/* Speed mode picker — Walk / Run / Drive presets only.
+          Joystick mode does not honor custom km/h or min~max range,
+          so those controls are deliberately omitted. */}
+      <div className="seg">
+        <div className="seg-row seg-row-header">
+          <Gauge size={13} className="text-[var(--color-accent)]" />
+          <span className="seg-label">{t('panel.speed')}</span>
+        </div>
+        <SpeedPresets />
       </div>
+
+      <ActionButtons />
     </div>
   )
 }
