@@ -145,6 +145,44 @@ export default function SpeedControls() {
   )
 }
 
+/** Walk / Run / Drive preset chips. Renders just the chips row — caller
+ *  wraps in `<div className="seg">` with its own header. Reused by
+ *  JoystickPanel, which only wants the presets and not the slider/range. */
+export function SpeedPresets() {
+  const { sim } = useSimContext()
+  const t = useT()
+
+  const isPresetActive = (mode: MoveMode) =>
+    sim.moveMode === mode &&
+    sim.customSpeedKmh == null &&
+    sim.speedMinKmh == null &&
+    sim.speedMaxKmh == null
+
+  return (
+    <div className="seg-row seg-row-flush">
+      <div className="flex gap-1 w-full">
+        {SPEED_PRESETS.map((opt) => {
+          const active = isPresetActive(opt.mode)
+          return (
+            <button
+              key={opt.mode}
+              className={`seg-chip ${active ? 'seg-chip-on' : 'seg-chip-off'}`}
+              onClick={() => {
+                sim.setMoveMode(opt.mode)
+                sim.setCustomSpeedKmh(null)
+              }}
+            >
+              <opt.Icon size={14} />
+              <span>{t(opt.labelKey)}</span>
+              <span className="text-[9px] opacity-50">{opt.value} km/h</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function CustomSpeedSlider({
   value,
   onChange,
