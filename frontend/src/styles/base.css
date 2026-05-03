@@ -106,7 +106,6 @@
 }
 
 @media (max-width: 768px) {
-  .joystick-overlay { bottom: 16px; right: 16px; }
   .joystick-pad { width: 120px; height: 120px; }
 }
 

@@ -332,7 +332,7 @@ export const STRINGS = {
   'panel.coordinates': { zh: '座標', en: 'Coordinates' },
   'panel.search_hint': { zh: '使用搜尋來查找地址', en: 'Use search to find an address' },
   'panel.navigate_hint': { zh: '在地圖上右鍵選擇目的地', en: 'Right-click on the map to set destination' },
-  'panel.joystick_hint': { zh: '使用畫面上的搖桿控制移動方向', en: 'Use the joystick pad on the map to control direction' },
+  'panel.joystick_hint': { zh: '拖曳右下角的搖桿,或按 WASD / 方向鍵控制移動', en: 'Drag the pad in the dock, or press WASD / arrow keys to move' },
   'settings.title': { zh: '設定', en: 'Settings' },
   'settings.map_layer': { zh: '地圖圖層', en: 'Map layer' },
   'settings.preferences': { zh: '偏好設定', en: 'Preferences' },

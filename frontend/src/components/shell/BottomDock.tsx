@@ -91,9 +91,9 @@ export default function BottomDock() {
 
       {/* panel-controls */}
       <div className="flex items-center gap-2.5 shrink-0">
-        {/* Speed is irrelevant in Teleport (instant) and Joystick
-            (direction-driven) modes — hide rather than dim so the
-            dock reads cleanly. */}
+        {/* SpeedToggle is hidden (not dimmed) for Teleport — the action
+            is instant — and for Joystick, where speed comes from the
+            preset chosen in the side panel. Keeps the dock uncluttered. */}
         {!speedToggleDisabled && <SpeedToggle />}
         <ActionGroup />
       </div>
