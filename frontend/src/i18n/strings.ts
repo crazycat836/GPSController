@@ -249,6 +249,7 @@ export const STRINGS = {
 
   // ── Joystick ─────────────────────────────────
   'joy.drag_or_keys': { zh: '拖曳或按 WASD / 方向鍵', en: 'Drag or press WASD / arrow keys' },
+  'joy.pad_aria_label': { zh: '搖桿控制盤,拖曳或按 WASD / 方向鍵移動裝置', en: 'Joystick pad — drag or press WASD / arrow keys to move device' },
   'joy.north': { zh: '北', en: 'N' },
   'joy.east': { zh: '東', en: 'E' },
   'joy.south': { zh: '南', en: 'S' },
