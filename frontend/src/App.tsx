@@ -219,17 +219,25 @@ function AppShell() {
   }, [wsConnected])
 
   // Toast when a device is lost involuntarily (DVT exhausted, USB unplugged,
-  // WiFi tunnel died). Fires whenever `lostUdids` grows — the set itself is
-  // cleared when the device reappears, so the user only sees this on the
-  // transition into lost state, not while it stays lost.
-  const prevLostCount = useRef(0)
+  // WiFi tunnel died, phone locked mid-op). Triggered by `lastDisconnect.ts`
+  // changing — fires once per backend broadcast and picks a cause-specific
+  // copy when the backend classified the failure. Falls back to the generic
+  // toast for `unknown` so a future cause we don't have a key for still
+  // surfaces something readable.
+  const prevLastDisconnectTs = useRef(0)
   useEffect(() => {
-    const size = device.lostUdids.size
-    if (size > prevLostCount.current) {
-      toast.showToast(t('toast.device_lost'), 4000)
-    }
-    prevLostCount.current = size
-  }, [device.lostUdids, toast, t])
+    const ld = device.lastDisconnect
+    if (!ld) return
+    if (ld.ts <= prevLastDisconnectTs.current) return
+    prevLastDisconnectTs.current = ld.ts
+    const key =
+      ld.cause === 'usb_removed' ? 'toast.device_lost.usb_removed' as const
+      : ld.cause === 'wifi_dropped' ? 'toast.device_lost.wifi_dropped' as const
+      : ld.cause === 'phone_locked' ? 'toast.device_lost.phone_locked' as const
+      : ld.cause === 'ddi_not_mounted' ? 'toast.device_lost.ddi_not_mounted' as const
+      : 'toast.device_lost' as const
+    toast.showToast(t(key), 4000)
+  }, [device.lastDisconnect, toast, t])
 
   // Keyboard shortcuts
   useEffect(() => {

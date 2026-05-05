@@ -22,12 +22,22 @@ import {
   parseDeviceReconnected,
   parseDeviceSnapshot,
 } from './parsers'
-import type { DeviceInfo, WsSubscribe } from './parsers'
+import type { DeviceInfo, DeviceLostCause, WsSubscribe } from './parsers'
+
+export interface DeviceLastDisconnect {
+  readonly udids: readonly string[]
+  readonly cause: DeviceLostCause
+  // Wall-clock ms — App.tsx watches this for changes to fire a one-shot
+  // toast. Pinned to a fresh `Date.now()` per event so identical
+  // back-to-back disconnects (same udids + cause) still re-trigger.
+  readonly ts: number
+}
 
 export interface DeviceWsSetters {
   setDevices: React.Dispatch<React.SetStateAction<DeviceInfo[]>>
   setConnectedDevice: React.Dispatch<React.SetStateAction<DeviceInfo | null>>
   setLostUdids: React.Dispatch<React.SetStateAction<Set<string>>>
+  setLastDisconnect: React.Dispatch<React.SetStateAction<DeviceLastDisconnect | null>>
   bumpWsGen: () => void
 }
 
@@ -63,6 +73,17 @@ export function useDeviceWs(
         const udids: readonly string[] = payload.udids ?? (payload.udid ? [payload.udid] : [])
         // user-initiated disconnects don't warrant a "lost" pill
         const involuntary = payload.reason !== 'user'
+        if (involuntary) {
+          // Surface the cause one level up so App.tsx can pick a
+          // root-cause-specific toast. Independent of `lostUdids` (which
+          // is a Set of udids for pill rendering); same trigger, different
+          // shape.
+          s.setLastDisconnect({
+            udids,
+            cause: payload.cause ?? 'unknown',
+            ts: Date.now(),
+          })
+        }
         if (udids.length === 0) {
           s.setConnectedDevice(null)
           s.setDevices((prev) => {

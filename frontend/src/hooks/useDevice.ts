@@ -7,9 +7,11 @@ import { devWarn } from '../lib/dev-log'
 import { deviceListEqual } from './device/parsers'
 import type { DeviceInfo, WsSubscribe } from './device/parsers'
 import { useDeviceWs } from './device/useDeviceWs'
+import type { DeviceLastDisconnect } from './device/useDeviceWs'
 import { useWifiTunnel } from './device/useWifiTunnel'
 
-export type { DeviceInfo, WifiScanResult, WsSubscribe } from './device/parsers'
+export type { DeviceInfo, WifiScanResult, WsSubscribe, DeviceLostCause } from './device/parsers'
+export type { DeviceLastDisconnect } from './device/useDeviceWs'
 
 // Coalesce burst scans (visibility-change + WS-reconnect debounce can
 // both fire within ~200ms). When `poll: true` AND another poll ran
@@ -30,6 +32,10 @@ export function useDevice(subscribe?: WsSubscribe) {
   // share is_connected=false but the former deserves a red "已斷線" pill.
   // Cleared when the UDID reappears connected, or on a fresh scan.
   const [lostUdids, setLostUdids] = useState<Set<string>>(() => new Set())
+  // Last involuntary disconnect — drives the cause-specific toast in
+  // App.tsx. Independent of `lostUdids`; same trigger but carries the
+  // root-cause label classified by the backend.
+  const [lastDisconnect, setLastDisconnect] = useState<DeviceLastDisconnect | null>(null)
 
   // Bumped every time a WS-driven state change is applied (connected /
   // disconnected / reconnected). Used by REST flows (scan/connect/
@@ -48,7 +54,9 @@ export function useDevice(subscribe?: WsSubscribe) {
     clearAutoReconnectBlocks().catch((err) => devWarn('clearAutoReconnectBlocks failed', err))
   }, [])
 
-  useDeviceWs(subscribe, { setDevices, setConnectedDevice, setLostUdids, bumpWsGen })
+  useDeviceWs(subscribe, {
+    setDevices, setConnectedDevice, setLostUdids, setLastDisconnect, bumpWsGen,
+  })
 
   const wifi = useWifiTunnel({ setDevices, setConnectedDevice })
 
@@ -239,14 +247,14 @@ export function useDevice(subscribe?: WsSubscribe) {
       connectWifi, scanWifi, wifiScanning, wifiDevices,
       startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
       connectedDevices, primaryDevice,
-      lostUdids,
+      lostUdids, lastDisconnect,
     }),
     [
       devices, connectedDevice, scanning, scan, connect, disconnect, forget,
       connectWifi, scanWifi, wifiScanning, wifiDevices,
       startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
       connectedDevices, primaryDevice,
-      lostUdids,
+      lostUdids, lastDisconnect,
     ],
   )
 }

@@ -43,10 +43,31 @@ export interface DeviceConnectedPayload {
   connection_type?: string
 }
 
+export type DeviceLostCause =
+  | 'unknown'
+  | 'usb_removed'
+  | 'wifi_dropped'
+  | 'phone_locked'
+  | 'ddi_not_mounted'
+
+const DEVICE_LOST_CAUSES: readonly DeviceLostCause[] = [
+  'unknown', 'usb_removed', 'wifi_dropped', 'phone_locked', 'ddi_not_mounted',
+]
+
+function asDeviceLostCause(v: unknown): DeviceLostCause | undefined {
+  return typeof v === 'string' && (DEVICE_LOST_CAUSES as readonly string[]).includes(v)
+    ? v as DeviceLostCause
+    : undefined
+}
+
 export interface DeviceDisconnectedPayload {
   udid?: string
   udids?: readonly string[]
   reason?: string
+  // Backend's classified root cause when reason is involuntary
+  // (device_lost / usb_unplugged / wifi tunnel cleanup). Absent on
+  // user-initiated disconnects ('user' / 'forget').
+  cause?: DeviceLostCause
 }
 
 export interface DeviceReconnectedPayload {
@@ -97,6 +118,7 @@ export function parseDeviceDisconnected(data: unknown): DeviceDisconnectedPayloa
     udid: asString(obj.udid),
     udids: asStringArray(obj.udids),
     reason: asString(obj.reason),
+    cause: asDeviceLostCause(obj.cause),
   }
 }
 

@@ -447,10 +447,11 @@ export function useSimWsDispatcher(
           break
         }
         case 'device_disconnected': {
-          // User-facing notice is a toast fired by App.tsx off device.lostUdids
-          // (canonical Toast per DESIGN.md §4). The legacy ErrorBanner path was
-          // removed: banner isn't in DESIGN.md and DeviceChip's "已斷線" pill
-          // already persists the state until reconnect.
+          // User-facing notice is a toast fired by App.tsx off
+          // device.lastDisconnect (canonical Toast per DESIGN.md §4),
+          // which picks a cause-specific copy. The legacy ErrorBanner
+          // path was removed: banner isn't in DESIGN.md and DeviceChip's
+          // "已斷線" pill already persists the state until reconnect.
           s.setStatus((prev) => ({ ...prev, running: false, paused: false }))
           break
         }

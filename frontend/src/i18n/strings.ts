@@ -70,7 +70,11 @@ export const STRINGS = {
   'device.chip_state_error': { zh: '錯誤', en: 'Error' },
   'device.chip_state_reconnecting': { zh: '重連中', en: 'Reconnecting' },
   'device.chip_state_disconnected': { zh: '已斷線', en: 'Disconnected' },
-  'toast.device_lost': { zh: '裝置連線中斷,請重新插上 USB', en: 'Device connection lost. Please reconnect USB.' },
+  'toast.device_lost': { zh: '裝置連線中斷,請重新連線', en: 'Device connection lost. Please reconnect.' },
+  'toast.device_lost.usb_removed': { zh: 'USB 已拔除,請重新插上', en: 'USB unplugged. Please reconnect the cable.' },
+  'toast.device_lost.wifi_dropped': { zh: 'WiFi 連線中斷,請確認手機在同一 WiFi', en: 'WiFi tunnel lost. Check the iPhone is on the same WiFi.' },
+  'toast.device_lost.phone_locked': { zh: '手機鎖屏,請解鎖後再操作', en: 'iPhone is locked. Unlock the device and try again.' },
+  'toast.device_lost.ddi_not_mounted': { zh: 'Developer Disk Image 未掛載,請重新連線裝置', en: 'Developer Disk Image not mounted. Please reconnect the device.' },
 
   // ── Connection health (banner + stale visuals) ───────────
   'conn.ws_reconnecting': { zh: '與背景服務連線中…', en: 'Reconnecting to backend…' },
