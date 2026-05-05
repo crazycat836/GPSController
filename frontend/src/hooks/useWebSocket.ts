@@ -34,6 +34,12 @@ export function useWebSocket() {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectDelay = useRef(RECONNECT_INTERVAL)
   const mountedRef = useRef(true)
+  // Tracks whether the *current* socket has yielded a server frame yet.
+  // We only flip `connected → true` after the server speaks, not after we
+  // optimistically send the auth frame — otherwise a half-broken backend
+  // (TCP accepts but never replies) would still show "connected" to the UI.
+  // Reset on every connect() so each new socket re-proves itself.
+  const firstMessageReceivedRef = useRef(false)
 
   const cleanup = useCallback(() => {
     if (reconnectTimer.current) {
@@ -45,6 +51,10 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     if (!mountedRef.current) return
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return
+
+    // Per-socket reset — last connection's "we got a frame" must not count
+    // for this one.
+    firstMessageReceivedRef.current = false
 
     try {
       const ws = new WebSocket(WS_URL)
@@ -81,12 +91,22 @@ export function useWebSocket() {
           // If the auth frame can't be sent the socket will close shortly
           // anyway; scheduleReconnect() handles the retry.
         }
-        setConnected(true)
+        // NB: `connected` is intentionally NOT set here. We wait for the
+        // backend's first response (initial-state push: cooldown_update +
+        // device_snapshot, fired from _send_initial_state) so the UI can
+        // distinguish "TCP open" from "live and serving".
         reconnectDelay.current = RECONNECT_INTERVAL
       }
 
       ws.onmessage = (event) => {
         if (!mountedRef.current) return
+        // Flip `connected → true` on the first server frame after open.
+        // We do this before parsing so even an unparseable payload
+        // (which proves the peer is alive) flips the state correctly.
+        if (!firstMessageReceivedRef.current) {
+          firstMessageReceivedRef.current = true
+          setConnected(true)
+        }
         try {
           const msg: WsMessage = JSON.parse(event.data)
           // Fan out synchronously: no state, no batching, no drops.
@@ -101,6 +121,7 @@ export function useWebSocket() {
       ws.onclose = () => {
         if (!mountedRef.current) return
         setConnected(false)
+        firstMessageReceivedRef.current = false
         wsRef.current = null
         scheduleReconnect()
       }

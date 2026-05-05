@@ -546,11 +546,17 @@ async def wifi_tunnel_discover():
     return {"devices": unique}
 
 
-async def _cleanup_wifi_connections() -> list[str]:
+async def _cleanup_wifi_connections(reason: str = "wifi_tunnel_stopped") -> list[str]:
     """Disconnect any Network devices + drop the simulation engine.
-    Broadcasts device_disconnected so the frontend banners/disables context
+
+    Broadcasts ``device_disconnected`` so the frontend banners/disables context
     menu items immediately instead of waiting for the next failed action.
-    Returns the UDIDs that were disconnected."""
+    Returns the UDIDs that were disconnected.
+
+    *reason* is forwarded as the ``reason`` field in the broadcast so consumers
+    (frontend toasts, future analytics) can distinguish a user/admin stop
+    from a liveness-probe-detected death.
+    """
     app_state = ctx.app_state
     dm = _dm()
     udids: list[str] = []
@@ -567,7 +573,7 @@ async def _cleanup_wifi_connections() -> list[str]:
         for udid in udids:
             try:
                 await dm.disconnect(udid)
-                _tunnel_logger.info("Disconnected WiFi device %s", udid)
+                _tunnel_logger.info("Disconnected WiFi device %s (reason=%s)", udid, reason)
             except (OSError, RuntimeError):
                 _tunnel_logger.exception("Failed to disconnect %s", udid)
         if udids:
@@ -575,7 +581,7 @@ async def _cleanup_wifi_connections() -> list[str]:
                 from api.websocket import broadcast
                 await broadcast("device_disconnected", {
                     "udids": udids,
-                    "reason": "wifi_tunnel_stopped",
+                    "reason": reason,
                 })
             except Exception:
                 _tunnel_logger.exception("WiFi cleanup: broadcast failed")

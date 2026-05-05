@@ -53,6 +53,17 @@ export interface DeviceReconnectedPayload {
   udid: string
 }
 
+export interface DeviceSnapshotEntry {
+  udid: string
+  name?: string
+  ios_version?: string
+  connection_type?: string
+}
+
+export interface DeviceSnapshotPayload {
+  devices: readonly DeviceSnapshotEntry[]
+}
+
 function asObject(v: unknown): Record<string, unknown> | null {
   return typeof v === 'object' && v != null ? v as Record<string, unknown> : null
 }
@@ -95,6 +106,27 @@ export function parseDeviceReconnected(data: unknown): DeviceReconnectedPayload 
   const udid = asString(obj.udid)
   if (!udid) return null
   return { udid }
+}
+
+export function parseDeviceSnapshot(data: unknown): DeviceSnapshotPayload | null {
+  const obj = asObject(data)
+  if (!obj) return null
+  const raw = obj.devices
+  if (!Array.isArray(raw)) return null
+  const devices: DeviceSnapshotEntry[] = []
+  for (const entry of raw) {
+    const e = asObject(entry)
+    if (!e) continue
+    const udid = asString(e.udid)
+    if (!udid) continue
+    devices.push({
+      udid,
+      name: asString(e.name),
+      ios_version: asString(e.ios_version),
+      connection_type: asString(e.connection_type),
+    })
+  }
+  return { devices }
 }
 
 export function deviceListEqual(a: readonly DeviceInfo[], b: readonly DeviceInfo[]): boolean {

@@ -57,7 +57,15 @@ async def broadcast(event_type: str, data: dict):
 
 
 async def _send_initial_state(ws: WebSocket) -> None:
-    """Push current position and cooldown to a newly connected client."""
+    """Push current position, cooldown, and device snapshot to a newly
+    connected client.
+
+    The ``device_snapshot`` event is the authoritative ground truth for the
+    frontend's device list on (re)connect. Without it the renderer would
+    keep whatever stale list it had from before the WS drop and show
+    phantom "connected" pills until the next REST-poll-driven scan completes
+    (~30s worst case).
+    """
     app_state = ctx.app_state
     # Current position from any active engine
     for engine in app_state.simulation_engines.values():
@@ -71,6 +79,29 @@ async def _send_initial_state(ws: WebSocket) -> None:
     # Cooldown state
     cd = app_state.cooldown_timer.get_status()
     await ws.send_text(json.dumps({"type": "cooldown_update", "data": cd}))
+
+    # Device snapshot — only the currently-connected entries. discover_devices
+    # is cached (0.5s TTL) so this is cheap on bursty reconnects.
+    try:
+        all_devices = await app_state.device_manager.discover_devices()
+        connected = [
+            {
+                "udid": d.udid,
+                "name": d.name,
+                "ios_version": d.ios_version,
+                "connection_type": d.connection_type,
+            }
+            for d in all_devices
+            if getattr(d, "is_connected", False)
+        ]
+        await ws.send_text(json.dumps({
+            "type": "device_snapshot",
+            "data": {"devices": connected},
+        }))
+    except Exception:
+        # Snapshot is a hint, not a contract — frontend has a polling
+        # fallback. Don't fail the whole handshake on a discovery hiccup.
+        logger.debug("Failed to send device_snapshot to new WS client", exc_info=True)
 
 
 async def _require_auth_frame(ws: WebSocket) -> bool:

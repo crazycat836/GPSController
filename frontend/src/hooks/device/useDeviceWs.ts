@@ -20,6 +20,7 @@ import {
   parseDeviceConnected,
   parseDeviceDisconnected,
   parseDeviceReconnected,
+  parseDeviceSnapshot,
 } from './parsers'
 import type { DeviceInfo, WsSubscribe } from './parsers'
 
@@ -124,6 +125,81 @@ export function useDeviceWs(
         })
         s.setConnectedDevice((prev) => prev ?? merged)
         s.setLostUdids((ls) => { if (!ls.has(payload.udid)) return ls; const n = new Set(ls); n.delete(payload.udid); return n })
+      } else if (msg.type === 'device_snapshot') {
+        // Authoritative ground-truth from the server (sent on every WS
+        // connect via _send_initial_state). Replaces the local list so
+        // any phantom "connected" entries left over from before a
+        // reconnect — e.g. a WiFi tunnel that died while we were offline
+        // — are cleared in one shot. Treats the snapshot as a delta-zero:
+        // anything not in `devices` is_connected=false.
+        const payload = parseDeviceSnapshot(msg.data)
+        if (!payload) return
+        s.bumpWsGen()
+        const incoming = new Map<string, DeviceInfo>()
+        for (const e of payload.devices) {
+          incoming.set(e.udid, {
+            udid: e.udid,
+            name: e.name ?? '',
+            ios_version: e.ios_version ?? '',
+            connection_type: e.connection_type ?? 'USB',
+            is_connected: true,
+          })
+        }
+        s.setDevices((prev) => {
+          // Preserve existing developer_mode_* fields where the udid
+          // overlaps — the snapshot deliberately doesn't carry them
+          // (broadcast payload stays small).
+          const next: DeviceInfo[] = []
+          const seen = new Set<string>()
+          for (const d of prev) {
+            const fresh = incoming.get(d.udid)
+            if (fresh) {
+              next.push({ ...d, ...fresh })
+              seen.add(d.udid)
+            } else {
+              // Not in snapshot → mark disconnected, keep entry so the
+              // "previously connected" pill can show until a fresh scan.
+              next.push({ ...d, is_connected: false })
+            }
+          }
+          for (const [udid, fresh] of incoming) {
+            if (!seen.has(udid)) next.push(fresh)
+          }
+          return next
+        })
+        s.setConnectedDevice((prev) => {
+          if (prev && incoming.has(prev.udid)) {
+            return { ...prev, ...incoming.get(prev.udid)! }
+          }
+          // Promote any snapshot entry to primary if we had no prior pick.
+          if (!prev) {
+            const first = payload.devices[0]
+            return first
+              ? {
+                  udid: first.udid,
+                  name: first.name ?? '',
+                  ios_version: first.ios_version ?? '',
+                  connection_type: first.connection_type ?? 'USB',
+                  is_connected: true,
+                }
+              : null
+          }
+          // Prior connectedDevice no longer in snapshot — drop it.
+          return null
+        })
+        // Snapshot proves these udids are actively connected — so they
+        // can't be "lost". Clear them from the lost set in one pass.
+        if (incoming.size > 0) {
+          s.setLostUdids((ls) => {
+            if (ls.size === 0) return ls
+            let changed = false
+            const next = new Set(ls)
+            for (const udid of incoming.keys()) {
+              if (next.delete(udid)) changed = true
+            }
+            return changed ? next : ls
+          })
+        }
       } else if (msg.type === 'device_reconnected') {
         const payload = parseDeviceReconnected(msg.data)
         if (!payload) return
