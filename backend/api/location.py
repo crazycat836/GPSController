@@ -248,18 +248,14 @@ async def teleport(req: TeleportRequest):
 
     old_pos = engine.current_position
     try:
-        await engine.teleport(req.lat, req.lng)
+        await _exec_with_retry(
+            req.udid, engine, "teleport",
+            lambda e: e.teleport(req.lat, req.lng),
+        )
     except HTTPException:
         raise
-    except DeviceLostError as e:
-        raise (await _handle_device_lost(e))
-    except Exception as e:
+    except Exception:
         logger.exception("Teleport failed")
-        # Also inspect the cause — nested DeviceLostError (e.g. re-raised from
-        # the simulation engine retry loop) should still trigger cleanup.
-        nested = unwrap_device_lost(e)
-        if nested is not None:
-            raise (await _handle_device_lost(nested))
         raise http_err(500, "teleport_failed", "Teleport failed; see ~/.gpscontroller/logs/backend.log")
 
     # Start cooldown if enabled and there was a previous position.
@@ -280,6 +276,67 @@ async def _guard(coro):
     except HTTPException:
         raise
     except DeviceLostError as exc:
+        raise (await _handle_device_lost(exc))
+    except Exception as exc:
+        nested = unwrap_device_lost(exc)
+        if nested is not None:
+            raise (await _handle_device_lost(nested))
+        raise
+
+
+async def _exec_with_retry(udid_arg, engine, label: str, op):
+    """Run ``op(engine)``. On DeviceLostError (or a wrapped one), do a
+    full force-reconnect cycle and retry the op exactly once. Any final
+    DeviceLostError (initial fail + reconnect-or-retry fail) is funnelled
+    into the standard ``_handle_device_lost`` cleanup flow.
+
+    The retry covers the locwarp-style "give the device one more chance
+    after a blip" case: a transient screen-lock or WiFi-roam failure no
+    longer surfaces as a user-visible error — the rebuilt engine usually
+    succeeds on the second try.
+
+    *udid_arg* is the raw API-level udid (None = primary). Resolved fresh
+    on the retry path so the freshly-rebuilt engine is picked up correctly
+    in dual-device mode.
+    """
+    try:
+        return await op(engine)
+    except HTTPException:
+        raise
+    except DeviceLostError as exc:
+        first_lost = exc
+    except Exception as exc:
+        nested = unwrap_device_lost(exc)
+        if nested is None:
+            raise
+        first_lost = nested
+
+    app_state = ctx.app_state
+    dm = app_state.device_manager
+    try:
+        target_udid = await _resolve_target_udid(app_state, dm, udid_arg)
+    except HTTPException:
+        # No device left to reconnect to — original DeviceLost is the truth.
+        raise (await _handle_device_lost(first_lost))
+
+    logger.warning(
+        "%s failed (DeviceLost: %s); retrying once after full reconnect",
+        label, first_lost,
+    )
+    rebuilt = await _force_reconnect(app_state, dm, target_udid)
+    if rebuilt is None:
+        raise (await _handle_device_lost(first_lost))
+
+    # _force_reconnect returns the legacy primary accessor; in dual mode
+    # the primary may not be target_udid's engine. Pin to the udid we
+    # just rebuilt explicitly.
+    target_engine = app_state.get_engine(target_udid) or rebuilt
+    try:
+        return await op(target_engine)
+    except HTTPException:
+        raise
+    except DeviceLostError as exc:
+        logger.warning("%s retry after full reconnect also failed", label)
         raise (await _handle_device_lost(exc))
     except Exception as exc:
         nested = unwrap_device_lost(exc)
@@ -416,7 +473,7 @@ async def resume(udid: str | None = None):
 @router.post("/restore")
 async def restore(udid: str | None = None):
     engine = await _engine(udid)
-    await _guard(engine.restore())
+    await _exec_with_retry(udid, engine, "restore", lambda e: e.restore())
     return {"status": "restored"}
 
 
@@ -435,7 +492,7 @@ async def stop_simulation(udid: str | None = None):
     """Legacy endpoint: stop + restore. Kept for backwards compatibility,
     prefer /stop (movement only) or /restore (clear location)."""
     engine = await _engine(udid)
-    await _guard(engine.restore())
+    await _exec_with_retry(udid, engine, "restore", lambda e: e.restore())
     return {"status": "stopped"}
 
 
