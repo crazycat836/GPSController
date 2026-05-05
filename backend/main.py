@@ -522,6 +522,7 @@ async def _usbmux_presence_watchdog():
     import time
     from pymobiledevice3.usbmux import list_devices
     from api.websocket import broadcast
+    from services.location_service import DeviceLostCause
 
     miss_counts: dict[str, int] = {}
     miss_threshold = 3
@@ -582,7 +583,7 @@ async def _usbmux_presence_watchdog():
                     await broadcast("device_disconnected", {
                         "udids": lost_now,
                         "reason": "usb_unplugged",
-                        "cause": "usb_removed",
+                        "cause": DeviceLostCause.USB_REMOVED.value,
                     })
                 except Exception:
                     logger.exception("watchdog: broadcast (disconnected) failed")

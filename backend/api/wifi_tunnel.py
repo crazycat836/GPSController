@@ -12,6 +12,7 @@ from api._errors import http_err
 from config import MAX_DEVICES
 from context import ctx
 from core.wifi_tunnel import TunnelRunner
+from services.location_service import DeviceLostCause
 
 router = APIRouter(prefix="/api/device", tags=["device"])
 
@@ -579,13 +580,13 @@ async def _cleanup_wifi_connections(reason: str = "wifi_tunnel_stopped") -> list
         if udids:
             try:
                 from api.websocket import broadcast
-                # cleanup is always a tunnel/network condition by definition —
-                # whether triggered by user stop, watchdog, or liveness probe,
-                # the device-level effect is the same: WiFi-side path is gone.
+                # cleanup is always a tunnel/network condition — whether
+                # triggered by user stop, watchdog, or liveness probe, the
+                # device-level effect is the same: WiFi-side path is gone.
                 await broadcast("device_disconnected", {
                     "udids": udids,
                     "reason": reason,
-                    "cause": "wifi_dropped",
+                    "cause": DeviceLostCause.WIFI_DROPPED.value,
                 })
             except Exception:
                 _tunnel_logger.exception("WiFi cleanup: broadcast failed")

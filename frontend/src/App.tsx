@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type L from 'leaflet'
 import { useT } from './i18n'
+import type { StringKey } from './i18n/strings'
 import { SimMode, type LatLng } from './hooks/useSimulation'
+import type { DeviceLostCause } from './hooks/useDevice'
 import { STORAGE_KEYS } from './lib/storage-keys'
 import { haversineM, polylineDistanceM } from './lib/geo'
 
@@ -57,6 +59,18 @@ import Modal from './components/Modal'
 // `hint` out to action-button consumers (panels, search bar, banner).
 // SimProvider sits inside health so sim consumers can disable actions
 // without duplicating the health derivation.
+
+// i18n keys for cause-classified device-lost toasts. `unknown` (and any
+// future cause we don't have a key for yet) falls back to the generic
+// `toast.device_lost`. Mirrors the SIM_ERROR_KEYS pattern in SimContext.
+const DEVICE_LOST_TOAST_KEYS: Record<DeviceLostCause, StringKey> = {
+  unknown: 'toast.device_lost',
+  usb_removed: 'toast.device_lost.usb_removed',
+  wifi_dropped: 'toast.device_lost.wifi_dropped',
+  phone_locked: 'toast.device_lost.phone_locked',
+  ddi_not_mounted: 'toast.device_lost.ddi_not_mounted',
+}
+
 function App() {
   return (
     <ToastProvider>
@@ -218,24 +232,14 @@ function AppShell() {
     }
   }, [wsConnected])
 
-  // Toast when a device is lost involuntarily (DVT exhausted, USB unplugged,
-  // WiFi tunnel died, phone locked mid-op). Triggered by `lastDisconnect.ts`
-  // changing — fires once per backend broadcast and picks a cause-specific
-  // copy when the backend classified the failure. Falls back to the generic
-  // toast for `unknown` so a future cause we don't have a key for still
-  // surfaces something readable.
+  // Fires one cause-specific toast per involuntary disconnect.
   const prevLastDisconnectTs = useRef(0)
   useEffect(() => {
     const ld = device.lastDisconnect
     if (!ld) return
     if (ld.ts <= prevLastDisconnectTs.current) return
     prevLastDisconnectTs.current = ld.ts
-    const key =
-      ld.cause === 'usb_removed' ? 'toast.device_lost.usb_removed' as const
-      : ld.cause === 'wifi_dropped' ? 'toast.device_lost.wifi_dropped' as const
-      : ld.cause === 'phone_locked' ? 'toast.device_lost.phone_locked' as const
-      : ld.cause === 'ddi_not_mounted' ? 'toast.device_lost.ddi_not_mounted' as const
-      : 'toast.device_lost' as const
+    const key = DEVICE_LOST_TOAST_KEYS[ld.cause] ?? 'toast.device_lost'
     toast.showToast(t(key), 4000)
   }, [device.lastDisconnect, toast, t])
 

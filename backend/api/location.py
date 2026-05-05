@@ -11,7 +11,6 @@ from config import resolve_speed_profile
 from services.location_service import (
     DeviceLostCause,
     DeviceLostError,
-    classify_device_lost_cause,
     unwrap_device_lost,
 )
 from context import ctx
@@ -158,20 +157,12 @@ _DEVICE_LOST_MESSAGE: dict[DeviceLostCause, str] = {
 }
 
 
-async def _handle_device_lost(exc: Exception) -> "HTTPException":
-    """Clean up after a DeviceLostError: disconnect the stale device from
-    DeviceManager, drop the simulation engine, broadcast an explicit
-    `device_disconnected` WebSocket event so the frontend can banner it.
-    Returns an HTTPException the caller should raise.
-
-    The exception's classified ``cause`` is forwarded both to the WS
-    broadcast (so banners can be cause-specific) and to the HTTP envelope
-    (so direct API clients see the same root-cause label)."""
-    if isinstance(exc, DeviceLostError):
-        cause = exc.cause
-    else:
-        cause = classify_device_lost_cause(exc)
-
+async def _handle_device_lost(exc: DeviceLostError) -> "HTTPException":
+    """Disconnect the stale device, drop its engine, broadcast
+    ``device_disconnected`` (with cause), and return a 503 ready to
+    raise. All callers either catch ``DeviceLostError`` directly or
+    extract a nested one via ``unwrap_device_lost`` before calling."""
+    cause = exc.cause
     app_state = ctx.app_state
     dm = app_state.device_manager
     lost_udids = dm.connected_udids
@@ -313,19 +304,13 @@ async def _guard(coro):
 
 
 async def _exec_with_retry(udid_arg, engine, label: str, op):
-    """Run ``op(engine)``. On DeviceLostError (or a wrapped one), do a
-    full force-reconnect cycle and retry the op exactly once. Any final
-    DeviceLostError (initial fail + reconnect-or-retry fail) is funnelled
-    into the standard ``_handle_device_lost`` cleanup flow.
-
-    The retry covers the locwarp-style "give the device one more chance
-    after a blip" case: a transient screen-lock or WiFi-roam failure no
-    longer surfaces as a user-visible error — the rebuilt engine usually
-    succeeds on the second try.
-
-    *udid_arg* is the raw API-level udid (None = primary). Resolved fresh
-    on the retry path so the freshly-rebuilt engine is picked up correctly
-    in dual-device mode.
+    """Run ``op(engine)``. On DeviceLostError (or a wrapped one), do one
+    full force-reconnect cycle and retry the op exactly once. A final
+    failure funnels into ``_handle_device_lost``. Gives the device one
+    more chance after a transient blip (screen-lock, WiFi roam) before
+    surfacing a user-visible error. *udid_arg* (None = primary) is
+    re-resolved on retry so the rebuilt engine is picked up correctly in
+    dual-device mode.
     """
     try:
         return await op(engine)
