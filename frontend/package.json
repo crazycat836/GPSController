@@ -1,6 +1,6 @@
 {
   "name": "gps-controller",
-  "version": "0.14.9",
+  "version": "0.14.10",
   "description": "iOS Virtual Location Simulator",
   "author": "crazycat836",
   "main": "electron/main.js",
