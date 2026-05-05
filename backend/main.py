@@ -5,6 +5,7 @@ import os
 import secrets
 import time
 from contextlib import asynccontextmanager
+from copy import copy
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -49,7 +50,7 @@ if _old_data_dir.exists() and not _new_data_dir.exists():
         pass  # cross-device or permission issue — ignore, will create fresh
 
 # Configure logging — colored console + rotating file in ~/.gpscontroller/logs/
-_log_fmt = "%(asctime)s [%(name)-20s] %(levelname)s %(message)s"
+_log_fmt = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 _log_datefmt = "%Y-%m-%d %H:%M:%S"
 _log_dir = _new_data_dir / "logs"
 
@@ -68,12 +69,39 @@ class _ColorFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         color = self._COLORS.get(record.levelno, "")
-        # Match uvicorn's `levelprefix` shape: append `:` and pad to 9
-        # chars (e.g. "INFO:    ", "ERROR:   "). Padding happens BEFORE
-        # the ANSI wrap so the escape codes don't count toward width.
-        padded = f"{record.levelname}:".ljust(9)
-        record.levelname = f"{color}{padded}{self._RESET}"
+        record.levelname = f"{color}{record.levelname}{self._RESET}"
         return super().format(record)
+
+
+class _UvicornDefaultFormatter(uvicorn.logging.DefaultFormatter):
+    """Like uvicorn's DefaultFormatter but colors `levelname` directly
+    (no padding, no trailing colon) so format strings can use
+    `%(levelname)s` instead of the padded `%(levelprefix)s`."""
+
+    def formatMessage(self, record: logging.LogRecord) -> str:
+        recordcopy = copy(record)
+        if self.use_colors:
+            recordcopy.levelname = self.color_level_name(
+                recordcopy.levelname, recordcopy.levelno
+            )
+            if "color_message" in recordcopy.__dict__:
+                recordcopy.msg = recordcopy.__dict__["color_message"]
+                recordcopy.message = recordcopy.getMessage()
+        return logging.Formatter.formatMessage(self, recordcopy)
+
+
+class _UvicornAccessFormatter(uvicorn.logging.AccessFormatter):
+    """Like uvicorn's AccessFormatter but colors `levelname` directly
+    (no padding) — keeps the parent's client_addr/request_line/status_code
+    interpolation."""
+
+    def formatMessage(self, record: logging.LogRecord) -> str:
+        recordcopy = copy(record)
+        if self.use_colors:
+            recordcopy.levelname = self.color_level_name(
+                recordcopy.levelname, recordcopy.levelno
+            )
+        return super().formatMessage(recordcopy)
 
 
 _console_handler = logging.StreamHandler()
@@ -672,9 +700,30 @@ async def lifespan(application: FastAPI):
 
     watchdog_task = asyncio.create_task(_usbmux_presence_watchdog())
 
+    # WiFi tunnel liveness probe — TCP-pings the active tunnel's RSD endpoint
+    # and tears down stale Network connections when it stops responding. The
+    # existing _tunnel_watchdog only fires when the tunnel asyncio task
+    # raises; this probe covers the silent-death case (iPhone leaves WiFi /
+    # Mac wakes from sleep with a dead tunnel).
+    from core.tunnel_liveness import tunnel_liveness_loop
+    liveness_stop = asyncio.Event()
+    liveness_task = asyncio.create_task(tunnel_liveness_loop(liveness_stop))
+
     yield
 
     # ── Shutdown ──
+    # Signal cooperative-exit loops first, then fall back to cancel if
+    # they don't unblock within the grace window.
+    liveness_stop.set()
+    try:
+        await asyncio.wait_for(liveness_task, timeout=2.0)
+    except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+        liveness_task.cancel()
+        try:
+            await liveness_task
+        except (asyncio.CancelledError, Exception):
+            pass
+
     watchdog_task.cancel()
     try:
         await watchdog_task
@@ -791,14 +840,14 @@ if __name__ == "__main__":
         "disable_existing_loggers": False,
         "formatters": {
             "default": {
-                "()": "uvicorn.logging.DefaultFormatter",
-                "fmt": "%(asctime)s [%(name)-20s] %(levelprefix)s %(message)s",
+                "()": f"{__name__}._UvicornDefaultFormatter",
+                "fmt": "%(asctime)s %(levelname)s %(name)s: %(message)s",
                 "datefmt": "%Y-%m-%d %H:%M:%S",
                 "use_colors": True,
             },
             "access": {
-                "()": "uvicorn.logging.AccessFormatter",
-                "fmt": "%(asctime)s [%(name)-20s] %(levelprefix)s %(client_addr)s - \"%(request_line)s\" %(status_code)s",
+                "()": f"{__name__}._UvicornAccessFormatter",
+                "fmt": "%(asctime)s %(levelname)s %(name)s: %(client_addr)s - \"%(request_line)s\" %(status_code)s",
                 "datefmt": "%Y-%m-%d %H:%M:%S",
                 "use_colors": True,
             },
