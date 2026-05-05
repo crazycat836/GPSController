@@ -98,9 +98,15 @@ class DvtLocationService(LocationService):
     async def _reconnect(self) -> None:
         """Tear down and fully recreate the DVT provider and instrument.
 
-        Retries with exponential backoff (2s, 4s, 8s, 16s, 30s) up to 5
-        times.  This handles the case where the RSD/tunnel needs a moment
-        to recover after a screen lock or brief WiFi interruption.
+        Retries with a graded backoff totalling ~15s. The early attempts
+        (0.5s, 2s elapsed) catch the common 1-2s blip fast; the later
+        attempts (5s, 9s, 15s elapsed) cover screen-lock and WiFi-roam
+        pauses that pymobiledevice3 can take several seconds to walk back
+        from. 15s also matches the tunnel liveness probe window, so a
+        truly-dead tunnel is broadcast as device_disconnected at roughly
+        the same moment this gives up — the UI is never stuck in a
+        "reconnecting" state past the point we've already declared the
+        device gone.
         """
         async with self._reconnect_lock:
             # Close the old DVT provider gracefully
@@ -114,11 +120,11 @@ class DvtLocationService(LocationService):
             if self._lockdown is None:
                 raise RuntimeError("Cannot reconnect DVT: no lockdown/RSD reference")
 
-            # Fast-fail: a blip usually recovers within 1-2s. If it doesn't,
-            # the device is almost certainly gone (USB unplugged, tunnel dead)
-            # — there's no point making the user wait 60s. 2 attempts with
-            # 0.5s + 1.5s = ~2s worst case, then raise DeviceLostError.
-            delays = [0.5, 1.5]
+            # Cumulative wait across attempts: 0.5 + 1.5 + 3 + 4 + 6 = 15s.
+            # Early intervals stay tight so an instant blip recovers
+            # quickly; later intervals stretch so we don't hammer a device
+            # that's mid-unlock.
+            delays = [0.5, 1.5, 3.0, 4.0, 6.0]
             last_exc: Exception | None = None
             for attempt, delay in enumerate(delays, start=1):
                 try:
