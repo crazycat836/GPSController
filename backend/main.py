@@ -582,6 +582,7 @@ async def _usbmux_presence_watchdog():
                     await broadcast("device_disconnected", {
                         "udids": lost_now,
                         "reason": "usb_unplugged",
+                        "cause": "usb_removed",
                     })
                 except Exception:
                     logger.exception("watchdog: broadcast (disconnected) failed")

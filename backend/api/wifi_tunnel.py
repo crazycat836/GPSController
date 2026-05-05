@@ -579,9 +579,13 @@ async def _cleanup_wifi_connections(reason: str = "wifi_tunnel_stopped") -> list
         if udids:
             try:
                 from api.websocket import broadcast
+                # cleanup is always a tunnel/network condition by definition —
+                # whether triggered by user stop, watchdog, or liveness probe,
+                # the device-level effect is the same: WiFi-side path is gone.
                 await broadcast("device_disconnected", {
                     "udids": udids,
                     "reason": reason,
+                    "cause": "wifi_dropped",
                 })
             except Exception:
                 _tunnel_logger.exception("WiFi cleanup: broadcast failed")

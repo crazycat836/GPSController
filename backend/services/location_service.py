@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from enum import StrEnum
 
 import asyncio
 
@@ -20,11 +21,81 @@ from pymobiledevice3.services.simulate_location import DtSimulateLocation
 logger = logging.getLogger(__name__)
 
 
+class DeviceLostCause(StrEnum):
+    """Why a DeviceLostError was raised. The frontend uses this to show a
+    cause-specific message instead of the generic 'device lost'. Lower-cased
+    snake_case values are used directly as JSON wire format."""
+
+    UNKNOWN = "unknown"
+    USB_REMOVED = "usb_removed"
+    WIFI_DROPPED = "wifi_dropped"
+    PHONE_LOCKED = "phone_locked"
+    DDI_NOT_MOUNTED = "ddi_not_mounted"
+
+
 class DeviceLostError(RuntimeError):
     """Raised when a location service determines the underlying device
-    connection is no longer recoverable (e.g. USB unplugged, tunnel dead).
-    Callers should drop any cached engine/connection and force a fresh
-    discover+connect on the next user action."""
+    connection is no longer recoverable (e.g. USB unplugged, tunnel dead,
+    phone locked). Callers should drop any cached engine/connection and
+    force a fresh discover+connect on the next user action.
+
+    The ``cause`` attribute identifies the root cause class so the API
+    layer can surface a precise user-facing message. ``UNKNOWN`` is the
+    safe default for legacy raise sites that haven't classified yet — the
+    user-facing message falls back to the generic 'device lost' copy.
+    """
+
+    def __init__(
+        self,
+        message: str = "",
+        cause: DeviceLostCause = DeviceLostCause.UNKNOWN,
+    ) -> None:
+        super().__init__(message)
+        self.cause: DeviceLostCause = cause
+
+
+def classify_device_lost_cause(exc: BaseException | None) -> DeviceLostCause:
+    """Walk *exc* (and its ``__cause__`` chain) and pick the matching
+    DeviceLostCause based on pymobiledevice3 exception types.
+
+    Returns ``UNKNOWN`` when no specific class can be identified — callers
+    that already know the cause from context (e.g. the WiFi tunnel cleanup
+    helper, which knows it was on WiFi) should pass their own value
+    instead of relying on this helper.
+    """
+    if exc is None:
+        return DeviceLostCause.UNKNOWN
+
+    # Lazy import keeps this module's import surface lean — the exceptions
+    # module pulls in a chunk of pymobiledevice3 we don't otherwise need.
+    try:
+        from pymobiledevice3.exceptions import (
+            ConnectionFailedToUsbmuxdError,
+            DeveloperDiskImageNotFoundError,
+            DeveloperModeIsNotEnabledError,
+            MuxException,
+            PasscodeRequiredError,
+            PasswordRequiredError,
+            RSDRequiredError,
+            TunneldConnectionError,
+        )
+    except ImportError:
+        return DeviceLostCause.UNKNOWN
+
+    visited: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        if isinstance(current, (PasswordRequiredError, PasscodeRequiredError)):
+            return DeviceLostCause.PHONE_LOCKED
+        if isinstance(current, (DeveloperDiskImageNotFoundError, DeveloperModeIsNotEnabledError)):
+            return DeviceLostCause.DDI_NOT_MOUNTED
+        if isinstance(current, (RSDRequiredError, TunneldConnectionError)):
+            return DeviceLostCause.WIFI_DROPPED
+        if isinstance(current, (ConnectionFailedToUsbmuxdError, MuxException)):
+            return DeviceLostCause.USB_REMOVED
+        current = current.__cause__
+    return DeviceLostCause.UNKNOWN
 
 
 def unwrap_device_lost(exc: BaseException | None) -> DeviceLostError | None:
@@ -149,8 +220,9 @@ class DvtLocationService(LocationService):
                 return
             except Exception as exc:
                 last_exc = exc
-            logger.error("DVT provider reconnect exhausted — device likely lost")
-            raise DeviceLostError(f"DVT reconnect failed: {last_exc}") from last_exc
+            cause = classify_device_lost_cause(last_exc)
+            logger.error("DVT provider reconnect exhausted — device likely lost (cause=%s)", cause.value)
+            raise DeviceLostError(f"DVT reconnect failed: {last_exc}", cause) from last_exc
 
     async def set(self, lat: float, lng: float) -> None:
         """Simulate the device location using the DVT instrument channel."""
@@ -251,8 +323,9 @@ class LegacyLocationService(LocationService):
                 self._active = True
                 logger.info("Legacy location set to (%.6f, %.6f) after reconnect", lat, lng)
             except Exception as retry_exc:
-                logger.error("Legacy reconnect failed — device likely lost (%s)", retry_exc)
-                raise DeviceLostError(f"Legacy reconnect failed: {retry_exc}") from retry_exc
+                cause = classify_device_lost_cause(retry_exc)
+                logger.error("Legacy reconnect failed — device likely lost (%s, cause=%s)", retry_exc, cause.value)
+                raise DeviceLostError(f"Legacy reconnect failed: {retry_exc}", cause) from retry_exc
         except Exception:
             logger.exception("Failed to set legacy simulated location")
             raise
@@ -283,8 +356,9 @@ class LegacyLocationService(LocationService):
                 await self._maybe_await(svc.clear())
                 self._active = False
             except Exception as retry_exc:
-                logger.error("Legacy clear failed after reconnect — device likely lost (%s)", retry_exc)
-                raise DeviceLostError(f"Legacy clear failed: {retry_exc}") from retry_exc
+                cause = classify_device_lost_cause(retry_exc)
+                logger.error("Legacy clear failed after reconnect — device likely lost (%s, cause=%s)", retry_exc, cause.value)
+                raise DeviceLostError(f"Legacy clear failed: {retry_exc}", cause) from retry_exc
         except Exception:
             logger.exception("Failed to clear legacy simulated location")
             raise

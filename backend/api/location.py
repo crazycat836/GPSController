@@ -8,7 +8,12 @@ from pydantic import BaseModel, Field
 from api._errors import http_err
 from api.websocket import broadcast
 from config import resolve_speed_profile
-from services.location_service import DeviceLostError, unwrap_device_lost
+from services.location_service import (
+    DeviceLostCause,
+    DeviceLostError,
+    classify_device_lost_cause,
+    unwrap_device_lost,
+)
 from context import ctx
 from utils.geo import validate_coords
 
@@ -141,11 +146,32 @@ async def _engine(udid: str | None = None):
     )
 
 
+# Default user-facing message per cause. Frontend i18n keys off the
+# `cause` field for localized copy; this English fallback ships with the
+# raw HTTP response so curl / API clients still see something useful.
+_DEVICE_LOST_MESSAGE: dict[DeviceLostCause, str] = {
+    DeviceLostCause.UNKNOWN: "Device connection lost; please reconnect and try again",
+    DeviceLostCause.USB_REMOVED: "USB cable disconnected; please reconnect USB",
+    DeviceLostCause.WIFI_DROPPED: "WiFi tunnel lost; check that the iPhone is on the same WiFi network and try again",
+    DeviceLostCause.PHONE_LOCKED: "iPhone is locked; unlock the device and try again",
+    DeviceLostCause.DDI_NOT_MOUNTED: "Developer Disk Image is not mounted; reconnect the device or restart GPSController",
+}
+
+
 async def _handle_device_lost(exc: Exception) -> "HTTPException":
     """Clean up after a DeviceLostError: disconnect the stale device from
     DeviceManager, drop the simulation engine, broadcast an explicit
     `device_disconnected` WebSocket event so the frontend can banner it.
-    Returns an HTTPException the caller should raise."""
+    Returns an HTTPException the caller should raise.
+
+    The exception's classified ``cause`` is forwarded both to the WS
+    broadcast (so banners can be cause-specific) and to the HTTP envelope
+    (so direct API clients see the same root-cause label)."""
+    if isinstance(exc, DeviceLostError):
+        cause = exc.cause
+    else:
+        cause = classify_device_lost_cause(exc)
+
     app_state = ctx.app_state
     dm = app_state.device_manager
     lost_udids = dm.connected_udids
@@ -167,6 +193,7 @@ async def _handle_device_lost(exc: Exception) -> "HTTPException":
         await broadcast("device_disconnected", {
             "udids": lost_udids,
             "reason": "device_lost",
+            "cause": cause.value,
             "error": str(exc),
         })
     except Exception:
@@ -176,7 +203,8 @@ async def _handle_device_lost(exc: Exception) -> "HTTPException":
         status_code=503,
         detail={
             "code": "device_lost",
-            "message": "Device connection lost (USB unplugged or tunnel died); please reconnect USB and try again",
+            "cause": cause.value,
+            "message": _DEVICE_LOST_MESSAGE.get(cause, _DEVICE_LOST_MESSAGE[DeviceLostCause.UNKNOWN]),
         },
     )
 
