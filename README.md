@@ -188,7 +188,7 @@ iOS 16+ 的「開發者模式」預設不顯示,需先側載任一自簽 IPA 觸
 
 | 層 | 技術 |
 | --- | --- |
-| Frontend | Electron 41, React 18.3, TypeScript 5.5, Vite 8, Tailwind CSS 4.2, Leaflet 1.9 |
+| Frontend | Electron 41, React 19, TypeScript 6, Vite 8, Tailwind CSS 4.2, Leaflet 1.9 |
 | Backend | Python 3.13, FastAPI, uvicorn, websockets, pymobiledevice3 9.9+, pydantic 2, httpx, gpxpy |
 | 外部服務 | OSRM(`router.project-osrm.org`)、Nominatim、CartoDB Voyager tiles(皆免費、無需 API key) |
 | 打包 | PyInstaller + electron-builder(Windows NSIS / macOS DMG) |

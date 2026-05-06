@@ -247,7 +247,7 @@ export function SimProvider({ children }: SimProviderProps) {
     if (!m) return
     if (m.ts === lastDdiMissingTs.current) return
     lastDdiMissingTs.current = m.ts
-    const isDev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true
+    const isDev = import.meta.env.DEV
     if (isDev) {
       // eslint-disable-next-line no-console
       console.warn('[ddi_mount_missing]', m.stage ?? '?', m.reason)

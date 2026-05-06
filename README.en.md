@@ -186,7 +186,7 @@ On iOS 16+, the Developer Mode toggle is hidden until the device has had at leas
 
 | Layer | Stack |
 | --- | --- |
-| Frontend | Electron 41, React 18.3, TypeScript 5.5, Vite 8, Tailwind CSS 4.2, Leaflet 1.9 |
+| Frontend | Electron 41, React 19, TypeScript 6, Vite 8, Tailwind CSS 4.2, Leaflet 1.9 |
 | Backend | Python 3.13, FastAPI, uvicorn, websockets, pymobiledevice3 9.9+, pydantic 2, httpx, gpxpy |
 | External services | OSRM (routing), Nominatim (geocoding), CartoDB Voyager (map tiles) — all free, no API key |
 | Packaging | PyInstaller + electron-builder (Windows NSIS / macOS DMG) |

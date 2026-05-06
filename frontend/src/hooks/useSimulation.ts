@@ -298,7 +298,9 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
         throw err
       }
     },
-    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, pauseLoop, pauseRandomWalk, straightLine, loopLapCount],
+    // Body reads only pauseLoop — keep deps tight so this callback identity
+    // doesn't churn on unrelated pauseMultiStop / pauseRandomWalk edits.
+    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseLoop, straightLine, loopLapCount],
   )
 
   const multiStop = useCallback(
@@ -320,7 +322,8 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
         throw err
       }
     },
-    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, pauseLoop, pauseRandomWalk, straightLine, loopLapCount],
+    // Body reads only pauseMultiStop — mirror of startLoop above.
+    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, straightLine, loopLapCount],
   )
 
   const randomWalk = useCallback(

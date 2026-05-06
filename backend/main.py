@@ -766,7 +766,17 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # Loopback-only API; legitimate callers are the Electron renderer
+    # (app://. / file://) and the Vite dev server. A wildcard let any
+    # browser tab on the user's machine issue requests through the
+    # user-agent, which the bearer-token middleware can't catch on
+    # pre-flight. Lock this down explicitly.
+    allow_origins=[
+        "app://.",
+        "file://",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

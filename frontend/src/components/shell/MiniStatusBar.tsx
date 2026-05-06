@@ -10,6 +10,7 @@ import { useWeather } from '../../hooks/useWeather'
 import WeatherChip from './WeatherChip'
 import { DEVICE_COLORS, DEVICE_LETTERS } from '../../lib/constants'
 import type { DeviceInfo } from '../../hooks/useDevice'
+import { copyToClipboard } from '../../lib/clipboard'
 
 // Status pair — top-left stack matching redesign/Home:
 //   1. Device pill(s)       glass-pill-medium, 0.82 alpha
@@ -183,7 +184,8 @@ function LivePosCard({ currentPos, isSimulating, stale }: LivePosCardProps) {
   const handleCopy = useCallback(() => {
     if (!currentPos) return
     const txt = `${currentPos.lat.toFixed(6)}, ${currentPos.lng.toFixed(6)}`
-    navigator.clipboard.writeText(txt).then(() => {
+    void copyToClipboard(txt).then((ok) => {
+      if (!ok) return
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     })

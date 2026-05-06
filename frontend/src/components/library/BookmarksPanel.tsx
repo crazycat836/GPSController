@@ -4,6 +4,7 @@ import {
   FolderInput, ClipboardList, ClipboardPaste,
 } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
+import { useToastContext } from '../../contexts/ToastContext'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
@@ -41,6 +42,7 @@ const PLACE_CHIPS_VISIBLE_CAP = 5
 export default function BookmarksPanel({ onBookmarkClick, currentPosition }: BookmarksPanelProps) {
   const t = useT()
   const bm = useBookmarkContext()
+  const { showToast } = useToastContext()
   const { bookmarks, places, tags } = bm
 
   const [search, setSearch] = useState('')
@@ -447,7 +449,14 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         onClose={() => setPlaceMgrOpen(false)}
         places={places}
         onAdd={async (name) => { await bm.createPlace({ name }) }}
-        onDelete={(id) => bm.deletePlace(id)}
+        onDelete={async (id) => {
+          try {
+            await bm.deletePlace(id)
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : t('toast.route_delete_failed')
+            showToast(message)
+          }
+        }}
         onRename={async (id, name) => { await bm.updatePlace(id, { name }) }}
         onReorder={(ids) => bm.reorderPlaces(ids)}
       />

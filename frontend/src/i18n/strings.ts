@@ -276,7 +276,6 @@ export const STRINGS = {
 
   // ── Error codes (backend → i18n) ────────────
   'err.python313_missing': { zh: '需要 Python 3.13+ 才能啟動 WiFi Tunnel', en: 'Python 3.13+ is required to start the Wi-Fi tunnel' },
-  'err.tunnel_script_missing': { zh: '找不到 wifi_tunnel.py 腳本', en: 'wifi_tunnel.py script not found' },
   'err.tunnel_spawn_failed': { zh: '無法啟動 Tunnel 進程', en: 'Failed to spawn tunnel process' },
   'err.tunnel_exited': { zh: 'Tunnel 進程異常結束', en: 'Tunnel process exited unexpectedly' },
   'err.tunnel_timeout': { zh: 'Tunnel 啟動逾時,請確認 iPhone 解鎖且與電腦同網段', en: 'Tunnel startup timed out, ensure iPhone is unlocked and on the same subnet' },

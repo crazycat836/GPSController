@@ -48,11 +48,10 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
     setLoading(true)
     try {
       const raw = await searchAddress(q)
-      setResults((Array.isArray(raw) ? raw : []).map((r: any) => ({
-        name: r.display_name || r.name || '',
+      setResults((Array.isArray(raw) ? raw : []).map((r) => ({
+        name: r.display_name,
         lat: r.lat,
         lng: r.lng,
-        address: r.address || '',
       })))
       setOpen(true)
     } catch {

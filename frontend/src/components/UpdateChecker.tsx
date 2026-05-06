@@ -15,7 +15,7 @@ const DISMISS_KEY = STORAGE_KEYS.updateDismissed;
 // links open in the system browser rather than the webview. Web builds
 // don't define it; fall back to the native `<a target="_blank">` nav.
 interface ElectronBridge {
-  gpscontroller?: { openExternal?: (url: string) => void }
+  gpsController?: { openExternal?: (url: string) => void }
 }
 
 function parseVer(s: string): number[] {
@@ -36,7 +36,7 @@ function isNewer(a: string, b: string): boolean {
 }
 
 function openExternalOrDefault(url: string, e: React.MouseEvent) {
-  const bridge = (window as unknown as ElectronBridge).gpscontroller;
+  const bridge = (window as unknown as ElectronBridge).gpsController;
   if (bridge?.openExternal) {
     e.preventDefault();
     bridge.openExternal(url);
