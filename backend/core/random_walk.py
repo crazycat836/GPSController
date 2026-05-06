@@ -10,7 +10,12 @@ from pymobiledevice3.exceptions import ConnectionTerminatedError
 
 from models.schemas import Coordinate, MovementMode, SimulationState
 from services.interpolator import RouteInterpolator
-from config import resolve_speed_profile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
+from config import (
+    DEFAULT_PAUSE_ENABLED,
+    DEFAULT_PAUSE_MAX,
+    DEFAULT_PAUSE_MIN,
+    clamp_pause_range,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -257,10 +262,7 @@ class RandomWalkHandler:
         speed_max_kmh: float | None,
     ) -> dict:
         """Honor mid-flight apply_speed; otherwise re-pick per leg."""
-        engine = self.engine
-        if engine._speed_was_applied and engine._active_speed_profile is not None:
-            return dict(engine._active_speed_profile)
-        return resolve_speed_profile(
+        return self.engine.pick_speed_profile(
             profile_name, speed_kmh, speed_min_kmh, speed_max_kmh,
         )
 
@@ -319,11 +321,9 @@ class RandomWalkHandler:
         """
         if not pause_enabled:
             return False
-        lo, hi = sorted((float(pause_min), float(pause_max)))
-        if lo <= 0 and hi <= 0:
+        lo, hi = clamp_pause_range(pause_min, pause_max)
+        if hi <= 0:
             return False
-        if lo < 0:
-            lo = 0.0
         pause_duration = (rng or random).uniform(lo, hi)
         logger.info("Random walk pausing for %.1fs before next leg", pause_duration)
 

@@ -96,6 +96,20 @@ DEFAULT_PAUSE_ENABLED = True
 DEFAULT_PAUSE_MIN = 5.0
 DEFAULT_PAUSE_MAX = 20.0
 
+
+def clamp_pause_range(pause_min: float, pause_max: float) -> tuple[float, float]:
+    """Sort + lower-bound a (min, max) pause range to non-negative seconds.
+
+    Used by every movement mode that supports inter-leg / inter-lap pauses
+    (loop, multi-stop, random walk). Each caller still applies its own
+    "skip if hi <= 0" rule and its own RNG choice afterwards — this helper
+    just collapses the shared sort + negative-guard.
+    """
+    lo, hi = sorted((float(pause_min), float(pause_max)))
+    if lo < 0:
+        lo = 0.0
+    return lo, hi
+
 # Reconnect
 RECONNECT_BASE_DELAY = 2.0
 RECONNECT_MAX_DELAY = 60.0

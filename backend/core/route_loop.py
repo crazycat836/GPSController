@@ -7,7 +7,12 @@ import logging
 import random
 
 from models.schemas import Coordinate, MovementMode, SimulationState
-from config import resolve_speed_profile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
+from config import (
+    DEFAULT_PAUSE_ENABLED,
+    DEFAULT_PAUSE_MAX,
+    DEFAULT_PAUSE_MIN,
+    clamp_pause_range,
+)
 from core.lap_limit import record_lap_and_check_limit
 
 logger = logging.getLogger(__name__)
@@ -102,12 +107,9 @@ class RouteLooper:
             # If the user has applied a speed mid-flight, honor it on
             # subsequent laps; otherwise re-pick speed each lap so a range
             # produces realistic per-lap variation.
-            if engine._speed_was_applied and engine._active_speed_profile is not None:
-                speed_profile = dict(engine._active_speed_profile)
-            else:
-                speed_profile = resolve_speed_profile(
-                    profile_name, speed_kmh, speed_min_kmh, speed_max_kmh,
-                )
+            speed_profile = engine.pick_speed_profile(
+                profile_name, speed_kmh, speed_min_kmh, speed_max_kmh,
+            )
             await engine._move_along_route(coords, speed_profile)
 
             # Check if we were stopped during the route
@@ -119,9 +121,7 @@ class RouteLooper:
 
             # Optional random pause between laps
             if pause_enabled:
-                lo, hi = sorted((float(pause_min), float(pause_max)))
-                if lo < 0:
-                    lo = 0.0
+                lo, hi = clamp_pause_range(pause_min, pause_max)
                 if hi > 0:
                     lap_pause = random.uniform(lo, hi)
                     logger.info("Loop: pausing %.1fs before next lap", lap_pause)

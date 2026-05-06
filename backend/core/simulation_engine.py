@@ -19,7 +19,14 @@ from models.schemas import (
 )
 from services.location_service import DeviceLostError, LocationService, unwrap_device_lost
 from services.route_service import RouteService
-from config import SPEED_PROFILES, SpeedProfile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
+from config import (
+    SPEED_PROFILES,
+    SpeedProfile,
+    DEFAULT_PAUSE_ENABLED,
+    DEFAULT_PAUSE_MIN,
+    DEFAULT_PAUSE_MAX,
+    resolve_speed_profile,
+)
 
 from core.teleport import TeleportHandler
 from core.navigator import Navigator
@@ -619,6 +626,26 @@ class SimulationEngine:
         """Push a coordinate to the device and update internal state."""
         await self.location_service.set(lat, lng)
         self.current_position = Coordinate(lat=lat, lng=lng)
+
+    def pick_speed_profile(
+        self,
+        profile_name: str,
+        speed_kmh: float | None,
+        speed_min_kmh: float | None,
+        speed_max_kmh: float | None,
+    ) -> "SpeedProfile":
+        """Resolve the speed profile to use for the next leg/lap.
+
+        Honors a mid-flight ``apply_speed`` (so the user-applied profile
+        sticks across leg boundaries); otherwise re-picks from the call
+        args so range mode varies per leg. Replaces the three near-
+        identical helpers in route_loop / multi_stop / random_walk.
+        """
+        if self._speed_was_applied and self._active_speed_profile is not None:
+            return dict(self._active_speed_profile)
+        return resolve_speed_profile(
+            profile_name, speed_kmh, speed_min_kmh, speed_max_kmh,
+        )
 
     async def apply_speed(
         self,

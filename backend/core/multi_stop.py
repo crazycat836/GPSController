@@ -8,7 +8,12 @@ import random
 from typing import Callable
 
 from models.schemas import Coordinate, MovementMode, SimulationState
-from config import resolve_speed_profile, DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MIN, DEFAULT_PAUSE_MAX
+from config import (
+    DEFAULT_PAUSE_ENABLED,
+    DEFAULT_PAUSE_MAX,
+    DEFAULT_PAUSE_MIN,
+    clamp_pause_range,
+)
 from core.lap_limit import record_lap_and_check_limit
 from utils.geo import haversine_m
 
@@ -37,9 +42,7 @@ def _resolve_pause_seconds(
         return float(stop_duration)
     if not pause_enabled:
         return 0.0
-    lo, hi = sorted((float(pause_min), float(pause_max)))
-    if lo < 0:
-        lo = 0.0
+    lo, hi = clamp_pause_range(pause_min, pause_max)
     return random.uniform(lo, hi) if hi > 0 else 0.0
 
 
@@ -99,9 +102,7 @@ class MultiStopNavigator:
         def _pick_profile() -> dict:
             # Honor mid-flight apply_speed across legs / laps; otherwise
             # re-pick from the original args (so range mode varies).
-            if engine._speed_was_applied and engine._active_speed_profile is not None:
-                return dict(engine._active_speed_profile)
-            return resolve_speed_profile(
+            return engine.pick_speed_profile(
                 profile_name, speed_kmh, speed_min_kmh, speed_max_kmh,
             )
 

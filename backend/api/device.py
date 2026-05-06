@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
-from api._errors import http_err
+from api._errors import http_err, ios_unsupported_error, max_devices_error
 from api.websocket import broadcast
 from config import MAX_DEVICES
 from context import ctx
@@ -41,10 +41,7 @@ async def connect_device(udid: str):
     app_state.unblock_auto_reconnect(udid)
     # Max MAX_DEVICES devices (group mode). Allow re-connect of an already-connected udid.
     if not dm.is_connected(udid) and dm.connected_count >= MAX_DEVICES:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "max_devices_reached", "message": f"Maximum {MAX_DEVICES} devices connected"},
-        )
+        raise max_devices_error()
     try:
         await dm.connect(udid)
         await app_state.create_engine_for_device(udid)
@@ -64,19 +61,7 @@ async def connect_device(udid: str):
             )
         return {"status": "connected", "udid": udid}
     except UnsupportedIosVersionError as e:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "ios_unsupported",
-                "message": (
-                    f"Detected iOS {e.version}; GPSController v0.1.49+ requires "
-                    f"iOS {UnsupportedIosVersionError.MIN_VERSION} or newer. "
-                    f"Please update to iOS {UnsupportedIosVersionError.MIN_VERSION}+ before connecting."
-                ),
-                "ios_version": e.version,
-                "min_version": UnsupportedIosVersionError.MIN_VERSION,
-            },
-        )
+        raise ios_unsupported_error(e.version)
     except Exception:
         logger.exception("Device connect failed", extra={"udid": udid})
         raise http_err(500, "connect_failed", "Device connection failed; please retry")

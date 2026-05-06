@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from api._errors import http_err
+from api._errors import http_err, ios_unsupported_error, max_devices_error
 from config import MAX_DEVICES
 from context import ctx
 from core.wifi_tunnel import TunnelRunner
@@ -282,10 +282,7 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
     # Max MAX_DEVICES devices (group mode). connect_wifi_tunnel may reconnect an
     # existing udid; we can only cheaply check the pre-state here.
     if dm.connected_count >= MAX_DEVICES:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "max_devices_reached", "message": f"Maximum {MAX_DEVICES} devices connected"},
-        )
+        raise max_devices_error()
     try:
         info = await dm.connect_wifi_tunnel(req.rsd_address, req.rsd_port)
         await app_state.create_engine_for_device(info.udid)
@@ -310,19 +307,7 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
             "connection_type": "Network",
         }
     except UnsupportedIosVersionError as e:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "ios_unsupported",
-                "message": (
-                    f"Detected iOS {e.version}; GPSController v0.1.49+ requires "
-                    f"iOS {UnsupportedIosVersionError.MIN_VERSION} or newer. "
-                    f"Please update to iOS {UnsupportedIosVersionError.MIN_VERSION}+ before connecting."
-                ),
-                "ios_version": e.version,
-                "min_version": UnsupportedIosVersionError.MIN_VERSION,
-            },
-        )
+        raise ios_unsupported_error(e.version)
     except Exception:
         logger.exception("WiFi tunnel connect failed", extra={"rsd_address": req.rsd_address})
         raise http_err(500, "connect_failed", "Connection failed; ensure the tunnel is still running and retry")
@@ -850,10 +835,7 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
     # Connect through the tunnel
     dm = _dm()
     if dm.connected_count >= MAX_DEVICES:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "max_devices_reached", "message": f"Maximum {MAX_DEVICES} devices connected"},
-        )
+        raise max_devices_error()
     try:
         info = await dm.connect_wifi_tunnel(rsd_address, rsd_port)
         await app_state.create_engine_for_device(info.udid)
