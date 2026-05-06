@@ -53,7 +53,7 @@ class UnsupportedIosVersionError(RuntimeError):
 logger = logging.getLogger(__name__)
 
 
-def _parse_ios_version(version_string: str) -> tuple[int, ...]:
+def parse_ios_version(version_string: str) -> tuple[int, ...]:
     """Convert an iOS version string like '17.4.1' into a comparable tuple."""
     try:
         return tuple(int(p) for p in version_string.split("."))
@@ -233,7 +233,7 @@ class DeviceManager:
                 # only when it's actually useful. Reuse the per-connection
                 # cache when available so repeat polls don't pay a
                 # lockdown round-trip.
-                ios_major = _parse_ios_version(info.ios_version)[0] if info.ios_version else 0
+                ios_major = parse_ios_version(info.ios_version)[0] if info.ios_version else 0
                 if ios_major >= 16:
                     cached = active_conn.developer_mode_enabled if active_conn else None
                     if cached is not None:
@@ -317,7 +317,7 @@ class DeviceManager:
             raise
 
         ios_version_str: str = lockdown.all_values.get("ProductVersion", "0.0")
-        ver = _parse_ios_version(ios_version_str)
+        ver = parse_ios_version(ios_version_str)
 
         if ver < (16, 0):
             logger.warning(
@@ -499,7 +499,7 @@ class DeviceManager:
         if conn.location_service is not None:
             return conn.location_service
 
-        ver = _parse_ios_version(conn.ios_version)
+        ver = parse_ios_version(conn.ios_version)
         if ver >= (17, 0):
             loc = await create_dvt_location_service(conn, self._ddi_mount_lock)
         else:

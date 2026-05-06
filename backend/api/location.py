@@ -551,7 +551,7 @@ async def cooldown_settings(req: CooldownSettings):
     cd.enabled = req.enabled
     if not req.enabled:
         await cd.dismiss()
-    await cd._emit()
+    await cd.notify()
     return {"enabled": cd.enabled}
 
 
@@ -559,7 +559,7 @@ async def cooldown_settings(req: CooldownSettings):
 async def cooldown_dismiss():
     cd = _cooldown()
     await cd.dismiss()
-    await cd._emit()
+    await cd.notify()
     return {"status": "dismissed"}
 
 
@@ -588,7 +588,7 @@ class _InitialPosRequest(BaseModel):
 @router.get("/settings/initial-position", tags=["settings"])
 async def get_initial_position():
     app_state = ctx.app_state
-    pos = app_state._initial_map_position
+    pos = app_state.get_initial_map_position()
     return {"position": pos}  # {"position": null} or {"position": {"lat","lng"}}
 
 
@@ -621,4 +621,4 @@ async def get_last_device_position():
     real GPS on connect).
     """
     app_state = ctx.app_state
-    return {"position": app_state._last_position}
+    return {"position": app_state.get_last_position()}

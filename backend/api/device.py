@@ -10,7 +10,7 @@ from api._errors import http_err, ios_unsupported_error, max_devices_error
 from api.websocket import broadcast
 from config import MAX_DEVICES
 from context import ctx
-from core.device_manager import UnsupportedIosVersionError, _parse_ios_version
+from core.device_manager import UnsupportedIosVersionError, parse_ios_version
 from models.schemas import DeviceInfo
 
 router = APIRouter(prefix="/api/device", tags=["device"])
@@ -231,7 +231,7 @@ async def amfi_reveal_developer_mode(udid: str):
 
     # iOS 15 and below have no Developer Mode concept, so the AMFI
     # service call would fail with a misleading error.
-    ios_major = _parse_ios_version(conn.ios_version or "0")[0]
+    ios_major = parse_ios_version(conn.ios_version or "0")[0]
     if ios_major < 16:
         raise HTTPException(
             status_code=400,

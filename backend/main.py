@@ -267,6 +267,25 @@ class AppState:
         """Set the persisted initial map center ({"lat","lng"} or None)."""
         self._initial_map_position = position
 
+    def get_initial_map_position(self) -> dict | None:
+        """Return the user-pinned initial map center, or None if unset.
+
+        Distinct from :py:meth:`get_initial_position`, which falls back
+        to the last device coordinate / default. Frontend's
+        ``GET /api/location/settings/initial-position`` exposes only the
+        persisted setting so a cleared pin (None) round-trips as null.
+        """
+        return self._initial_map_position
+
+    def get_last_position(self) -> dict | None:
+        """Return the device's last-known coordinate ({"lat","lng"}), or
+        None if nothing has been recorded yet.
+
+        Used by ``GET /api/location/last-device-position`` so the
+        frontend can pre-render the position pin on app launch.
+        """
+        return self._last_position
+
     def block_auto_reconnect(self, udid: str) -> None:
         """Mark *udid* as 'user-disconnected' — watchdog will skip it."""
         self._no_auto_reconnect.add(udid)

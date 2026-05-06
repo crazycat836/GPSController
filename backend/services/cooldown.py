@@ -83,7 +83,7 @@ class CooldownTimer:
             cooldown_sec,
         )
 
-        await self._emit()
+        await self.notify()
         self._task = asyncio.create_task(self._countdown())
 
     async def _countdown(self) -> None:
@@ -93,7 +93,7 @@ class CooldownTimer:
                 await asyncio.sleep(1.0)
                 elapsed = time.monotonic() - self._start_time
                 self.remaining = max(0.0, self.total - elapsed)
-                await self._emit()
+                await self.notify()
 
             logger.info("Cooldown finished")
         except asyncio.CancelledError:
@@ -101,7 +101,7 @@ class CooldownTimer:
         finally:
             self.is_active = False
             self.remaining = 0.0
-            await self._emit()
+            await self.notify()
 
     async def dismiss(self) -> None:
         """Cancel an active cooldown immediately."""
@@ -120,7 +120,7 @@ class CooldownTimer:
     # WebSocket broadcast
     # ------------------------------------------------------------------
 
-    async def _emit(self) -> None:
+    async def notify(self) -> None:
         """Push cooldown state to all connected clients via WebSocket."""
         if self._broadcast is None:
             return
