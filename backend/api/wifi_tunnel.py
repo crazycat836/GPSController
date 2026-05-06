@@ -3,6 +3,7 @@ import ipaddress
 import logging
 import socket
 from collections.abc import Awaitable, Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from fastapi import APIRouter, HTTPException
@@ -22,6 +23,13 @@ router = APIRouter(prefix="/api/device", tags=["device"])
 _tunnel = TunnelRunner()
 # Watchdog task handle (lives at module level since TunnelRunner is now shared).
 _tunnel_watchdog_task: "asyncio.Task | None" = None
+
+# Bounded thread pool for reverse-DNS lookups during a /24 subnet scan.
+# `socket.gethostbyaddr` is blocking; routing 253 concurrent lookups
+# through the default executor saturates it (default = min(32, os.cpu_count() + 4))
+# and stalls every other run_in_executor caller until the scan finishes.
+# 16 workers is enough to keep the scan fast without monopolising threads.
+_DNS_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="wifi-dns")
 
 _tunnel_logger = logging.getLogger("wifi_tunnel")
 logger = logging.getLogger(__name__)
@@ -464,7 +472,7 @@ async def _resolve_hostname(ip: str, *, timeout: float = 2.0) -> str | None:
     loop = asyncio.get_running_loop()
     try:
         info = await asyncio.wait_for(
-            loop.run_in_executor(None, socket.gethostbyaddr, ip),
+            loop.run_in_executor(_DNS_POOL, socket.gethostbyaddr, ip),
             timeout=timeout,
         )
     except (socket.herror, socket.gaierror, OSError, asyncio.TimeoutError):

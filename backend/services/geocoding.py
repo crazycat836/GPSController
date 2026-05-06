@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import httpx
@@ -12,6 +13,54 @@ from models.schemas import GeocodingResult
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+
+# Lifespan-scoped HTTP client. Reusing the connection pool across calls
+# avoids paying TCP+TLS handshake on every search / reverse during a
+# 10 Hz navigation. Closed on FastAPI shutdown via close_client().
+_client: httpx.AsyncClient | None = None
+_client_lock = asyncio.Lock()
+
+
+async def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        async with _client_lock:
+            if _client is None:
+                _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
+
+
+async def close_client() -> None:
+    """Release the shared HTTP client. Called from the FastAPI lifespan."""
+    global _client
+    if _client is not None:
+        try:
+            await _client.aclose()
+        finally:
+            _client = None
+
+
+# Nominatim's usage policy (https://operations.osmfoundation.org/policies/nominatim/)
+# requires no more than 1 request per second. A frontend bug or local
+# attacker could otherwise hammer this proxy and trigger an IP ban that
+# affects every user behind the NAT. Serialize all outbound calls
+# through a single-slot gate with a ≥1s spacing.
+_NOMINATIM_MIN_INTERVAL_S = 1.05  # tiny safety margin
+_rate_lock = asyncio.Lock()
+_last_request_at: float = 0.0
+
+
+async def _nominatim_rate_limit() -> None:
+    """Block until at least :data:`_NOMINATIM_MIN_INTERVAL_S` has passed
+    since the previous call. Serializes search + reverse together."""
+    global _last_request_at
+    async with _rate_lock:
+        loop = asyncio.get_event_loop()
+        now = loop.time()
+        wait = _NOMINATIM_MIN_INTERVAL_S - (now - _last_request_at)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        _last_request_at = loop.time()
 
 
 class GeocodingService:
@@ -54,14 +103,15 @@ class GeocodingService:
         logger.debug("Nominatim search: %s", query)
 
         try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                resp = await client.get(
-                    f"{NOMINATIM_BASE_URL}/search",
-                    params=params,
-                    headers=self._headers(),
-                )
-                resp.raise_for_status()
-                data = resp.json()
+            await _nominatim_rate_limit()
+            client = await _get_client()
+            resp = await client.get(
+                f"{NOMINATIM_BASE_URL}/search",
+                params=params,
+                headers=self._headers(),
+            )
+            resp.raise_for_status()
+            data = resp.json()
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
             logger.warning("Nominatim search unreachable (%s): %s", type(exc).__name__, exc)
             return []
@@ -120,14 +170,15 @@ class GeocodingService:
         # instead of throwing away the whole status pair on a transient DNS
         # or timeout hiccup.
         try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                resp = await client.get(
-                    f"{NOMINATIM_BASE_URL}/reverse",
-                    params=params,
-                    headers=headers,
-                )
-                resp.raise_for_status()
-                data = resp.json()
+            await _nominatim_rate_limit()
+            client = await _get_client()
+            resp = await client.get(
+                f"{NOMINATIM_BASE_URL}/reverse",
+                params=params,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
             logger.warning("Nominatim reverse unreachable (%s): %s", type(exc).__name__, exc)
             return None

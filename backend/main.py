@@ -761,6 +761,20 @@ async def lifespan(application: FastAPI):
         except Exception:
             logger.exception("shutdown: terminate_engine failed for %s", udid)
     await app_state.device_manager.disconnect_all()
+
+    # Release the shared HTTP clients last so any in-flight request from
+    # the engine teardown above completes before the pool is torn down.
+    try:
+        from services.geocoding import close_client as close_geocoding_client
+        await close_geocoding_client()
+    except Exception:
+        logger.exception("shutdown: close_geocoding_client failed")
+    try:
+        from services.route_service import close_client as close_route_client
+        await close_route_client()
+    except Exception:
+        logger.exception("shutdown: close_route_client failed")
+
     logger.info("GPSController shut down")
 
 

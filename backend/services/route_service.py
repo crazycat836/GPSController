@@ -27,6 +27,32 @@ _PROFILE_MAP = {
 _TIMEOUT = httpx.Timeout(8.0, connect=4.0)
 
 
+# Lifespan-scoped HTTP client. Reusing the connection pool avoids the
+# TCP+TLS handshake on every OSRM call — multi-stop with 10+ legs would
+# otherwise pay it once per leg. Closed on FastAPI shutdown.
+_client: httpx.AsyncClient | None = None
+_client_lock = asyncio.Lock()
+
+
+async def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        async with _client_lock:
+            if _client is None:
+                _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
+
+
+async def close_client() -> None:
+    """Release the shared HTTP client. Called from the FastAPI lifespan."""
+    global _client
+    if _client is not None:
+        try:
+            await _client.aclose()
+        finally:
+            _client = None
+
+
 def _straight_line_fallback(
     waypoints: list[tuple[float, float]],
     walking_speed_mps: float = SPEED_PROFILES["walking"]["speed_mps"],
@@ -186,10 +212,10 @@ class RouteService:
         timeout = _TIMEOUT if cached == "ok" else self._PROBE_TIMEOUT
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                data = resp.json()
+            client = await _get_client()
+            resp = await client.get(url, timeout=timeout)
+            resp.raise_for_status()
+            data = resp.json()
             if data.get("code") != "Ok":
                 msg = data.get("message", "Unknown OSRM error")
                 raise RuntimeError(f"OSRM error: {msg}")
