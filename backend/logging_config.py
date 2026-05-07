@@ -1,0 +1,136 @@
+"""Logging setup for the FastAPI backend.
+
+Hoisted out of ``main.py`` so the entrypoint stays focused on app
+construction. Owns three concerns:
+
+  - Console + rotating-file handlers with our preferred format
+  - Color formatters for ``logging.LogRecord`` and uvicorn's two
+    sub-loggers (default + access)
+  - An access-log filter that drops OPTIONS preflights and a fixed
+    list of noisy GET endpoints the frontend polls every few seconds
+
+Returns the canonical ``gpscontroller`` logger so callers can use it
+immediately. Idempotent within a single process — calling more than
+once just re-attaches the same handlers, so unit tests that import
+the module repeatedly stay safe.
+"""
+
+from __future__ import annotations
+
+import logging
+from copy import copy
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
+import uvicorn
+
+
+_LOG_FMT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+_LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
+_FILE_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
+_FILE_BACKUP_COUNT = 3
+
+# Routine polling endpoints (frontend heartbeats): /api/device/list every
+# ~30s, cooldown/last-device-position checks on each WS reconnect, etc.
+# These flood the log without telling us anything when they 200. Non-2xx
+# responses on these paths still surface elsewhere (the caller handles
+# the error) so dropping them here keeps the dev log readable.
+_ACCESS_NOISE_PATHS = (
+    '"GET /api/device/list ',
+    '"GET /api/location/cooldown/status ',
+    '"GET /api/location/last-device-position ',
+    '"GET /api/location/settings/initial-position ',
+    '"GET /api/bookmarks ',
+    '"GET /api/bookmarks/places ',
+    '"GET /api/bookmarks/tags ',
+    '"GET /api/route/saved ',
+    '"GET /api/location/status ',
+)
+
+
+class _ColorFormatter(logging.Formatter):
+    """Adds ANSI color to the level name for terminal output."""
+
+    _COLORS = {
+        logging.DEBUG: "\033[36m",     # cyan
+        logging.INFO: "\033[32m",      # green
+        logging.WARNING: "\033[33m",   # yellow
+        logging.ERROR: "\033[31m",     # red
+        logging.CRITICAL: "\033[1;31m",  # bold red
+    }
+    _RESET = "\033[0m"
+
+    def format(self, record: logging.LogRecord) -> str:
+        color = self._COLORS.get(record.levelno, "")
+        record.levelname = f"{color}{record.levelname}{self._RESET}"
+        return super().format(record)
+
+
+class _UvicornDefaultFormatter(uvicorn.logging.DefaultFormatter):
+    """Like uvicorn's DefaultFormatter but colors `levelname` directly
+    (no padding, no trailing colon) so format strings can use
+    `%(levelname)s` instead of the padded `%(levelprefix)s`."""
+
+    def formatMessage(self, record: logging.LogRecord) -> str:
+        recordcopy = copy(record)
+        if self.use_colors:
+            recordcopy.levelname = self.color_level_name(
+                recordcopy.levelname, recordcopy.levelno
+            )
+            if "color_message" in recordcopy.__dict__:
+                recordcopy.msg = recordcopy.__dict__["color_message"]
+                recordcopy.message = recordcopy.getMessage()
+        return logging.Formatter.formatMessage(self, recordcopy)
+
+
+class _UvicornAccessFormatter(uvicorn.logging.AccessFormatter):
+    """Like uvicorn's AccessFormatter but colors `levelname` directly
+    (no padding) — keeps the parent's client_addr/request_line/status_code
+    interpolation."""
+
+    def formatMessage(self, record: logging.LogRecord) -> str:
+        recordcopy = copy(record)
+        if self.use_colors:
+            recordcopy.levelname = self.color_level_name(
+                recordcopy.levelname, recordcopy.levelno
+            )
+        return super().formatMessage(recordcopy)
+
+
+class _AccessNoiseFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if '"OPTIONS ' in msg:
+            return False
+        return not any(p in msg for p in _ACCESS_NOISE_PATHS)
+
+
+def setup_logging(log_dir: Path) -> logging.Logger:
+    """Configure root logging + uvicorn loggers and return the project logger.
+
+    Creates ``log_dir`` if missing. Rotating-file handler caps at
+    ``_FILE_MAX_BYTES`` with ``_FILE_BACKUP_COUNT`` backups. The console
+    handler always attaches; the file handler attaches best-effort
+    (logging stays usable on read-only filesystems / sandboxed runs).
+    """
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(_ColorFormatter(_LOG_FMT, datefmt=_LOG_DATEFMT))
+
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_dir / "backend.log",
+            maxBytes=_FILE_MAX_BYTES,
+            backupCount=_FILE_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(logging.Formatter(_LOG_FMT, datefmt=_LOG_DATEFMT))
+        file_handler.setLevel(logging.INFO)
+        handlers: list[logging.Handler] = [console_handler, file_handler]
+    except Exception:
+        handlers = [console_handler]
+
+    logging.basicConfig(level=logging.INFO, handlers=handlers, force=True)
+    logging.getLogger("uvicorn.access").addFilter(_AccessNoiseFilter())
+
+    return logging.getLogger("gpscontroller")
