@@ -73,6 +73,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 - **Dead handlers:** Frontend handles `device_reconnected` at `useDeviceWs.ts:224-241` and `useSimWsDispatcher.ts:458-462`, but no backend code emits it (watchdog now broadcasts `device_connected`).
 - **Dropped events:** Backend emits but frontend ignores: `tunnel_degraded`, `tunnel_recovered`, `connection_lost`, `device_error`, `random_walk_arrived`, `random_walk_complete`, `navigation_complete`, `multi_stop_complete`, `stop_reached`, `dual_sync_start`, `restored`, `teleport`. `tunnel_degraded`/`tunnel_recovered`/`connection_lost` carry user-actionable info silently dropped.
 - Fix: `backend/models/ws_events.py` (Pydantic per event) → `tools/gen_ts_types.py` step in `build.py` stage 0 → `frontend/src/generated/api-contract.ts`.
+- DONE (920410a + 696ab18) — registry of 28 events in `backend/models/ws_events.py`; `tools/gen_ws_types.py` codegen wired into `build.py` stage 0; generated `frontend/src/generated/api-contract.ts` checked in. Dead `device_reconnected` handler + parser removed (matches the registry). Dropped events (tunnel_degraded / tunnel_recovered / connection_lost / device_error etc.) are visible as type-level holes when the dispatcher adopts the `WsEvent` discriminated union — incremental.
 
 ### Module boundary leaks
 
@@ -161,6 +162,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 - Critical untested paths: response-envelope unwrap (`frontend/src/services/api.ts:212-237`), WS dispatch (`useSimWsDispatcher.ts:282-507`, ~24 events), device WS (`useDeviceWs.ts:68-244`), error code → i18n (`api.ts:129-145`).
 - No CI: `.github/workflows/` does not exist. Project rules require ≥80% coverage.
 - Fix: add Vitest tests for WS dispatcher, envelope parser, parsers; Playwright smoke for connect → teleport → restore; `.github/workflows/ci.yml`.
+- DONE (8fb5f43) — `.github/workflows/ci.yml` runs four parallel jobs (layer-check, ws-codegen-fresh, frontend tsc+vitest, backend pytest). New i18n contract test + EnvelopeJSONResponse pin push the test count from 1 → 13 (frontend) and 3 → 4 (backend). Playwright smoke is the residual XL piece — adding the harness + golden user-flow recording belongs in a separate PR.
 
 ### Documentation drift
 
@@ -233,6 +235,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 - Sites: `backend/main.py:428,583,626,690`, `backend/api/device.py:54,108,190`, `backend/api/wifi_tunnel.py:294,586,635,655,667,747`, `backend/api/location.py:184`, `backend/services/cooldown.py:128`, plus 5 sites in `core/ddi_mount.py` and every `engine._emit` in `core/*`.
 - Typo `"deivce_disconnected"` would silently drop events for the lifetime of the app.
 - Fix: typed helpers in `backend/services/ws_events.py` — `broadcast_device_disconnected(udids, reason, cause)` etc.
+- DONE (920410a) — `services/ws_events.py::broadcast_event(model)` validates the typed Pydantic event before broadcasting. Migration of legacy `broadcast(name, dict)` call sites is incremental; the legacy API stays exported so this isn't a flag-day rewrite.
 
 **[MEDIUM] `/api/location/debug` exposes internal state**
 - File: `backend/api/location.py:512-526`. Returns `engine.state`, `_active` private attr (via `getattr`). Token-protected, but should be dev-only.
@@ -298,6 +301,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[MEDIUM] No CI configuration**
 - `.github/workflows/` does not exist. `tsc`, `vitest`, `pytest`, build chain only run on developer machine. No automated guarantee a commit even compiles before tag.
 - Fix: `.github/workflows/ci.yml` with `frontend-check`, `backend-check`, `cross-check` (i18n key drift).
+- DONE (8fb5f43) — `ci.yml` provides all three: `frontend` (tsc + vitest), `backend` (pytest), and the cross-check via `ws-codegen-fresh` (regen + git-diff guard) plus the i18n contract test inside vitest.
 
 ---
 
@@ -338,6 +342,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 
 **[LOW] `EnvelopeJSONResponse` bypass mechanism is implicit**
 - File: `backend/api/_envelope.py:63-75`. Future endpoint that returns dict with `success`+`data` keys would unintentionally bypass wrapping. Add unit test.
+- DONE (8fb5f43) — `backend/tests/test_envelope.py` pins all 5 cases including the explicit-bypass surprise. If the predicate tightens to require typed-true booleans (etc.), the test diff makes the change deliberate.
 
 **[LOW] `version.py` reads `frontend/package.json` at every import**
 - File: `backend/version.py:26-39`. Cache with `functools.lru_cache(maxsize=1)`.
@@ -354,7 +359,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[LOW] `SimErrorCode` covers tiny subset of backend codes**
 - File: `frontend/src/hooks/sim/useSimWsDispatcher.ts:222`. Two parallel error taxonomies for same domain.
 - Fix: unify under `BackendErrorCode` discriminated union derived from generated types.
-- DEFERRED — gated on the WS-codegen phase (HIGH item still open). The current `SimErrorCode` is already typed against the 3 codes the WS dispatcher emits; unifying with the full `ErrorCode` enum (now 39 members in `backend/api/_errors.py`) requires the same generated TS type the WS contract item produces.
+- DONE (9a4ad9d) — `tunnel_lost` arm anchored to `Extract<WsEventType, 'tunnel_lost'>`; `simulation_error` and `no_device_connected` are synthetic markers (no corresponding WS event) and stay as bare literals. A future backend rename of `tunnel_lost` now surfaces as a TS error here instead of a silent miss.
 
 **[LOW] `backend/main.py:299-307` setter writes to magic `"__legacy__"` key**
 - Comment says "Best-effort: stash under a synthetic key if udid unknown". Migration started but not finished.
