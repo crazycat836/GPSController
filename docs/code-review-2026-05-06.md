@@ -117,15 +117,18 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[HIGH] File size — `backend/main.py` is 882 lines with 3 distinct responsibilities**
 - File: `backend/main.py:190-496` (`AppState` ~310 lines), `:503-645` (`_usbmux_presence_watchdog` ~140 lines), `:1-188` (logging setup). `_sync_new_device_to_primary` alone is 110 lines (`:387-495`).
 - Fix: extract `AppState` → `backend/state.py`; watchdog + dual-sync → `backend/services/device_watchdog.py`; logging → `backend/logging_config.py`. Result: <300 lines.
+- DONE (7f81112) — all three extractions landed; main.py is now 350 lines (was 916). Slightly above the <300 target but the residual is import wiring + FastAPI app + token-auth middleware + lifespan orchestration, which legitimately belongs at the entrypoint.
 
 **[HIGH] File size — `backend/api/wifi_tunnel.py` is 875 lines mixing scan/pair/lifecycle**
 - File: `backend/api/wifi_tunnel.py:1-875` — discovery (`_scan_subnet_for_port`, `_resolve_hostname`, `wifi_tunnel_discover`), RemotePairing handshake (`_perform_remote_pair_handshake`, `_close_remote_pair_resources`, `wifi_repair`), tunnel lifecycle (`wifi_tunnel_start`, `wifi_tunnel_stop`, `_tunnel_watchdog`).
 - Fix: split into `services/wifi_discovery.py` + `services/wifi_repair.py` + `services/wifi_tunnel_lifecycle.py`; keep router thin.
+- DONE (507a238) — `services/wifi_discovery.py` extracted (`scan_subnet_for_port`, `resolve_hostname`, dedicated `_DNS_POOL`). api/wifi_tunnel.py is now 731 lines (was 875). The repair + lifecycle splits are deferred — they couple to module-level `_tunnel_watchdog_task` state and the tunnel runner is already centralised in `services/wifi_tunnel_service.py`, so the further split has lower marginal value than its blast radius.
 
 **[HIGH] Architecture — `SimContext.tsx` is an 810-line "god context"**
 - File: `frontend/src/contexts/SimContext.tsx:106-146` (the `SimContextValue` interface; comment at `:703-710` already acknowledges)
 - Every consumer re-renders on every position-tick. The `SimDerivedContext` pattern is already in place — extend it.
 - Fix: split into stable-handlers context (rarely changes) + reactive-state context. Pull cooldown subscriber (`:634-654`) into `useCooldownSync` hook; per-mode action functions into `frontend/src/contexts/sim/actions.ts`.
+- DONE (de1d982) — `useCooldownSync` hook extracted (53 lines); the random-tour geometry inside `generateWaypoints` extracted to `lib/waypoint_gen.ts` (pure, testable). SimContext.tsx is now 757 lines (was 814). The full stable-handlers/reactive-state split is deferred — it would change the public context shape consumed by ~21 files; small and big follow-up commit.
 
 ### Performance
 
