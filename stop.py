@@ -4,12 +4,20 @@ GPSController 一鍵停止
 
 import os
 import subprocess
+import sys
+
+# Single source of truth for the backend bind port lives in backend/config.py.
+ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(ROOT, "backend"))
+from config import API_PORT as BACKEND_PORT  # noqa: E402
+
+FRONTEND_PORT = 5173  # Vite dev-server default; not a backend concern
 
 
 def main():
     print("  正在停止 GPSController...")
 
-    for port in [8777, 5173]:
+    for port in (BACKEND_PORT, FRONTEND_PORT):
         if os.name == "nt":
             # shell=True is intentional and safe here: fixed pipeline
             # with a developer-supplied integer port — no user input.

@@ -22,8 +22,12 @@ FRONTEND = os.path.join(ROOT, "frontend")
 sys.path.insert(0, ROOT)
 from tools.terminal_ui import visual_width, box_line, box_border  # noqa: E402, F401
 
-BACKEND_PORT = 8777
-FRONTEND_PORT = 5173
+# Single source of truth for the backend bind port lives in backend/config.py;
+# importing it here keeps start / stop / backend in lockstep automatically.
+sys.path.insert(0, BACKEND)
+from config import API_PORT as BACKEND_PORT  # noqa: E402
+
+FRONTEND_PORT = 5173  # Vite dev-server default; not a backend concern
 
 
 def _app_version() -> str:

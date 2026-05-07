@@ -587,9 +587,12 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
         raise
 
 
-@router.post("/wifi/tunnel/start")
-async def wifi_tunnel_start(req: WifiTunnelStartRequest):
-    """Start an in-process WiFi tunnel (requires admin)."""
+async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
+    """Start an in-process WiFi tunnel. Body of the /wifi/tunnel/start
+    route, hoisted out so /wifi/tunnel/start-and-connect can reuse it
+    without one route handler calling another (which blurs the routing
+    layer + bypasses dependency injection / middleware).
+    """
     global _tunnel_watchdog_task
     async with _tunnel.lock:
         if _tunnel.is_running():
@@ -636,6 +639,12 @@ async def wifi_tunnel_start(req: WifiTunnelStartRequest):
                 _tunnel_watchdog(_tunnel.task, _tunnel.generation)
             )
         return {"status": "started", **info}
+
+
+@router.post("/wifi/tunnel/start")
+async def wifi_tunnel_start(req: WifiTunnelStartRequest):
+    """Start an in-process WiFi tunnel (requires admin)."""
+    return await _do_tunnel_start(req)
 
 
 @router.get("/wifi/tunnel/status")
@@ -752,8 +761,9 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
     """Start a WiFi tunnel and immediately connect the device through it."""
     app_state = ctx.app_state
 
-    # Start the tunnel
-    tunnel_result = await wifi_tunnel_start(req)
+    # Start the tunnel via the shared helper instead of calling the route
+    # handler directly — keeps the routing layer single-responsibility.
+    tunnel_result = await _do_tunnel_start(req)
     if tunnel_result.get("status") not in ("started", "already_running"):
         raise http_err(500, ErrorCode.TUNNEL_FAILED, "Tunnel startup failed")
 
