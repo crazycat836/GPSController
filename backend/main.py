@@ -25,7 +25,7 @@ from config import (
     MAX_DEVICES,
     ensure_data_dir,
 )
-from logging_config import setup_logging
+from logging_config import setup_logging, uvicorn_log_config
 from state import AppState
 from version import __version__
 
@@ -305,46 +305,13 @@ async def root():
 
 
 if __name__ == "__main__":
-    # Custom log config: keep Uvicorn's colored output but unify the format
-    _uvicorn_log_config = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "default": {
-                "()": f"{__name__}._UvicornDefaultFormatter",
-                "fmt": "%(asctime)s %(levelname)s %(name)s: %(message)s",
-                "datefmt": "%Y-%m-%d %H:%M:%S",
-                "use_colors": True,
-            },
-            "access": {
-                "()": f"{__name__}._UvicornAccessFormatter",
-                "fmt": "%(asctime)s %(levelname)s %(name)s: %(client_addr)s - \"%(request_line)s\" %(status_code)s",
-                "datefmt": "%Y-%m-%d %H:%M:%S",
-                "use_colors": True,
-            },
-        },
-        "handlers": {
-            "default": {
-                "formatter": "default",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stderr",
-            },
-            "access": {
-                "formatter": "access",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stdout",
-            },
-        },
-        "loggers": {
-            "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
-            "uvicorn.error": {"level": "INFO"},
-            "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
-        },
-    }
+    # Custom log config: keep Uvicorn's colored output but unify the format.
+    # The dict + formatter classes both live in `logging_config`; absolute
+    # module references inside it survive being launched as `__main__`.
     uvicorn.run(
         "main:app",
         host=API_HOST,
         port=API_PORT,
         reload=False,
-        log_config=_uvicorn_log_config,
+        log_config=uvicorn_log_config(),
     )

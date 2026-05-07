@@ -105,6 +105,53 @@ class _AccessNoiseFilter(logging.Filter):
         return not any(p in msg for p in _ACCESS_NOISE_PATHS)
 
 
+def uvicorn_log_config() -> dict:
+    """Build the dictConfig uvicorn consumes via ``log_config=`` so its
+    own logger output matches our format and color scheme.
+
+    The class paths under ``"()"`` are absolute module references —
+    when main.py is launched as ``__main__`` Python's logging.config
+    can't resolve a bare ``__main__.<class>`` after a refactor that
+    moved the formatter classes out, so we always point at this
+    module by name.
+    """
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "()": f"{__name__}._UvicornDefaultFormatter",
+                "fmt": _LOG_FMT,
+                "datefmt": _LOG_DATEFMT,
+                "use_colors": True,
+            },
+            "access": {
+                "()": f"{__name__}._UvicornAccessFormatter",
+                "fmt": '%(asctime)s %(levelname)s %(name)s: %(client_addr)s - "%(request_line)s" %(status_code)s',
+                "datefmt": _LOG_DATEFMT,
+                "use_colors": True,
+            },
+        },
+        "handlers": {
+            "default": {
+                "formatter": "default",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stderr",
+            },
+            "access": {
+                "formatter": "access",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stdout",
+            },
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+            "uvicorn.error": {"level": "INFO"},
+            "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+        },
+    }
+
+
 def setup_logging(log_dir: Path) -> logging.Logger:
     """Configure root logging + uvicorn loggers and return the project logger.
 
