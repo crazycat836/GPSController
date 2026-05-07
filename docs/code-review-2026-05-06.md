@@ -188,12 +188,15 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 ### Backend
 
 **[MEDIUM] Dead import — `traceback` in `backend/api/location.py:3`** (never used).
+- DONE (5d09338)
 
 **[MEDIUM] Duplicate `import asyncio`** at `backend/main.py:521`, `:649`; `backend/core/device_manager.py:538` (already imported at module top).
+- DONE (5d09338) — also dropped the unnecessary `as _asyncio` alias in device_manager
 
 **[MEDIUM] Legacy typing — mixed `Dict`/`Optional` with `from __future__ import annotations`**
 - File: `backend/core/device_manager.py:25`, `:72-81`, `:114`. Inconsistent with rest of codebase.
 - Fix: migrate to `dict[]` / `X | None`.
+- DONE (5d09338) — Dict + Optional dropped from typing import; Any retained (still used)
 
 **[MEDIUM] DRY — `_get_local_ip()` reimplemented twice with identical UDP-probe trick**
 - File: `backend/api/wifi_tunnel.py:408-419`; `backend/core/device_manager.py:759-774`
@@ -202,6 +205,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[MEDIUM] Error handling — silent legacy-data-dir migration**
 - File: `backend/main.py:49-50` — `except OSError: pass`. A permissions bug silently loses persistent settings.
 - Fix: `logger.debug("legacy rename failed: %s", exc)`.
+- DONE (5d09338)
 
 **[MEDIUM] Magic constants buried in modules instead of `config.py`**
 - `backend/api/wifi_tunnel.py:459`, `:522`, `:526-528` (`49152` RemotePairing port)
@@ -210,9 +214,11 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 
 **[MEDIUM] Naming — local `_log = logging.getLogger("gpscontroller")` shadows module logger**
 - File: `backend/api/location.py:53`, `:83`. Use module-level `logger`.
+- DONE (5d09338)
 
 **[MEDIUM] Type — public function missing return type**
 - File: `backend/api/wifi_tunnel.py:41` — `_run_teardown_steps` returns `list[dict[str, str]]` but undeclared.
+- DONE — verified at current line 51, return type already declared (no edit needed; possibly added during an earlier phase)
 
 **[MEDIUM] Documentation — Nominatim failure semantics undocumented**
 - File: `backend/api/geocode.py:39` — `search`/`reverse` return `[]`/`None` on upstream failure, not 5xx. Frontend has to infer.
@@ -239,6 +245,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[MEDIUM] React — non-null assertion on `editing.bookmark!.id`**
 - File: `frontend/src/components/library/BookmarksPanel.tsx:440`
 - Fix: capture `const bk = editing.bookmark; if (!bk) return;`.
+- DONE (09ec5be) — IIFE captures `bk` once; closure in onSubmit no longer relies on TS narrowing
 
 **[MEDIUM] Performance — `renderBookmarkRow` is a closure recreated every render**
 - File: `frontend/src/components/library/BookmarksPanel.tsx:328`
@@ -248,6 +255,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[MEDIUM] React — mutation inside `useMemo` (`buckets.get(key)!.push(b)`)**
 - File: `frontend/src/components/library/BookmarksPanel.tsx:120`
 - Fix: `buckets.set(key, [...(buckets.get(key) ?? []), b])`.
+- DONE (09ec5be)
 
 **[MEDIUM] Module-level mutable state without doc**
 - File: `frontend/src/services/api.ts:87` (`warnedLocalStorage`), `:162` (`authTokenPromise`). Test-isolation pitfall.
@@ -257,17 +265,21 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 
 **[MEDIUM] Magic number — `useState(5)` for default waypoint count**
 - File: `frontend/src/contexts/SimContext.tsx:239`. Should be `DEFAULT_WP_GEN_COUNT` in `frontend/src/lib/constants.ts`.
+- DONE (09ec5be)
 
 **[MEDIUM] Type alias declared inside callback body**
 - File: `frontend/src/contexts/SimContext.tsx:292` (`type Pt = ...`). Hoist to module scope.
+- DONE (09ec5be) — hoisted as module-scope `type WaypointCandidate`
 
 **[MEDIUM] Error handling — cooldown initial fetch swallowed**
 - File: `frontend/src/contexts/SimContext.tsx:641` — `.catch(() => {})` hides slow-backend startup.
 - Fix: `devWarn` in catch.
+- DONE (09ec5be)
 
 **[MEDIUM] `SimContext` reaches around `services/api.ts` for WS payload typing**
 - File: `frontend/src/contexts/SimContext.tsx:646` casts inline `{ remaining_seconds?, enabled? }` instead of importing `CooldownStatusResponse` from `frontend/src/services/api.ts:339-345`.
 - Two parallel definitions for the same Pydantic model.
+- DONE (09ec5be) — switched cast to `Partial<CooldownStatusResponse>` (the WS payload is partial; api.ts stays the source of truth for the full shape)
 
 ### Cross-cutting
 
@@ -284,24 +296,30 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[LOW] PEP-8 — Missing `from __future__ import annotations` in `backend/api/{location,device,bookmarks,route,websocket,system}.py`** — they use `X | None` directly; pinned on 3.10 unnecessarily.
 
 **[LOW] `shell=True` for trusted Windows pipeline** — `start.py:76`, `stop.py:16`. No user input but worth a comment.
+- DONE (5d09338) — comment added at both sites explaining why shell=True is safe
 
 **[LOW] DRY — Avatar button hand-rolls `SettingsRow` styles**
 - File: `frontend/src/components/shell/SettingsMenu.tsx:245-279`. Use existing `SettingsRow` component.
 
 **[LOW] React keys — `key={i}` in `BulkCoordsDialog` error list**
 - File: `frontend/src/components/library/BulkCoordsDialog.tsx:145`. Use `${err.line}-${err.reason}`.
+- DONE (09ec5be)
 
 **[LOW] Unnecessary type cast on `package.json`**
 - File: `frontend/src/components/UpdateChecker.tsx:3-7`, `frontend/src/components/shell/SettingsMenu.tsx:17-19`. With `resolveJsonModule`, the cast is dead weight.
+- DONE (09ec5be)
 
 **[LOW] Console — bare `console.warn` instead of `devWarn`**
 - File: `frontend/src/contexts/SimContext.tsx:253`; `frontend/src/hooks/useSimulation.ts:506-510`.
+- DONE (09ec5be) — both call sites collapsed to a single `devWarn(...)` call
 
 **[LOW] Re-annotated `_handlers` list trips `mypy --warn-unreachable`**
 - File: `backend/main.py:120`, `:122`. Annotate once before `try`.
+- DONE (5d09338)
 
 **[LOW] Dead `from typing import Callable` runtime import**
 - File: `backend/core/multi_stop.py:8`. Only used in stringified annotations.
+- DONE (5d09338) — moved into a TYPE_CHECKING guard from `collections.abc`
 
 **[LOW] `EnvelopeJSONResponse` bypass mechanism is implicit**
 - File: `backend/api/_envelope.py:63-75`. Future endpoint that returns dict with `success`+`data` keys would unintentionally bypass wrapping. Add unit test.
