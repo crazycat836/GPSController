@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from api._errors import ErrorCode, http_err
-from api.websocket import broadcast
+from services.ws_broadcaster import broadcast
 from config import resolve_speed_profile
 from services.location_service import (
     DeviceLostCause,

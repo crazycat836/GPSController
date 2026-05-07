@@ -199,7 +199,7 @@ class AppState:
         self.simulation_engines: dict[str, "SimulationEngine"] = {}
         self._primary_udid: str | None = None
         # deferred to break api↔main circular import
-        from api.websocket import broadcast
+        from services.ws_broadcaster import broadcast
         self.cooldown_timer = CooldownTimer(broadcast=broadcast)
         self.bookmark_manager = BookmarkManager()
         self.coord_formatter = CoordinateFormatter()
@@ -372,7 +372,7 @@ class AppState:
         do not hijack the map-view focus.
         """
         from core.simulation_engine import SimulationEngine
-        from api.websocket import broadcast
+        from services.ws_broadcaster import broadcast
 
         loc_service = await self.device_manager.get_location_service(udid)
 
@@ -427,7 +427,7 @@ class AppState:
             return
 
         from models.schemas import Coordinate, MovementMode
-        from api.websocket import broadcast
+        from services.ws_broadcaster import broadcast
 
         try:
             mmode = MovementMode(snapshot.movement_mode)
@@ -540,7 +540,7 @@ async def _usbmux_presence_watchdog():
     import asyncio
     import time
     from pymobiledevice3.usbmux import list_devices
-    from api.websocket import broadcast
+    from services.ws_broadcaster import broadcast
     from services.location_service import DeviceLostCause
 
     miss_counts: dict[str, int] = {}
@@ -666,7 +666,7 @@ async def _usbmux_presence_watchdog():
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     import asyncio
-    from api.websocket import broadcast
+    from services.ws_broadcaster import broadcast
     global API_TOKEN
 
     # ── Startup ──

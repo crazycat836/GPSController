@@ -12,15 +12,17 @@ from pydantic import BaseModel, Field, field_validator
 from api._errors import ErrorCode, http_err, ios_unsupported_error, max_devices_error
 from config import MAX_DEVICES
 from context import ctx
-from core.wifi_tunnel import TunnelRunner
-from services.location_service import DeviceLostCause
+from services.wifi_tunnel_service import (
+    _cleanup_wifi_connections,
+    _tcp_probe,
+    _tunnel,
+)
 
 router = APIRouter(prefix="/api/device", tags=["device"])
 
-# Module-level singletons (tunnel runner, watchdog handle).
-# In-process tunnel runner. Serialised by its own asyncio.Lock so concurrent
-# /start or /stop requests never race.
-_tunnel = TunnelRunner()
+# The tunnel runner singleton lives in services.wifi_tunnel_service so
+# core.tunnel_liveness can reach it without crossing back into api/. The
+# import above is the only access point the router uses.
 # Watchdog task handle (lives at module level since TunnelRunner is now shared).
 _tunnel_watchdog_task: "asyncio.Task | None" = None
 
@@ -295,7 +297,7 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
         info = await dm.connect_wifi_tunnel(req.rsd_address, req.rsd_port)
         await app_state.create_engine_for_device(info.udid)
         try:
-            from api.websocket import broadcast
+            from services.ws_broadcaster import broadcast
             await broadcast("device_connected", {
                 "udid": info.udid,
                 "name": info.name,
@@ -412,24 +414,6 @@ def _get_primary_local_ip() -> str | None:
         return None
 
 
-async def _tcp_probe(ip: str, port: int, timeout: float = 0.4) -> bool:
-    try:
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(ip, port), timeout=timeout,
-        )
-        writer.close()
-        try:
-            await writer.wait_closed()
-        except (OSError, ConnectionError) as exc:
-            _tunnel_logger.debug(
-                "_tcp_probe(%s:%d): wait_closed raised (%s); socket already torn down",
-                ip, port, exc.__class__.__name__, exc_info=True,
-            )
-        return True
-    except (OSError, ConnectionError, asyncio.TimeoutError):
-        return False
-
-
 async def _scan_subnet_for_port(port: int = 49152) -> list[str]:
     """Scan the local /24 subnet for hosts responding on the given TCP port.
 
@@ -540,54 +524,6 @@ async def wifi_tunnel_discover():
     return {"devices": unique}
 
 
-async def _cleanup_wifi_connections(reason: str = "wifi_tunnel_stopped") -> list[str]:
-    """Disconnect any Network devices + drop the simulation engine.
-
-    Broadcasts ``device_disconnected`` so the frontend banners/disables context
-    menu items immediately instead of waiting for the next failed action.
-    Returns the UDIDs that were disconnected.
-
-    *reason* is forwarded as the ``reason`` field in the broadcast so consumers
-    (frontend toasts, future analytics) can distinguish a user/admin stop
-    from a liveness-probe-detected death.
-    """
-    app_state = ctx.app_state
-    dm = _dm()
-    udids: list[str] = []
-    try:
-        udids = dm.udids_by_connection_type("Network")
-        # Stop engine tasks *before* tearing down the transport. A running
-        # Navigate / RandomWalk loop would otherwise keep emitting events
-        # against a dead RSD and spam "arrived at destination" log noise.
-        for udid in udids:
-            try:
-                await app_state.terminate_engine(udid)
-            except Exception:
-                _tunnel_logger.exception("Failed to terminate engine for %s", udid)
-        for udid in udids:
-            try:
-                await dm.disconnect(udid)
-                _tunnel_logger.info("Disconnected WiFi device %s (reason=%s)", udid, reason)
-            except (OSError, RuntimeError):
-                _tunnel_logger.exception("Failed to disconnect %s", udid)
-        if udids:
-            try:
-                from api.websocket import broadcast
-                # cleanup is always a tunnel/network condition — whether
-                # triggered by user stop, watchdog, or liveness probe, the
-                # device-level effect is the same: WiFi-side path is gone.
-                await broadcast("device_disconnected", {
-                    "udids": udids,
-                    "reason": reason,
-                    "cause": DeviceLostCause.WIFI_DROPPED.value,
-                })
-            except Exception:
-                _tunnel_logger.exception("WiFi cleanup: broadcast failed")
-    except Exception:
-        _tunnel_logger.exception("WiFi cleanup step failed")
-    return udids
-
-
 async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
     """Watch the tunnel task; if it dies unexpectedly (WiFi blip, iPhone
     locked, admin revoked), clean up any dependent WiFi connections so the
@@ -624,7 +560,7 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
 
         _tunnel_logger.warning("Tunnel task exited unexpectedly; 5s grace period")
         try:
-            from api.websocket import broadcast
+            from services.ws_broadcaster import broadcast
             await broadcast("tunnel_degraded", {"reason": "task_exited"})
         except Exception:
             _tunnel_logger.exception("Failed to emit tunnel_degraded event")
@@ -644,7 +580,7 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
                 )
                 if _tunnel.is_running():
                     try:
-                        from api.websocket import broadcast
+                        from services.ws_broadcaster import broadcast
                         await broadcast("tunnel_recovered", {})
                     except Exception as exc:
                         _tunnel_logger.debug(
@@ -656,7 +592,7 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
             _tunnel.task = None
             _tunnel.info = None
             try:
-                from api.websocket import broadcast
+                from services.ws_broadcaster import broadcast
                 await broadcast("tunnel_lost", {"reason": "task_exited"})
             except Exception:
                 _tunnel_logger.exception("Failed to emit tunnel_lost event")
@@ -736,7 +672,7 @@ def _cancel_watchdog() -> None:
 
 
 async def _broadcast_usb_fallback_error(udid: str) -> None:
-    from api.websocket import broadcast
+    from services.ws_broadcaster import broadcast
     await broadcast("device_error", {
         "udid": udid,
         "stage": "usb_fallback",

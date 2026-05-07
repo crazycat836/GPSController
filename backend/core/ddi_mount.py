@@ -46,7 +46,7 @@ async def broadcast_ddi_mount_failure(udid: str, stage: str, reason: str) -> Non
     handled consistently.
     """
     try:
-        from api.websocket import broadcast
+        from services.ws_broadcaster import broadcast
         payload = {
             "udid": udid,
             "stage": stage,
@@ -104,7 +104,7 @@ async def ensure_personalized_ddi_mounted(
     # sees a "preparing device" overlay instead of a frozen UI.
     logger.info("Personalized DDI not mounted on %s; mounting (may download ~20MB)...", conn.udid)
     try:
-        from api.websocket import broadcast
+        from services.ws_broadcaster import broadcast
         await broadcast("ddi_mounting", {"udid": conn.udid})
     except Exception:
         logger.debug("ddi_mounting WS broadcast failed (personalized)", exc_info=True)
@@ -146,7 +146,7 @@ async def ensure_personalized_ddi_mounted(
     finally:
         if mount_succeeded:
             try:
-                from api.websocket import broadcast
+                from services.ws_broadcaster import broadcast
                 await broadcast("ddi_mounted", {"udid": conn.udid})
             except Exception:
                 logger.debug("ddi_mounted WS broadcast failed (personalized)", exc_info=True)
@@ -193,7 +193,7 @@ async def ensure_classic_ddi_mounted(conn: "_ActiveConnection") -> None:
 
     logger.info("Classic DDI not mounted on %s; attempting auto-mount", conn.udid)
     try:
-        from api.websocket import broadcast
+        from services.ws_broadcaster import broadcast
         await broadcast("ddi_mounting", {"udid": conn.udid})
     except Exception:
         logger.debug("ddi_mounting WS broadcast failed (classic)", exc_info=True)
@@ -210,7 +210,7 @@ async def ensure_classic_ddi_mounted(conn: "_ActiveConnection") -> None:
     finally:
         if mounted:
             try:
-                from api.websocket import broadcast
+                from services.ws_broadcaster import broadcast
                 await broadcast("ddi_mounted", {"udid": conn.udid})
             except Exception:
                 logger.debug("ddi_mounted WS broadcast failed (classic)", exc_info=True)

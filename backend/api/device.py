@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from api._errors import ErrorCode, http_err, ios_unsupported_error, max_devices_error
-from api.websocket import broadcast
+from services.ws_broadcaster import broadcast
 from config import MAX_DEVICES
 from context import ctx
 from core.device_manager import UnsupportedIosVersionError, parse_ios_version

@@ -34,11 +34,12 @@ async def tunnel_liveness_loop(stop: asyncio.Event) -> None:
     route through ``_cleanup_wifi_connections``, which short-circuits when
     there are no Network devices left to disconnect.
     """
-    # Late imports avoid circular dependency at module load: api.wifi_tunnel
-    # transitively imports from core.* during router setup, and pulling those
-    # symbols at module-top would create a cycle.
-    from api.wifi_tunnel import _cleanup_wifi_connections, _tcp_probe, _tunnel
     from context import ctx
+    from services.wifi_tunnel_service import (
+        _cleanup_wifi_connections,
+        _tcp_probe,
+        _tunnel,
+    )
 
     miss_count = 0
     logger.info(

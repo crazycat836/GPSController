@@ -7,6 +7,19 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from context import ctx
 from models.schemas import JoystickInput
+from services.ws_broadcaster import (
+    broadcast,
+    connection_count,
+    register,
+    unregister,
+)
+
+# Re-export broadcast so existing call sites that still use
+# ``from api.websocket import broadcast`` keep compiling during the
+# migration to services.ws_broadcaster. New code should import from
+# services.ws_broadcaster directly so core/ never has to reach back
+# into api/ — see tools/check_layers.py.
+__all__ = ["broadcast", "router"]
 
 router = APIRouter(tags=["websocket"])
 logger = logging.getLogger(__name__)
@@ -17,43 +30,6 @@ logger = logging.getLogger(__name__)
 # generic disconnect.
 _WS_AUTH_FAIL_CODE = 4001
 _WS_AUTH_TIMEOUT_SECONDS = 5.0
-
-# Active WebSocket connections
-_connections: list[WebSocket] = []
-
-# Per-client send budget. One stalled client must not block the rest of the
-# fan-out, so each ws.send_text is wrapped in wait_for and slow ones are
-# treated as dead so the broadcast loop reclaims their slot.
-_BROADCAST_PER_CLIENT_TIMEOUT_S = 1.0
-
-
-async def broadcast(event_type: str, data: dict):
-    """Broadcast event to all connected WebSocket clients.
-
-    Sends fan out in parallel with a per-client timeout so a single slow /
-    stuck client cannot stall every other broadcast that follows. Failing
-    clients (timeout, exception) are removed from the connection list.
-    """
-    message = json.dumps({"type": event_type, "data": data})
-
-    async def _send_one(ws: WebSocket) -> "WebSocket | None":
-        try:
-            await asyncio.wait_for(
-                ws.send_text(message), timeout=_BROADCAST_PER_CLIENT_TIMEOUT_S,
-            )
-            return None  # success
-        except Exception:
-            return ws  # mark for removal
-
-    # Snapshot the connection list — concurrent disconnects mutate
-    # _connections from the websocket_endpoint's finally clause.
-    targets = list(_connections)
-    if not targets:
-        return
-    results = await asyncio.gather(*[_send_one(ws) for ws in targets])
-    for ws in results:
-        if ws is not None and ws in _connections:
-            _connections.remove(ws)
 
 
 async def _send_initial_state(ws: WebSocket) -> None:
@@ -138,8 +114,8 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     if not await _require_auth_frame(ws):
         return
-    _connections.append(ws)
-    logger.info("WebSocket client connected (%d total)", len(_connections))
+    register(ws)
+    logger.info("WebSocket client connected (%d total)", connection_count())
 
     try:
         await _send_initial_state(ws)
@@ -199,6 +175,5 @@ async def websocket_endpoint(ws: WebSocket):
     except Exception as e:
         logger.error("WebSocket error: %s", e)
     finally:
-        if ws in _connections:
-            _connections.remove(ws)
-        logger.info("WebSocket client disconnected (%d remaining)", len(_connections))
+        unregister(ws)
+        logger.info("WebSocket client disconnected (%d remaining)", connection_count())
