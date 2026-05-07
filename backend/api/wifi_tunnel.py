@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from api._errors import ErrorCode, http_err, ios_unsupported_error, max_devices_error
-from config import MAX_DEVICES
+from config import MAX_DEVICES, REMOTE_PAIRING_PORT
 from context import ctx
 from services.wifi_tunnel_service import (
     _cleanup_wifi_connections,
@@ -392,7 +392,7 @@ async def wifi_repair():
 
 class WifiTunnelStartRequest(BaseModel):
     ip: str
-    port: int = Field(default=49152, ge=1, le=65535)
+    port: int = Field(default=REMOTE_PAIRING_PORT, ge=1, le=65535)
     udid: str | None = None
 
     @field_validator("ip")
@@ -401,7 +401,7 @@ class WifiTunnelStartRequest(BaseModel):
         return _validate_local_ip(v)
 
 
-async def _scan_subnet_for_port(port: int = 49152) -> list[str]:
+async def _scan_subnet_for_port(port: int = REMOTE_PAIRING_PORT) -> list[str]:
     """Scan the local /24 subnet for hosts responding on the given TCP port.
 
     Probes are gated by a Semaphore so we never have more than 32 parallel
@@ -485,12 +485,12 @@ async def wifi_tunnel_discover():
     if not results:
         _tunnel_logger.info("mDNS empty; falling back to /24 TCP scan on port 49152")
         try:
-            hits = await _scan_subnet_for_port(49152)
+            hits = await _scan_subnet_for_port(REMOTE_PAIRING_PORT)
             names = await asyncio.gather(*(_resolve_hostname(ip) for ip in hits))
             for ip, resolved in zip(hits, names):
                 results.append({
                     "ip": ip,
-                    "port": 49152,
+                    "port": REMOTE_PAIRING_PORT,
                     "host": ip,
                     "name": resolved or ip,
                     "method": "tcp_scan",

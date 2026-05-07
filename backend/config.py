@@ -97,6 +97,17 @@ DEFAULT_PAUSE_MIN = 5.0
 DEFAULT_PAUSE_MAX = 20.0
 
 
+# RemotePairing port advertised over mDNS / scanned by the /24 fallback.
+# Must match `frontend/src/lib/constants.ts::DEFAULT_TUNNEL_PORT`.
+REMOTE_PAIRING_PORT = 49152
+
+# DVT reconnect backoff schedule. Cumulative wait across the schedule
+# is 0.5 + 1.5 + 3 + 4 + 6 = 15s. Early intervals stay tight so an
+# instant blip recovers quickly; later intervals stretch so we don't
+# hammer a device that's mid-unlock.
+DVT_RECONNECT_DELAYS = [0.5, 1.5, 3.0, 4.0, 6.0]
+
+
 def clamp_pause_range(pause_min: float, pause_max: float) -> tuple[float, float]:
     """Sort + lower-bound a (min, max) pause range to non-negative seconds.
 

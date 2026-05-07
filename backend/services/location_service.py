@@ -28,6 +28,8 @@ from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
 from pymobiledevice3.services.dvt.instruments.location_simulation import LocationSimulation
 from pymobiledevice3.services.simulate_location import DtSimulateLocation
 
+from config import DVT_RECONNECT_DELAYS
+
 logger = logging.getLogger(__name__)
 
 
@@ -183,13 +185,11 @@ class DvtLocationService(LocationService):
             if self._lockdown is None:
                 raise RuntimeError("Cannot reconnect DVT: no lockdown/RSD reference")
 
-            # Cumulative wait across attempts: 0.5 + 1.5 + 3 + 4 + 6 = 15s.
-            # Early intervals stay tight so an instant blip recovers
-            # quickly; later intervals stretch so we don't hammer a device
-            # that's mid-unlock.
-            delays = [0.5, 1.5, 3.0, 4.0, 6.0]
+            # Schedule lives in config.DVT_RECONNECT_DELAYS so the rationale
+            # (cumulative ≈15s, tight-then-stretched) sits next to the rest
+            # of the project's tunables instead of being buried mid-method.
             last_exc: Exception | None = None
-            for attempt, delay in enumerate(delays, start=1):
+            for attempt, delay in enumerate(DVT_RECONNECT_DELAYS, start=1):
                 try:
                     new_dvt = DvtProvider(self._lockdown)
                     await new_dvt.__aenter__()
