@@ -326,7 +326,15 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     setInlineEditName(b.name)
   }, [])
 
-  const renderBookmarkRow = (b: Bookmark) => (
+  // Stable handlers so memoised BookmarkRow can skip renders when the
+  // parent re-renders for unrelated reasons (typing in search, etc.).
+  const cancelInlineEdit = useCallback(() => setInlineEditId(null), [])
+  const editBookmark = useCallback(
+    (bk: Bookmark) => setEditing({ mode: 'edit', bookmark: bk }),
+    [],
+  )
+
+  const renderBookmarkRow = useCallback((b: Bookmark) => (
     <BookmarkRow
       key={b.id}
       bookmark={b}
@@ -340,16 +348,22 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       inlineEditName={inlineEditName}
       onInlineEditChange={setInlineEditName}
       onInlineEditCommit={commitInlineRename}
-      onInlineEditCancel={() => setInlineEditId(null)}
+      onInlineEditCancel={cancelInlineEdit}
       onStartInlineEdit={startInlineEdit}
       isActive={isBookmarkActive(b)}
       isCopied={copiedId === b.id}
       onActivate={onBookmarkClick}
-      onEdit={(bk) => setEditing({ mode: 'edit', bookmark: bk })}
+      onEdit={editBookmark}
       onDelete={confirmDeleteOne}
       rowMenuItems={rowMenuItems}
     />
-  )
+  ), [
+    placeMap, tagMap, displayPlace, selectionMode, selectedIds,
+    toggleSelected, inlineEditId, inlineEditName,
+    commitInlineRename, cancelInlineEdit, startInlineEdit,
+    isBookmarkActive, copiedId, onBookmarkClick,
+    editBookmark, confirmDeleteOne, rowMenuItems,
+  ])
 
   return (
     <div className="relative flex flex-col gap-3 p-4 pb-[92px]">

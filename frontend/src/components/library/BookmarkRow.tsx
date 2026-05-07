@@ -54,7 +54,7 @@ interface BookmarkRowProps {
  * callbacks. The row composes `ListRow` and overlays an accent stripe when
  * the bookmark coordinates match the currently-loaded map position.
  */
-export default function BookmarkRow({
+function BookmarkRowImpl({
   bookmark: b,
   placeMap, tagMap, displayPlace,
   selectionMode, checked, onToggleSelected,
@@ -234,6 +234,14 @@ export default function BookmarkRow({
     </div>
   )
 }
+
+// Memoized so the parent's per-render scroll / search / selection-mode
+// state changes don't repaint every row when the row's own props are
+// referentially stable. The parent passes useMemo-derived placeMap /
+// tagMap / displayPlace + useCallback handlers, so memo's default
+// shallow compare suffices.
+const BookmarkRow = React.memo(BookmarkRowImpl)
+export default BookmarkRow
 
 interface SelectionTileProps {
   checked: boolean
