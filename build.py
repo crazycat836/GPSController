@@ -101,6 +101,15 @@ def run(argv: list[str], *, cwd: Path | None = None) -> None:
 
 # ── Stages ───────────────────────────────────────────────────────────
 
+def stage_codegen() -> None:
+    """Re-run TS-from-Pydantic codegen so frontend/src/generated/api-contract.ts
+    matches the live backend WS event registry. Cheap (a few hundred ms);
+    run unconditionally so a developer who edited backend/models/ws_events.py
+    and forgot to re-run can't ship a stale contract."""
+    py = resolve_python()
+    run([*py, "tools/gen_ws_types.py"], cwd=ROOT)
+
+
 def stage_backend() -> None:
     if not (BACKEND / "gpscontroller-backend.spec").exists():
         die("backend/gpscontroller-backend.spec 不存在")
@@ -161,25 +170,28 @@ def main() -> None:
     os_label = "Windows" if sys.platform == "win32" else "macOS (arm64)"
     print_banner(f"GPSController Build — {os_label}")
 
-    total = 3
+    total = 4
     started = time.monotonic()
+
+    print_step(1, total, "Codegen WS event types → frontend/src/generated/api-contract.ts")
+    stage_codegen()
 
     if args.skip_backend:
         print("  [~] 跳過 backend 階段(--skip-backend)")
     else:
-        print_step(1, total, f"PyInstaller backend → {DIST_PY.relative_to(ROOT)}/")
+        print_step(2, total, f"PyInstaller backend → {DIST_PY.relative_to(ROOT)}/")
         stage_backend()
 
     if args.skip_frontend:
         print("  [~] 跳過 frontend 階段(--skip-frontend)")
     else:
-        print_step(2, total, f"Vite build frontend → {(FRONTEND / 'dist').relative_to(ROOT)}/")
+        print_step(3, total, f"Vite build frontend → {(FRONTEND / 'dist').relative_to(ROOT)}/")
         stage_frontend()
 
     if args.skip_installer:
         print("  [~] 跳過 installer 階段(--skip-installer)")
     else:
-        print_step(3, total, f"electron-builder → {RELEASE.relative_to(ROOT)}/")
+        print_step(4, total, f"electron-builder → {RELEASE.relative_to(ROOT)}/")
         stage_installer()
 
     elapsed = int(time.monotonic() - started)
