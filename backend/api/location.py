@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import traceback
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -50,8 +49,6 @@ async def _resolve_target_udid(app_state, dm, requested_udid: str | None) -> str
     device → first discovered device (with retries). Raises an HTTPException
     with code ``no_device`` when nothing is reachable.
     """
-    _log = logging.getLogger("gpscontroller")
-
     connected = dm.connected_udids
     target_udid = requested_udid or (connected[0] if connected else None)
     if target_udid is not None:
@@ -62,10 +59,10 @@ async def _resolve_target_udid(app_state, dm, requested_udid: str | None) -> str
             discovered = await dm.discover_devices()
             if discovered:
                 if attempt > 0:
-                    _log.info("discover_devices returned device on attempt %d", attempt + 1)
+                    logger.info("discover_devices returned device on attempt %d", attempt + 1)
                 return discovered[0].udid
         except Exception:
-            _log.exception("discover_devices failed during lazy rebuild (attempt %d)", attempt + 1)
+            logger.exception("discover_devices failed during lazy rebuild (attempt %d)", attempt + 1)
         await asyncio.sleep(_DISCOVER_RETRY_DELAY_S)
 
     raise http_err(400, ErrorCode.NO_DEVICE, "No iOS device connected; connect via USB first")
@@ -77,15 +74,14 @@ async def _get_or_rebuild_engine(app_state, target_udid: str):
     Returns the rebuilt engine on success, or None if the rebuild raised
     so the caller can fall through to a hard reset.
     """
-    _log = logging.getLogger("gpscontroller")
-    _log.info("simulation_engine missing; attempt 1 (rebuild) for %s", target_udid)
+    logger.info("simulation_engine missing; attempt 1 (rebuild) for %s", target_udid)
     try:
         await app_state.create_engine_for_device(target_udid)
         if app_state.simulation_engine is not None:
-            _log.info("Engine rebuild succeeded on attempt 1")
+            logger.info("Engine rebuild succeeded on attempt 1")
             return app_state.simulation_engine
     except Exception:
-        _log.exception("Engine rebuild (attempt 1) failed for %s", target_udid)
+        logger.exception("Engine rebuild (attempt 1) failed for %s", target_udid)
     return None
 
 

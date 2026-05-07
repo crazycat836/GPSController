@@ -22,7 +22,7 @@ import socket
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pymobiledevice3.lockdown import create_using_usbmux, create_using_tcp
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
@@ -69,16 +69,16 @@ class _ActiveConnection:
     lockdown: object  # LockdownClient or RemoteServiceDiscoveryService
     ios_version: str
     connection_type: str = "USB"  # "USB" or "Network"
-    dvt_provider: Optional[DvtProvider] = None
-    tunnel_proxy: Optional[CoreDeviceTunnelProxy] = None
+    dvt_provider: DvtProvider | None = None
+    tunnel_proxy: CoreDeviceTunnelProxy | None = None
     tunnel_context: object = None  # async context manager for the tunnel
-    rsd: Optional[RemoteServiceDiscoveryService] = None
-    location_service: Optional[LocationService] = None
+    rsd: RemoteServiceDiscoveryService | None = None
+    location_service: LocationService | None = None
     usbmux_lockdown: object = None  # Original lockdown client (for legacy fallback on iOS 17+)
     # Cached Developer Mode toggle state. Queried once at connect and
     # invalidated by the AMFI reveal endpoint so `/device/list` doesn't
     # pay a lockdown round-trip per device per poll.
-    developer_mode_enabled: Optional[bool] = None
+    developer_mode_enabled: bool | None = None
 
 
 # Public alias so callers outside this module can type-annotate against
@@ -111,7 +111,7 @@ class DeviceManager:
     _DISCOVER_TTL = 0.5
 
     def __init__(self) -> None:
-        self._connections: Dict[str, _ActiveConnection] = {}
+        self._connections: dict[str, _ActiveConnection] = {}
         self._lock = asyncio.Lock()
         # Serialise DDI downloads/mounts across devices. Without this, two
         # parallel connects on a fresh machine race to write the same DDI
@@ -535,7 +535,6 @@ class DeviceManager:
         """
         logger.info("Connecting via WiFi tunnel RSD at %s:%d", rsd_address, rsd_port)
 
-        import asyncio as _asyncio
         rsd = None
         last_exc: Exception | None = None
         # TUN interface routes may take a few seconds to become reachable
@@ -560,7 +559,7 @@ class DeviceManager:
                         attempt,
                         exc_info=True,
                     )
-                await _asyncio.sleep(min(0.5 * attempt, 2.0))
+                await asyncio.sleep(min(0.5 * attempt, 2.0))
 
         if last_exc is not None:
             logger.error("Failed to connect to RSD at %s:%d after retries", rsd_address, rsd_port)

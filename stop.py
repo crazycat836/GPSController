@@ -11,6 +11,8 @@ def main():
 
     for port in [8777, 5173]:
         if os.name == "nt":
+            # shell=True is intentional and safe here: fixed pipeline
+            # with a developer-supplied integer port — no user input.
             result = subprocess.run(
                 f'netstat -ano | findstr ":{port}" | findstr "LISTENING"',
                 capture_output=True, text=True, shell=True,

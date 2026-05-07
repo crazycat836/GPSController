@@ -71,6 +71,9 @@ def is_port_open(port):
 def kill_port(port):
     """清理佔用指定 port 的進程"""
     if os.name == "nt":
+        # shell=True is intentional and safe here: the command string is
+        # a fixed pipeline and `port` is a developer-supplied integer
+        # constant from config — no user input flows through.
         result = subprocess.run(
             f'netstat -ano | findstr ":{port}" | findstr "LISTENING"',
             capture_output=True, text=True, shell=True,

@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from typing import Callable
+from typing import TYPE_CHECKING
 
 from models.schemas import Coordinate, MovementMode, SimulationState
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 from config import (
     DEFAULT_PAUSE_ENABLED,
     DEFAULT_PAUSE_MAX,

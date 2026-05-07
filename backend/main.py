@@ -46,8 +46,13 @@ _new_data_dir = Path.home() / ".gpscontroller"
 if _old_data_dir.exists() and not _new_data_dir.exists():
     try:
         _old_data_dir.rename(_new_data_dir)
-    except OSError:
-        pass  # cross-device or permission issue — ignore, will create fresh
+    except OSError as exc:
+        # cross-device or permission issue — ignore, will create fresh.
+        # Log so a permissions bug doesn't silently lose persistent settings.
+        logging.getLogger("gpscontroller").debug(
+            "legacy data-dir rename failed (%s -> %s): %s",
+            _old_data_dir, _new_data_dir, exc,
+        )
 
 # Configure logging — colored console + rotating file in ~/.gpscontroller/logs/
 _log_fmt = "%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -119,7 +124,7 @@ try:
     _file_handler.setLevel(logging.INFO)
     _handlers: list[logging.Handler] = [_console_handler, _file_handler]
 except Exception:
-    _handlers: list[logging.Handler] = [_console_handler]
+    _handlers = [_console_handler]
 logging.basicConfig(level=logging.INFO, handlers=_handlers, force=True)
 logger = logging.getLogger("gpscontroller")
 
@@ -537,7 +542,6 @@ async def _usbmux_presence_watchdog():
     the WiFi tunnel watchdog. Consecutive-miss debouncing protects against
     usbmuxd re-enumeration hiccups.
     """
-    import asyncio
     import time
     from pymobiledevice3.usbmux import list_devices
     from services.ws_broadcaster import broadcast
@@ -665,7 +669,6 @@ async def _usbmux_presence_watchdog():
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    import asyncio
     from services.ws_broadcaster import broadcast
     global API_TOKEN
 
