@@ -6,6 +6,8 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
+
+from api._errors import http_err
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
@@ -52,7 +54,7 @@ async def save_route(route: SavedRoute):
 @router.delete("/saved/{route_id}")
 async def delete_saved(route_id: str):
     if not await _store.delete(route_id):
-        raise HTTPException(status_code=404, detail="Route not found")
+        raise http_err(404, "route_not_found", "Route not found")
     return {"status": "deleted"}
 
 
@@ -67,7 +69,7 @@ async def rename_saved(route_id: str, req: _RouteRenameRequest):
         raise HTTPException(status_code=400, detail={"code": "invalid_name", "message": "Route name must not be empty"})
     route = await _store.rename(route_id, name)
     if route is None:
-        raise HTTPException(status_code=404, detail="Route not found")
+        raise http_err(404, "route_not_found", "Route not found")
     return route
 
 
@@ -160,7 +162,7 @@ def _ascii_safe_filename(name: str) -> str:
 async def export_gpx(route_id: str):
     route = _store.get(route_id)
     if route is None:
-        raise HTTPException(status_code=404, detail="Route not found")
+        raise http_err(404, "route_not_found", "Route not found")
     points = [{"lat": c.lat, "lng": c.lng} for c in route.waypoints]
     gpx_xml = gpx_service.generate_gpx(points, name=route.name)
     # RFC 5987 / RFC 6266: emit both a plain ASCII `filename` for legacy

@@ -206,7 +206,7 @@ async def device_info(udid: str):
     for d in devices:
         if d.udid == udid:
             return d
-    raise HTTPException(status_code=404, detail="Device not found")
+    raise http_err(404, "device_not_found", "Device not found")
 
 
 # ── AMFI: "Reveal Developer Mode in Settings" (iOS 16+) ─────────────

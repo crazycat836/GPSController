@@ -295,6 +295,37 @@ export const STRINGS = {
   'err.device_lost': { zh: '裝置連線中斷(USB 拔除或 Tunnel 死亡),請重新插上 USB 後再操作', en: 'Device connection lost (USB unplugged or tunnel died), please reconnect USB and try again' },
   'err.max_devices_reached': { zh: '已連接最多 2 台裝置', en: 'Maximum 2 devices connected' },
   'err.ios_unsupported': { zh: '裝置 iOS 版本過舊,GPSController 僅支援 iOS 16 以上。請升級 iOS 後再試。', en: 'This device runs an unsupported iOS version. GPSController requires iOS 16 or later. Please update and try again.' },
+  'err.ios_version_unsupported': { zh: '此功能需要更新的 iOS 版本', en: 'This feature requires a newer iOS version' },
+  // Bookmarks / places / tags / routes / devices — 404 / 400 surface
+  'err.bookmark_not_found': { zh: '找不到此收藏', en: 'Bookmark not found' },
+  'err.place_not_found': { zh: '找不到此場所', en: 'Place not found' },
+  'err.default_place_immutable': { zh: '無法刪除預設場所', en: 'Cannot delete the default place' },
+  'err.tag_not_found': { zh: '找不到此標籤', en: 'Tag not found' },
+  'err.route_not_found': { zh: '找不到此路線', en: 'Route not found' },
+  'err.device_not_found': { zh: '找不到此裝置', en: 'Device not found' },
+  // Validation / auth
+  'err.validation_failed': { zh: '輸入驗證失敗', en: 'Request validation failed' },
+  'err.unauthorized': { zh: '未授權,請確認 token 設定', en: 'Unauthorized, check token configuration' },
+  'err.invalid_name': { zh: '名稱無效', en: 'Invalid name' },
+  'err.invalid_coord': { zh: '座標格式無效', en: 'Invalid coordinates' },
+  'err.invalid_lang': { zh: '無效的語言代碼', en: 'Invalid language code' },
+  // GPX import
+  'err.gpx_too_large': { zh: 'GPX 檔案過大', en: 'GPX file too large' },
+  'err.gpx_decode_failed': { zh: '無法解析 GPX 檔案', en: 'Failed to decode GPX file' },
+  // Connection / tunnel lifecycle
+  'err.device_not_connected': { zh: '裝置未連線', en: 'Device is not connected' },
+  'err.usb_required': { zh: '此操作需要 USB 連線', en: 'This operation requires a USB connection' },
+  'err.connect_failed': { zh: '連線失敗,請重試', en: 'Connection failed, please retry' },
+  'err.scan_failed': { zh: '掃描裝置失敗', en: 'Device scan failed' },
+  'err.forget_failed': { zh: '取消配對失敗', en: 'Failed to forget device' },
+  'err.tunnel_failed': { zh: 'WiFi Tunnel 啟動失敗', en: 'Wi-Fi tunnel failed to start' },
+  'err.tunnel_no_rsd': { zh: 'Tunnel 已啟動但找不到 RSD 資訊', en: 'Tunnel started but RSD info missing' },
+  // Movement / AMFI / logs
+  'err.no_active_route': { zh: '目前沒有進行中的路線', en: 'No active route' },
+  'err.joystick_start_failed': { zh: '搖桿啟動失敗', en: 'Failed to start joystick' },
+  'err.amfi_unavailable': { zh: 'AMFI 服務無法使用', en: 'AMFI service unavailable' },
+  'err.amfi_reveal_failed': { zh: '顯示開發者模式失敗', en: 'Failed to reveal Developer Mode' },
+  'err.open_log_failed': { zh: '開啟日誌檔案失敗', en: 'Failed to open log file' },
 
   // ── Start-from-cached confirm dialog ────────
   // Shown when the user triggers a movement action (navigate / multi-stop /
