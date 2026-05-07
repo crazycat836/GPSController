@@ -42,6 +42,7 @@ export const DEFAULT_TUNNEL_PORT = 49152
 export const DEFAULT_PAUSE = { enabled: true, min: 5, max: 20 } as const
 export const DEFAULT_RANDOM_WALK_RADIUS = 500
 export const DEFAULT_WP_GEN_RADIUS = 300
+export const DEFAULT_WP_GEN_COUNT = 5
 
 /** Random-walk radius preset rail (metres). Shared by BottomDock and RandomWalkPanel. */
 export const RADIUS_PRESETS = [200, 500, 1000, 2000] as const

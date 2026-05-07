@@ -4,7 +4,7 @@ import pkg from '../../package.json';
 import { useT } from '../i18n';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 
-const CURRENT = (pkg as { version: string }).version;
+const CURRENT = pkg.version;
 const REPO = 'crazycat836/GPSController';
 const RELEASES_URL = `https://github.com/${REPO}/releases`;
 const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;

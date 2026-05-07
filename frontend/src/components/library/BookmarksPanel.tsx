@@ -118,8 +118,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     const buckets = new Map<string, Bookmark[]>()
     for (const b of filtered) {
       const key = b.place_id || '__uncategorized__'
-      if (!buckets.has(key)) buckets.set(key, [])
-      buckets.get(key)!.push(b)
+      buckets.set(key, [...(buckets.get(key) ?? []), b])
     }
     const ordered = places
       .map((p) => ({
@@ -423,24 +422,29 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
             onSubmit={handleCreate}
           />
         ) : editing.bookmark ? (
-          <BookmarkEditDialog
-            open
-            mode="edit"
-            currentPosition={currentPosition}
-            places={places}
-            tags={tags}
-            initial={{
-              id: editing.bookmark.id,
-              name: editing.bookmark.name,
-              lat: editing.bookmark.lat,
-              lng: editing.bookmark.lng,
-              placeId: editing.bookmark.place_id || places[0]?.id || 'default',
-              tagIds: [...(editing.bookmark.tags ?? [])],
-              note: editing.bookmark.note,
-            }}
-            onClose={() => setEditing(null)}
-            onSubmit={(values) => handleUpdate(editing.bookmark!.id, values)}
-          />
+          (() => {
+            const bk = editing.bookmark
+            return (
+              <BookmarkEditDialog
+                open
+                mode="edit"
+                currentPosition={currentPosition}
+                places={places}
+                tags={tags}
+                initial={{
+                  id: bk.id,
+                  name: bk.name,
+                  lat: bk.lat,
+                  lng: bk.lng,
+                  placeId: bk.place_id || places[0]?.id || 'default',
+                  tagIds: [...(bk.tags ?? [])],
+                  note: bk.note,
+                }}
+                onClose={() => setEditing(null)}
+                onSubmit={(values) => handleUpdate(bk.id, values)}
+              />
+            )
+          })()
         ) : null
       )}
 

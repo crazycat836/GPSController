@@ -141,8 +141,8 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
               className="text-[11px] font-mono max-h-32 overflow-y-auto flex flex-col gap-0.5 bg-[var(--color-danger-dim)] border border-[var(--color-danger)]/30 rounded-md text-[var(--color-text-2)]"
               style={{ padding: '6px 8px' }}
             >
-              {parsed.errors.slice(0, 50).map((err, i) => (
-                <li key={i}>
+              {parsed.errors.slice(0, 50).map((err) => (
+                <li key={`${err.line}-${err.reason}`}>
                   <span className="text-[var(--color-error-text)]">L{err.line}</span>
                   {' · '}
                   <span className="text-[var(--color-text-3)]">[{err.reason}]</span>

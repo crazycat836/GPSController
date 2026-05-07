@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import * as api from '../services/api'
 import { PRE_SYNC_SETTLE_MS } from '../lib/constants'
+import { devWarn } from '../lib/dev-log'
 import type { LatLng } from './sim/types'
 import {
   useSimRuntimes,
@@ -502,18 +503,11 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     const results = await Promise.allSettled(
       udids.map((u) => api.teleport(pos.lat, pos.lng, u)),
     )
-    if (import.meta.env.DEV) {
-      results.forEach((r, i) => {
-        if (r.status === 'rejected') {
-          // eslint-disable-next-line no-console
-          console.warn(
-            '[preSyncStart] teleport failed for',
-            udids[i],
-            r.reason,
-          )
-        }
-      })
-    }
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        devWarn('[preSyncStart] teleport failed for', udids[i], r.reason)
+      }
+    })
     // Tiny settle delay so devices finalise the teleport before the next
     // command arrives.
     await new Promise((r) => setTimeout(r, PRE_SYNC_SETTLE_MS))

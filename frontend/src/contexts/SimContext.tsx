@@ -6,9 +6,11 @@ import * as api from '../services/api'
 import type { CooldownStatusResponse } from '../services/api'
 import {
   DEFAULT_RANDOM_WALK_RADIUS,
+  DEFAULT_WP_GEN_COUNT,
   DEFAULT_WP_GEN_RADIUS,
   RESTORE_MIN_DISPLAY_MS,
 } from '../lib/constants'
+import { devWarn } from '../lib/dev-log'
 import { useDeviceContext } from './DeviceContext'
 import { useToastContext } from './ToastContext'
 import { useWebSocketContext } from './WebSocketContext'
@@ -27,6 +29,10 @@ const SIM_ERROR_KEYS: Record<SimErrorCode, StringKey> = {
 
 // Re-export for consumers
 export { SimMode, MoveMode }
+
+// Polar-coord scratch shape used by `generateWaypoints`. Hoisted so the
+// type alias isn't re-declared inside the callback body.
+type WaypointCandidate = { lat: number; lng: number; theta?: number }
 
 // Pure coordinate helpers — module-level so they're allocated once.
 const normalizeLng = (lng: number): number => {
@@ -236,7 +242,7 @@ export function SimProvider({ children }: SimProviderProps) {
   }, [])
   const [randomWalkRadius, setRandomWalkRadius] = useState(DEFAULT_RANDOM_WALK_RADIUS)
   const [wpGenRadius, setWpGenRadius] = useState(DEFAULT_WP_GEN_RADIUS)
-  const [wpGenCount, setWpGenCount] = useState(5)
+  const [wpGenCount, setWpGenCount] = useState(DEFAULT_WP_GEN_COUNT)
 
   // Surface a user-facing hint when the backend reports a DDI mount
   // failure. `ts` on the signal dedupes repeat failures across
@@ -247,11 +253,7 @@ export function SimProvider({ children }: SimProviderProps) {
     if (!m) return
     if (m.ts === lastDdiMissingTs.current) return
     lastDdiMissingTs.current = m.ts
-    const isDev = import.meta.env.DEV
-    if (isDev) {
-      // eslint-disable-next-line no-console
-      console.warn('[ddi_mount_missing]', m.stage ?? '?', m.reason)
-    }
+    devWarn('[ddi_mount_missing]', m.stage ?? '?', m.reason)
     showToast(t('ddi.missing_hint'), 10000)
   }, [sim.ddiMissing, showToast, t])
 
@@ -289,8 +291,7 @@ export function SimProvider({ children }: SimProviderProps) {
     const latScale = 111320
     const lngScale = 111320 * Math.cos((lat * Math.PI) / 180)
 
-    type Pt = { lat: number; lng: number; theta?: number }
-    const pts: Pt[] = []
+    const pts: WaypointCandidate[] = []
     for (let i = 0; i < count; i++) {
       const r = radius * Math.sqrt(Math.random())
       const theta = Math.random() * 2 * Math.PI
@@ -302,7 +303,7 @@ export function SimProvider({ children }: SimProviderProps) {
     }
 
     const remaining = [...pts]
-    const ordered: Pt[] = []
+    const ordered: WaypointCandidate[] = []
     let cx = lat, cy = lng
     while (remaining.length) {
       let bestIdx = 0, bestD = Infinity
@@ -638,12 +639,16 @@ export function SimProvider({ children }: SimProviderProps) {
     api.getCooldownStatus().then((s: CooldownStatusResponse) => {
       setCooldown(s.remaining_seconds ?? 0)
       if (typeof s.enabled === 'boolean') setCooldownEnabled(s.enabled)
-    }).catch(() => {})
+    }).catch((err) => {
+      // Slow backend startup or transient connect failure — don't crash
+      // the WS subscriber chain; log in dev so it's still surfaced.
+      devWarn('cooldown initial fetch failed', err)
+    })
 
     if (!subscribe) return
     return subscribe((msg) => {
       if (msg.type !== 'cooldown_update') return
-      const d = msg.data as { remaining_seconds?: number; enabled?: boolean }
+      const d = msg.data as Partial<CooldownStatusResponse>
       const next = d.remaining_seconds ?? 0
       setCooldown((prev) => Math.round(prev) === Math.round(next) ? prev : next)
       if (typeof d.enabled === 'boolean') {

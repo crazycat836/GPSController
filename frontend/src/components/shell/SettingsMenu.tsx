@@ -16,7 +16,7 @@ import Modal from '../Modal'
 import { AVATAR_PRESETS } from '../../lib/avatars'
 import pkg from '../../../package.json'
 
-const APP_VERSION = (pkg as { version: string }).version
+const APP_VERSION = pkg.version
 
 function formatCooldown(seconds: number): string {
   const m = Math.floor(seconds / 60)
