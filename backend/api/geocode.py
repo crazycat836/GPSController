@@ -1,3 +1,20 @@
+"""Forward / reverse geocoding proxy in front of Nominatim.
+
+**Failure semantics.** Both endpoints map every upstream failure
+(DNS miss, timeout, 5xx, rate-limit, malformed payload) to a
+*successful* response with empty data:
+
+  - ``GET /api/geocode/search``  → ``[]``  on any upstream failure
+  - ``GET /api/geocode/reverse`` → ``null`` on any upstream failure
+
+The 4xx responses surface only request-validation faults (e.g.
+``invalid_lang``). The frontend can therefore treat an empty
+result as "geocoder unavailable, fall back to coordinate display"
+without parsing error envelopes.
+"""
+
+from __future__ import annotations
+
 import re
 
 from fastapi import APIRouter, HTTPException, Query

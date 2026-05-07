@@ -20,7 +20,7 @@ FRONTEND = os.path.join(ROOT, "frontend")
 
 # 共用 box-drawing helpers (與 build.py 共用)
 sys.path.insert(0, ROOT)
-from tools.terminal_ui import _visual_width, _box_line, _box_border  # noqa: E402, F401
+from tools.terminal_ui import visual_width, box_line, box_border  # noqa: E402, F401
 
 BACKEND_PORT = 8777
 FRONTEND_PORT = 5173
@@ -44,9 +44,9 @@ BOX_WIDTH = 46
 
 def print_banner():
     print()
-    print(_box_border("╔", "═", "╗", BOX_WIDTH))
-    print(_box_line(f"   GPSController — iOS 虛擬定位模擬器 v{APP_VERSION}", BOX_WIDTH))
-    print(_box_border("╚", "═", "╝", BOX_WIDTH))
+    print(box_border("╔", "═", "╗", BOX_WIDTH))
+    print(box_line(f"   GPSController — iOS 虛擬定位模擬器 v{APP_VERSION}", BOX_WIDTH))
+    print(box_border("╚", "═", "╝", BOX_WIDTH))
     print()
 
 
@@ -272,15 +272,15 @@ def main():
     url = f"http://localhost:{FRONTEND_PORT}"
     webbrowser.open(url)
 
-    print(_box_border("╔", "═", "╗", BOX_WIDTH))
-    print(_box_line("          GPSController 已就緒！", BOX_WIDTH))
-    print(_box_border("╠", "═", "╣", BOX_WIDTH))
-    print(_box_line(f"  前端畫面:  http://localhost:{FRONTEND_PORT}", BOX_WIDTH))
-    print(_box_line(f"  後端 API:  http://localhost:{BACKEND_PORT}", BOX_WIDTH))
-    print(_box_line(f"  API 文件:  http://localhost:{BACKEND_PORT}/docs", BOX_WIDTH))
-    print(_box_border("╠", "═", "╣", BOX_WIDTH))
-    print(_box_line("  按 Enter 停止所有服務", BOX_WIDTH))
-    print(_box_border("╚", "═", "╝", BOX_WIDTH))
+    print(box_border("╔", "═", "╗", BOX_WIDTH))
+    print(box_line("          GPSController 已就緒！", BOX_WIDTH))
+    print(box_border("╠", "═", "╣", BOX_WIDTH))
+    print(box_line(f"  前端畫面:  http://localhost:{FRONTEND_PORT}", BOX_WIDTH))
+    print(box_line(f"  後端 API:  http://localhost:{BACKEND_PORT}", BOX_WIDTH))
+    print(box_line(f"  API 文件:  http://localhost:{BACKEND_PORT}/docs", BOX_WIDTH))
+    print(box_border("╠", "═", "╣", BOX_WIDTH))
+    print(box_line("  按 Enter 停止所有服務", BOX_WIDTH))
+    print(box_border("╚", "═", "╝", BOX_WIDTH))
     print()
 
     try:

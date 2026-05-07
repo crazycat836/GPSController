@@ -17,6 +17,7 @@ from services.wifi_tunnel_service import (
     _tcp_probe,
     _tunnel,
 )
+from utils.net import get_primary_local_ip
 
 router = APIRouter(prefix="/api/device", tags=["device"])
 
@@ -400,20 +401,6 @@ class WifiTunnelStartRequest(BaseModel):
         return _validate_local_ip(v)
 
 
-def _get_primary_local_ip() -> str | None:
-    """Return this machine's primary IPv4 (the one used to reach the internet)."""
-    import socket as _s
-    try:
-        s = _s.socket(_s.AF_INET, _s.SOCK_DGRAM)
-        s.settimeout(0.5)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except OSError:
-        return None
-
-
 async def _scan_subnet_for_port(port: int = 49152) -> list[str]:
     """Scan the local /24 subnet for hosts responding on the given TCP port.
 
@@ -424,7 +411,7 @@ async def _scan_subnet_for_port(port: int = 49152) -> list[str]:
     table. With the gate, worst-case latency is still bounded by
     ceil(253/32) * 0.4s ≈ 3.2s — fine for a user-initiated one-shot scan.
     """
-    my_ip = _get_primary_local_ip()
+    my_ip = get_primary_local_ip()
     if not my_ip:
         return []
     try:

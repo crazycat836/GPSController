@@ -41,16 +41,16 @@ RELEASE = FRONTEND / "release"
 
 # 共用 box-drawing helpers (與 start.py 共用)
 sys.path.insert(0, str(ROOT))
-from tools.terminal_ui import _visual_width, _box_line, _box_border  # noqa: E402, F401
+from tools.terminal_ui import visual_width, box_line, box_border  # noqa: E402, F401
 
 BOX_WIDTH = 58
 
 
 def print_banner(title: str) -> None:
     print()
-    print(_box_border("╔", "═", "╗", BOX_WIDTH))
-    print(_box_line(f"   {title}", BOX_WIDTH))
-    print(_box_border("╚", "═", "╝", BOX_WIDTH))
+    print(box_border("╔", "═", "╗", BOX_WIDTH))
+    print(box_line(f"   {title}", BOX_WIDTH))
+    print(box_border("╚", "═", "╝", BOX_WIDTH))
     print()
 
 
@@ -186,10 +186,10 @@ def main() -> None:
     mins, secs = divmod(elapsed, 60)
 
     print()
-    print(_box_border("╔", "═", "╗", BOX_WIDTH))
-    print(_box_line(f"   打包完成(耗時 {mins}m {secs}s)", BOX_WIDTH))
-    print(_box_line(f"   產物位置:{RELEASE}", BOX_WIDTH))
-    print(_box_border("╚", "═", "╝", BOX_WIDTH))
+    print(box_border("╔", "═", "╗", BOX_WIDTH))
+    print(box_line(f"   打包完成(耗時 {mins}m {secs}s)", BOX_WIDTH))
+    print(box_line(f"   產物位置:{RELEASE}", BOX_WIDTH))
+    print(box_border("╚", "═", "╝", BOX_WIDTH))
     print()
 
 

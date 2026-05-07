@@ -760,14 +760,11 @@ def _guess_local_subnet() -> str | None:
 
     Returns the base IP like '192.168.1.0' or ``None`` if unable to determine.
     """
+    from utils.net import get_primary_local_ip
+    local_ip = get_primary_local_ip()
+    if not local_ip:
+        return None
     try:
-        # Open a UDP socket to a public IP (doesn't actually send)
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-        # Return the /24 base
-        parts = local_ip.rsplit(".", 1)
-        return f"{parts[0]}.0"
-    except (OSError, IndexError):
+        return f"{local_ip.rsplit('.', 1)[0]}.0"
+    except IndexError:
         return None

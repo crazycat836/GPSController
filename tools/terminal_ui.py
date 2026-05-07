@@ -10,7 +10,7 @@ from __future__ import annotations
 import unicodedata
 
 
-def _visual_width(text: str) -> int:
+def visual_width(text: str) -> int:
     """Return the terminal display width of *text*.
 
     CJK and other east-asian fullwidth characters occupy two columns; all
@@ -26,12 +26,12 @@ def _visual_width(text: str) -> int:
     return width
 
 
-def _box_line(content: str, inner_width: int) -> str:
+def box_line(content: str, inner_width: int) -> str:
     """Render *content* as a single bordered line padded to ``inner_width``."""
-    pad = max(0, inner_width - _visual_width(content))
+    pad = max(0, inner_width - visual_width(content))
     return "  ║" + content + " " * pad + "║"
 
 
-def _box_border(left: str, fill: str, right: str, inner_width: int) -> str:
+def box_border(left: str, fill: str, right: str, inner_width: int) -> str:
     """Render a horizontal border row (top/middle/bottom of a box)."""
     return "  " + left + fill * inner_width + right

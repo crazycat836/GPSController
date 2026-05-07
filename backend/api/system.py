@@ -1,5 +1,7 @@
 """System utility endpoints — open files / folders for the user."""
 
+from __future__ import annotations
+
 import ctypes
 import logging
 import os

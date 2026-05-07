@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 
@@ -498,7 +500,20 @@ async def stop_simulation(udid: str | None = None):
 
 @router.get("/debug")
 async def debug_info():
-    """Debug endpoint to check engine and location service state."""
+    """Debug endpoint to check engine and location service state.
+
+    Token-protected like every other endpoint, but additionally gated
+    behind the dev-mode flag so production builds don't expose engine
+    internals (private ``_active`` attribute, etc.) to a leaked token.
+    Set ``GPSCONTROLLER_DEV_NOAUTH=1`` to enable.
+    """
+    import main as _main
+    if not _main._is_auth_disabled():
+        # In production builds the route exists but returns 404 — same
+        # response a typo would produce, so the surface area is invisible
+        # to anyone scanning with a leaked token.
+        raise HTTPException(status_code=404)
+
     app_state = ctx.app_state
     engine = app_state.simulation_engine
     if engine is None:
