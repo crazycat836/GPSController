@@ -201,6 +201,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[MEDIUM] DRY — `_get_local_ip()` reimplemented twice with identical UDP-probe trick**
 - File: `backend/api/wifi_tunnel.py:408-419`; `backend/core/device_manager.py:759-774`
 - Fix: hoist to `backend/utils/net.py`.
+- DONE (57ea3b1) — `get_primary_local_ip()` (public name) in `utils/net.py`; both call sites updated
 
 **[MEDIUM] Error handling — silent legacy-data-dir migration**
 - File: `backend/main.py:49-50` — `except OSError: pass`. A permissions bug silently loses persistent settings.
@@ -211,6 +212,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 - `backend/api/wifi_tunnel.py:459`, `:522`, `:526-528` (`49152` RemotePairing port)
 - `backend/services/location_service.py:190` (`[0.5, 1.5, 3.0, 4.0, 6.0]` reconnect delays)
 - `backend/api/websocket.py:19`, `:27` (`_WS_AUTH_TIMEOUT_SECONDS`, `_BROADCAST_PER_CLIENT_TIMEOUT_S`)
+- DONE (998f05c) — `REMOTE_PAIRING_PORT` + `DVT_RECONNECT_DELAYS` in `config.py`. WS timeouts kept module-local — they're truly internal to the WS endpoint.
 
 **[MEDIUM] Naming — local `_log = logging.getLogger("gpscontroller")` shadows module logger**
 - File: `backend/api/location.py:53`, `:83`. Use module-level `logger`.
@@ -222,6 +224,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 
 **[MEDIUM] Documentation — Nominatim failure semantics undocumented**
 - File: `backend/api/geocode.py:39` — `search`/`reverse` return `[]`/`None` on upstream failure, not 5xx. Frontend has to infer.
+- DONE (57ea3b1) — module-level docstring documents the `[]`/`null`-on-upstream-failure contract
 
 **[MEDIUM] Centralised broadcasting needed — `event_type` strings as bare literals across 7 files**
 - Sites: `backend/main.py:428,583,626,690`, `backend/api/device.py:54,108,190`, `backend/api/wifi_tunnel.py:294,586,635,655,667,747`, `backend/api/location.py:184`, `backend/services/cooldown.py:128`, plus 5 sites in `core/ddi_mount.py` and every `engine._emit` in `core/*`.
@@ -231,16 +234,19 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[MEDIUM] `/api/location/debug` exposes internal state**
 - File: `backend/api/location.py:512-526`. Returns `engine.state`, `_active` private attr (via `getattr`). Token-protected, but should be dev-only.
 - Fix: gate behind `if _is_auth_disabled():` or remove.
+- DONE (57ea3b1) — endpoint now 404s outside dev mode (same response a typo would produce, so the surface is invisible to a leaked token)
 
 **[MEDIUM] Two sources of truth for tunnel default port**
 - File: `frontend/src/services/api.ts:266` `DEFAULT_TUNNEL_PORT = 49152`; backend `backend/api/wifi_tunnel.py:399` `49152`.
 - Fix: surface via `/api/system/constants` or comment-link.
+- DONE (998f05c) — backend now imports `config.REMOTE_PAIRING_PORT`; comment on the constant pins it to the frontend `DEFAULT_TUNNEL_PORT`. The `/api/system/constants` endpoint is gated on the WS-codegen phase (out of scope here).
 
 ### Frontend
 
 **[MEDIUM] DRY — Three identical fetch-then-refresh handlers in `BookmarkContext`**
 - File: `frontend/src/contexts/BookmarkContext.tsx:125-167` — `handleRouteSave`, `handleRouteRename`, `handleRouteDelete`.
 - Fix: extract `refreshRoutes` callback.
+- DONE (55a74e5) — also folded `handleGpxImport` into the same callback
 
 **[MEDIUM] React — non-null assertion on `editing.bookmark!.id`**
 - File: `frontend/src/components/library/BookmarksPanel.tsx:440`
@@ -259,9 +265,11 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 
 **[MEDIUM] Module-level mutable state without doc**
 - File: `frontend/src/services/api.ts:87` (`warnedLocalStorage`), `:162` (`authTokenPromise`). Test-isolation pitfall.
+- DONE (55a74e5) — both globals carry test-isolation notes pointing at vi.resetModules() / invalidateAuthToken()
 
 **[MEDIUM] Idiomatic — non-memoized `handleInput`/`handleSelect`**
 - File: `frontend/src/components/shell/SearchBar.tsx:65-82`. Inconsistent with `doSearch` which is `useCallback`.
+- DONE (55a74e5) — also memoized `handleSubmit`
 
 **[MEDIUM] Magic number — `useState(5)` for default waypoint count**
 - File: `frontend/src/contexts/SimContext.tsx:239`. Should be `DEFAULT_WP_GEN_COUNT` in `frontend/src/lib/constants.ts`.
@@ -294,12 +302,14 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[LOW] Naming clash — `backend/api/wifi_tunnel.py` vs `backend/core/wifi_tunnel.py`** (and removed root `wifi_tunnel.py`). Rename `api/wifi_tunnel.py` → `api/tunnel_router.py`.
 
 **[LOW] PEP-8 — Missing `from __future__ import annotations` in `backend/api/{location,device,bookmarks,route,websocket,system}.py`** — they use `X | None` directly; pinned on 3.10 unnecessarily.
+- DONE (57ea3b1) — all six listed files plus geocode.py (bonus)
 
 **[LOW] `shell=True` for trusted Windows pipeline** — `start.py:76`, `stop.py:16`. No user input but worth a comment.
 - DONE (5d09338) — comment added at both sites explaining why shell=True is safe
 
 **[LOW] DRY — Avatar button hand-rolls `SettingsRow` styles**
 - File: `frontend/src/components/shell/SettingsMenu.tsx:245-279`. Use existing `SettingsRow` component.
+- DONE (55a74e5) — wrapped in `<div ref={avatarRowRef}>` so the bounding-rect anchor still works
 
 **[LOW] React keys — `key={i}` in `BulkCoordsDialog` error list**
 - File: `frontend/src/components/library/BulkCoordsDialog.tsx:145`. Use `${err.line}-${err.reason}`.
@@ -329,9 +339,11 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 
 **[LOW] Root-level `start.py`/`stop.py` use port literals instead of `backend/config.py`**
 - Files: `start.py:25-26`, `stop.py:12`. Backend canonical at `backend/config.py:111`. Three files in lockstep.
+- DONE (d44aaea) — both launchers import `API_PORT as BACKEND_PORT` from `backend/config.py`. Frontend port stays literal (Vite dev concern).
 
 **[LOW] `backend/api/wifi_tunnel.py:835-874` calls route handler `wifi_tunnel_start(req)` directly**
 - Blurs routing layer. Extract to `_do_start(req)` helper.
+- DONE (d44aaea) — extracted as `_do_tunnel_start(req)`; both endpoints route through it
 
 **[LOW] `SimErrorCode` covers tiny subset of backend codes**
 - File: `frontend/src/hooks/sim/useSimWsDispatcher.ts:222`. Two parallel error taxonomies for same domain.
@@ -340,6 +352,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[LOW] `backend/main.py:299-307` setter writes to magic `"__legacy__"` key**
 - Comment says "Best-effort: stash under a synthetic key if udid unknown". Migration started but not finished.
 - Fix: grep last caller, migrate, delete.
+- DONE (50ae049) — grep showed zero callers; setter + synthetic-key path deleted (getter retained — still consumed by api/location.py as the "primary engine" shorthand)
 
 **[LOW] `backend/api/_errors.py` lacks an `ErrorCode` enum**
 - 17-line file accepts any string for `code`. Source of i18n drift.
@@ -349,6 +362,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[LOW] `tools/terminal_ui.py` exports underscore-prefixed names imported by sibling scripts**
 - Files: `tools/terminal_ui.py:13`, `:29`, `:35` — `_visual_width`, `_box_line`, `_box_border`. Imported by `start.py:23`, `build.py:44`.
 - Fix: drop the underscore prefix.
+- DONE (57ea3b1)
 
 ---
 
