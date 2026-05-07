@@ -3,7 +3,6 @@ import { useSimulation, SimMode, MoveMode } from '../hooks/useSimulation'
 import type { FanoutOutcome, SimErrorCode } from '../hooks/useSimulation'
 import { useJoystick } from '../hooks/useJoystick'
 import * as api from '../services/api'
-import type { CooldownStatusResponse } from '../services/api'
 import {
   DEFAULT_RANDOM_WALK_RADIUS,
   DEFAULT_WP_GEN_COUNT,
@@ -11,6 +10,8 @@ import {
   RESTORE_MIN_DISPLAY_MS,
 } from '../lib/constants'
 import { devWarn } from '../lib/dev-log'
+import { generateRandomTour } from '../lib/waypoint_gen'
+import { useCooldownSync } from '../hooks/useCooldownSync'
 import { useDeviceContext } from './DeviceContext'
 import { useToastContext } from './ToastContext'
 import { useWebSocketContext } from './WebSocketContext'
@@ -30,9 +31,6 @@ const SIM_ERROR_KEYS: Record<SimErrorCode, StringKey> = {
 // Re-export for consumers
 export { SimMode, MoveMode }
 
-// Polar-coord scratch shape used by `generateWaypoints`. Hoisted so the
-// type alias isn't re-declared inside the callback body.
-type WaypointCandidate = { lat: number; lng: number; theta?: number }
 
 // Pure coordinate helpers — module-level so they're allocated once.
 const normalizeLng = (lng: number): number => {
@@ -287,42 +285,8 @@ export function SimProvider({ children }: SimProviderProps) {
       showToast(t('toast.no_position_random'))
       return
     }
-    const { lat, lng } = sim.currentPosition
-    const latScale = 111320
-    const lngScale = 111320 * Math.cos((lat * Math.PI) / 180)
-
-    const pts: WaypointCandidate[] = []
-    for (let i = 0; i < count; i++) {
-      const r = radius * Math.sqrt(Math.random())
-      const theta = Math.random() * 2 * Math.PI
-      pts.push({
-        lat: lat + (r * Math.cos(theta)) / latScale,
-        lng: lng + (r * Math.sin(theta)) / lngScale,
-        theta,
-      })
-    }
-
-    const remaining = [...pts]
-    const ordered: WaypointCandidate[] = []
-    let cx = lat, cy = lng
-    while (remaining.length) {
-      let bestIdx = 0, bestD = Infinity
-      for (let i = 0; i < remaining.length; i++) {
-        const dx = (remaining[i].lat - cx) * latScale
-        const dy = (remaining[i].lng - cy) * lngScale
-        const d = dx * dx + dy * dy
-        if (d < bestD) { bestD = d; bestIdx = i }
-      }
-      const [next] = remaining.splice(bestIdx, 1)
-      ordered.push(next)
-      cx = next.lat; cy = next.lng
-    }
-
-    sim.setWaypoints([
-      { lat, lng },
-      ...ordered.map(({ lat, lng }) => ({ lat, lng })),
-    ])
-  }, [sim, t])
+    sim.setWaypoints(generateRandomTour(sim.currentPosition, radius, count))
+  }, [sim, showToast, t])
 
   const handleGenerateRandomWaypoints = useCallback(() => {
     generateWaypoints(wpGenRadius, wpGenCount)
@@ -632,31 +596,10 @@ export function SimProvider({ children }: SimProviderProps) {
 
   // --- Effects ---
 
-  // Listen for cooldown updates via WebSocket (replaces polling).
-  // One initial GET on mount to sync state, then all updates come via WS.
-  useEffect(() => {
-    // Initial sync
-    api.getCooldownStatus().then((s: CooldownStatusResponse) => {
-      setCooldown(s.remaining_seconds ?? 0)
-      if (typeof s.enabled === 'boolean') setCooldownEnabled(s.enabled)
-    }).catch((err) => {
-      // Slow backend startup or transient connect failure — don't crash
-      // the WS subscriber chain; log in dev so it's still surfaced.
-      devWarn('cooldown initial fetch failed', err)
-    })
-
-    if (!subscribe) return
-    return subscribe((msg) => {
-      if (msg.type !== 'cooldown_update') return
-      const d = msg.data as Partial<CooldownStatusResponse>
-      const next = d.remaining_seconds ?? 0
-      setCooldown((prev) => Math.round(prev) === Math.round(next) ? prev : next)
-      if (typeof d.enabled === 'boolean') {
-        const nextEnabled = d.enabled
-        setCooldownEnabled((prev) => prev === nextEnabled ? prev : nextEnabled)
-      }
-    })
-  }, [subscribe])
+  // Cooldown timer mirroring (initial REST fetch + WS updates) lives in
+  // useCooldownSync so this provider can stay focused on dispatching
+  // simulation actions.
+  useCooldownSync(subscribe, setCooldown, setCooldownEnabled)
 
   // --- Derived values ---
 
