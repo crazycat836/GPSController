@@ -260,6 +260,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 - File: `frontend/src/components/library/BookmarksPanel.tsx:328`
 - Closes over many state vars. With 500-item lists, typing in search re-renders every row.
 - Fix: extract `BookmarkRowRenderer` as a memoized component.
+- DONE (894b183) — wrapped `BookmarkRow` in `React.memo`; stabilized the two inline arrows (`cancelInlineEdit`, `editBookmark`) with `useCallback`; `renderBookmarkRow` itself now `useCallback`. Memo's shallow compare suffices because the parent passes `useMemo`-derived maps + stable handlers.
 
 **[MEDIUM] React — mutation inside `useMemo` (`buckets.get(key)!.push(b)`)**
 - File: `frontend/src/components/library/BookmarksPanel.tsx:120`
@@ -303,6 +304,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 ## LOW Priority
 
 **[LOW] Naming clash — `backend/api/wifi_tunnel.py` vs `backend/core/wifi_tunnel.py`** (and removed root `wifi_tunnel.py`). Rename `api/wifi_tunnel.py` → `api/tunnel_router.py`.
+- DONE (894b183) — `git mv` preserves history; only main.py needed an import-line update.
 
 **[LOW] PEP-8 — Missing `from __future__ import annotations` in `backend/api/{location,device,bookmarks,route,websocket,system}.py`** — they use `X | None` directly; pinned on 3.10 unnecessarily.
 - DONE (57ea3b1) — all six listed files plus geocode.py (bonus)
@@ -339,6 +341,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 
 **[LOW] `version.py` reads `frontend/package.json` at every import**
 - File: `backend/version.py:26-39`. Cache with `functools.lru_cache(maxsize=1)`.
+- DONE — verified moot: `__version__ = _resolve_version()` runs once at module import (Python's module-level execution model), so subsequent imports get the cached module attribute. Adding `@lru_cache` to `_resolve_version` would change nothing.
 
 **[LOW] Root-level `start.py`/`stop.py` use port literals instead of `backend/config.py`**
 - Files: `start.py:25-26`, `stop.py:12`. Backend canonical at `backend/config.py:111`. Three files in lockstep.
@@ -351,6 +354,7 @@ TypeScript build is clean. Backend has 3 unit/integration test files; frontend h
 **[LOW] `SimErrorCode` covers tiny subset of backend codes**
 - File: `frontend/src/hooks/sim/useSimWsDispatcher.ts:222`. Two parallel error taxonomies for same domain.
 - Fix: unify under `BackendErrorCode` discriminated union derived from generated types.
+- DEFERRED — gated on the WS-codegen phase (HIGH item still open). The current `SimErrorCode` is already typed against the 3 codes the WS dispatcher emits; unifying with the full `ErrorCode` enum (now 39 members in `backend/api/_errors.py`) requires the same generated TS type the WS contract item produces.
 
 **[LOW] `backend/main.py:299-307` setter writes to magic `"__legacy__"` key**
 - Comment says "Best-effort: stash under a synthetic key if udid unknown". Migration started but not finished.
