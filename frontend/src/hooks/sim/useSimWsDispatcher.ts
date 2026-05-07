@@ -455,12 +455,9 @@ export function useSimWsDispatcher(
           s.setStatus((prev) => ({ ...prev, running: false, paused: false }))
           break
         }
-        case 'device_reconnected': {
-          // Auto-reconnected by the usbmux watchdog after a re-plug, clear
-          // the banner; the success is already visible via DeviceStatus.
-          s.setError(null)
-          break
-        }
+        // `device_reconnected` removed — the watchdog now emits
+        // `device_connected` after a re-plug, which clears the error
+        // via the existing case below.
         case 'pause_countdown':
         case 'random_walk_pause': {
           const d = parsePauseCountdown(wsMessage.data)

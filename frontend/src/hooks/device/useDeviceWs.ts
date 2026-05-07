@@ -19,7 +19,6 @@ import { useEffect, useRef } from 'react'
 import {
   parseDeviceConnected,
   parseDeviceDisconnected,
-  parseDeviceReconnected,
   parseDeviceSnapshot,
 } from './parsers'
 import type { DeviceInfo, DeviceLostCause, WsSubscribe } from './parsers'
@@ -221,25 +220,10 @@ export function useDeviceWs(
             return changed ? next : ls
           })
         }
-      } else if (msg.type === 'device_reconnected') {
-        const payload = parseDeviceReconnected(msg.data)
-        if (!payload) return
-        s.bumpWsGen()
-        const { udid } = payload
-        s.setDevices((prev) => {
-          const idx = prev.findIndex((d) => d.udid === udid)
-          if (idx === -1) return prev
-          if (prev[idx].is_connected) return prev
-          const next = prev.slice()
-          next[idx] = { ...prev[idx], is_connected: true }
-          return next
-        })
-        s.setConnectedDevice((prev) => {
-          if (prev && prev.udid === udid) return { ...prev, is_connected: true }
-          return prev
-        })
-        s.setLostUdids((ls) => { if (!ls.has(udid)) return ls; const n = new Set(ls); n.delete(udid); return n })
       }
+      // `device_reconnected` was a legacy event — the usbmux watchdog
+      // now emits `device_connected` after a re-plug. Handler removed
+      // to match the WS event registry (backend/models/ws_events.py).
     })
   }, [subscribe])
 }

@@ -70,10 +70,6 @@ export interface DeviceDisconnectedPayload {
   cause?: DeviceLostCause
 }
 
-export interface DeviceReconnectedPayload {
-  udid: string
-}
-
 export interface DeviceSnapshotEntry {
   udid: string
   name?: string
@@ -120,14 +116,6 @@ export function parseDeviceDisconnected(data: unknown): DeviceDisconnectedPayloa
     reason: asString(obj.reason),
     cause: asDeviceLostCause(obj.cause),
   }
-}
-
-export function parseDeviceReconnected(data: unknown): DeviceReconnectedPayload | null {
-  const obj = asObject(data)
-  if (!obj) return null
-  const udid = asString(obj.udid)
-  if (!udid) return null
-  return { udid }
 }
 
 export function parseDeviceSnapshot(data: unknown): DeviceSnapshotPayload | null {
