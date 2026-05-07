@@ -61,25 +61,25 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
     }
   }, [])
 
-  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value)
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => doSearch(e.target.value), 300)
-  }
+  }, [doSearch])
 
-  const handleSelect = (lat: number, lng: number) => {
+  const handleSelect = useCallback((lat: number, lng: number) => {
     onTeleport(lat, lng)
     setQuery('')
     setResults([])
     setOpen(false)
     inputRef.current?.blur()
-  }
+  }, [onTeleport])
 
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
     if (validCoord) {
       handleSelect(validCoord.lat, validCoord.lng)
     }
-  }
+  }, [validCoord, handleSelect])
 
   // ⌘K to focus the search input.
   useEffect(() => {

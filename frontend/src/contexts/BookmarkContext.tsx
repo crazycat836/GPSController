@@ -122,6 +122,15 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [savedRoutes])
 
+  // Re-fetch the saved-route list and push it through state. Every
+  // mutation handler below funnels through here so the cache shape +
+  // sort order is identical regardless of which path triggered the
+  // refresh.
+  const refreshRoutes = useCallback(async () => {
+    const routes = await api.getSavedRoutes()
+    setSavedRoutes(routes)
+  }, [])
+
   const handleRouteSave = useCallback(async (
     name: string,
     waypoints: { lat: number; lng: number }[],
@@ -133,49 +142,45 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       await api.saveRoute({ name, waypoints, profile: moveMode })
-      const routes = await api.getSavedRoutes()
-      setSavedRoutes(routes)
+      await refreshRoutes()
       showToast(t('toast.route_saved', { name }))
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : ''
       showToast(t('toast.route_save_failed', { msg: message }))
     }
-  }, [showToast, t])
+  }, [refreshRoutes, showToast, t])
 
   const handleRouteRename = useCallback(async (id: string, name: string) => {
     try {
       await api.renameRoute(id, name)
-      const routes = await api.getSavedRoutes()
-      setSavedRoutes(routes)
+      await refreshRoutes()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('toast.route_rename_failed')
       showToast(message)
     }
-  }, [showToast, t])
+  }, [refreshRoutes, showToast, t])
 
   const handleRouteDelete = useCallback(async (id: string) => {
     try {
       await api.deleteRoute(id)
-      const routes = await api.getSavedRoutes()
-      setSavedRoutes(routes)
+      await refreshRoutes()
       showToast(t('toast.route_deleted'))
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('toast.route_delete_failed')
       showToast(message)
     }
-  }, [showToast, t])
+  }, [refreshRoutes, showToast, t])
 
   const handleGpxImport = useCallback(async (file: File) => {
     try {
       const res = await api.importGpx(file)
-      const routes = await api.getSavedRoutes()
-      setSavedRoutes(routes)
+      await refreshRoutes()
       showToast(t('toast.gpx_imported', { n: res.points }))
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : ''
       showToast(t('toast.gpx_import_failed', { msg: message }))
     }
-  }, [showToast, t])
+  }, [refreshRoutes, showToast, t])
 
   // Slugify a route name into a filename-safe stem. Falls back to the
   // route id when the name has no usable characters left.

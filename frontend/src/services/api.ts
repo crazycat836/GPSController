@@ -84,6 +84,11 @@ async function fetchWithRetry(url: string, opts: RequestInit, maxAttempts = 15):
 
 // Latched once when localStorage throws so the navigator-language fallback
 // path doesn't silently hide a sandboxed-storage misconfiguration in dev.
+//
+// Test isolation: this module-level latch persists across `currentLang()`
+// calls within a single Vitest module run; tests that need to assert the
+// warning fires more than once should reset module state via vi.resetModules()
+// between cases.
 let warnedLocalStorage = false
 
 function currentLang(): 'zh' | 'en' {
@@ -159,6 +164,9 @@ function formatError(error: unknown, fallback: string): string {
  * The cache is invalidated on a 401 response (see `authedFetch`) so a
  * rotated session token is picked up automatically without a reload.
  */
+// Test isolation: this cache is a module-level singleton. Tests that need
+// to exercise multiple bridge states must reset it via vi.resetModules() or
+// `invalidateAuthToken()` (used in production by the 401 handler) between cases.
 let authTokenPromise: Promise<string> | null = null
 
 function getAuthToken(): Promise<string> {
