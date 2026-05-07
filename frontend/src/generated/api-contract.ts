@@ -227,3 +227,53 @@ export type WsEvent =
   | { type: "random_walk_complete"; data: RandomWalkCompleteEvent }
   | { type: "restored"; data: RestoredEvent }
   | { type: "connection_lost"; data: ConnectionLostEvent };
+
+/**
+ * Mirrors backend/api/_errors.py::ErrorCode. Used by the i18n
+ * contract test to detect drift between backend codes and the
+ * `err.<code>` lookup table in `frontend/src/i18n/strings.ts`.
+ */
+export type BackendErrorCode = "validation_failed" | "unauthorized" | "invalid_name" | "invalid_coord" | "invalid_lang" | "bookmark_not_found" | "place_not_found" | "default_place_immutable" | "tag_not_found" | "route_not_found" | "device_not_found" | "device_not_connected" | "device_lost" | "no_device" | "connect_failed" | "trust_failed" | "remote_pair_failed" | "repair_needs_usb" | "usb_required" | "usbmux_unavailable" | "forget_failed" | "max_devices_reached" | "ios_unsupported" | "ios_version_unsupported" | "tunnel_failed" | "tunnel_no_rsd" | "tunnel_spawn_failed" | "tunnel_timeout" | "scan_failed" | "no_position" | "no_active_route" | "teleport_failed" | "joystick_start_failed" | "cooldown_active" | "gpx_too_large" | "gpx_decode_failed" | "amfi_unavailable" | "amfi_reveal_failed" | "open_log_failed";
+
+/** Runtime version of `BackendErrorCode` for iteration in tests. */
+export const BACKEND_ERROR_CODES = [
+  "validation_failed",
+  "unauthorized",
+  "invalid_name",
+  "invalid_coord",
+  "invalid_lang",
+  "bookmark_not_found",
+  "place_not_found",
+  "default_place_immutable",
+  "tag_not_found",
+  "route_not_found",
+  "device_not_found",
+  "device_not_connected",
+  "device_lost",
+  "no_device",
+  "connect_failed",
+  "trust_failed",
+  "remote_pair_failed",
+  "repair_needs_usb",
+  "usb_required",
+  "usbmux_unavailable",
+  "forget_failed",
+  "max_devices_reached",
+  "ios_unsupported",
+  "ios_version_unsupported",
+  "tunnel_failed",
+  "tunnel_no_rsd",
+  "tunnel_spawn_failed",
+  "tunnel_timeout",
+  "scan_failed",
+  "no_position",
+  "no_active_route",
+  "teleport_failed",
+  "joystick_start_failed",
+  "cooldown_active",
+  "gpx_too_large",
+  "gpx_decode_failed",
+  "amfi_unavailable",
+  "amfi_reveal_failed",
+  "open_log_failed",
+] as const satisfies readonly BackendErrorCode[];

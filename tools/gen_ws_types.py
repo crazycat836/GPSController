@@ -29,6 +29,7 @@ sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 from pydantic import BaseModel  # noqa: E402
 
+from api._errors import ErrorCode  # noqa: E402
 from models.ws_events import WS_EVENTS  # noqa: E402
 
 
@@ -140,6 +141,32 @@ def _render_event_name_union() -> str:
     return f"export type WsEventType = {arms};\n"
 
 
+def _render_error_code_union() -> str:
+    """Render `BackendErrorCode` (TS type) and `BACKEND_ERROR_CODES`
+    (runtime tuple) from the live ErrorCode StrEnum.
+
+    The frontend i18n table must mirror this exactly — the contract
+    test in ``frontend/src/i18n/strings.test.ts`` walks the runtime
+    tuple and asserts every member has an ``err.<code>`` translation
+    in ``STRINGS``.
+    """
+    arms = " | ".join(f'"{c.value}"' for c in ErrorCode)
+    runtime = ",\n  ".join(f'"{c.value}"' for c in ErrorCode)
+    return (
+        "/**\n"
+        " * Mirrors backend/api/_errors.py::ErrorCode. Used by the i18n\n"
+        " * contract test to detect drift between backend codes and the\n"
+        " * `err.<code>` lookup table in `frontend/src/i18n/strings.ts`.\n"
+        " */\n"
+        f"export type BackendErrorCode = {arms};\n"
+        "\n"
+        "/** Runtime version of `BackendErrorCode` for iteration in tests. */\n"
+        "export const BACKEND_ERROR_CODES = [\n"
+        f"  {runtime},\n"
+        "] as const satisfies readonly BackendErrorCode[];\n"
+    )
+
+
 def main() -> int:
     out_dir = _OUT_PATH.parent
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -149,6 +176,7 @@ def main() -> int:
         parts.append(_render_interface(model))
     parts.append(_render_event_name_union())
     parts.append(_render_union())
+    parts.append(_render_error_code_union())
 
     text = "\n".join(parts)
     _OUT_PATH.write_text(text, encoding="utf-8")
