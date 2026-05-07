@@ -9,6 +9,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from api._errors import ErrorCode
+
 router = APIRouter(prefix="/api/system", tags=["system"])
 
 logger = logging.getLogger(__name__)
@@ -57,7 +59,7 @@ async def open_log():
         _open_native(target)
     except Exception as exc:
         logger.exception("Failed to open log path %s", target)
-        raise HTTPException(status_code=500, detail={"code": "open_log_failed",
+        raise HTTPException(status_code=500, detail={"code": ErrorCode.OPEN_LOG_FAILED.value,
                                                      "message": f"Could not open log: {exc}"})
     return {"status": "opened", "path": str(target)}
 
@@ -71,6 +73,6 @@ async def open_log_folder():
         _open_native(log_dir)
     except Exception as exc:
         logger.exception("Failed to open log folder %s", log_dir)
-        raise HTTPException(status_code=500, detail={"code": "open_log_failed",
+        raise HTTPException(status_code=500, detail={"code": ErrorCode.OPEN_LOG_FAILED.value,
                                                      "message": f"Could not open folder: {exc}"})
     return {"status": "opened", "path": str(log_dir)}

@@ -5,7 +5,7 @@ import traceback
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from api._errors import http_err
+from api._errors import ErrorCode, http_err
 from api.websocket import broadcast
 from config import resolve_speed_profile
 from services.location_service import (
@@ -68,10 +68,7 @@ async def _resolve_target_udid(app_state, dm, requested_udid: str | None) -> str
             _log.exception("discover_devices failed during lazy rebuild (attempt %d)", attempt + 1)
         await asyncio.sleep(_DISCOVER_RETRY_DELAY_S)
 
-    raise HTTPException(
-        status_code=400,
-        detail={"code": "no_device", "message": "No iOS device connected; connect via USB first"},
-    )
+    raise http_err(400, ErrorCode.NO_DEVICE, "No iOS device connected; connect via USB first")
 
 
 async def _get_or_rebuild_engine(app_state, target_udid: str):
@@ -136,12 +133,10 @@ async def _engine(udid: str | None = None):
     if engine is not None:
         return engine
 
-    raise HTTPException(
-        status_code=400,
-        detail={
-            "code": "no_device",
-            "message": "Device connection invalid; try re-plugging USB or restarting GPSController (see ~/.gpscontroller/logs/backend.log)",
-        },
+    raise http_err(
+        400,
+        ErrorCode.NO_DEVICE,
+        "Device connection invalid; try re-plugging USB or restarting GPSController (see ~/.gpscontroller/logs/backend.log)",
     )
 
 
@@ -193,7 +188,7 @@ async def _handle_device_lost(exc: DeviceLostError) -> "HTTPException":
     return HTTPException(
         status_code=503,
         detail={
-            "code": "device_lost",
+            "code": ErrorCode.DEVICE_LOST.value,
             "cause": cause.value,
             "message": _DEVICE_LOST_MESSAGE.get(cause, _DEVICE_LOST_MESSAGE[DeviceLostCause.UNKNOWN]),
         },
@@ -234,11 +229,7 @@ async def apply_speed(req: ApplySpeedRequest):
     )
     swapped = await engine.apply_speed(profile)
     if not swapped:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "no_active_route",
-                    "message": "No active route; cannot apply a new speed"},
-        )
+        raise http_err(400, ErrorCode.NO_ACTIVE_ROUTE, "No active route; cannot apply a new speed")
     return {"status": "applied", "speed_mps": profile["speed_mps"]}
 
 
@@ -259,7 +250,7 @@ async def teleport(req: TeleportRequest):
         raise HTTPException(
             status_code=429,
             detail={
-                "code": "cooldown_active",
+                "code": ErrorCode.COOLDOWN_ACTIVE.value,
                 "message": f"Cooldown active; wait {int(cooldown.remaining)} more seconds",
                 "remaining_seconds": cooldown.remaining,
             },
@@ -275,7 +266,7 @@ async def teleport(req: TeleportRequest):
         raise
     except Exception:
         logger.exception("Teleport failed")
-        raise http_err(500, "teleport_failed", "Teleport failed; see ~/.gpscontroller/logs/backend.log")
+        raise http_err(500, ErrorCode.TELEPORT_FAILED, "Teleport failed; see ~/.gpscontroller/logs/backend.log")
 
     # Start cooldown if enabled and there was a previous position.
     # Skipped in dual mode for the same reason the check above is skipped.
@@ -396,7 +387,7 @@ async def navigate(req: NavigateRequest):
     if engine.current_position is None:
         raise HTTPException(
             status_code=400,
-            detail={"code": "no_position", "message": "No current position; teleport to a coordinate first"},
+            detail={"code": ErrorCode.NO_POSITION.value, "message": "No current position; teleport to a coordinate first"},
         )
     _spawn(engine.navigate(
         Coordinate(lat=req.lat, lng=req.lng), req.mode,
@@ -458,7 +449,7 @@ async def joystick_start(req: JoystickStartRequest):
         raise
     except Exception:
         logger.exception("joystick_start failed")
-        raise http_err(500, "joystick_start_failed", "Joystick start failed; see ~/.gpscontroller/logs/backend.log")
+        raise http_err(500, ErrorCode.JOYSTICK_START_FAILED, "Joystick start failed; see ~/.gpscontroller/logs/backend.log")
     return {"status": "started", "mode": req.mode}
 
 
@@ -603,7 +594,7 @@ async def set_initial_position(req: _InitialPosRequest):
         new_pos: dict | None = None
     else:
         if not validate_coords(req.lat, req.lng):
-            raise http_err(400, "invalid_coord", "lat must be in [-90, 90], lng in [-180, 180]")
+            raise http_err(400, ErrorCode.INVALID_COORD, "lat must be in [-90, 90], lng in [-180, 180]")
         new_pos = {"lat": float(req.lat), "lng": float(req.lng)}
     app_state.set_initial_position(new_pos)
     app_state.save_settings()

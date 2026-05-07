@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
-from api._errors import http_err, ios_unsupported_error, max_devices_error
+from api._errors import ErrorCode, http_err, ios_unsupported_error, max_devices_error
 from api.websocket import broadcast
 from config import MAX_DEVICES
 from context import ctx
@@ -64,7 +64,7 @@ async def connect_device(udid: str):
         raise ios_unsupported_error(e.version)
     except Exception:
         logger.exception("Device connect failed", extra={"udid": udid})
-        raise http_err(500, "connect_failed", "Device connection failed; please retry")
+        raise http_err(500, ErrorCode.CONNECT_FAILED, "Device connection failed; please retry")
 
 
 @router.post("/auto-reconnect/reset")
@@ -187,7 +187,7 @@ async def forget_device(udid: str):
         )
         raise http_err(
             500,
-            "forget_failed",
+            ErrorCode.FORGET_FAILED,
             "Could not remove any trust record; admin privileges may be required — restart the backend with sudo and retry",
         )
 
@@ -206,7 +206,7 @@ async def device_info(udid: str):
     for d in devices:
         if d.udid == udid:
             return d
-    raise http_err(404, "device_not_found", "Device not found")
+    raise http_err(404, ErrorCode.DEVICE_NOT_FOUND, "Device not found")
 
 
 # ── AMFI: "Reveal Developer Mode in Settings" (iOS 16+) ─────────────
@@ -224,10 +224,7 @@ async def amfi_reveal_developer_mode(udid: str):
     # connection_type) via the public ConnectionInfo accessor.
     conn = dm.get_connection(udid)
     if conn is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "device_not_connected", "message": "Device is not currently connected"},
-        )
+        raise http_err(404, ErrorCode.DEVICE_NOT_CONNECTED, "Device is not currently connected")
 
     # iOS 15 and below have no Developer Mode concept, so the AMFI
     # service call would fail with a misleading error.
@@ -236,7 +233,7 @@ async def amfi_reveal_developer_mode(udid: str):
         raise HTTPException(
             status_code=400,
             detail={
-                "code": "ios_version_unsupported",
+                "code": ErrorCode.IOS_VERSION_UNSUPPORTED.value,
                 "message": "iOS 16 or newer is required to use Developer Mode",
                 "ios_version": conn.ios_version,
             },
@@ -249,7 +246,7 @@ async def amfi_reveal_developer_mode(udid: str):
         raise HTTPException(
             status_code=400,
             detail={
-                "code": "usb_required",
+                "code": ErrorCode.USB_REQUIRED.value,
                 "message": "AMFI requires a USB connection (WiFi tunnel does not forward this service)",
             },
         )
@@ -258,13 +255,13 @@ async def amfi_reveal_developer_mode(udid: str):
         from pymobiledevice3.services.amfi import AmfiService
     except ImportError:
         logger.exception("pymobiledevice3 AMFI module import failed", extra={"udid": udid})
-        raise http_err(500, "amfi_unavailable", "pymobiledevice3 AMFI service failed to load")
+        raise http_err(500, ErrorCode.AMFI_UNAVAILABLE, "pymobiledevice3 AMFI service failed to load")
 
     try:
         AmfiService(conn.lockdown).reveal_developer_mode_option_in_ui()
     except Exception:
         logger.exception("AMFI reveal failed for %s", udid)
-        raise http_err(500, "amfi_reveal_failed", "AMFI operation failed; ensure the device is unlocked and trusts this computer")
+        raise http_err(500, ErrorCode.AMFI_REVEAL_FAILED, "AMFI operation failed; ensure the device is unlocked and trusts this computer")
 
     # Invalidate the cached status so the next discover pays a fresh
     # lockdown query and the frontend sees the toggle flip.

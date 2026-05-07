@@ -2,6 +2,7 @@ import re
 
 from fastapi import APIRouter, HTTPException, Query
 
+from api._errors import ErrorCode
 from models.schemas import GeocodingResult
 from services.geocoding import GeocodingService
 
@@ -36,5 +37,5 @@ async def reverse_geocode(
     lang: str | None = Query(default=None, max_length=64),
 ):
     if lang is not None and not _LANG_RE.fullmatch(lang):
-        raise HTTPException(status_code=400, detail={"code": "invalid_lang", "message": "Invalid language tag"})
+        raise HTTPException(status_code=400, detail={"code": ErrorCode.INVALID_LANG.value, "message": "Invalid language tag"})
     return await geocoding_service.reverse(lat, lng, lang)

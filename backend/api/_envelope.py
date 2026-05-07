@@ -34,6 +34,8 @@ from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from api._errors import ErrorCode
+
 
 def _is_already_enveloped(content: Any) -> bool:
     """Detect a payload already in envelope shape so we never double-wrap."""
@@ -106,7 +108,7 @@ async def validation_exception_handler(
         "success": False,
         "data": None,
         "error": {
-            "code": "validation_failed",
+            "code": ErrorCode.VALIDATION_FAILED.value,
             "message": "Request payload failed validation",
             "errors": exc.errors(),
         },
@@ -121,7 +123,7 @@ def unauthorized_response() -> JSONResponse:
         {
             "success": False,
             "data": None,
-            "error": {"code": "unauthorized", "message": "Missing or invalid X-GPS-Token"},
+            "error": {"code": ErrorCode.UNAUTHORIZED.value, "message": "Missing or invalid X-GPS-Token"},
         },
         status_code=401,
     )

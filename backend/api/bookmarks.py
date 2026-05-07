@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter
 
-from api._errors import http_err
+from api._errors import ErrorCode, http_err
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -104,7 +104,7 @@ async def update_bookmark(bookmark_id: str, bookmark: Bookmark):
         country=country,
     )
     if not updated:
-        raise http_err(404, "bookmark_not_found", "Bookmark not found")
+        raise http_err(404, ErrorCode.BOOKMARK_NOT_FOUND, "Bookmark not found")
     return updated
 
 
@@ -112,7 +112,7 @@ async def update_bookmark(bookmark_id: str, bookmark: Bookmark):
 async def delete_bookmark(bookmark_id: str):
     bm = _bm()
     if not await bm.delete_bookmark(bookmark_id):
-        raise http_err(404, "bookmark_not_found", "Bookmark not found")
+        raise http_err(404, ErrorCode.BOOKMARK_NOT_FOUND, "Bookmark not found")
     return {"status": "deleted"}
 
 
@@ -176,16 +176,16 @@ async def create_place(place: BookmarkPlace):
 async def update_place(place_id: str, place: BookmarkPlace):
     updated = await _bm().update_place(place_id, name=place.name, color=place.color)
     if not updated:
-        raise http_err(404, "place_not_found", "Place not found")
+        raise http_err(404, ErrorCode.PLACE_NOT_FOUND, "Place not found")
     return updated
 
 
 @router.delete("/places/{place_id}")
 async def delete_place(place_id: str):
     if place_id == "default":
-        raise http_err(400, "default_place_immutable", "Cannot delete the default place")
+        raise http_err(400, ErrorCode.DEFAULT_PLACE_IMMUTABLE, "Cannot delete the default place")
     if not await _bm().delete_place(place_id):
-        raise http_err(404, "place_not_found", "Place not found")
+        raise http_err(404, ErrorCode.PLACE_NOT_FOUND, "Place not found")
     return {"status": "deleted"}
 
 
@@ -211,14 +211,14 @@ async def create_tag(tag: BookmarkTag):
 async def update_tag(tag_id: str, tag: BookmarkTag):
     updated = await _bm().update_tag(tag_id, name=tag.name, color=tag.color)
     if not updated:
-        raise http_err(404, "tag_not_found", "Tag not found")
+        raise http_err(404, ErrorCode.TAG_NOT_FOUND, "Tag not found")
     return updated
 
 
 @router.delete("/tags/{tag_id}")
 async def delete_tag(tag_id: str):
     if not await _bm().delete_tag(tag_id):
-        raise http_err(404, "tag_not_found", "Tag not found")
+        raise http_err(404, ErrorCode.TAG_NOT_FOUND, "Tag not found")
     return {"status": "deleted"}
 
 

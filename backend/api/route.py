@@ -5,9 +5,9 @@ import urllib.parse
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, UploadFile, File
 
-from api._errors import http_err
+from api._errors import ErrorCode, http_err
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
@@ -54,7 +54,7 @@ async def save_route(route: SavedRoute):
 @router.delete("/saved/{route_id}")
 async def delete_saved(route_id: str):
     if not await _store.delete(route_id):
-        raise http_err(404, "route_not_found", "Route not found")
+        raise http_err(404, ErrorCode.ROUTE_NOT_FOUND, "Route not found")
     return {"status": "deleted"}
 
 
@@ -66,10 +66,10 @@ class _RouteRenameRequest(BaseModel):
 async def rename_saved(route_id: str, req: _RouteRenameRequest):
     name = req.name.strip()
     if not name:
-        raise HTTPException(status_code=400, detail={"code": "invalid_name", "message": "Route name must not be empty"})
+        raise http_err(400, ErrorCode.INVALID_NAME, "Route name must not be empty")
     route = await _store.rename(route_id, name)
     if route is None:
-        raise http_err(404, "route_not_found", "Route not found")
+        raise http_err(404, ErrorCode.ROUTE_NOT_FOUND, "Route not found")
     return route
 
 
@@ -99,16 +99,10 @@ async def import_gpx(file: UploadFile = File(...)):
     # body into memory. `file.size` is populated when the client sent a
     # Content-Length; fall back to a bounded-chunk read otherwise.
     if file.size is not None and file.size > _MAX_GPX_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail={"code": "gpx_too_large", "message": f"GPX exceeds {_MAX_GPX_BYTES // (1024 * 1024)} MiB limit"},
-        )
+        raise http_err(413, ErrorCode.GPX_TOO_LARGE, f"GPX exceeds {_MAX_GPX_BYTES // (1024 * 1024)} MiB limit")
     content = await file.read(_MAX_GPX_BYTES + 1)
     if len(content) > _MAX_GPX_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail={"code": "gpx_too_large", "message": f"GPX exceeds {_MAX_GPX_BYTES // (1024 * 1024)} MiB limit"},
-        )
+        raise http_err(413, ErrorCode.GPX_TOO_LARGE, f"GPX exceeds {_MAX_GPX_BYTES // (1024 * 1024)} MiB limit")
     # Most GPX exporters write UTF-8, but real-world devices ship UTF-16
     # and latin-1 too. Try the common encodings before giving up so the
     # user gets a structured 400 they can act on instead of an opaque 500
@@ -121,13 +115,7 @@ async def import_gpx(file: UploadFile = File(...)):
         except UnicodeDecodeError:
             continue
     if text is None:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "gpx_decode_failed",
-                "message": "GPX file is not valid UTF-8, UTF-16, or latin-1",
-            },
-        )
+        raise http_err(400, ErrorCode.GPX_DECODE_FAILED, "GPX file is not valid UTF-8, UTF-16, or latin-1")
     coords = gpx_service.parse_gpx(text)
     # Strip the .gpx extension from the filename so the rename input
     # doesn't show "myroute.gpx" — the format suffix is irrelevant to the
@@ -162,7 +150,7 @@ def _ascii_safe_filename(name: str) -> str:
 async def export_gpx(route_id: str):
     route = _store.get(route_id)
     if route is None:
-        raise http_err(404, "route_not_found", "Route not found")
+        raise http_err(404, ErrorCode.ROUTE_NOT_FOUND, "Route not found")
     points = [{"lat": c.lat, "lng": c.lng} for c in route.waypoints]
     gpx_xml = gpx_service.generate_gpx(points, name=route.name)
     # RFC 5987 / RFC 6266: emit both a plain ASCII `filename` for legacy
