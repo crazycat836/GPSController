@@ -219,7 +219,15 @@ function coordOf(p: { lat?: number; lng?: number } | [number, number] | unknown)
 
 export type WsSubscribe = (fn: (m: WsMessage) => void) => () => void
 
-export type SimErrorCode = 'tunnel_lost' | 'simulation_error' | 'no_device_connected'
+// SimErrorCode tags an error surface this hook hands to consumers via
+// `localizeError`. `tunnel_lost` is a real WS event — anchored to
+// the generated `WsEventType` union so a backend rename/removal of it
+// propagates as a TypeScript error here instead of a silent miss.
+// `simulation_error` and `no_device_connected` are synthetic markers
+// (not WS event names) and stay as bare literals.
+import type { WsEventType } from '../../generated/api-contract'
+type _TunnelLostCode = Extract<WsEventType, 'tunnel_lost'>
+export type SimErrorCode = _TunnelLostCode | 'simulation_error' | 'no_device_connected'
 
 export interface SimulationStatus {
   running: boolean
