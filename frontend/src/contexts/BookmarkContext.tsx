@@ -42,7 +42,7 @@ interface BookmarkContextValue {
   addBmDialog: AddBmDialog | null
   setAddBmDialog: React.Dispatch<React.SetStateAction<AddBmDialog | null>>
   handleAddBookmark: (lat: number, lng: number) => void
-  submitAddBookmark: () => void
+  submitAddBookmark: () => Promise<void>
 
   // Bookmark import/export
   handleBookmarkImport: (file: File) => Promise<void>
@@ -87,23 +87,37 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     })
   }, [bm.places, t])
 
-  const submitAddBookmark = useCallback(() => {
+  const submitAddBookmark = useCallback(async () => {
     if (!addBmDialog || !addBmDialog.name.trim()) return
     const place = bm.places.find((p) => p.name === addBmDialog.place)
-    bm.createBookmark({
+    const payload = {
       name: addBmDialog.name.trim(),
       lat: addBmDialog.lat,
       lng: addBmDialog.lng,
       place_id: place?.id || 'default',
       tags: [],
-    })
+    }
     setAddBmDialog(null)
-  }, [addBmDialog, bm])
+    try {
+      await bm.createBookmark(payload)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.save_failed', { msg: message }))
+    }
+  }, [addBmDialog, bm, showToast, t])
 
   const handleBookmarkImport = useCallback(async (file: File) => {
     try {
       const text = await file.text()
       const data = JSON.parse(text)
+      if (
+        !data ||
+        typeof data !== 'object' ||
+        !Array.isArray(data.places) ||
+        !Array.isArray(data.bookmarks)
+      ) {
+        throw new Error('invalid file: missing places or bookmarks array')
+      }
       const res = await api.importBookmarks(data)
       await bm.refresh()
       showToast(t('bm.import_success', { n: res.imported }))
@@ -125,10 +139,16 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
   // Re-fetch the saved-route list and push it through state. Every
   // mutation handler below funnels through here so the cache shape +
   // sort order is identical regardless of which path triggered the
-  // refresh.
+  // refresh. Errors are logged and re-thrown so callers' existing
+  // try/catch blocks can surface the right toast.
   const refreshRoutes = useCallback(async () => {
-    const routes = await api.getSavedRoutes()
-    setSavedRoutes(routes)
+    try {
+      const routes = await api.getSavedRoutes()
+      setSavedRoutes(routes)
+    } catch (err) {
+      devLog('Failed to refresh saved routes', err)
+      throw err
+    }
   }, [])
 
   const handleRouteSave = useCallback(async (
@@ -146,7 +166,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
       showToast(t('toast.route_saved', { name }))
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : ''
-      showToast(t('toast.route_save_failed', { msg: message }))
+      showToast(t('toast.save_failed', { msg: message }))
     }
   }, [refreshRoutes, showToast, t])
 
@@ -155,7 +175,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
       await api.renameRoute(id, name)
       await refreshRoutes()
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t('toast.route_rename_failed')
+      const message = err instanceof Error ? err.message : t('toast.rename_failed')
       showToast(message)
     }
   }, [refreshRoutes, showToast, t])

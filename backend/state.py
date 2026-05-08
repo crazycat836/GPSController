@@ -25,7 +25,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from config import DEFAULT_LOCATION, SETTINGS_FILE
+from config import DEFAULT_LOCATION, SETTINGS_FILE, STATE_SAVE_INTERVAL_SEC
 from core.device_manager import DeviceManager
 from services.bookmarks import BookmarkManager
 from services.coord_format import CoordinateFormatter
@@ -58,9 +58,10 @@ class AppState:
         # None, the frontend falls back to a hardcoded default.
         self._initial_map_position: dict | None = None
         # Throttle disk writes for high-frequency position_update events
-        # (~10 Hz during navigation) — persist at most once every 2s.
+        # (~10 Hz during navigation). Interval lives in config so the
+        # rationale sits next to other tunables.
         self._last_save_time: float = 0.0
-        self._save_interval: float = 2.0
+        self._save_interval: float = STATE_SAVE_INTERVAL_SEC
         # UDIDs the user explicitly disconnected. The usbmux watchdog
         # respects this set: a blocked UDID is NOT auto-reconnected even
         # if usbmuxd still reports it. Unblocked when (a) the user

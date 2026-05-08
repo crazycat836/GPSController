@@ -93,20 +93,19 @@ async def _force_reconnect(app_state, dm, target_udid: str):
 
     Returns the rebuilt engine on success or None if reconnect/rebuild fails.
     """
-    _log = logging.getLogger("gpscontroller")
-    _log.info("attempt 2 (hard reset) for %s", target_udid)
+    logger.info("attempt 2 (hard reset) for %s", target_udid)
     try:
         try:
             await dm.disconnect(target_udid)
         except Exception:
-            _log.warning("disconnect during hard reset failed; proceeding", exc_info=True)
+            logger.warning("disconnect during hard reset failed; proceeding", exc_info=True)
         await dm.connect(target_udid)
         await app_state.create_engine_for_device(target_udid)
         if app_state.simulation_engine is not None:
-            _log.info("Engine rebuild succeeded on attempt 2")
+            logger.info("Engine rebuild succeeded on attempt 2")
             return app_state.simulation_engine
     except Exception:
-        _log.exception("Engine rebuild (attempt 2, hard reset) failed for %s", target_udid)
+        logger.exception("Engine rebuild (attempt 2, hard reset) failed for %s", target_udid)
     return None
 
 
@@ -504,8 +503,8 @@ async def debug_info():
 
     Token-protected like every other endpoint, but additionally gated
     behind the dev-mode flag so production builds don't expose engine
-    internals (private ``_active`` attribute, etc.) to a leaked token.
-    Set ``GPSCONTROLLER_DEV_NOAUTH=1`` to enable.
+    internals to a leaked token. Set ``GPSCONTROLLER_DEV_NOAUTH=1`` to
+    enable.
     """
     import main as _main
     if not _main._is_auth_disabled():
@@ -524,7 +523,7 @@ async def debug_info():
         "state": engine.state.value if engine.state else None,
         "current_position": {"lat": engine.current_position.lat, "lng": engine.current_position.lng} if engine.current_position else None,
         "location_service": type(loc_svc).__name__ if loc_svc else None,
-        "location_service_active": getattr(loc_svc, '_active', None),
+        "location_service_active": loc_svc.active_state if loc_svc else None,
     }
 
 

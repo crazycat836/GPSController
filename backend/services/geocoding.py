@@ -9,6 +9,7 @@ import httpx
 
 from config import NOMINATIM_BASE_URL, NOMINATIM_USER_AGENT
 from models.schemas import GeocodingResult
+from services.http_client import make_async_client_singleton
 
 logger = logging.getLogger(__name__)
 
@@ -17,27 +18,16 @@ _TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 # Lifespan-scoped HTTP client. Reusing the connection pool across calls
 # avoids paying TCP+TLS handshake on every search / reverse during a
 # 10 Hz navigation. Closed on FastAPI shutdown via close_client().
-_client: httpx.AsyncClient | None = None
-_client_lock = asyncio.Lock()
-
-
-async def _get_client() -> httpx.AsyncClient:
-    global _client
-    if _client is None:
-        async with _client_lock:
-            if _client is None:
-                _client = httpx.AsyncClient(timeout=_TIMEOUT)
-    return _client
-
-
-async def close_client() -> None:
-    """Release the shared HTTP client. Called from the FastAPI lifespan."""
-    global _client
-    if _client is not None:
-        try:
-            await _client.aclose()
-        finally:
-            _client = None
+# The Nominatim usage policy requires a UA + JSON Accept header on every
+# request, so they're attached as defaults on the client itself — per-call
+# headers (Accept-Language for reverse) merge on top.
+_get_client, close_client = make_async_client_singleton(
+    _TIMEOUT,
+    headers={
+        "User-Agent": NOMINATIM_USER_AGENT,
+        "Accept": "application/json",
+    },
+)
 
 
 # Nominatim's usage policy (https://operations.osmfoundation.org/policies/nominatim/)

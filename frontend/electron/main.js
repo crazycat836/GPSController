@@ -131,6 +131,11 @@ async function createWindow() {
       sandbox: true,
       nodeIntegration: false,
       contextIsolation: true,
+      // `webSecurity` defaults to `true` in Electron, but spell it out
+      // here so a future reviewer doesn't have to consult the docs to
+      // confirm same-origin / mixed-content protections are on. CSP
+      // (declared in index.html) is the layered defence on top.
+      webSecurity: true,
       preload: path.join(__dirname, 'preload.js'),
       // Only the version is forwarded via argv — it's non-sensitive and
       // lets preload expose `version` synchronously without an IPC round

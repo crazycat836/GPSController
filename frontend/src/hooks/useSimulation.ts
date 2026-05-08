@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import * as api from '../services/api'
 import { PRE_SYNC_SETTLE_MS } from '../lib/constants'
 import { devWarn } from '../lib/dev-log'
@@ -434,44 +434,74 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     return res
   }, [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh])
 
-  // Fetch initial status on mount
+  // Fetch initial status on mount.
+  //
+  // Sequence (single async/await chain so failures and the secondary
+  // last-position fetch share one top-level try/catch):
+  //   1. getStatus() — primary source, also tells us whether the engine
+  //      is currently pushing a live position.
+  //   2. getLastDevicePosition() — fallback rehydration when the engine
+  //      is idle on a fresh server restart. Skipped when (1) already
+  //      delivered a live position.
+  //
+  // `aborted` guards every setState call so a late resolution after the
+  // component unmounts is a no-op. The `initialFetched` ref keeps the
+  // body one-shot in dev StrictMode where effects mount → unmount →
+  // mount.
   const initialFetched = useRef(false)
   useEffect(() => {
     if (initialFetched.current) return
     initialFetched.current = true
-    api.getStatus().then((res) => {
+    let aborted = false
+
+    const run = async () => {
+      // Issue both fetches in parallel: getStatus() is authoritative when
+      // the engine is live; getLastDevicePosition() is the persisted
+      // fallback used only when status has no live position. Sequential
+      // awaits would cost an extra RTT on every cold mount even though
+      // the fallback is almost always discarded.
+      const [statusRes, lastPosRes] = await Promise.allSettled([
+        api.getStatus(),
+        api.getLastDevicePosition(),
+      ])
+      if (aborted) return
+
       let hadLivePosition = false
-      if (res.position) {
-        hadLivePosition = true
-        setCurrentPosition({ lat: res.position.lat, lng: res.position.lng })
-        setBackendPositionSynced(true)
+      if (statusRes.status === 'fulfilled') {
+        const res = statusRes.value
+        if (res.position) {
+          hadLivePosition = true
+          setCurrentPosition({ lat: res.position.lat, lng: res.position.lng })
+          setBackendPositionSynced(true)
+        }
+        if (res.mode) {
+          const mapped = stateToMode(res.mode)
+          if (mapped) _setMode(mapped)
+        }
+        if (res.running != null || res.paused != null) {
+          setStatus({
+            running: !!res.running,
+            paused: !!res.paused,
+            speed: res.speed ?? 0,
+          })
+        }
       }
-      if (res.mode) {
-        const mapped = stateToMode(res.mode)
-        if (mapped) _setMode(mapped)
+      // Rehydrate from persisted settings only when the live engine has
+      // no position (fresh server restart). A real position_update from
+      // the device supersedes this immediately after.
+      if (!hadLivePosition && lastPosRes.status === 'fulfilled') {
+        const { position } = lastPosRes.value
+        if (position) {
+          setCurrentPosition((prev) => prev ?? { lat: position.lat, lng: position.lng })
+        }
       }
-      if (res.running != null || res.paused != null) {
-        setStatus({
-          running: !!res.running,
-          paused: !!res.paused,
-          speed: res.speed ?? 0,
-        })
-      }
-      // Fallback: on a fresh server restart the engine is intentionally
-      // left idle (no position pushed to the iPhone). Rehydrate the last
-      // known position from persisted settings so the pin shows up
-      // immediately instead of the empty "尚未取得目前位置" state. A real
-      // position_update from the device supersedes this automatically.
-      if (!hadLivePosition) {
-        api.getLastDevicePosition().then(({ position }) => {
-          if (position) {
-            setCurrentPosition((prev) => prev ?? { lat: position.lat, lng: position.lng })
-          }
-        }).catch(() => { /* ignore — just start empty */ })
-      }
-    }).catch(() => {
-      // backend may not be running yet
-    })
+    }
+
+    void run()
+
+    return () => {
+      aborted = true
+    }
   }, [])
 
   // ── Group-mode fan-out helpers ──────────────────────────────────────
@@ -573,10 +603,13 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     fanout(udids, 'joystick-stop', (u) => api.joystickStop(u)), [fanout])
 
   // Derived: primary runtime for legacy single-device components.
-  const primaryRuntime: DeviceRuntime | null = (() => {
+  // Memoised so consumers see a stable reference between renders when
+  // `runtimes` itself is unchanged — `Object.keys(runtimes)` allocates,
+  // and re-allocating it every render churns downstream `useMemo` deps.
+  const primaryRuntime: DeviceRuntime | null = useMemo(() => {
     const keys = Object.keys(runtimes)
     return keys.length ? runtimes[keys[0]] : null
-  })()
+  }, [runtimes])
   const anyRunning = Object.values(runtimes).some((r) =>
     r.state && r.state !== 'idle' && r.state !== 'disconnected',
   )

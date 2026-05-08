@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
-import { SPEED_MAP, useSimContext } from './SimContext'
+import { useSimContext } from './SimContext'
+import { pickDisplaySpeed, toLatLng } from '../lib/sim-derive'
 
 // A focused slice of SimContext for read-only consumers (route cards,
 // pause-resume pill, action gating). The 5 fields here also live on
@@ -22,40 +23,42 @@ interface SimDerivedProviderProps {
 export function SimDerivedProvider({ children }: SimDerivedProviderProps) {
   const { sim } = useSimContext()
 
+  // Derivations live in `lib/sim-derive.ts` so this provider and
+  // `SimContext` agree on every formula (toLatLng, pickDisplaySpeed) by
+  // construction. No more "must stay in sync" comments.
   const currentPos = useMemo(
-    () => sim.currentPosition ? { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng } : null,
+    () => toLatLng(sim.currentPosition),
     [sim.currentPosition?.lat, sim.currentPosition?.lng],
   )
 
   const destPos = useMemo(
-    () => sim.destination ? { lat: sim.destination.lat, lng: sim.destination.lng } : null,
+    () => toLatLng(sim.destination),
     [sim.destination?.lat, sim.destination?.lng],
   )
 
   const isRunning = sim.status.running
   const isPaused = sim.status.paused
 
-  const speed = SPEED_MAP[sim.moveMode] || 5
-
-  const displaySpeed: number | string = useMemo(() => {
-    const fmt = (kmh: number | null, lo: number | null, hi: number | null): number | string => {
-      if (lo != null && hi != null) return `${Math.min(lo, hi)}~${Math.max(lo, hi)}`
-      if (kmh != null) return kmh
-      return speed
-    }
-    return sim.status.running && sim.effectiveSpeed
-      ? fmt(sim.effectiveSpeed.kmh, sim.effectiveSpeed.min, sim.effectiveSpeed.max)
-      : fmt(sim.customSpeedKmh, sim.speedMinKmh, sim.speedMaxKmh)
-  }, [
-    sim.status.running,
-    sim.effectiveSpeed?.kmh,
-    sim.effectiveSpeed?.min,
-    sim.effectiveSpeed?.max,
-    sim.customSpeedKmh,
-    sim.speedMinKmh,
-    sim.speedMaxKmh,
-    speed,
-  ])
+  const displaySpeed: number | string = useMemo(
+    () => pickDisplaySpeed({
+      running: sim.status.running,
+      moveMode: sim.moveMode,
+      effectiveSpeed: sim.effectiveSpeed,
+      customSpeedKmh: sim.customSpeedKmh,
+      speedMinKmh: sim.speedMinKmh,
+      speedMaxKmh: sim.speedMaxKmh,
+    }),
+    [
+      sim.status.running,
+      sim.moveMode,
+      sim.effectiveSpeed?.kmh,
+      sim.effectiveSpeed?.min,
+      sim.effectiveSpeed?.max,
+      sim.customSpeedKmh,
+      sim.speedMinKmh,
+      sim.speedMaxKmh,
+    ],
+  )
 
   const value = useMemo<SimDerivedContextValue>(
     () => ({ currentPos, destPos, displaySpeed, isRunning, isPaused }),

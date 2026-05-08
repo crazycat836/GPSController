@@ -1,15 +1,28 @@
 import React, { useState, useCallback } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { Footprints, Rabbit, Car, Check, Gauge } from 'lucide-react'
 import { useSimContext, MoveMode } from '../../contexts/SimContext'
-import { useT } from '../../i18n'
+import { useT, type StringKey } from '../../i18n'
+import {
+  SPEED_PRESETS as BASE_SPEED_PRESETS,
+  isSpeedPresetActive,
+  type SpeedPresetMode,
+} from '../../lib/constants'
 
-// Values in km/h. Must match `SimContext.SPEED_MAP` and
-// `BottomDock.SPEED_PRESETS` (retuned 2026-04).
-const SPEED_PRESETS = [
-  { labelKey: 'move.walking' as const, value: 10.8, mode: 'walking' as MoveMode, Icon: Footprints },
-  { labelKey: 'move.running' as const, value: 19.8, mode: 'running' as MoveMode, Icon: Rabbit },
-  { labelKey: 'move.driving' as const, value: 60,   mode: 'driving' as MoveMode, Icon: Car },
-] as const
+// Per-preset UI metadata (icon + i18n label key) layered on top of the
+// canonical km/h presets in `lib/constants`. Keeping the icon/label table
+// here means `lib/constants` does not need to depend on `lucide-react`.
+const PRESET_UI: Record<SpeedPresetMode, { Icon: LucideIcon; labelKey: StringKey }> = {
+  walking: { Icon: Footprints, labelKey: 'move.walking' },
+  running: { Icon: Rabbit,     labelKey: 'move.running' },
+  driving: { Icon: Car,        labelKey: 'move.driving' },
+}
+
+const SPEED_PRESETS = BASE_SPEED_PRESETS.map((p) => ({
+  mode: p.mode as MoveMode,
+  value: p.kmh,
+  ...PRESET_UI[p.mode],
+}))
 
 // Logarithmic slider mapping for 0.36 – 120 km/h.
 // Low speeds (walking) need more resolution than high speeds (driving).
@@ -38,12 +51,6 @@ export default function SpeedControls() {
   const { sim, handleApplySpeed, isRunning } = useSimContext()
   const t = useT()
 
-  const isPresetActive = (mode: MoveMode) =>
-    sim.moveMode === mode &&
-    sim.customSpeedKmh == null &&
-    sim.speedMinKmh == null &&
-    sim.speedMaxKmh == null
-
   const hasCustom = sim.customSpeedKmh != null
   const hasRange = sim.speedMinKmh != null && sim.speedMaxKmh != null
 
@@ -68,7 +75,7 @@ export default function SpeedControls() {
       <div className="seg-row seg-row-flush">
         <div className="flex gap-1 w-full">
           {SPEED_PRESETS.map((opt) => {
-            const active = isPresetActive(opt.mode)
+            const active = isSpeedPresetActive(opt.mode, sim)
             return (
               <button
                 key={opt.mode}
@@ -152,17 +159,11 @@ export function SpeedPresets() {
   const { sim } = useSimContext()
   const t = useT()
 
-  const isPresetActive = (mode: MoveMode) =>
-    sim.moveMode === mode &&
-    sim.customSpeedKmh == null &&
-    sim.speedMinKmh == null &&
-    sim.speedMaxKmh == null
-
   return (
     <div className="seg-row seg-row-flush">
       <div className="flex gap-1 w-full">
         {SPEED_PRESETS.map((opt) => {
-          const active = isPresetActive(opt.mode)
+          const active = isSpeedPresetActive(opt.mode, sim)
           return (
             <button
               key={opt.mode}

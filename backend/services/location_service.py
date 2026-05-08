@@ -126,6 +126,19 @@ class LocationService(ABC):
     async def clear(self) -> None:
         """Stop simulating and restore the real device location."""
 
+    @property
+    def active_state(self) -> bool:
+        """Whether the service is currently pushing a simulated location.
+
+        Public, read-only view of the internal ``_active`` flag —
+        ``/api/location/debug`` surfaces this instead of reaching into
+        the private attribute. Subclasses keep their existing
+        ``_active`` bookkeeping; the default implementation returns
+        ``getattr(self, "_active", False)`` so future implementations
+        without that attribute degrade gracefully.
+        """
+        return bool(getattr(self, "_active", False))
+
 
 class DvtLocationService(LocationService):
     """
@@ -200,7 +213,7 @@ class DvtLocationService(LocationService):
                     last_exc = exc
                     logger.warning(
                         "DVT reconnect attempt %d/%d failed (%s); retrying in %.1fs",
-                        attempt, len(delays), type(exc).__name__, delay,
+                        attempt, len(DVT_RECONNECT_DELAYS), type(exc).__name__, delay,
                     )
                     await asyncio.sleep(delay)
             # Final try without delay

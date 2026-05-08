@@ -19,22 +19,31 @@ def main():
 
     for port in (BACKEND_PORT, FRONTEND_PORT):
         if os.name == "nt":
-            # shell=True is intentional and safe here: fixed pipeline
-            # with a developer-supplied integer port — no user input.
+            # Shell-free: run netstat with a list arg and parse listening
+            # rows in Python so neither the port constant nor the PID is
+            # ever interpolated into a cmd.exe pipeline.
             result = subprocess.run(
-                f'netstat -ano | findstr ":{port}" | findstr "LISTENING"',
-                capture_output=True, text=True, shell=True,
+                ["netstat", "-ano"],
+                capture_output=True, text=True,
             )
-            for line in result.stdout.strip().splitlines():
+            suffix = f":{port}"
+            seen_pids: set[int] = set()
+            for line in result.stdout.splitlines():
                 parts = line.split()
-                if not parts:
+                if len(parts) < 5 or "LISTENING" not in parts:
+                    continue
+                local_addr = parts[1]
+                if not local_addr.endswith(suffix):
                     continue
                 try:
                     pid_int = int(parts[-1])
                 except ValueError:
                     continue
+                if pid_int in seen_pids:
+                    continue
+                seen_pids.add(pid_int)
                 subprocess.run(
-                    ["taskkill", "/PID", str(pid_int), "/F"],
+                    ["taskkill", "/F", "/PID", str(pid_int)],
                     check=False,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )

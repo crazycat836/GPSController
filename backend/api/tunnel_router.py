@@ -3,15 +3,17 @@ import ipaddress
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import TypedDict
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from api._deps import get_device_manager
 from api._errors import ErrorCode, http_err, ios_unsupported_error, max_devices_error
 from config import MAX_DEVICES, REMOTE_PAIRING_PORT
 from context import ctx
 from services.wifi_discovery import resolve_hostname, scan_subnet_for_port
-from services.wifi_tunnel_service import _cleanup_wifi_connections, _tunnel
+from services.wifi_tunnel_service import cleanup_wifi_connections, tunnel
 
 router = APIRouter(prefix="/api/device", tags=["device"])
 
@@ -23,6 +25,20 @@ _tunnel_watchdog_task: "asyncio.Task | None" = None
 
 _tunnel_logger = logging.getLogger("wifi_tunnel")
 logger = logging.getLogger(__name__)
+
+
+class _RemotePairResources(TypedDict):
+    """Closeable handles opened during the iOS 17+ RemotePairing handshake.
+
+    Constructed with all four keys set to ``None`` and progressively
+    populated as each handshake step succeeds. Teardown reads each entry
+    back and closes whatever was opened, so a partial handshake still
+    cleans up.
+    """
+    proxy: object | None       # CoreDeviceTunnelProxy
+    tunnel_ctx: object | None  # async context manager from start_tcp_tunnel()
+    rsd: object | None         # RemoteServiceDiscoveryService
+    tunnel_svc: object | None  # CoreDeviceTunnelService
 
 
 @dataclass(frozen=True)
@@ -78,11 +94,6 @@ def _validate_local_ip(value: str) -> str:
     return str(addr)
 
 
-def _dm():
-    app_state = ctx.app_state
-    return app_state.device_manager
-
-
 # /wifi/connect (legacy direct-IP WiFi for iOS <17) removed in v0.1.49.
 
 
@@ -110,7 +121,7 @@ async def _perform_remote_pair_handshake(
     lockdown,
     udid: str,
     ios_version: str,
-    resources: dict,
+    resources: _RemotePairResources,
 ) -> bool:
     """Run the iOS 17+ RemotePairing handshake and return whether the pair
     record was regenerated.
@@ -185,7 +196,7 @@ async def _perform_remote_pair_handshake(
         )
 
 
-async def _close_remote_pair_resources(resources: dict) -> None:
+async def _close_remote_pair_resources(resources: _RemotePairResources) -> None:
     """Idempotently close every resource opened by the RemotePairing handshake.
 
     Safe to call when the handshake never started, succeeded fully, or failed
@@ -201,7 +212,7 @@ async def _close_remote_pair_resources(resources: dict) -> None:
     ):
         try:
             r = closer()
-            if hasattr(r, "__await__"):
+            if asyncio.iscoroutine(r):
                 await r
         except Exception as exc:
             _tunnel_logger.debug(
@@ -209,12 +220,13 @@ async def _close_remote_pair_resources(resources: dict) -> None:
                 exc.__class__.__name__, exc_info=True,
             )
     try:
-        if resources["proxy"] is not None:
+        proxy = resources["proxy"]
+        if proxy is not None:
             # CoreDeviceTunnelProxy.close() is a coroutine — mirror the
             # await-if-awaitable pattern used for the closers above so we
             # don't leak a "was never awaited" warning.
-            r = resources["proxy"].close()
-            if hasattr(r, "__await__"):
+            r = proxy.close()
+            if asyncio.iscoroutine(r):
                 await r
     except Exception as exc:
         _tunnel_logger.debug(
@@ -252,7 +264,7 @@ async def _select_usb_device() -> str:
 @router.get("/wifi/scan")
 async def wifi_scan():
     """Scan the local network for iOS devices."""
-    dm = _dm()
+    dm = get_device_manager()
     try:
         results = await dm.scan_wifi_devices()
         return results
@@ -276,7 +288,7 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
     """Connect to a device via an existing WiFi tunnel (RSD address/port)."""
     app_state = ctx.app_state
     from core.device_manager import UnsupportedIosVersionError
-    dm = _dm()
+    dm = get_device_manager()
     # Max MAX_DEVICES devices (group mode). connect_wifi_tunnel may reconnect an
     # existing udid; we can only cheaply check the pre-state here.
     if dm.connected_count >= MAX_DEVICES:
@@ -360,7 +372,12 @@ async def wifi_repair():
 
     remote_record_regenerated = False
     if major >= 17:
-        resources: dict = {"proxy": None, "tunnel_ctx": None, "rsd": None, "tunnel_svc": None}
+        resources: _RemotePairResources = {
+            "proxy": None,
+            "tunnel_ctx": None,
+            "rsd": None,
+            "tunnel_svc": None,
+        }
         try:
             remote_record_regenerated = await _perform_remote_pair_handshake(
                 lockdown, udid, ios_version, resources,
@@ -452,9 +469,9 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
     the tunnel before we tear down engines.
 
     *gen* is the tunnel epoch we were spawned to watch. Comparing the
-    live ``_tunnel.generation`` against this snapshot survives a
+    live ``tunnel.generation`` against this snapshot survives a
     stop + start cycle inside the grace window — the previous identity
-    check against ``_tunnel.task`` (which transiently goes None between
+    check against ``tunnel.task`` (which transiently goes None between
     ``stop()`` and the next ``start()``) would have torn down the
     brand-new tunnel's resources by mistake.
     """
@@ -471,11 +488,11 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
 
         # Task has ended. If a newer tunnel has already replaced ours,
         # this watchdog is stale — nothing to do.
-        if _tunnel.generation != gen:
+        if tunnel.generation != gen:
             _tunnel_logger.info(
                 "watchdog: generation mismatch (current=%d, expected=%d); "
                 "stale watchdog exiting without cleanup",
-                _tunnel.generation, gen,
+                tunnel.generation, gen,
             )
             return
 
@@ -488,18 +505,18 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
 
         await asyncio.sleep(5.0)
 
-        async with _tunnel.lock:
+        async with tunnel.lock:
             # Generation gate is the post-sleep authority. If anything
             # ran start() inside the grace window the epoch will have
             # moved on and we must not tear down the new tunnel — even
             # if our original task identity also happens to be None.
-            if _tunnel.generation != gen:
+            if tunnel.generation != gen:
                 _tunnel_logger.info(
                     "watchdog: generation mismatch after grace "
                     "(current=%d, expected=%d); bailing without cleanup",
-                    _tunnel.generation, gen,
+                    tunnel.generation, gen,
                 )
-                if _tunnel.is_running():
+                if tunnel.is_running():
                     try:
                         from services.ws_broadcaster import broadcast
                         await broadcast("tunnel_recovered", {})
@@ -509,9 +526,9 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
                             exc.__class__.__name__, exc_info=True,
                         )
                 return
-            await _cleanup_wifi_connections()
-            _tunnel.task = None
-            _tunnel.info = None
+            await cleanup_wifi_connections()
+            tunnel.task = None
+            tunnel.info = None
             try:
                 from services.ws_broadcaster import broadcast
                 await broadcast("tunnel_lost", {"reason": "task_exited"})
@@ -528,16 +545,16 @@ async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
     layer + bypasses dependency injection / middleware).
     """
     global _tunnel_watchdog_task
-    async with _tunnel.lock:
-        if _tunnel.is_running():
-            if _tunnel.info:
-                return {"status": "already_running", **_tunnel.info}
+    async with tunnel.lock:
+        if tunnel.is_running():
+            if tunnel.info:
+                return {"status": "already_running", **tunnel.info}
             return {"status": "already_running"}
 
         resolved_udid = req.udid
         if not resolved_udid:
             try:
-                conns = _dm().connected_udids
+                conns = get_device_manager().connected_udids
                 if conns:
                     resolved_udid = conns[0]
             except (RuntimeError, AttributeError) as exc:
@@ -554,7 +571,7 @@ async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
         )
 
         try:
-            info = await _tunnel.start(resolved_udid, req.ip, req.port, timeout=20.0)
+            info = await tunnel.start(resolved_udid, req.ip, req.port, timeout=20.0)
         except asyncio.TimeoutError:
             raise HTTPException(
                 status_code=500,
@@ -570,7 +587,7 @@ async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
         _tunnel_logger.info("WiFi tunnel started: %s", info)
         if _tunnel_watchdog_task is None or _tunnel_watchdog_task.done():
             _tunnel_watchdog_task = asyncio.create_task(
-                _tunnel_watchdog(_tunnel.task, _tunnel.generation)
+                _tunnel_watchdog(tunnel.task, tunnel.generation)
             )
         return {"status": "started", **info}
 
@@ -584,10 +601,10 @@ async def wifi_tunnel_start(req: WifiTunnelStartRequest):
 @router.get("/wifi/tunnel/status")
 async def wifi_tunnel_status():
     """Check if the WiFi tunnel is running."""
-    if not _tunnel.is_running():
-        _tunnel.info = None
+    if not tunnel.is_running():
+        tunnel.info = None
         return {"running": False}
-    return {"running": True, **(_tunnel.info or {})}
+    return {"running": True, **(tunnel.info or {})}
 
 
 def _cancel_watchdog() -> None:
@@ -657,16 +674,16 @@ async def wifi_tunnel_stop():
     """Stop the WiFi tunnel and clean up any network-based device
     connections that were routed through it."""
     app_state = ctx.app_state
-    dm = _dm()
+    dm = get_device_manager()
 
-    async with _tunnel.lock:
+    async with tunnel.lock:
         # Always disconnect Network devices first — even when the tunnel
         # isn't running we may still hold stale Network entries.
-        await _cleanup_wifi_connections()
+        await cleanup_wifi_connections()
 
-        if not _tunnel.is_running():
-            _tunnel.info = None
-            _tunnel.task = None
+        if not tunnel.is_running():
+            tunnel.info = None
+            tunnel.task = None
             return {"status": "not_running"}
 
         # Order matters: cancel the watchdog *before* tearing down the
@@ -675,12 +692,12 @@ async def wifi_tunnel_stop():
         # service/RSD/tunnel-ctx close).
         shutdown_steps: list[_TeardownStep] = [
             _TeardownStep("cancel_watchdog", _cancel_watchdog),
-            _TeardownStep("tunnel_stop", _tunnel.stop),
+            _TeardownStep("tunnel_stop", tunnel.stop),
         ]
         await _run_teardown_steps(shutdown_steps)
 
     # USB fallback runs outside the tunnel lock — it acquires its own
-    # device-manager locks and we don't want to hold _tunnel.lock across
+    # device-manager locks and we don't want to hold tunnel.lock across
     # a network/USB discovery + connect roundtrip.
     fallback_steps: list[_TeardownStep] = [
         _TeardownStep("usb_fallback", lambda: _attempt_usb_fallback(app_state, dm)),
@@ -708,7 +725,7 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
         raise http_err(500, ErrorCode.TUNNEL_NO_RSD, "Tunnel started but RSD info is missing")
 
     # Connect through the tunnel
-    dm = _dm()
+    dm = get_device_manager()
     if dm.connected_count >= MAX_DEVICES:
         raise max_devices_error()
     try:

@@ -1,4 +1,5 @@
 import React from 'react'
+import { devWarn } from '../lib/dev-log'
 
 interface ErrorBoundaryProps {
   children: React.ReactNode
@@ -32,8 +33,11 @@ export default class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    // eslint-disable-next-line no-console
-    console.error('[ErrorBoundary] Unhandled render error:', error, errorInfo)
+    // `devWarn` short-circuits in production builds; in DEV it routes to
+    // `console.warn` which is sufficient for surfacing render-time throws
+    // without lighting up the DevTools error overlay every time. The
+    // user-visible fallback UI still renders regardless.
+    devWarn('[ErrorBoundary] Unhandled render error:', error, errorInfo)
   }
 
   private handleRestart = (): void => {

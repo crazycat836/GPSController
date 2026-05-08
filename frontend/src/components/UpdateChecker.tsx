@@ -11,6 +11,41 @@ const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
 const COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const DISMISS_KEY = STORAGE_KEYS.updateDismissed;
 
+// How long to trust a cached check before re-hitting the GitHub API. The
+// release-poll endpoint has tight unauthenticated rate limits (60/h per
+// IP), so we don't want every component re-mount to burn quota — once
+// per hour is more than enough for an update prompt.
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const LAST_CHECK_KEY = STORAGE_KEYS.updateLastCheck;
+
+interface LastCheckCache {
+  /** Epoch ms when we last fetched the GitHub releases endpoint. */
+  at: number
+  /** The newest tag returned at `at`, or `null` when the user is up to date. */
+  latest: string | null
+}
+
+function readLastCheck(): LastCheckCache | null {
+  try {
+    const raw = localStorage.getItem(LAST_CHECK_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { at?: unknown; latest?: unknown };
+    if (typeof parsed.at !== 'number') return null;
+    if (parsed.latest !== null && typeof parsed.latest !== 'string') return null;
+    return { at: parsed.at, latest: parsed.latest };
+  } catch {
+    return null;
+  }
+}
+
+function writeLastCheck(latest: string | null): void {
+  try {
+    localStorage.setItem(LAST_CHECK_KEY, JSON.stringify({
+      at: Date.now(), latest,
+    } satisfies LastCheckCache));
+  } catch { /* storage disabled */ }
+}
+
 // Electron preload exposes an `openExternal` bridge so clicks on GitHub
 // links open in the system browser rather than the webview. Web builds
 // don't define it; fall back to the native `<a target="_blank">` nav.
@@ -68,6 +103,22 @@ export default function UpdateChecker() {
         }
       } catch { /* malformed cache — treat as not-dismissed */ }
 
+      // Reuse a recent check (incl. the "no update" outcome) instead of
+      // re-hitting the GitHub API on every component mount.
+      const cached = readLastCheck();
+      const hasFreshCache = cached !== null &&
+        Date.now() - cached.at < UPDATE_CHECK_INTERVAL_MS;
+      if (hasFreshCache) {
+        const tag = cached.latest;
+        if (cancelled) return;
+        if (!tag || !isNewer(tag, CURRENT)) return;
+        if (dismissedVersion && parseVer(tag).join('.') === parseVer(dismissedVersion).join('.')) {
+          return;
+        }
+        setLatest(tag);
+        return;
+      }
+
       try {
         const r = await fetch(API_URL, {
           headers: { Accept: 'application/vnd.github+json' },
@@ -75,6 +126,13 @@ export default function UpdateChecker() {
         if (!r.ok || cancelled) return;
         const data = await r.json();
         const tag: string | undefined = data?.tag_name;
+
+        // Persist whichever outcome we got — `null` for "user is on the
+        // latest version", or the tag string when there's an update — so
+        // the next mount inside the interval window short-circuits.
+        const cacheTag = tag && isNewer(tag, CURRENT) ? tag : null;
+        writeLastCheck(cacheTag);
+
         if (!tag || !isNewer(tag, CURRENT)) return;
 
         // Respect an in-cooldown dismissal for this exact version; a
@@ -85,7 +143,9 @@ export default function UpdateChecker() {
         }
         setLatest(tag);
       } catch {
-        // Offline / rate-limited / DNS — silent.
+        // Offline / rate-limited / DNS — silent. Don't update the cache so
+        // the next mount tries again rather than honouring a transient
+        // failure for the full interval.
       }
     })();
     return () => { cancelled = true; };

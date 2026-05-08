@@ -3,6 +3,11 @@ import type { LucideIcon } from 'lucide-react'
 import { useSimContext } from '../../../contexts/SimContext'
 import { MoveMode } from '../../../hooks/useSimulation'
 import { useT, type StringKey } from '../../../i18n'
+import {
+  SPEED_PRESETS as BASE_SPEED_PRESETS,
+  isSpeedPresetActive,
+  type SpeedPresetMode,
+} from '../../../lib/constants'
 
 interface SpeedPreset {
   mode: MoveMode
@@ -11,15 +16,20 @@ interface SpeedPreset {
   value: number
 }
 
-// Speed preset rail. Icons map to design's Walk / Run / Drive glyphs;
-// lucide's Footprints / Rabbit / Car are the closest analogues.
-// km/h values must match `SimContext.SPEED_MAP` and backend
-// `SPEED_PROFILES` (m/s equivalents 3.0 / 5.5 / 16.667).
-const SPEED_PRESETS: readonly SpeedPreset[] = [
-  { mode: MoveMode.Walking, Icon: Footprints, labelKey: 'move.walking', value: 10.8 },
-  { mode: MoveMode.Running, Icon: Rabbit,     labelKey: 'move.running', value: 19.8 },
-  { mode: MoveMode.Driving, Icon: Car,        labelKey: 'move.driving', value: 60 },
-]
+// Per-preset UI metadata layered on top of the canonical km/h presets in
+// `lib/constants`. Icons map to design's Walk / Run / Drive glyphs; lucide's
+// Footprints / Rabbit / Car are the closest analogues.
+const PRESET_UI: Record<SpeedPresetMode, { Icon: LucideIcon; labelKey: StringKey }> = {
+  walking: { Icon: Footprints, labelKey: 'move.walking' },
+  running: { Icon: Rabbit,     labelKey: 'move.running' },
+  driving: { Icon: Car,        labelKey: 'move.driving' },
+}
+
+const SPEED_PRESETS: readonly SpeedPreset[] = BASE_SPEED_PRESETS.map((p) => ({
+  mode: p.mode as MoveMode,
+  value: p.kmh,
+  ...PRESET_UI[p.mode],
+}))
 
 // Speed preset toggle group. A preset is "active" only when the live
 // move mode matches AND no custom/min/max override is set, so flipping
@@ -27,11 +37,6 @@ const SPEED_PRESETS: readonly SpeedPreset[] = [
 export default function SpeedToggle() {
   const t = useT()
   const { sim } = useSimContext()
-  const presetActive = (mode: MoveMode) =>
-    sim.moveMode === mode
-    && sim.customSpeedKmh == null
-    && sim.speedMinKmh == null
-    && sim.speedMaxKmh == null
 
   const onPreset = (mode: MoveMode) => {
     sim.setMoveMode(mode)
@@ -48,7 +53,7 @@ export default function SpeedToggle() {
       style={{ background: 'var(--color-surface-ghost)' }}
     >
       {SPEED_PRESETS.map(({ mode, Icon, labelKey, value }) => {
-        const on = presetActive(mode)
+        const on = isSpeedPresetActive(mode, sim)
         return (
           <button
             key={mode}

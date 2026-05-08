@@ -16,6 +16,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from config import BOOKMARKS_FILE
 from models.schemas import (
@@ -181,43 +182,112 @@ class BookmarkManager:
                 len(self.store.places),
                 len(self.store.tags),
             )
-            backfilled = self._ensure_presets()
+            new_places, new_tags, backfilled = self._ensure_presets()
+            if backfilled:
+                self.store = self.store.model_copy(update={
+                    "places": new_places,
+                    "tags": new_tags,
+                })
             if migrated or backfilled:
                 self._save()
         except Exception as exc:
             logger.warning("Bookmark payload failed schema validation: %s", exc)
 
-    def _ensure_presets(self) -> bool:
-        """Append any missing preset places/tags. Idempotent by id."""
+    def _ensure_presets(self) -> tuple[list[BookmarkPlace], list[BookmarkTag], bool]:
+        """Compute new places/tags lists with any missing presets appended.
+
+        Returns ``(new_places, new_tags, added)`` — when ``added`` is True
+        the caller should swap them onto ``self.store`` via ``model_copy``
+        and persist. Idempotent by id; existing entries are preserved.
+        """
         added = False
         now = _now_iso()
 
-        place_ids = {p.id for p in self.store.places}
+        new_places: list[BookmarkPlace] = list(self.store.places)
+        place_ids = {p.id for p in new_places}
         for pid, name, color, order in _PRESET_PLACES:
             if pid in place_ids:
                 continue
-            self.store.places.append(
+            new_places.append(
                 BookmarkPlace(id=pid, name=name, color=color, sort_order=order, created_at=now)
             )
             added = True
 
-        tag_ids = {t.id for t in self.store.tags}
+        new_tags: list[BookmarkTag] = list(self.store.tags)
+        tag_ids = {t.id for t in new_tags}
         for pid, name, color, order in _PRESET_TAGS:
             if pid in tag_ids:
                 continue
-            self.store.tags.append(
+            new_tags.append(
                 BookmarkTag(id=pid, name=name, color=color, sort_order=order, created_at=now)
             )
             added = True
 
         if added:
             logger.info("Backfilled missing preset places/tags")
-        return added
+        return new_places, new_tags, added
 
     def _save(self) -> None:
         """Persist the current store to disk atomically."""
         payload = json.loads(self.store.model_dump_json())
         safe_write_json(Path(BOOKMARKS_FILE), payload)
+
+    # ------------------------------------------------------------------
+    # Generic helpers (places / tags share the same shape)
+    # ------------------------------------------------------------------
+
+    def _update_item(
+        self,
+        items_attr_name: Literal["places", "tags"],
+        item_id: str,
+        **field_updates: object,
+    ) -> object | None:
+        """Find an item by id on ``self.store.<items_attr_name>``, apply
+        non-None ``field_updates`` via ``model_copy``, swap into the list,
+        and return the updated item (or the original when there were no
+        updates). Returns ``None`` if the item id was not found.
+
+        Generalises the find/copy/replace dance shared by ``update_place``
+        and ``update_tag``. Caller still owns locking + ``_save()``.
+        """
+        items = getattr(self.store, items_attr_name)
+        idx = next((i for i, x in enumerate(items) if x.id == item_id), None)
+        if idx is None:
+            return None
+        item = items[idx]
+        applied = {k: v for k, v in field_updates.items() if v is not None}
+        if not applied:
+            return item
+        new_item = item.model_copy(update=applied)
+        new_items = list(items)
+        new_items[idx] = new_item
+        setattr(self.store, items_attr_name, new_items)
+        return new_item
+
+    def _reorder_items(
+        self,
+        items_attr_name: Literal["places", "tags"],
+        ordered_ids: list[str],
+    ) -> int:
+        """Rewrite ``sort_order`` on ``self.store.<items_attr_name>`` to
+        match ``ordered_ids``. Unknown ids are ignored; entries not in
+        ``ordered_ids`` keep their current order. Returns the number of
+        items whose ``sort_order`` actually changed. Caller owns locking.
+        """
+        items = getattr(self.store, items_attr_name)
+        id_to_order = {iid: i for i, iid in enumerate(ordered_ids)}
+        changed = 0
+        new_items: list = []
+        for item in items:
+            new_order = id_to_order.get(item.id)
+            if new_order is None or item.sort_order == new_order:
+                new_items.append(item)
+                continue
+            new_items.append(item.model_copy(update={"sort_order": new_order}))
+            changed += 1
+        if changed:
+            setattr(self.store, items_attr_name, new_items)
+        return changed
 
     # ------------------------------------------------------------------
     # Places
@@ -244,21 +314,11 @@ class BookmarkManager:
         color: str | None = None,
     ) -> BookmarkPlace | None:
         async with self._lock:
-            place = self._find_place(place_id)
-            if place is None:
+            updated = self._update_item("places", place_id, name=name, color=color)
+            if updated is None:
                 return None
-            updates: dict[str, object] = {}
-            if name is not None:
-                updates["name"] = name
-            if color is not None:
-                updates["color"] = color
-            if updates:
-                new_place = place.model_copy(update=updates)
-                idx = self.store.places.index(place)
-                self.store.places[idx] = new_place
-                place = new_place
             self._save()
-            return place
+            return updated  # type: ignore[return-value]
 
     async def delete_place(self, place_id: str) -> bool:
         """Delete a place; bookmarks pointing at it fall back to *default*."""
@@ -285,18 +345,8 @@ class BookmarkManager:
         """Rewrite sort_order to match the given id sequence. Unknown ids are
         ignored. Returns number of places whose sort_order actually changed."""
         async with self._lock:
-            id_to_order = {pid: i for i, pid in enumerate(ordered_ids)}
-            changed = 0
-            new_places: list[BookmarkPlace] = []
-            for place in self.store.places:
-                new_order = id_to_order.get(place.id)
-                if new_order is None or place.sort_order == new_order:
-                    new_places.append(place)
-                    continue
-                new_places.append(place.model_copy(update={"sort_order": new_order}))
-                changed += 1
+            changed = self._reorder_items("places", ordered_ids)
             if changed:
-                self.store.places = new_places
                 self._save()
             return changed
 
@@ -328,21 +378,11 @@ class BookmarkManager:
         color: str | None = None,
     ) -> BookmarkTag | None:
         async with self._lock:
-            tag = self._find_tag(tag_id)
-            if tag is None:
+            updated = self._update_item("tags", tag_id, name=name, color=color)
+            if updated is None:
                 return None
-            updates: dict[str, object] = {}
-            if name is not None:
-                updates["name"] = name
-            if color is not None:
-                updates["color"] = color
-            if updates:
-                new_tag = tag.model_copy(update=updates)
-                idx = self.store.tags.index(tag)
-                self.store.tags[idx] = new_tag
-                tag = new_tag
             self._save()
-            return tag
+            return updated  # type: ignore[return-value]
 
     async def delete_tag(self, tag_id: str) -> bool:
         """Delete a tag. Also strips it from every bookmark's tags list."""
@@ -364,18 +404,8 @@ class BookmarkManager:
 
     async def reorder_tags(self, ordered_ids: list[str]) -> int:
         async with self._lock:
-            id_to_order = {tid: i for i, tid in enumerate(ordered_ids)}
-            changed = 0
-            new_tags: list[BookmarkTag] = []
-            for tag in self.store.tags:
-                new_order = id_to_order.get(tag.id)
-                if new_order is None or tag.sort_order == new_order:
-                    new_tags.append(tag)
-                    continue
-                new_tags.append(tag.model_copy(update={"sort_order": new_order}))
-                changed += 1
+            changed = self._reorder_items("tags", ordered_ids)
             if changed:
-                self.store.tags = new_tags
                 self._save()
             return changed
 

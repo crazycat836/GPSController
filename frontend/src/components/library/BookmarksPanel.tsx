@@ -13,6 +13,7 @@ import { copyToClipboard } from '../../lib/clipboard'
 import { type Chip } from '../ui/ChipFilterBar'
 import { type KebabMenuItem } from '../ui/KebabMenu'
 import EmptyState from '../ui/EmptyState'
+import SectionHeader from '../ui/SectionHeader'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import BookmarkEditDialog, { type BookmarkEditValues } from './BookmarkEditDialog'
 import PlaceManagerDialog, { getPlaceColor } from './PlaceManagerDialog'
@@ -194,29 +195,36 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   }, [])
 
   // ─── Mutations ──────────────────────────────────────
-  const handleCreate = useCallback((values: BookmarkEditValues) => {
-    void bm.createBookmark({
-      name: values.name,
-      lat: values.lat,
-      lng: values.lng,
-      place_id: values.placeId,
-      tags: values.tagIds,
-      note: values.note,
-    })
-    setEditing(null)
-  }, [bm])
+  const submitBookmark = useCallback(async (op: () => Promise<unknown>) => {
+    try {
+      await op()
+      setEditing(null)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.save_failed', { msg: message }))
+    }
+  }, [showToast, t])
 
-  const handleUpdate = useCallback((id: string, values: BookmarkEditValues) => {
-    void bm.updateBookmark(id, {
-      name: values.name,
-      lat: values.lat,
-      lng: values.lng,
-      place_id: values.placeId,
-      tags: values.tagIds,
-      note: values.note,
-    })
-    setEditing(null)
-  }, [bm])
+  const toBookmarkPayload = (values: BookmarkEditValues) => ({
+    name: values.name,
+    lat: values.lat,
+    lng: values.lng,
+    place_id: values.placeId,
+    tags: values.tagIds,
+    note: values.note,
+  })
+
+  const handleCreate = useCallback(
+    (values: BookmarkEditValues) =>
+      submitBookmark(() => bm.createBookmark(toBookmarkPayload(values))),
+    [bm, submitBookmark],
+  )
+
+  const handleUpdate = useCallback(
+    (id: string, values: BookmarkEditValues) =>
+      submitBookmark(() => bm.updateBookmark(id, toBookmarkPayload(values))),
+    [bm, submitBookmark],
+  )
 
   const handleCopy = useCallback(async (b: Bookmark) => {
     const text = `${b.name} ${b.lat.toFixed(6)}, ${b.lng.toFixed(6)}`
@@ -244,14 +252,18 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     setConfirm(null)
   }, [confirm, bm, exitSelection])
 
-  const commitInlineRename = useCallback((id: string) => {
+  const commitInlineRename = useCallback(async (id: string) => {
     const next = inlineEditName.trim()
     const current = bookmarks.find((b) => b.id === id)
-    if (next && current && next !== current.name) {
-      void bm.updateBookmark(id, { name: next })
-    }
     setInlineEditId(null)
-  }, [inlineEditName, bookmarks, bm])
+    if (!next || !current || next === current.name) return
+    try {
+      await bm.updateBookmark(id, { name: next })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('toast.rename_failed')
+      showToast(message)
+    }
+  }, [inlineEditName, bookmarks, bm, showToast, t])
 
   // ─── Header kebab items ─────────────────────────────
   const headerMenuItems: KebabMenuItem[] = useMemo(() => [
@@ -405,14 +417,14 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         <div className="flex flex-col gap-4">
           {sections.map((section) => (
             <div key={section.id} className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between px-1 pt-1">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-3)]">
-                  {section.label}
-                </span>
-                <span className="font-mono text-[10px] text-[var(--color-text-3)] opacity-70">
-                  {section.list.length}
-                </span>
-              </div>
+              <SectionHeader
+                title={section.label}
+                right={
+                  <span className="font-mono text-[10px] text-[var(--color-text-3)] opacity-70">
+                    {section.list.length}
+                  </span>
+                }
+              />
               {section.list.map((b) => renderBookmarkRow(b))}
             </div>
           ))}
@@ -424,42 +436,36 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       )}
 
       {/* Edit dialog (create + edit share one component) */}
-      {editing && (
-        editing.mode === 'create' ? (
-          <BookmarkEditDialog
-            open
-            mode="create"
-            currentPosition={currentPosition}
-            places={places}
-            tags={tags}
-            onClose={() => setEditing(null)}
-            onSubmit={handleCreate}
-          />
-        ) : editing.bookmark ? (
-          (() => {
-            const bk = editing.bookmark
-            return (
-              <BookmarkEditDialog
-                open
-                mode="edit"
-                currentPosition={currentPosition}
-                places={places}
-                tags={tags}
-                initial={{
-                  id: bk.id,
-                  name: bk.name,
-                  lat: bk.lat,
-                  lng: bk.lng,
-                  placeId: bk.place_id || places[0]?.id || 'default',
-                  tagIds: [...(bk.tags ?? [])],
-                  note: bk.note,
-                }}
-                onClose={() => setEditing(null)}
-                onSubmit={(values) => handleUpdate(bk.id, values)}
-              />
-            )
-          })()
-        ) : null
+      {editing?.mode === 'create' && (
+        <BookmarkEditDialog
+          open
+          mode="create"
+          currentPosition={currentPosition}
+          places={places}
+          tags={tags}
+          onClose={() => setEditing(null)}
+          onSubmit={handleCreate}
+        />
+      )}
+      {editing?.mode === 'edit' && editing.bookmark && (
+        <BookmarkEditDialog
+          open
+          mode="edit"
+          currentPosition={currentPosition}
+          places={places}
+          tags={tags}
+          initial={{
+            id: editing.bookmark.id,
+            name: editing.bookmark.name,
+            lat: editing.bookmark.lat,
+            lng: editing.bookmark.lng,
+            placeId: editing.bookmark.place_id || places[0]?.id || 'default',
+            tagIds: [...(editing.bookmark.tags ?? [])],
+            note: editing.bookmark.note,
+          }}
+          onClose={() => setEditing(null)}
+          onSubmit={(values) => handleUpdate(editing.bookmark!.id, values)}
+        />
       )}
 
       <PlaceManagerDialog

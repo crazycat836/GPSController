@@ -265,11 +265,11 @@ export const STRINGS = {
 
   // ── Toast / errors ───────────────────────────
   'toast.route_saved': { zh: '已儲存路線「{name}」', en: 'Route "{name}" saved' },
-  'toast.route_save_failed': { zh: '儲存失敗: {msg}', en: 'Save failed: {msg}' },
+  'toast.save_failed': { zh: '儲存失敗: {msg}', en: 'Save failed: {msg}' },
   'toast.route_need_waypoint': { zh: '請先加入至少一個路徑點', en: 'Add at least one waypoint first' },
   'toast.route_deleted': { zh: '已刪除路線', en: 'Route deleted' },
   'toast.route_delete_failed': { zh: '刪除失敗', en: 'Delete failed' },
-  'toast.route_rename_failed': { zh: '重新命名失敗', en: 'Rename failed' },
+  'toast.rename_failed': { zh: '重新命名失敗', en: 'Rename failed' },
   'toast.gpx_imported': { zh: '已匯入 {n} 個路徑點', en: 'Imported {n} waypoints' },
   'toast.gpx_import_failed': { zh: '匯入失敗: {msg}', en: 'Import failed: {msg}' },
   'toast.export_failed': { zh: '匯出失敗: {msg}', en: 'Export failed: {msg}' },

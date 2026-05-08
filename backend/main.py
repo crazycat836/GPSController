@@ -25,7 +25,7 @@ from config import (
     MAX_DEVICES,
     ensure_data_dir,
 )
-from logging_config import setup_logging, uvicorn_log_config
+from logging_config import UVICORN_LOG_CONFIG, setup_logging
 from state import AppState
 from version import __version__
 
@@ -72,14 +72,24 @@ _AUTH_EXEMPT_PATHS = frozenset({
 
 
 def _write_token_file(token: str) -> None:
-    """Write the session token to ~/.gpscontroller/token, mode 0600."""
-    TOKEN_FILE.write_text(token, encoding="utf-8")
+    """Write the session token to ~/.gpscontroller/token with mode 0600.
+
+    Using ``Path.write_text`` followed by ``os.chmod`` opens a race window
+    where the token sits at the default umask (typically 0o644) and is
+    world-readable for the duration of the chmod. ``os.open`` with the
+    mode supplied up-front lets the kernel apply 0o600 atomically before
+    any data lands. Windows ignores the mode bits and relies on user-
+    profile ACLs to keep the file private.
+    """
+    fd = os.open(
+        str(TOKEN_FILE),
+        os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+        0o600,
+    )
     try:
-        os.chmod(TOKEN_FILE, 0o600)
-    except OSError:
-        # Windows does not honour chmod in the POSIX sense; ACLs on
-        # the user profile directory still prevent cross-user reads.
-        pass
+        os.write(fd, token.encode("utf-8"))
+    finally:
+        os.close(fd)
 
 
 app_state = AppState()
@@ -206,6 +216,12 @@ async def lifespan(application: FastAPI):
 
 # ── FastAPI app ───────────────────────────────────────────
 
+# Only expose the interactive docs / OpenAPI schema in dev mode (when the
+# session token is disabled via GPSCONTROLLER_DEV_NOAUTH=1). In packaged
+# production runs the docs surface would let any local listener enumerate
+# every API path — there's no benefit to advertising it once auth is on.
+_DOCS_ENABLED = _is_auth_disabled()
+
 app = FastAPI(
     title="GPSController",
     version=__version__,
@@ -216,6 +232,9 @@ app = FastAPI(
     # return a Response(content=bytes, ...) bypass this so binary payloads
     # remain unwrapped.
     default_response_class=EnvelopeJSONResponse,
+    docs_url="/docs" if _DOCS_ENABLED else None,
+    redoc_url="/redoc" if _DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if _DOCS_ENABLED else None,
 )
 
 # Convert HTTPException + 422 RequestValidationError into the same
@@ -238,7 +257,10 @@ app.add_middleware(
     ],
     allow_credentials=False,
     allow_methods=["*"],
-    allow_headers=["*"],
+    # Only the headers the renderer actually sends. The bearer token rides
+    # in X-GPS-Token; JSON bodies need Content-Type. A wildcard would let
+    # any same-origin browser tab probe arbitrary headers through CORS.
+    allow_headers=["X-GPS-Token", "Content-Type"],
 )
 
 
@@ -305,13 +327,10 @@ async def root():
 
 
 if __name__ == "__main__":
-    # Custom log config: keep Uvicorn's colored output but unify the format.
-    # The dict + formatter classes both live in `logging_config`; absolute
-    # module references inside it survive being launched as `__main__`.
     uvicorn.run(
         "main:app",
         host=API_HOST,
         port=API_PORT,
         reload=False,
-        log_config=uvicorn_log_config(),
+        log_config=UVICORN_LOG_CONFIG,
     )

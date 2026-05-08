@@ -1,6 +1,6 @@
 """Unit tests for the WiFi tunnel liveness probe.
 
-Mocks ``_tcp_probe``, ``_cleanup_wifi_connections``, ``_tunnel``, and
+Mocks ``_tcp_probe``, ``cleanup_wifi_connections``, ``tunnel``, and
 ``ctx.app_state.device_manager`` so the loop can run end-to-end without
 pymobiledevice3 / a real iOS device.
 
@@ -28,7 +28,7 @@ from core import tunnel_liveness  # noqa: E402
 def _make_fake_tunnel(*, running: bool = True, generation: int = 1,
                       info: dict | None = None):
     """Build a SimpleNamespace that quacks like ``TunnelRunner`` enough for
-    the probe loop. Provides an asyncio.Lock so ``async with _tunnel.lock``
+    the probe loop. Provides an asyncio.Lock so ``async with tunnel.lock``
     works, and the same fields the loop reads from ``info``."""
     return SimpleNamespace(
         lock=asyncio.Lock(),
@@ -50,12 +50,12 @@ def _patch_loop_deps(monkeypatch, *, tunnel, network_udids: list[str],
     last value once exhausted (so an "always-fail" test can pass `[False]`).
     Returns (cleanup_mock, probe_call_counter).
     """
-    from api import wifi_tunnel as wt
     from context import ctx
+    from services import wifi_tunnel_service as wt
 
     cleanup = AsyncMock(return_value=list(network_udids))
-    monkeypatch.setattr(wt, "_tunnel", tunnel, raising=True)
-    monkeypatch.setattr(wt, "_cleanup_wifi_connections", cleanup, raising=True)
+    monkeypatch.setattr(wt, "tunnel", tunnel, raising=True)
+    monkeypatch.setattr(wt, "cleanup_wifi_connections", cleanup, raising=True)
 
     call_idx = {"n": 0}
 
@@ -175,13 +175,13 @@ def test_generation_change_aborts_cleanup(monkeypatch):
     snapshot at the top of the iteration and the cleanup re-check at the
     bottom — the exact race window the generation guard exists to defend.
     """
-    from api import wifi_tunnel as wt
     from context import ctx
+    from services import wifi_tunnel_service as wt
 
     tunnel = _make_fake_tunnel(generation=7)
     cleanup = AsyncMock(return_value=["udid-A"])
-    monkeypatch.setattr(wt, "_tunnel", tunnel, raising=True)
-    monkeypatch.setattr(wt, "_cleanup_wifi_connections", cleanup, raising=True)
+    monkeypatch.setattr(wt, "tunnel", tunnel, raising=True)
+    monkeypatch.setattr(wt, "cleanup_wifi_connections", cleanup, raising=True)
 
     call_count = {"n": 0}
 

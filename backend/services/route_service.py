@@ -9,6 +9,7 @@ import time
 import httpx
 
 from config import OSRM_BASE_URL, SPEED_PROFILES
+from services.http_client import make_async_client_singleton
 from utils.geo import haversine_m
 
 logger = logging.getLogger(__name__)
@@ -30,35 +31,24 @@ _TIMEOUT = httpx.Timeout(8.0, connect=4.0)
 # Lifespan-scoped HTTP client. Reusing the connection pool avoids the
 # TCP+TLS handshake on every OSRM call — multi-stop with 10+ legs would
 # otherwise pay it once per leg. Closed on FastAPI shutdown.
-_client: httpx.AsyncClient | None = None
-_client_lock = asyncio.Lock()
-
-
-async def _get_client() -> httpx.AsyncClient:
-    global _client
-    if _client is None:
-        async with _client_lock:
-            if _client is None:
-                _client = httpx.AsyncClient(timeout=_TIMEOUT)
-    return _client
-
-
-async def close_client() -> None:
-    """Release the shared HTTP client. Called from the FastAPI lifespan."""
-    global _client
-    if _client is not None:
-        try:
-            await _client.aclose()
-        finally:
-            _client = None
+_get_client, close_client = make_async_client_singleton(_TIMEOUT)
 
 
 def _straight_line_fallback(
     waypoints: list[tuple[float, float]],
-    walking_speed_mps: float = SPEED_PROFILES["walking"]["speed_mps"],
+    walking_speed_mps: float | None = None,
 ) -> dict:
     """Construct a straight-line route as a last resort when OSRM is unreachable.
-    Densifies each segment so the interpolator has enough sample points."""
+    Densifies each segment so the interpolator has enough sample points.
+
+    ``walking_speed_mps=None`` resolves to ``SPEED_PROFILES["walking"]
+    ["speed_mps"]`` at call time. Resolving inside the body (rather than
+    in the default expression) keeps the function decoupled from
+    import-time evaluation order — the speed profile is read fresh on
+    every call, so test overrides and config reloads take effect.
+    """
+    if walking_speed_mps is None:
+        walking_speed_mps = SPEED_PROFILES["walking"]["speed_mps"]
     coords: list[list[float]] = [[waypoints[0][0], waypoints[0][1]]]
     total_distance = 0.0
     leg_durations: list[float] = []
@@ -182,7 +172,14 @@ class RouteService:
         waypoints: list[tuple[float, float]],
         profile: str,
     ) -> dict:
-        osrm_profile = _PROFILE_MAP.get(profile, profile)
+        # Strict allowlist: an unknown profile must not be forwarded as a raw
+        # path segment to OSRM. Bubble a ValueError so the FastAPI handler
+        # surfaces it as a 4xx (the /plan endpoint validates with a Literal
+        # type at the boundary, so this is defence-in-depth for direct
+        # callers like SimulationEngine).
+        osrm_profile = _PROFILE_MAP.get(profile)
+        if osrm_profile is None:
+            raise ValueError(f"Unknown profile: {profile!r}")
 
         # OSRM coordinate pairs are lon,lat (not lat,lon)
         coords_str = ";".join(

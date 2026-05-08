@@ -25,7 +25,11 @@ from pathlib import Path
 import uvicorn
 
 
-_LOG_FMT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+_LOG_PREFIX_FMT = "%(asctime)s %(levelname)s %(name)s:"
+_LOG_FMT = f"{_LOG_PREFIX_FMT} %(message)s"
+_UVICORN_ACCESS_FMT = (
+    f'{_LOG_PREFIX_FMT} %(client_addr)s - "%(request_line)s" %(status_code)s'
+)
 _LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
 _FILE_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
 _FILE_BACKUP_COUNT = 3
@@ -105,51 +109,43 @@ class _AccessNoiseFilter(logging.Filter):
         return not any(p in msg for p in _ACCESS_NOISE_PATHS)
 
 
-def uvicorn_log_config() -> dict:
-    """Build the dictConfig uvicorn consumes via ``log_config=`` so its
-    own logger output matches our format and color scheme.
-
-    The class paths under ``"()"`` are absolute module references —
-    when main.py is launched as ``__main__`` Python's logging.config
-    can't resolve a bare ``__main__.<class>`` after a refactor that
-    moved the formatter classes out, so we always point at this
-    module by name.
-    """
-    return {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "default": {
-                "()": f"{__name__}._UvicornDefaultFormatter",
-                "fmt": _LOG_FMT,
-                "datefmt": _LOG_DATEFMT,
-                "use_colors": True,
-            },
-            "access": {
-                "()": f"{__name__}._UvicornAccessFormatter",
-                "fmt": '%(asctime)s %(levelname)s %(name)s: %(client_addr)s - "%(request_line)s" %(status_code)s',
-                "datefmt": _LOG_DATEFMT,
-                "use_colors": True,
-            },
+# `"()"` uses absolute module references so they survive main.py being
+# launched as `__main__` (a bare `__main__.<class>` won't resolve here).
+UVICORN_LOG_CONFIG: dict = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "()": f"{__name__}._UvicornDefaultFormatter",
+            "fmt": _LOG_FMT,
+            "datefmt": _LOG_DATEFMT,
+            "use_colors": True,
         },
-        "handlers": {
-            "default": {
-                "formatter": "default",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stderr",
-            },
-            "access": {
-                "formatter": "access",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stdout",
-            },
+        "access": {
+            "()": f"{__name__}._UvicornAccessFormatter",
+            "fmt": _UVICORN_ACCESS_FMT,
+            "datefmt": _LOG_DATEFMT,
+            "use_colors": True,
         },
-        "loggers": {
-            "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
-            "uvicorn.error": {"level": "INFO"},
-            "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+    },
+    "handlers": {
+        "default": {
+            "formatter": "default",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stderr",
         },
-    }
+        "access": {
+            "formatter": "access",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+        },
+    },
+    "loggers": {
+        "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.error": {"level": "INFO"},
+        "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+    },
+}
 
 
 def setup_logging(log_dir: Path) -> logging.Logger:

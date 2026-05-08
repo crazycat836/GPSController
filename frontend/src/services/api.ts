@@ -11,6 +11,7 @@ import { devWarn } from '../lib/dev-log'
 import { STRINGS } from '../i18n/strings'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../hooks/useBookmarks'
 import type { DeviceInfo } from '../hooks/useDevice'
+import type { LatLng } from '../hooks/sim/types'
 
 // ─── Shared response shapes ─────────────────────────────────
 
@@ -477,7 +478,6 @@ export const applySpeed = (mode: string, opts: SpeedOpts, udid?: string) =>
   })
 
 // Routes
-interface LatLng { lat: number; lng: number }
 export interface RoutePlanResponse {
   coordinates: LatLng[]
   distance_m?: number

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Search, MapPin } from 'lucide-react'
 import { searchAddress } from '../../services/api'
 import { useT } from '../../i18n'
+import { useOutsideClick } from '../../hooks/useOutsideClick'
 
 const COORD_RE = /^(-?\d+(?:\.\d+)?)[\s,]+(-?\d+(?:\.\d+)?)$/
 
@@ -94,16 +95,10 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  // Close dropdown on outside click. Standardised on `pointerdown` via the
+  // shared hook so dismissal also fires for touch and pen input.
+  const closeDropdown = useCallback(() => setOpen(false), [])
+  useOutsideClick(containerRef, closeDropdown, open)
 
   // Cleanup debounce
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])

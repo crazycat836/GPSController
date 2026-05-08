@@ -9,6 +9,7 @@ export const STORAGE_KEYS = {
   pauseLoop: 'gpscontroller.pause.loop',
   pauseRandomWalk: 'gpscontroller.pause.random_walk',
   updateDismissed: 'gpscontroller.update_check.dismissed',
+  updateLastCheck: 'gpscontroller.update_check.last_check',
   avatarSelection: 'gpscontroller.avatar_selection',
   avatarCustom: 'gpscontroller.avatar_custom',
 } as const

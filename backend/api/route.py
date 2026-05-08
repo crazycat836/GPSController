@@ -31,6 +31,18 @@ gpx_service = GpxService()
 # accidental directory export or a DoS payload.
 _MAX_GPX_BYTES = 10 * 1024 * 1024
 
+# Accepted Content-Type values for GPX uploads. Browsers and `curl -F`
+# usually send "application/gpx+xml" or "application/xml"; some legacy
+# clients emit "text/xml" and many browsers fall back to
+# "application/octet-stream" when they can't infer a MIME from the
+# extension. Anything outside this set is rejected before parsing.
+_GPX_ALLOWED_CONTENT_TYPES = frozenset({
+    "application/gpx+xml",
+    "application/xml",
+    "text/xml",
+    "application/octet-stream",
+})
+
 
 # Single store instance for the process. The class owns the dict + lock +
 # persist cycle so the route handlers stay thin.
@@ -97,6 +109,31 @@ async def import_all_saved_routes(body: _RouteImportBody):
 
 @router.post("/gpx/import")
 async def import_gpx(file: UploadFile = File(...)):
+    # Content-Type guard. Cheapest reject: do this before any read so a
+    # bogus binary upload (a JPG renamed to .gpx, a malicious payload
+    # mislabelled as some other type) never reaches gpxpy.
+    content_type = (file.content_type or "").lower().split(";", 1)[0].strip()
+    if content_type and content_type not in _GPX_ALLOWED_CONTENT_TYPES:
+        raise http_err(400, ErrorCode.GPX_DECODE_FAILED, f"Unsupported content-type: {content_type!r}")
+
+    # Filename extension guard. Defence-in-depth alongside the MIME
+    # check — clients can spoof either, but spoofing both is rarer and
+    # almost certainly intentional. Empty filename means "browser didn't
+    # send one"; we accept and rely on MIME + content parsing.
+    filename = (file.filename or "").lower()
+    if filename and not filename.endswith(".gpx"):
+        raise http_err(400, ErrorCode.GPX_DECODE_FAILED, "Filename must end in .gpx")
+
+    # NOTE on XXE / billion-laughs: gpxpy uses xml.etree.ElementTree
+    # internally, which is vulnerable to entity-expansion attacks in
+    # principle. The hardened alternative is `defusedxml`, but it isn't
+    # in requirements.txt and adding it just for this one endpoint isn't
+    # justified for a single-user desktop app. The 10 MiB byte cap below
+    # bounds the worst case — even a maliciously expanded payload can't
+    # exceed that, and gpxpy's own parser short-circuits on
+    # malformed XML before doing meaningful expansion. Revisit if this
+    # endpoint is ever exposed to untrusted multi-tenant traffic.
+
     # Reject oversized uploads before `await file.read()` loads the whole
     # body into memory. `file.size` is populated when the client sent a
     # Content-Length; fall back to a bounded-chunk read otherwise.

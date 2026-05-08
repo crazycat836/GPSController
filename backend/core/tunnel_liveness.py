@@ -9,7 +9,7 @@ the frontend keeps showing the device as "connected" indefinitely because
 
 The probe is poll-driven; the existing watchdog stays event-driven. They
 co-exist safely because the cleanup helper they share
-(``_cleanup_wifi_connections``) is idempotent on an empty UDID list.
+(``cleanup_wifi_connections``) is idempotent on an empty UDID list.
 """
 
 import asyncio
@@ -31,14 +31,14 @@ async def tunnel_liveness_loop(stop: asyncio.Event) -> None:
     Tears down WiFi connections + the tunnel itself once the endpoint has
     been unreachable for ``MISS_THRESHOLD * PROBE_INTERVAL_S`` seconds.
     Safe to run concurrently with ``_tunnel_watchdog`` — both ultimately
-    route through ``_cleanup_wifi_connections``, which short-circuits when
+    route through ``cleanup_wifi_connections``, which short-circuits when
     there are no Network devices left to disconnect.
     """
     from context import ctx
     from services.wifi_tunnel_service import (
-        _cleanup_wifi_connections,
         _tcp_probe,
-        _tunnel,
+        cleanup_wifi_connections,
+        tunnel,
     )
 
     miss_count = 0
@@ -62,13 +62,13 @@ async def tunnel_liveness_loop(stop: asyncio.Event) -> None:
             # Snapshot tunnel state under lock — `info` and `generation` must
             # be read together so the post-probe generation check below
             # compares against the same epoch we probed.
-            async with _tunnel.lock:
-                if not _tunnel.is_running() or _tunnel.info is None:
+            async with tunnel.lock:
+                if not tunnel.is_running() or tunnel.info is None:
                     miss_count = 0
                     continue
-                gen = _tunnel.generation
-                rsd_address = _tunnel.info.get("rsd_address")
-                rsd_port = _tunnel.info.get("rsd_port")
+                gen = tunnel.generation
+                rsd_address = tunnel.info.get("rsd_address")
+                rsd_port = tunnel.info.get("rsd_port")
 
             if not rsd_address or not rsd_port:
                 miss_count = 0
@@ -105,12 +105,12 @@ async def tunnel_liveness_loop(stop: asyncio.Event) -> None:
             # stop()/start() cycle inside the probe window bumps generation;
             # in that case the new tunnel owns its own future and we must
             # not tear it down based on the old tunnel's misses.
-            async with _tunnel.lock:
-                if _tunnel.generation != gen:
+            async with tunnel.lock:
+                if tunnel.generation != gen:
                     logger.info(
                         "Liveness threshold reached but tunnel generation moved "
                         "(seen=%d, current=%d) — yielding to new tunnel",
-                        gen, _tunnel.generation,
+                        gen, tunnel.generation,
                     )
                     miss_count = 0
                     continue
@@ -120,11 +120,11 @@ async def tunnel_liveness_loop(stop: asyncio.Event) -> None:
                 PROBE_INTERVAL_S * MISS_THRESHOLD,
             )
             try:
-                await _cleanup_wifi_connections(reason="tunnel_lost_liveness")
+                await cleanup_wifi_connections(reason="tunnel_lost_liveness")
             except Exception:
                 logger.exception("Liveness cleanup failed")
             try:
-                await _tunnel.stop()
+                await tunnel.stop()
             except Exception:
                 logger.exception("Liveness tunnel.stop failed")
             miss_count = 0

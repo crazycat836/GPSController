@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -162,10 +164,24 @@ class SimulationStatus(BaseModel):
 
 
 # ── Route ─────────────────────────────────────────────────
+# Profile values must mirror _PROFILE_MAP keys in services/route_service.py
+# exactly. The Literal puts the allowlist at the API boundary so an unknown
+# profile is rejected with a structured 422 before it ever reaches OSRM.
+RouteProfile = Literal[
+    "walking",
+    "running",
+    "driving",
+    "foot",
+    "car",
+    "bike",
+    "bicycle",
+]
+
+
 class RoutePlanRequest(BaseModel):
     start: Coordinate
     end: Coordinate
-    profile: str = "foot"
+    profile: RouteProfile = "foot"
 
 
 class SavedRoute(BaseModel):

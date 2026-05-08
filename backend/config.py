@@ -1,4 +1,5 @@
 import os
+import random
 from pathlib import Path
 from typing import TypedDict
 
@@ -66,7 +67,6 @@ def resolve_speed_profile(
 ) -> SpeedProfile:
     """Return a speed profile, picking a random km/h from the range if provided.
     Precedence: range > fixed custom > mode default."""
-    import random
     if speed_min_kmh is not None and speed_max_kmh is not None:
         lo, hi = sorted((float(speed_min_kmh), float(speed_max_kmh)))
         if lo <= 0:
@@ -139,3 +139,8 @@ API_PORT = 8777
 # usbmux watchdog all enforce this ceiling so the simulation engine pool
 # never exceeds the supported size.
 MAX_DEVICES = 2
+
+# AppState throttles disk writes for the high-frequency position_update
+# event stream (~10 Hz during navigation) — persists at most once every
+# this many seconds so the JSON file isn't rewritten on every tick.
+STATE_SAVE_INTERVAL_SEC = 2.0

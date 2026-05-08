@@ -4,13 +4,13 @@ Hosts the cross-layer state and helpers the WiFi tunnel needs from
 business logic (``core/tunnel_liveness``) without that layer having to
 reach back up into ``api/``:
 
-  - ``_tunnel`` — process-wide :class:`TunnelRunner` singleton. The
-    :mod:`api.wifi_tunnel` router and the liveness watcher both serialise
+  - ``tunnel`` — process-wide :class:`TunnelRunner` singleton. The
+    :mod:`api.tunnel_router` router and the liveness watcher both serialise
     against the same instance via its internal lock.
   - ``_tcp_probe`` — single-port TCP reachability probe used both by the
     /24 subnet scan and by ``tunnel_liveness`` to confirm the RSD is
     still answering.
-  - ``_cleanup_wifi_connections`` — drop every Network-mode device,
+  - ``cleanup_wifi_connections`` — drop every Network-mode device,
     terminate its engine, and emit ``device_disconnected`` so the UI
     re-renders before the next user action errors out.
 
@@ -32,7 +32,7 @@ logger = logging.getLogger("wifi_tunnel")
 
 # Process-wide tunnel runner. Serialised by its own asyncio.Lock so
 # concurrent /start or /stop requests never race.
-_tunnel = TunnelRunner()
+tunnel = TunnelRunner()
 
 
 async def _tcp_probe(ip: str, port: int, timeout: float = 0.4) -> bool:
@@ -60,7 +60,7 @@ async def _tcp_probe(ip: str, port: int, timeout: float = 0.4) -> bool:
         return False
 
 
-async def _cleanup_wifi_connections(reason: str = "wifi_tunnel_stopped") -> list[str]:
+async def cleanup_wifi_connections(reason: str = "wifi_tunnel_stopped") -> list[str]:
     """Disconnect any Network devices + drop the simulation engine.
 
     Broadcasts ``device_disconnected`` so the frontend banners/disables

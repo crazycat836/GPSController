@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from api._deps import get_device_manager
 from api._errors import ErrorCode, http_err, ios_unsupported_error, max_devices_error
 from services.ws_broadcaster import broadcast
 from config import MAX_DEVICES
@@ -20,14 +21,9 @@ router = APIRouter(prefix="/api/device", tags=["device"])
 logger = logging.getLogger(__name__)
 
 
-def _dm():
-    app_state = ctx.app_state
-    return app_state.device_manager
-
-
 @router.get("/list", response_model=list[DeviceInfo])
 async def list_devices():
-    dm = _dm()
+    dm = get_device_manager()
     return await dm.discover_devices()
 
 
@@ -37,7 +33,7 @@ async def list_devices():
 @router.post("/{udid}/connect")
 async def connect_device(udid: str):
     app_state = ctx.app_state
-    dm = _dm()
+    dm = get_device_manager()
     # User-initiated connect is the canonical "I want this device on"
     # signal — clear any prior auto-reconnect block for this UDID.
     app_state.unblock_auto_reconnect(udid)
@@ -82,7 +78,7 @@ async def reset_auto_reconnect_blocks():
 @router.delete("/{udid}/connect")
 async def disconnect_device(udid: str):
     app_state = ctx.app_state
-    dm = _dm()
+    dm = get_device_manager()
     # Block auto-reconnect: the watchdog must not reverse the user's
     # explicit Disconnect. Cleared on user Connect, on frontend boot,
     # or on backend restart (in-memory only).
@@ -125,7 +121,7 @@ async def forget_device(udid: str):
     time it's plugged in via USB.
     """
     app_state = ctx.app_state
-    dm = _dm()
+    dm = get_device_manager()
 
     conn = dm.get_connection(udid)
     if conn is not None:
@@ -203,7 +199,7 @@ async def forget_device(udid: str):
 
 @router.get("/{udid}/info", response_model=DeviceInfo | None)
 async def device_info(udid: str):
-    dm = _dm()
+    dm = get_device_manager()
     devices = await dm.discover_devices()
     for d in devices:
         if d.udid == udid:
@@ -221,7 +217,7 @@ async def device_info(udid: str):
 # Mode toggle appear" question entirely.
 @router.post("/{udid}/amfi/reveal-developer-mode")
 async def amfi_reveal_developer_mode(udid: str):
-    dm = _dm()
+    dm = get_device_manager()
     # AMFI reads several fields off the live Connection (ios_version,
     # connection_type) via the public ConnectionInfo accessor.
     conn = dm.get_connection(udid)

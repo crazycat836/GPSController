@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useSimContext } from '../../contexts/SimContext'
+import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
 import { pickFile } from '../../lib/fileIo'
@@ -21,6 +22,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   const t = useT()
   const bm = useBookmarkContext()
   const sim = useSimContext()
+  const { showToast } = useToastContext()
 
   const savedRoutes = bm.savedRoutes
   const waypointsCount = sim.sim.waypoints.length
@@ -31,12 +33,17 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   const [confirmDelete, setConfirmDelete] = useState<SavedRoute | null>(null)
 
   // ─── Actions ────────────────────────────────────────────────
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     const name = routeName.trim()
     if (!name || waypointsCount === 0) return
-    void bm.handleRouteSave(name, sim.sim.waypoints, sim.sim.moveMode)
     setRouteName('')
-  }, [routeName, waypointsCount, bm, sim])
+    try {
+      await bm.handleRouteSave(name, sim.sim.waypoints, sim.sim.moveMode)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.save_failed', { msg: message }))
+    }
+  }, [routeName, waypointsCount, bm, sim, showToast, t])
 
   const handleLoad = useCallback((id: string) => {
     const waypoints = bm.handleRouteLoad(id)

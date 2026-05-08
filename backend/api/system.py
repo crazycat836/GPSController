@@ -9,9 +9,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
-from api._errors import ErrorCode
+from api._errors import ErrorCode, http_err
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -59,10 +59,12 @@ async def open_log():
         target = log_dir
     try:
         _open_native(target)
-    except Exception as exc:
+    except Exception:
+        # Log the underlying error server-side so support has the trace,
+        # but never reflect raw exception text back to the client — paths
+        # and platform-specific messages can leak filesystem layout.
         logger.exception("Failed to open log path %s", target)
-        raise HTTPException(status_code=500, detail={"code": ErrorCode.OPEN_LOG_FAILED.value,
-                                                     "message": f"Could not open log: {exc}"})
+        raise http_err(500, ErrorCode.OPEN_LOG_FAILED, "Could not open log file")
     return {"status": "opened", "path": str(target)}
 
 
@@ -73,8 +75,9 @@ async def open_log_folder():
     log_dir.mkdir(parents=True, exist_ok=True)
     try:
         _open_native(log_dir)
-    except Exception as exc:
+    except Exception:
+        # Same rationale as open_log: keep the original exception out of
+        # the HTTP body; the server log already has the full context.
         logger.exception("Failed to open log folder %s", log_dir)
-        raise HTTPException(status_code=500, detail={"code": ErrorCode.OPEN_LOG_FAILED.value,
-                                                     "message": f"Could not open folder: {exc}"})
+        raise http_err(500, ErrorCode.OPEN_LOG_FAILED, "Could not open log folder")
     return {"status": "opened", "path": str(log_dir)}

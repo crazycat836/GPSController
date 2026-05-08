@@ -143,112 +143,6 @@ class EtaTracker:
         return max(self.total_distance - self.traveled, 0.0)
 
 
-# ── Internal __init__ clusters ──────────────────────────────────────────
-#
-# SimulationEngine carries ~30 instance attributes spanning several
-# concerns. To keep ``__init__`` readable, the attributes are declared in
-# two private dataclasses grouped by purpose:
-#
-#   * _RuntimeLocks  — asyncio concurrency primitives.
-#   * _RuntimeState  — all mutable per-run state (counters, snapshot,
-#                      route coords, speed-profile slots, etc.).
-#
-# Long-lived service handles (location_service, event_callback,
-# route_service, eta_tracker) and sub-handlers (Navigator, RouteLooper,
-# JoystickHandler, …) stay assigned directly in ``__init__`` because the
-# sub-handlers need ``self`` to construct.
-#
-# After construction the dataclass fields are bulk-copied onto ``self``
-# so every existing ``engine.<attr>`` reader in the rest of the codebase
-# (movement_loop, multi_stop, navigator, route_loop, joystick, restore,
-# api/location, …) keeps working unchanged.
-
-
-@dataclass
-class _RuntimeLocks:
-    """asyncio concurrency primitives owned by SimulationEngine.
-
-    ``_apply_speed_lock`` serialises apply_speed against itself so
-    concurrent /apply-speed requests can't interleave the read-modify-
-    write of ``_pending_speed_profile`` / ``_speed_was_applied``. After
-    acquire, apply_speed re-reads ``state`` and ``_active_route_coords``
-    because ``_move_along_route``'s finalize block (movement_loop.py)
-    may have cleared them while we were queued behind another caller.
-    """
-
-    _pause_event: asyncio.Event = field(default_factory=asyncio.Event)
-    _stop_event: asyncio.Event = field(default_factory=asyncio.Event)
-    _apply_speed_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-
-    def __post_init__(self) -> None:
-        # set = running, clear = paused.
-        self._pause_event.set()
-
-
-@dataclass
-class _RuntimeState:
-    """Per-run mutable state owned by SimulationEngine.
-
-    Grouped into one declaration so the surface is documented and typed
-    in one place. Values are bulk-copied onto SimulationEngine in
-    ``__init__`` to preserve the public ``engine.<attr>`` access surface
-    that the rest of ``backend/core`` and ``backend/api`` reads.
-    """
-
-    state: SimulationState = SimulationState.IDLE
-    current_position: Coordinate | None = None
-
-    # Most recent long-running action. Populated by navigate/start_loop/
-    # multi_stop/random_walk at the moment each begins, cleared when the
-    # engine returns to IDLE. AppState reads this to replay the same
-    # action on a newly-connected secondary device.
-    snapshot: SimulationSnapshot | None = None
-
-    # Task management.
-    _active_task: asyncio.Task | None = None
-    _paused_from: SimulationState | None = None
-
-    # Status tracking.
-    distance_traveled: float = 0.0
-    distance_remaining: float = 0.0
-    lap_count: int = 0
-    segment_index: int = 0
-    total_segments: int = 0
-    _current_speed_mps: float = 0.0
-
-    # Hot-swap speed support (see apply_speed + _move_along_route).
-    _active_route_coords: list[Coordinate] = field(default_factory=list)
-    _active_speed_profile: "SpeedProfile | None" = None
-    _pending_speed_profile: "SpeedProfile | None" = None
-
-    # User-facing waypoints used for waypoint_progress emission. Set by
-    # route_loop / multi_stop / navigator before each call to
-    # _move_along_route, so highlight events refer to the named
-    # waypoints rather than OSRM-densified polyline points.
-    _user_waypoints: list[Coordinate] = field(default_factory=list)
-    _user_waypoint_next: int = 0
-
-    # Set by apply_speed so route_loop / multi_stop know to reuse the
-    # applied profile on the next lap instead of re-resolving from the
-    # original request (which would revert speed every lap).
-    _speed_was_applied: bool = False
-
-    # Extra meters to add to every emitted distance_remaining / ETA while
-    # _move_along_route is running. Multi-stop sets this to the sum of
-    # future legs' distances so the UI shows total-trip ETA, not just
-    # current-leg ETA. Reset to 0 outside multi-stop.
-    _route_offset_remaining: float = 0.0
-
-
-def _spread(target: object, source: object) -> None:
-    """Copy every dataclass field from *source* onto *target* as an
-    attribute. Used by SimulationEngine.__init__ to flatten the cluster
-    dataclasses onto ``self`` while preserving the public attribute
-    access surface that the rest of the codebase relies on."""
-    for key, value in vars(source).items():
-        setattr(target, key, value)
-
-
 # ── Simulation Engine ───────────────────────────────────────────────────
 
 class SimulationEngine:
@@ -277,10 +171,65 @@ class SimulationEngine:
         self.route_service = RouteService()
         self.eta_tracker = EtaTracker()
 
-        # Bulk-spread the locks + per-run state from their cluster
-        # dataclasses onto ``self`` so external readers keep working.
-        _spread(self, _RuntimeLocks())
-        _spread(self, _RuntimeState())
+        # ── asyncio concurrency primitives ────────────────────────────
+        # ``_pause_event``: set = running, clear = paused. Started set
+        # so a fresh engine isn't blocked.
+        # ``_stop_event``:  set = handler should bail at next checkpoint.
+        # ``_apply_speed_lock``: serialises concurrent /apply-speed calls
+        # so the read-modify-write of ``_pending_speed_profile`` /
+        # ``_speed_was_applied`` can't interleave. After acquire,
+        # apply_speed re-reads ``state`` and ``_active_route_coords``
+        # because ``_move_along_route``'s finalize block may have
+        # cleared them while the caller was queued.
+        self._pause_event: asyncio.Event = asyncio.Event()
+        self._pause_event.set()
+        self._stop_event: asyncio.Event = asyncio.Event()
+        self._apply_speed_lock: asyncio.Lock = asyncio.Lock()
+
+        # ── Per-run mutable state ─────────────────────────────────────
+        self.state: SimulationState = SimulationState.IDLE
+        self.current_position: Coordinate | None = None
+
+        # Most recent long-running action. Populated by navigate/start_loop/
+        # multi_stop/random_walk at the moment each begins, cleared when the
+        # engine returns to IDLE. AppState reads this to replay the same
+        # action on a newly-connected secondary device.
+        self.snapshot: SimulationSnapshot | None = None
+
+        # Task management.
+        self._active_task: asyncio.Task | None = None
+        self._paused_from: SimulationState | None = None
+
+        # Status tracking.
+        self.distance_traveled: float = 0.0
+        self.distance_remaining: float = 0.0
+        self.lap_count: int = 0
+        self.segment_index: int = 0
+        self.total_segments: int = 0
+        self._current_speed_mps: float = 0.0
+
+        # Hot-swap speed support (see apply_speed + _move_along_route).
+        self._active_route_coords: list[Coordinate] = []
+        self._active_speed_profile: "SpeedProfile | None" = None
+        self._pending_speed_profile: "SpeedProfile | None" = None
+
+        # User-facing waypoints used for waypoint_progress emission. Set
+        # by route_loop / multi_stop / navigator before each call to
+        # _move_along_route, so highlight events refer to the named
+        # waypoints rather than OSRM-densified polyline points.
+        self._user_waypoints: list[Coordinate] = []
+        self._user_waypoint_next: int = 0
+
+        # Set by apply_speed so route_loop / multi_stop know to reuse
+        # the applied profile on the next lap instead of re-resolving
+        # from the original request (which would revert speed every lap).
+        self._speed_was_applied: bool = False
+
+        # Extra meters to add to every emitted distance_remaining / ETA
+        # while _move_along_route is running. Multi-stop sets this to
+        # the sum of future legs' distances so the UI shows total-trip
+        # ETA, not just current-leg ETA. Reset to 0 outside multi-stop.
+        self._route_offset_remaining: float = 0.0
 
         # Sub-handlers (need ``self`` to construct).
         self._teleport_handler = TeleportHandler(self)

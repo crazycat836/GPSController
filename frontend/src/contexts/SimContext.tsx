@@ -7,8 +7,14 @@ import {
   DEFAULT_RANDOM_WALK_RADIUS,
   DEFAULT_WP_GEN_COUNT,
   DEFAULT_WP_GEN_RADIUS,
+  RANDOM_GEN_COUNT_MAX,
+  RANDOM_GEN_COUNT_MIN,
+  RANDOM_GEN_RADIUS_MAX_M,
+  RANDOM_GEN_RADIUS_MIN_M,
   RESTORE_MIN_DISPLAY_MS,
+  SPEED_MAP,
 } from '../lib/constants'
+import { pickDisplaySpeed, toLatLng } from '../lib/sim-derive'
 import { devWarn } from '../lib/dev-log'
 import { generateRandomTour } from '../lib/waypoint_gen'
 import { useCooldownSync } from '../hooks/useCooldownSync'
@@ -99,13 +105,11 @@ async function runWithFanout<T>(params: {
   }
 }
 
-// km/h. Must stay in sync with `BottomDock.SPEED_PRESETS`,
-// `SpeedControls.SPEED_PRESETS`, and backend `SPEED_PROFILES`.
-export const SPEED_MAP: Record<MoveMode, number> = {
-  walking: 10.8,
-  running: 19.8,
-  driving: 60,
-}
+// Re-export `SPEED_MAP` so existing consumers (`App.tsx`,
+// `SimDerivedContext`) keep importing it through `contexts/SimContext`.
+// The canonical definition lives in `lib/constants.ts` next to
+// `SPEED_PRESETS` so the two cannot drift.
+export { SPEED_MAP }
 
 interface SimContextValue {
   // From useSimulation - pass through everything
@@ -293,8 +297,14 @@ export function SimProvider({ children }: SimProviderProps) {
   }, [generateWaypoints, wpGenRadius, wpGenCount])
 
   const handleGenerateAllRandom = useCallback(() => {
-    const radius = Math.floor(50 + Math.random() * 950)
-    const count = Math.floor(3 + Math.random() * 8)
+    // Inclusive on both ends — `+ 1` widens the open upper bound so MAX is
+    // reachable. See constants for the numeric bounds.
+    const radius = Math.floor(
+      RANDOM_GEN_RADIUS_MIN_M + Math.random() * (RANDOM_GEN_RADIUS_MAX_M - RANDOM_GEN_RADIUS_MIN_M + 1),
+    )
+    const count = Math.floor(
+      RANDOM_GEN_COUNT_MIN + Math.random() * (RANDOM_GEN_COUNT_MAX - RANDOM_GEN_COUNT_MIN + 1),
+    )
     setWpGenRadius(radius)
     setWpGenCount(count)
     generateWaypoints(radius, count)
@@ -530,7 +540,7 @@ export function SimProvider({ children }: SimProviderProps) {
     await runWithFanout({
       udids,
       devices: device.connectedDevices,
-      action: 'stop',
+      action: t('generic.stop'),
       single: () => sim.stop(),
       multi: (us) => sim.stopAll(us),
       t,
@@ -565,7 +575,7 @@ export function SimProvider({ children }: SimProviderProps) {
     await runWithFanout({
       udids,
       devices: device.connectedDevices,
-      action: 'pause',
+      action: t('generic.pause'),
       single: () => sim.pause(),
       multi: (us) => sim.pauseAll(us),
       t,
@@ -578,7 +588,7 @@ export function SimProvider({ children }: SimProviderProps) {
     await runWithFanout({
       udids,
       devices: device.connectedDevices,
-      action: 'resume',
+      action: t('generic.resume'),
       single: () => sim.resume(),
       multi: (us) => sim.resumeAll(us),
       t,
@@ -603,13 +613,16 @@ export function SimProvider({ children }: SimProviderProps) {
 
   // --- Derived values ---
 
+  // Shared derivations live in `lib/sim-derive.ts` so `SimDerivedContext`
+  // stays in lockstep with this provider — there is exactly one definition
+  // of `toLatLng` / `pickDisplaySpeed` in the codebase.
   const currentPos = useMemo(
-    () => sim.currentPosition ? { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng } : null,
+    () => toLatLng(sim.currentPosition),
     [sim.currentPosition?.lat, sim.currentPosition?.lng],
   )
 
   const destPos = useMemo(
-    () => sim.destination ? { lat: sim.destination.lat, lng: sim.destination.lng } : null,
+    () => toLatLng(sim.destination),
     [sim.destination?.lat, sim.destination?.lng],
   )
 
@@ -619,25 +632,26 @@ export function SimProvider({ children }: SimProviderProps) {
   // template + ternary allocate fresh each time). The memo below keys
   // on the primitive inputs so the value object sees a stable reference
   // when only unrelated sim state changed (e.g. lat/lng tick).
-  const displaySpeed: number | string = useMemo(() => {
-    const fmt = (kmh: number | null, lo: number | null, hi: number | null): number | string => {
-      if (lo != null && hi != null) return `${Math.min(lo, hi)}~${Math.max(lo, hi)}`
-      if (kmh != null) return kmh
-      return speed
-    }
-    return sim.status.running && sim.effectiveSpeed
-      ? fmt(sim.effectiveSpeed.kmh, sim.effectiveSpeed.min, sim.effectiveSpeed.max)
-      : fmt(sim.customSpeedKmh, sim.speedMinKmh, sim.speedMaxKmh)
-  }, [
-    sim.status.running,
-    sim.effectiveSpeed?.kmh,
-    sim.effectiveSpeed?.min,
-    sim.effectiveSpeed?.max,
-    sim.customSpeedKmh,
-    sim.speedMinKmh,
-    sim.speedMaxKmh,
-    speed,
-  ])
+  const displaySpeed: number | string = useMemo(
+    () => pickDisplaySpeed({
+      running: sim.status.running,
+      moveMode: sim.moveMode,
+      effectiveSpeed: sim.effectiveSpeed,
+      customSpeedKmh: sim.customSpeedKmh,
+      speedMinKmh: sim.speedMinKmh,
+      speedMaxKmh: sim.speedMaxKmh,
+    }),
+    [
+      sim.status.running,
+      sim.moveMode,
+      sim.effectiveSpeed?.kmh,
+      sim.effectiveSpeed?.min,
+      sim.effectiveSpeed?.max,
+      sim.customSpeedKmh,
+      sim.speedMinKmh,
+      sim.speedMaxKmh,
+    ],
+  )
 
   const isRunning = sim.status.running
   const isPaused = sim.status.paused

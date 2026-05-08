@@ -75,23 +75,30 @@ def is_port_open(port):
 def kill_port(port):
     """清理佔用指定 port 的進程"""
     if os.name == "nt":
-        # shell=True is intentional and safe here: the command string is
-        # a fixed pipeline and `port` is a developer-supplied integer
-        # constant from config — no user input flows through.
+        # Run netstat with list-form args (no shell pipeline) and filter
+        # in Python: matches the listening socket on the target port and
+        # extracts the PID from the trailing column. Keeps the kill path
+        # shell-free so neither port nor PID can be used for injection.
         result = subprocess.run(
-            f'netstat -ano | findstr ":{port}" | findstr "LISTENING"',
-            capture_output=True, text=True, shell=True,
+            ["netstat", "-ano"],
+            capture_output=True, text=True,
         )
-        for line in result.stdout.strip().splitlines():
+        suffix = f":{port}"
+        for line in result.stdout.splitlines():
             parts = line.split()
-            if not parts:
+            # Expected listening row:
+            #   "TCP  127.0.0.1:8000  0.0.0.0:0  LISTENING  1234"
+            if len(parts) < 5 or "LISTENING" not in parts:
+                continue
+            if not parts[1].endswith(suffix):
                 continue
             try:
-                pid_int = int(parts[-1])
+                pid = int(parts[-1])
             except ValueError:
                 continue
+            # taskkill is idempotent — repeated PIDs are a harmless no-op.
             subprocess.run(
-                ["taskkill", "/PID", str(pid_int), "/F"],
+                ["taskkill", "/F", "/PID", str(pid)],
                 check=False, capture_output=True,
             )
     else:
@@ -158,11 +165,23 @@ def start_backend():
         kill_port(BACKEND_PORT)
         time.sleep(1)
 
-    # Dev mode: disable the session token check so `vite dev` on port 5173
-    # (no Electron preload to inject the token) can call the backend.
-    # Packaged Electron builds always run with auth enabled.
+    # Dev mode: leave the session token check on by default. The launcher
+    # used to silently set GPSCONTROLLER_DEV_NOAUTH=1 here so `vite dev`
+    # on port 5173 (no Electron preload to inject the token) could reach
+    # the backend; that is a footgun in shared/dev environments. Make the
+    # opt-in explicit: surface a one-line hint when the flag is unset and
+    # a warning when it's already exported.
     env = dict(os.environ)
-    env.setdefault("GPSCONTROLLER_DEV_NOAUTH", "1")
+    if env.get("GPSCONTROLLER_DEV_NOAUTH") == "1":
+        print(
+            "      [!] GPSCONTROLLER_DEV_NOAUTH=1 detected — backend auth DISABLED. "
+            "Unset it to require X-GPS-Token."
+        )
+    else:
+        print(
+            "      [i] Backend auth ENABLED. To run the Vite dev server without "
+            "the Electron preload, export GPSCONTROLLER_DEV_NOAUTH=1 yourself."
+        )
 
     p = subprocess.Popen(
         [sys.executable, "main.py"],
@@ -184,8 +203,11 @@ def start_frontend():
         time.sleep(1)
 
     # 用 --port 強制指定 port，避免 Vite 跳到其他 port
+    # Bind the Vite dev server to loopback only. Without an explicit value
+    # `--host` defaults to 0.0.0.0 and exposes the unauthenticated dev UI
+    # to anything on the LAN; pin to 127.0.0.1 so this is a local tool.
     p = subprocess.Popen(
-        ["npx", "vite", "--host", "--port", str(FRONTEND_PORT), "--strictPort"],
+        ["npx", "vite", "--host", "127.0.0.1", "--port", str(FRONTEND_PORT), "--strictPort"],
         cwd=FRONTEND,
         shell=(os.name == "nt"),
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,

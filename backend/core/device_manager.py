@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import plistlib
 import socket
 import time
 from dataclasses import dataclass, field
@@ -51,6 +53,11 @@ class UnsupportedIosVersionError(RuntimeError):
         super().__init__(f"iOS {version} is not supported (requires {self.MIN_VERSION}+)")
 
 logger = logging.getLogger(__name__)
+
+# Apple lockdownd TCP port — every iOS device listens here for the
+# usbmuxd / wifi pair-record handshake. Used by the WiFi /24 subnet
+# scan to identify which IPs on the LAN are likely iPhones/iPads.
+_LOCKDOWND_PORT = 62078
 
 
 def parse_ios_version(version_string: str) -> tuple[int, ...]:
@@ -181,9 +188,6 @@ class DeviceManager:
                 self._discover_inflight = None
 
     async def _discover_devices_uncached(self) -> list[DeviceInfo]:
-        devices: list[DeviceInfo] = []
-        seen_udids: set[str] = set()
-
         # Let usbmux failures propagate — the public ``discover_devices``
         # wrapper catches them so we don't poison the cache with an empty
         # list on transient errors.
@@ -202,60 +206,91 @@ class DeviceManager:
                 len(raw_devices), "y" if len(raw_devices) == 1 else "ies",
             )
 
+        # Two-pass build so each DeviceInfo is constructed exactly once
+        # with all final values (no post-construction mutation, per the
+        # project immutability rule).
+        #
+        # Pass 1: walk raw entries in usbmux order, collecting per-UDID
+        # field bags. When a UDID appears twice (USB + Network), we keep
+        # whichever entry resolved as USB — usbmuxd may emit them in
+        # either order, so we update the bag's connection_type rather
+        # than rely on first-wins.
+        bags: dict[str, dict[str, Any]] = {}
+        order: list[str] = []
         for raw in raw_devices:
-            try:
-                conn_type = getattr(raw, "connection_type", "USB")
-                # If we already saw this device via USB, skip the Network duplicate
-                if raw.serial in seen_udids:
-                    # But upgrade to USB if this entry is USB (prefer USB info)
-                    if conn_type == "USB":
-                        for d in devices:
-                            if d.udid == raw.serial:
-                                d.connection_type = "USB"
-                    continue
-                seen_udids.add(raw.serial)
+            udid = getattr(raw, "serial", None)
+            if not udid:
+                continue
+            conn_type = getattr(raw, "connection_type", "USB")
+            if udid in bags:
+                if conn_type == "USB":
+                    bags[udid]["raw_conn_type"] = "USB"
+                continue
+            bags[udid] = {"raw_conn_type": conn_type}
+            order.append(udid)
 
-                lockdown = await create_using_usbmux(serial=raw.serial)
+        # Pass 2: per-UDID lockdown round-trip + DeviceInfo construction.
+        # Each bag is enriched with everything needed before the single
+        # DeviceInfo(...) call at the end of the loop body.
+        devices: list[DeviceInfo] = []
+        for udid in order:
+            bag = bags[udid]
+            try:
+                lockdown = await create_using_usbmux(serial=udid)
                 all_values = lockdown.all_values
-                # If device is already connected, report the active connection type
-                active_conn = self._connections.get(raw.serial)
-                if active_conn:
-                    conn_type = active_conn.connection_type
-                info = DeviceInfo(
-                    udid=raw.serial,
-                    name=all_values.get("DeviceName", "Unknown"),
-                    ios_version=all_values.get("ProductVersion", "0.0"),
-                    connection_type=conn_type,
+
+                # Active-connection wins over usbmux's reported type, since
+                # the live transport reflects how the user is actually
+                # talking to the device right now.
+                active_conn = self._connections.get(udid)
+                conn_type = (
+                    active_conn.connection_type if active_conn
+                    else bag["raw_conn_type"]
                 )
-                info.is_connected = raw.serial in self._connections
-                # Populate `developer_mode_enabled` for iOS 16+ so the
-                # frontend can offer an AMFI "Reveal in Settings" button
-                # only when it's actually useful. Reuse the per-connection
-                # cache when available so repeat polls don't pay a
-                # lockdown round-trip.
-                ios_major = parse_ios_version(info.ios_version)[0] if info.ios_version else 0
+
+                ios_version = all_values.get("ProductVersion", "0.0")
+                ios_major = parse_ios_version(ios_version)[0] if ios_version else 0
+                is_connected = udid in self._connections
+
+                # Resolve developer-mode state up front so DeviceInfo can
+                # be built in one shot. Cache hits are free; cache misses
+                # query lockdown and update the active_conn cache (the
+                # only mutation here is on the connection record we own,
+                # not on the freshly-constructed DeviceInfo).
+                developer_mode_enabled: bool | None = None
                 if ios_major >= 16:
                     cached = active_conn.developer_mode_enabled if active_conn else None
                     if cached is not None:
-                        info.developer_mode_enabled = cached
+                        developer_mode_enabled = cached
                     else:
                         try:
                             flag = bool(await lockdown.get_developer_mode_status())
-                            info.developer_mode_enabled = flag
+                            developer_mode_enabled = flag
                             if active_conn is not None:
                                 active_conn.developer_mode_enabled = flag
                         except Exception:
                             logger.debug(
                                 "get_developer_mode_status failed for %s",
-                                raw.serial, exc_info=True,
+                                udid, exc_info=True,
                             )
-                # Derived gate for the frontend AMFI button — all
-                # four preconditions in one place.
-                info.can_reveal_developer_mode = (
-                    info.is_connected
+
+                # Derived gate for the frontend AMFI button — all four
+                # preconditions in one place.
+                can_reveal_developer_mode = (
+                    is_connected
                     and (conn_type or "").lower() == "usb"
                     and ios_major >= 16
-                    and info.developer_mode_enabled is False
+                    and developer_mode_enabled is False
+                )
+
+                info = DeviceInfo(
+                    udid=udid,
+                    name=all_values.get("DeviceName", "Unknown"),
+                    ios_version=ios_version,
+                    connection_type=conn_type,
+                    is_connected=is_connected,
+                    developer_mode_enabled=developer_mode_enabled,
+                    can_reveal_developer_mode=can_reveal_developer_mode,
                 )
                 devices.append(info)
                 # DEBUG — see discover_devices() for rationale. This line
@@ -265,7 +300,7 @@ class DeviceManager:
                     info.udid, info.name, info.ios_version, conn_type, info.is_connected,
                 )
             except Exception:
-                logger.exception("Failed to query device %s", getattr(raw, "serial", "?"))
+                logger.exception("Failed to query device %s", udid)
 
         return devices
 
@@ -604,7 +639,7 @@ class DeviceManager:
         subnet: str | None = None,
         timeout: float = 0.5,
     ) -> list[dict]:
-        """Scan the local network for iOS devices on port 62078 (lockdownd).
+        """Scan the local network for iOS devices on the lockdownd TCP port.
 
         Tries each IP in the subnet concurrently.  Returns a list of
         ``{"ip": ..., "name": ..., "udid": ...}`` dicts for reachable
@@ -628,7 +663,7 @@ class DeviceManager:
         async def _probe(ip: str) -> dict | None:
             try:
                 _, writer = await asyncio.wait_for(
-                    asyncio.open_connection(ip, 62078),
+                    asyncio.open_connection(ip, _LOCKDOWND_PORT),
                     timeout=timeout,
                 )
                 writer.close()
@@ -721,9 +756,6 @@ def _load_pair_record(udid: str | None = None) -> dict | None:
     If *udid* is given, loads that specific record; otherwise loads the
     first ``.plist`` found (most setups have only one device).
     """
-    import os
-    import plistlib
-
     lockdown_dir = Path(os.environ.get("ALLUSERSPROFILE", "C:/ProgramData")) / "Apple" / "Lockdown"
     if not lockdown_dir.exists():
         logger.debug("Apple Lockdown directory not found: %s", lockdown_dir)
