@@ -32,7 +32,14 @@ OSRM_BASE_URL = os.environ.get("OSRM_BASE_URL", "https://router.project-osrm.org
 NOMINATIM_BASE_URL = os.environ.get(
     "NOMINATIM_BASE_URL", "https://nominatim.openstreetmap.org"
 )
-NOMINATIM_USER_AGENT = f"GPSController/{__version__}"
+# Nominatim's usage policy requires a UA that identifies the application
+# *and* provides a way to reach the operator (contact email or website).
+# Plain "ProductName/Version" UAs have been blocklisted in the past once
+# they generated enough traffic without a contact channel.
+NOMINATIM_USER_AGENT = (
+    f"GPSController/{__version__} "
+    "(+https://github.com/crazycat836/GPSController)"
+)
 
 
 class SpeedProfile(TypedDict):

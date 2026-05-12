@@ -190,6 +190,48 @@ class SavedRoute(BaseModel):
     waypoints: list[Coordinate] = Field(min_length=1, max_length=_MAX_WAYPOINTS)
     profile: str = Field(default="walking", max_length=32)
     created_at: str = ""
+    # Added in route-store v1. Existing v0 entries are back-filled to the
+    # preset "default" category on first load.
+    category_id: str = "default"
+    # Mirrors created_at on first save; bumped on rename / move / overwrite
+    # so the UI's "sort by updated" can pick the most recently touched route.
+    updated_at: str = ""
+    # Insertion-order fallback used by the drag-reorder UI in route-store v1.
+    # Persisted explicitly so two routes saved milliseconds apart don't end
+    # up shuffling when iteration order is preserved but the frontend sorts
+    # by sort_order.
+    sort_order: int = 0
+
+
+# Preset route category (mirrors BookmarkPlace's "default") — always present
+# in the store so a route with category_id="default" never dangles.
+class RouteCategory(BaseModel):
+    id: str = ""
+    name: str = Field(max_length=128)
+    color: str = Field(default="#6c8cff", max_length=32)
+    sort_order: int = 0
+    created_at: str = ""
+
+
+# Bumped to 1 when categories were added to the route store. v0 files (no
+# `version` key, flat `routes` list with no category_id) are migrated on
+# first load by :func:`backend.services.saved_routes._migrate_v0_to_v1`.
+ROUTE_STORE_VERSION = 1
+
+
+class RouteStore(BaseModel):
+    version: int = 0
+    categories: list[RouteCategory] = []
+    routes: list[SavedRoute] = []
+
+
+class RouteMoveRequest(BaseModel):
+    route_ids: list[str]
+    target_category_id: str
+
+
+class RouteBatchDeleteRequest(BaseModel):
+    route_ids: list[str]
 
 
 # ── Bookmarks ─────────────────────────────────────────────

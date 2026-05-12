@@ -40,6 +40,9 @@ class ErrorCode(StrEnum):
     DEFAULT_PLACE_IMMUTABLE = "default_place_immutable"
     TAG_NOT_FOUND = "tag_not_found"
     ROUTE_NOT_FOUND = "route_not_found"
+    ROUTE_NAME_CONFLICT = "route_name_conflict"
+    ROUTE_CATEGORY_NOT_FOUND = "route_category_not_found"
+    ROUTE_CATEGORY_IMMUTABLE = "route_category_immutable"
     DEVICE_NOT_FOUND = "device_not_found"
 
     # Connection / pairing / device lifecycle
@@ -85,14 +88,26 @@ class ErrorCode(StrEnum):
     OPEN_LOG_FAILED = "open_log_failed"
 
 
-def http_err(status: int, code: ErrorCode, message: str) -> HTTPException:
-    """Build a structured HTTPException with `{code, message}` detail.
+def http_err(
+    status: int,
+    code: ErrorCode,
+    message: str,
+    **extra: object,
+) -> HTTPException:
+    """Build a structured HTTPException with `{code, message, ...extra}` detail.
 
     Use this instead of raising `HTTPException(detail=str(e))` so internal
     exception text never leaks to API clients. The ``code`` is a typed
     :class:`ErrorCode` member; passing a bare string is a type error.
+
+    ``**extra`` is merged into the detail dict so callers can attach
+    context the UI consumes (e.g. an existing route's id on a
+    409 ``route_name_conflict``). Keys are deliberately not constrained
+    here — every endpoint owns its own contract for what extras it ships.
     """
-    return HTTPException(status_code=status, detail={"code": code.value, "message": message})
+    detail: dict[str, object] = {"code": code.value, "message": message}
+    detail.update(extra)
+    return HTTPException(status_code=status, detail=detail)
 
 
 def max_devices_error() -> HTTPException:

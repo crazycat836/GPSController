@@ -14,10 +14,17 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from config import ROUTES_FILE
-from models.schemas import RoutePlanRequest, SavedRoute, Coordinate
+from models.schemas import (
+    Coordinate,
+    RouteBatchDeleteRequest,
+    RouteCategory,
+    RouteMoveRequest,
+    RoutePlanRequest,
+    SavedRoute,
+)
 from services.route_service import RouteService
 from services.gpx_service import GpxService
-from services.saved_routes import SavedRoutesStore
+from services.saved_routes import ConflictPolicy, SavedRoutesStore
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +68,43 @@ async def list_saved():
 
 
 @router.post("/saved", response_model=SavedRoute)
-async def save_route(route: SavedRoute):
-    return await _store.add(route)
+async def save_route(
+    route: SavedRoute,
+    on_conflict: ConflictPolicy = "new",
+):
+    """Save a route. ``on_conflict`` controls what happens when a route
+    with the same (case-insensitive) name already exists in the target
+    category:
+
+    * ``new`` (default, legacy behaviour) — always insert a fresh row
+    * ``overwrite`` — replace the existing row in place; id, created_at,
+      and sort_order are preserved so any UI references remain valid
+    * ``reject`` — return 409 with the existing route so the UI can
+      show its overwrite / save-as-new prompt
+
+    Returns the freshly-saved (or overwritten) row directly to keep the
+    legacy ``SavedRoute`` response contract.
+    """
+    result = await _store.add(route, on_conflict=on_conflict)
+    if result is None:
+        # on_conflict=reject + duplicate found. Surface the existing row
+        # so the UI prompt can show "this name already exists, saved
+        # YYYY-MM-DD — overwrite?" without a follow-up GET.
+        existing = next(
+            (r for r in _store.list()
+             if r.category_id == route.category_id
+             and r.name.strip().casefold() == route.name.strip().casefold()),
+            None,
+        )
+        raise http_err(
+            409,
+            ErrorCode.ROUTE_NAME_CONFLICT,
+            "A route with that name already exists in this category",
+            existing_id=existing.id if existing else None,
+            existing_created_at=existing.created_at if existing else None,
+        )
+    saved, _action = result
+    return saved
 
 
 @router.delete("/saved/{route_id}")
@@ -169,7 +211,14 @@ async def import_gpx(file: UploadFile = File(...)):
         created_at=datetime.now(timezone.utc).isoformat(),
     )
     # _store.add() reassigns a fresh id + created_at and persists.
-    saved = await _store.add(route)
+    # GPX import always inserts (the user explicitly picked the file and
+    # we just stripped the extension), so conflict policy is "new" — a
+    # rare same-name match still ships as a fresh row rather than
+    # surprising the user with an overwrite prompt mid-import.
+    result = await _store.add(route, on_conflict="new")
+    # on_conflict="new" never returns None, but mypy doesn't know.
+    assert result is not None
+    saved, _ = result
     return {"status": "imported", "id": saved.id, "points": len(coords)}
 
 
@@ -208,3 +257,75 @@ async def export_gpx(route_id: str):
         media_type="application/gpx+xml",
         headers={"Content-Disposition": disposition},
     )
+
+
+# ── Categories ─────────────────────────────────────────────────────
+# Mirrors the bookmark-places surface (see api/bookmarks.py) so the
+# frontend's category-sidebar component can be shared once both modules
+# settle on the same shape.
+
+
+class _CategoryCreateRequest(BaseModel):
+    name: str = Field(max_length=128)
+    color: str = Field(default="#6c8cff", max_length=32)
+
+
+class _CategoryUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=128)
+    color: str | None = Field(default=None, max_length=32)
+
+
+@router.get("/saved/categories", response_model=list[RouteCategory])
+async def list_categories():
+    return _store.list_categories()
+
+
+@router.post("/saved/categories", response_model=RouteCategory)
+async def create_category(req: _CategoryCreateRequest):
+    name = req.name.strip()
+    if not name:
+        raise http_err(400, ErrorCode.INVALID_NAME, "Category name must not be empty")
+    return await _store.create_category(name=name, color=req.color)
+
+
+@router.put("/saved/categories/{category_id}", response_model=RouteCategory)
+async def update_category(category_id: str, req: _CategoryUpdateRequest):
+    name = req.name.strip() if req.name is not None else None
+    if name is not None and not name:
+        raise http_err(400, ErrorCode.INVALID_NAME, "Category name must not be empty")
+    updated = await _store.update_category(category_id, name=name, color=req.color)
+    if updated is None:
+        raise http_err(404, ErrorCode.ROUTE_CATEGORY_NOT_FOUND, "Category not found")
+    return updated
+
+
+@router.delete("/saved/categories/{category_id}")
+async def delete_category(category_id: str):
+    # The preset "default" bucket is the fallback for orphaned routes after
+    # any other category deletion — deleting it would leave routes pointing
+    # at a non-existent category id, so the store refuses the request.
+    ok = await _store.delete_category(category_id)
+    if not ok:
+        if category_id == "default":
+            raise http_err(
+                400,
+                ErrorCode.ROUTE_CATEGORY_IMMUTABLE,
+                "The default category cannot be deleted",
+            )
+        raise http_err(404, ErrorCode.ROUTE_CATEGORY_NOT_FOUND, "Category not found")
+    return {"status": "deleted"}
+
+
+# ── Batch operations ────────────────────────────────────────────────
+
+
+@router.post("/saved/batch-delete")
+async def batch_delete_routes(req: RouteBatchDeleteRequest):
+    deleted = await _store.batch_delete(req.route_ids)
+    return {"deleted": deleted}
+
+
+@router.post("/saved/move")
+async def move_routes_to_category(req: RouteMoveRequest):
+    moved = await _store.move(req.route_ids, req.target_category_id)
+    return {"moved": moved}

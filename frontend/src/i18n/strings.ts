@@ -301,6 +301,9 @@ export const STRINGS = {
   'err.default_place_immutable': { zh: '無法刪除預設場所', en: 'Cannot delete the default place' },
   'err.tag_not_found': { zh: '找不到此標籤', en: 'Tag not found' },
   'err.route_not_found': { zh: '找不到此路線', en: 'Route not found' },
+  'err.route_name_conflict': { zh: '同分類下已有相同名稱的路線', en: 'A route with that name already exists in this category' },
+  'err.route_category_not_found': { zh: '找不到此路線分類', en: 'Route category not found' },
+  'err.route_category_immutable': { zh: '無法刪除預設路線分類', en: 'Cannot delete the default route category' },
   'err.device_not_found': { zh: '找不到此裝置', en: 'Device not found' },
   // Validation / auth
   'err.validation_failed': { zh: '輸入驗證失敗', en: 'Request validation failed' },
