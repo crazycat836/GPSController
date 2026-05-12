@@ -85,25 +85,19 @@ async def save_route(
     Returns the freshly-saved (or overwritten) row directly to keep the
     legacy ``SavedRoute`` response contract.
     """
-    result = await _store.add(route, on_conflict=on_conflict)
-    if result is None:
-        # on_conflict=reject + duplicate found. Surface the existing row
-        # so the UI prompt can show "this name already exists, saved
-        # YYYY-MM-DD — overwrite?" without a follow-up GET.
-        existing = next(
-            (r for r in _store.list()
-             if r.category_id == route.category_id
-             and r.name.strip().casefold() == route.name.strip().casefold()),
-            None,
-        )
+    saved, action = await _store.add(route, on_conflict=on_conflict)
+    if action == "conflict":
+        # ``add`` already located the existing row under the lock and
+        # returns it as the SavedRoute payload here. No follow-up
+        # lock-free lookup — a concurrent delete cannot race us into
+        # shipping a null id/timestamp.
         raise http_err(
             409,
             ErrorCode.ROUTE_NAME_CONFLICT,
             "A route with that name already exists in this category",
-            existing_id=existing.id if existing else None,
-            existing_created_at=existing.created_at if existing else None,
+            existing_id=saved.id,
+            existing_created_at=saved.created_at,
         )
-    saved, _action = result
     return saved
 
 
@@ -118,15 +112,27 @@ class _RouteRenameRequest(BaseModel):
     name: str = Field(max_length=512)
 
 
-@router.patch("/saved/{route_id}")
+@router.patch("/saved/{route_id}", response_model=SavedRoute)
 async def rename_saved(route_id: str, req: _RouteRenameRequest):
     name = req.name.strip()
     if not name:
         raise http_err(400, ErrorCode.INVALID_NAME, "Route name must not be empty")
-    route = await _store.rename(route_id, name)
-    if route is None:
+    result = await _store.rename(route_id, name)
+    if result is None:
         raise http_err(404, ErrorCode.ROUTE_NOT_FOUND, "Route not found")
-    return route
+    action, payload = result
+    if action == "conflict":
+        # Renaming would create a same-name duplicate in the same
+        # category. Surface the existing row's id so the UI can decide
+        # whether to abort, force-rename, or open the existing route.
+        raise http_err(
+            409,
+            ErrorCode.ROUTE_NAME_CONFLICT,
+            "A route with that name already exists in this category",
+            existing_id=payload.id,
+            existing_created_at=payload.created_at,
+        )
+    return payload
 
 
 @router.get("/saved/export")
@@ -215,10 +221,7 @@ async def import_gpx(file: UploadFile = File(...)):
     # we just stripped the extension), so conflict policy is "new" — a
     # rare same-name match still ships as a fresh row rather than
     # surprising the user with an overwrite prompt mid-import.
-    result = await _store.add(route, on_conflict="new")
-    # on_conflict="new" never returns None, but mypy doesn't know.
-    assert result is not None
-    saved, _ = result
+    saved, _action = await _store.add(route, on_conflict="new")
     return {"status": "imported", "id": saved.id, "points": len(coords)}
 
 
@@ -327,6 +330,18 @@ async def batch_delete_routes(req: RouteBatchDeleteRequest):
 
 @router.post("/saved/move")
 async def move_routes_to_category(req: RouteMoveRequest):
+    # Validate the target before the store demotes unknown ids to
+    # "default" — that fallback is the right call when an inbound route
+    # carries a stale category, but on /move the target IS the entire
+    # point of the call, so a typo should surface as a 404 instead of
+    # silently re-bucketing every selected route.
+    known = {c.id for c in _store.list_categories()}
+    if req.target_category_id not in known:
+        raise http_err(
+            404,
+            ErrorCode.ROUTE_CATEGORY_NOT_FOUND,
+            "Target category does not exist",
+        )
     moved = await _store.move(req.route_ids, req.target_category_id)
     return {"moved": moved}
 
@@ -335,7 +350,9 @@ async def move_routes_to_category(req: RouteMoveRequest):
 
 
 class _RouteReorderRequest(BaseModel):
-    ordered_ids: list[str]
+    # Same cap as the cross-module batch endpoints — see _MAX_BATCH_IDS
+    # in models/schemas.py for rationale.
+    ordered_ids: list[str] = Field(max_length=10_000)
 
 
 @router.post("/saved/reorder")

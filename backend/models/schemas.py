@@ -225,13 +225,20 @@ class RouteStore(BaseModel):
     routes: list[SavedRoute] = []
 
 
+# Cap on every id-list batch payload. 10k is far beyond any plausible
+# UI selection but well below the memory-pressure threshold; an attacker
+# (or runaway renderer) sending 1M ids would otherwise pin the asyncio
+# lock and stall every other request.
+_MAX_BATCH_IDS = 10_000
+
+
 class RouteMoveRequest(BaseModel):
-    route_ids: list[str]
+    route_ids: list[str] = Field(max_length=_MAX_BATCH_IDS)
     target_category_id: str
 
 
 class RouteBatchDeleteRequest(BaseModel):
-    route_ids: list[str]
+    route_ids: list[str] = Field(max_length=_MAX_BATCH_IDS)
 
 
 # ── Bookmarks ─────────────────────────────────────────────
@@ -282,18 +289,18 @@ class Bookmark(BaseModel):
 
 
 class BookmarkMoveRequest(BaseModel):
-    bookmark_ids: list[str]
+    bookmark_ids: list[str] = Field(max_length=_MAX_BATCH_IDS)
     target_place_id: str
 
 
 class BookmarkTagRequest(BaseModel):
-    bookmark_ids: list[str]
-    tag_ids_add: list[str] = Field(default_factory=list)
-    tag_ids_remove: list[str] = Field(default_factory=list)
+    bookmark_ids: list[str] = Field(max_length=_MAX_BATCH_IDS)
+    tag_ids_add: list[str] = Field(default_factory=list, max_length=_MAX_BATCH_IDS)
+    tag_ids_remove: list[str] = Field(default_factory=list, max_length=_MAX_BATCH_IDS)
 
 
 class ReorderRequest(BaseModel):
-    ordered_ids: list[str]
+    ordered_ids: list[str] = Field(max_length=_MAX_BATCH_IDS)
 
 
 # Bumped to 1 when the single-category schema was split into place + tags.

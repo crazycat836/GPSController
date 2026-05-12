@@ -6,7 +6,7 @@ from fastapi import APIRouter
 
 from api._errors import ErrorCode, http_err
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from models.schemas import (
     Bookmark,
@@ -110,6 +110,16 @@ async def update_bookmark(bookmark_id: str, bookmark: Bookmark):
     return updated
 
 
+@router.post("/{bookmark_id}/touch", response_model=Bookmark)
+async def touch_bookmark(bookmark_id: str):
+    """Record that a bookmark was just used. Server-stamps ``last_used_at``."""
+    bm = _bm()
+    touched = await bm.touch_bookmark(bookmark_id)
+    if not touched:
+        raise http_err(404, ErrorCode.BOOKMARK_NOT_FOUND, "Bookmark not found")
+    return touched
+
+
 @router.delete("/{bookmark_id}")
 async def delete_bookmark(bookmark_id: str):
     bm = _bm()
@@ -119,7 +129,9 @@ async def delete_bookmark(bookmark_id: str):
 
 
 class BatchDeleteRequest(BaseModel):
-    ids: list[str]
+    # Same cap as the cross-module batch endpoints — see _MAX_BATCH_IDS
+    # in models/schemas.py for rationale.
+    ids: list[str] = Field(max_length=10_000)
 
 
 @router.post("/batch-delete")

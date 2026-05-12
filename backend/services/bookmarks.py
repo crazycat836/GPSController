@@ -48,6 +48,13 @@ _PRESET_TAGS: tuple[tuple[str, str, str, int], ...] = (
 # "寺廟" / "富士山") becomes a place.
 _PRESET_TAG_IDS = {pid for pid, *_ in _PRESET_TAGS}
 
+# Touch endpoint debounce window. Each `touch_bookmark` call writes the
+# full bookmark JSON to disk, so a misbehaving renderer that fires the
+# endpoint on every tap could thrash the FS — we collapse rapid repeats
+# into a single bump per window. 5s matches the user-perceptible
+# resolution of "recently used" sorting; bumping faster has no UI value.
+_TOUCH_DEBOUNCE_S = 5.0
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -504,6 +511,37 @@ class BookmarkManager:
 
             self._save()
             return bm
+
+    async def touch_bookmark(self, bm_id: str) -> Bookmark | None:
+        """Stamp ``last_used_at`` on *bm_id* with the current UTC time.
+
+        Server-stamped so clients can't drift the timestamp; kept separate
+        from :meth:`update_bookmark` so a usage tick never accidentally
+        re-geocodes or revalidates the row.
+
+        Debounced via :data:`_TOUCH_DEBOUNCE_S` — repeated taps inside the
+        window short-circuit to the cached row without touching disk.
+        """
+        async with self._lock:
+            bm = self._find_bookmark(bm_id)
+            if bm is None:
+                return None
+            now = datetime.now(timezone.utc)
+            if bm.last_used_at:
+                try:
+                    last = datetime.fromisoformat(bm.last_used_at)
+                    if (now - last).total_seconds() < _TOUCH_DEBOUNCE_S:
+                        return bm
+                except ValueError:
+                    # Legacy / hand-edited timestamps fall through to the
+                    # write path — better to re-stamp than to silently
+                    # freeze last_used_at forever.
+                    pass
+            new_bm = bm.model_copy(update={"last_used_at": now.isoformat()})
+            idx = self.store.bookmarks.index(bm)
+            self.store.bookmarks[idx] = new_bm
+            self._save()
+            return new_bm
 
     async def delete_bookmark(self, bm_id: str) -> bool:
         async with self._lock:

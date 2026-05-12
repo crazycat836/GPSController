@@ -185,8 +185,23 @@ class DvtLocationService(LocationService):
         the same moment this gives up — the UI is never stuck in a
         "reconnecting" state past the point we've already declared the
         device gone.
+
+        Emits ``tunnel_degraded`` once we commit to the reconnect (after
+        the lock) so the renderer can show a "reconnecting…" hint
+        instead of leaving the device pill confidently green for 15s.
+        ``tunnel_recovered`` fires on any successful recreate; final
+        failure falls through to ``_raise_device_lost`` whose
+        ``device_disconnected`` broadcast supersedes the degraded state.
         """
+        # Local import: ``ws_broadcaster`` itself imports nothing from
+        # this module, but several ``core/`` modules pull
+        # ``location_service`` in at load time. Keeping the broadcaster
+        # import lazy sidesteps any future re-ordering hazard.
+        from services.ws_broadcaster import broadcast
+
         async with self._reconnect_lock:
+            await broadcast("tunnel_degraded", {"reason": "dvt_channel_dropped"})
+
             # Close the old DVT provider gracefully
             try:
                 await self._dvt.__aexit__(None, None, None)
@@ -208,6 +223,7 @@ class DvtLocationService(LocationService):
                     await new_dvt.__aenter__()
                     self._dvt = new_dvt
                     logger.info("DVT provider reconnected on attempt %d", attempt)
+                    await broadcast("tunnel_recovered", {})
                     return
                 except Exception as exc:
                     last_exc = exc
@@ -222,6 +238,7 @@ class DvtLocationService(LocationService):
                 await new_dvt.__aenter__()
                 self._dvt = new_dvt
                 logger.info("DVT provider reconnected on final attempt")
+                await broadcast("tunnel_recovered", {})
                 return
             except Exception as exc:
                 last_exc = exc

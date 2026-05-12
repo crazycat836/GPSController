@@ -137,7 +137,13 @@ class SavedRoutesStore:
             raw, migrated = _migrate_v0_to_v1(raw)
             store = RouteStore(**raw)
         except Exception as exc:
-            logger.warning("Route payload failed schema validation: %s", exc)
+            # JSON parsed but the migration / Pydantic validation failed.
+            # ``safe_load_json`` only quarantines on JSON parse errors, so
+            # we have to do the rename ourselves — otherwise the next
+            # mutation will ``_persist()`` an empty store over the user's
+            # data. Side-stepping the file altogether (rename + start
+            # fresh) is the cheapest way to preserve the original bytes.
+            self._quarantine_invalid_file(exc)
             return RouteStore(
                 version=ROUTE_STORE_VERSION,
                 categories=_build_preset_categories(),
@@ -149,6 +155,29 @@ class SavedRoutesStore:
         if migrated or ensured:
             self._persist_now(store)
         return store
+
+    def _quarantine_invalid_file(self, exc: Exception) -> None:
+        """Rename the on-disk routes file to ``<name>.bak-<ts>`` so a
+        Pydantic validation failure during migration doesn't get
+        clobbered by the next mutation. Best-effort — if the rename
+        itself fails we log and proceed so the app still starts."""
+        if not self._routes_file.exists():
+            logger.warning("Route payload failed validation (%s); file missing", exc)
+            return
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup = self._routes_file.with_name(f"{self._routes_file.name}.bak-{ts}")
+        try:
+            self._routes_file.rename(backup)
+            logger.warning(
+                "Route payload failed validation (%s); quarantined to %s",
+                exc, backup.name,
+            )
+        except OSError as rename_exc:
+            logger.error(
+                "Route payload failed validation (%s); rename to %s also failed (%s); "
+                "in-memory store will be empty",
+                exc, backup.name, rename_exc,
+            )
 
     def _persist_now(self, store: RouteStore) -> None:
         """Write *store* to disk. Used during load when we don't hold
@@ -208,21 +237,25 @@ class SavedRoutesStore:
         self,
         route: SavedRoute,
         on_conflict: ConflictPolicy = "new",
-    ) -> tuple[SavedRoute, Literal["created", "overwritten"]] | None:
+    ) -> tuple[SavedRoute, Literal["created", "overwritten", "conflict"]]:
         """Save *route*, applying *on_conflict* when a same-name entry
         already exists.
 
-        Returns ``(route, action)`` where ``action`` is ``"created"`` for
-        a fresh save and ``"overwritten"`` when an existing same-name
-        entry was replaced in-place. Returns ``None`` when
-        ``on_conflict="reject"`` and a conflict was found — the API
-        translates that to a 409 so the UI can prompt.
+        Returns ``(route, action)`` where ``action`` is one of:
+
+        - ``"created"`` — fresh insert
+        - ``"overwritten"`` — existing same-name entry was replaced in
+          place; the returned route is the updated entry
+        - ``"conflict"`` — ``on_conflict="reject"`` was passed and a
+          same-name entry was found; the returned route is the **existing**
+          entry so the API can ship its id/created_at to the UI without a
+          follow-up lock-free lookup
         """
         async with self._lock:
             existing = self._find_same_name(route.name, route.category_id)
             if existing is not None:
                 if on_conflict == "reject":
-                    return None
+                    return existing, "conflict"
                 if on_conflict == "overwrite":
                     return self._overwrite_locked(existing, route), "overwritten"
                 # on_conflict == "new" — fall through to fresh insert
@@ -322,7 +355,26 @@ class SavedRoutesStore:
                 self._persist()
             return moved
 
-    async def rename(self, route_id: str, name: str) -> SavedRoute | None:
+    async def rename(
+        self,
+        route_id: str,
+        name: str,
+    ) -> tuple[Literal["renamed", "conflict"], SavedRoute] | None:
+        """Rename a route, enforcing the same case-insensitive uniqueness
+        invariant that :meth:`add` does.
+
+        Returns:
+
+        - ``None`` — no route with *route_id* exists (API maps to 404)
+        - ``("renamed", route)`` — happy path
+        - ``("conflict", existing)`` — a *different* route in the same
+          category already has this name; the existing one is returned
+          so the API can ship its id to the UI (API maps to 409)
+
+        Renames that resolve to the same normalised name as the route's
+        current name are treated as success — re-saving "Mt. Fuji" as
+        "mt. fuji " should not bounce.
+        """
         async with self._lock:
             idx = next(
                 (i for i, r in enumerate(self._store.routes) if r.id == route_id),
@@ -331,13 +383,18 @@ class SavedRoutesStore:
             if idx is None:
                 return None
             current = self._store.routes[idx]
+            normalised = _normalise_name(name)
+            if normalised != _normalise_name(current.name):
+                conflict = self._find_same_name(name, current.category_id)
+                if conflict is not None and conflict.id != route_id:
+                    return "conflict", conflict
             new_route = current.model_copy(update={
                 "name": name,
                 "updated_at": _now_iso(),
             })
             self._store.routes[idx] = new_route
             self._persist()
-            return new_route
+            return "renamed", new_route
 
     async def import_all(self, routes: list[SavedRoute]) -> int:
         """Merge *routes* into the store with fresh ids. Returns count imported."""
