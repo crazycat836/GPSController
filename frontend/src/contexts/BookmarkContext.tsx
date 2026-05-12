@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { useBookmarks, type Bookmark, type BookmarkPlace, type BookmarkTag } from '../hooks/useBookmarks'
 import * as api from '../services/api'
-import type { SavedRoute } from '../services/api'
+import type { SavedRoute, RouteCategory, RouteConflictPolicy } from '../services/api'
 import { useToastContext } from './ToastContext'
 import { useT } from '../i18n'
 import { devLog } from '../lib/dev-log'
@@ -12,6 +12,18 @@ interface AddBmDialog {
   name: string
   place: string
 }
+
+/** Outcome of `handleRouteSave`. The panel uses this to decide whether
+ *  to surface the "overwrite / save as new / cancel" dialog. */
+export type SaveRouteResult =
+  | { kind: 'created'; route: SavedRoute }
+  | { kind: 'overwritten'; route: SavedRoute }
+  | {
+      kind: 'conflict'
+      existingId: string | null
+      existingCreatedAt: string | null
+    }
+  | { kind: 'error'; message: string }
 
 interface BookmarkContextValue {
   // From useBookmarks
@@ -51,9 +63,28 @@ interface BookmarkContextValue {
   // Saved routes
   savedRoutes: readonly SavedRoute[]
   handleRouteLoad: (id: string) => { lat: number; lng: number }[] | null
-  handleRouteSave: (name: string, waypoints: { lat: number; lng: number }[], moveMode: string) => Promise<void>
+  handleRouteSave: (
+    name: string,
+    waypoints: { lat: number; lng: number }[],
+    moveMode: string,
+    options?: {
+      categoryId?: string
+      onConflict?: RouteConflictPolicy
+    },
+  ) => Promise<SaveRouteResult>
   handleRouteRename: (id: string, name: string) => Promise<void>
   handleRouteDelete: (id: string) => Promise<void>
+  handleRoutesBatchDelete: (ids: string[]) => Promise<void>
+  handleRoutesMoveToCategory: (ids: string[], targetCategoryId: string) => Promise<void>
+  handleRoutesReorder: (orderedIds: string[]) => Promise<void>
+  handleBookmarksReorder: (orderedIds: string[]) => Promise<void>
+
+  // Route categories
+  routeCategories: readonly RouteCategory[]
+  handleRouteCategoryCreate: (name: string, color: string) => Promise<RouteCategory | null>
+  handleRouteCategoryUpdate: (id: string, patch: { name?: string; color?: string }) => Promise<void>
+  handleRouteCategoryDelete: (id: string) => Promise<void>
+  handleRouteCategoriesReorder: (orderedIds: string[]) => Promise<void>
 
   // GPX
   handleGpxImport: (file: File) => Promise<void>
@@ -72,10 +103,12 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
   const bm = useBookmarks()
 
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([])
+  const [routeCategories, setRouteCategories] = useState<RouteCategory[]>([])
   const [addBmDialog, setAddBmDialog] = useState<AddBmDialog | null>(null)
 
   useEffect(() => {
     api.getSavedRoutes().then(setSavedRoutes).catch((err) => devLog('Failed to load saved routes', err))
+    api.getRouteCategories().then(setRouteCategories).catch((err) => devLog('Failed to load route categories', err))
   }, [])
 
   const handleAddBookmark = useCallback((lat: number, lng: number) => {
@@ -151,24 +184,70 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Pull the {existing_id, existing_created_at} fields out of the 409
+  // response body so the conflict dialog can show "saved YYYY-MM-DD"
+  // without a follow-up GET. Defensive against shape drift — every field
+  // is independently checked.
+  const parseConflictExtras = useCallback((err: unknown): {
+    existingId: string | null
+    existingCreatedAt: string | null
+  } => {
+    const fallback = { existingId: null, existingCreatedAt: null }
+    if (typeof err !== 'object' || err === null) return fallback
+    const detail = (err as { detail?: unknown }).detail
+    if (typeof detail !== 'object' || detail === null) return fallback
+    const eid = (detail as Record<string, unknown>).existing_id
+    const ets = (detail as Record<string, unknown>).existing_created_at
+    return {
+      existingId: typeof eid === 'string' ? eid : null,
+      existingCreatedAt: typeof ets === 'string' ? ets : null,
+    }
+  }, [])
+
   const handleRouteSave = useCallback(async (
     name: string,
     waypoints: { lat: number; lng: number }[],
     moveMode: string,
-  ) => {
+    options?: { categoryId?: string; onConflict?: RouteConflictPolicy },
+  ): Promise<SaveRouteResult> => {
     if (waypoints.length === 0) {
       showToast(t('toast.route_need_waypoint'))
-      return
+      return { kind: 'error', message: t('toast.route_need_waypoint') }
     }
+    const policy = options?.onConflict ?? 'new'
     try {
-      await api.saveRoute({ name, waypoints, profile: moveMode })
+      const saved = await api.saveRoute(
+        {
+          name,
+          waypoints,
+          profile: moveMode,
+          category_id: options?.categoryId ?? 'default',
+        },
+        policy,
+      )
       await refreshRoutes()
-      showToast(t('toast.route_saved', { name }))
+      // "overwritten" is inferred when the caller asked for that policy
+      // and the request succeeded — the backend doesn't ship the action
+      // separately to keep the response shape `SavedRoute`.
+      const kind = policy === 'overwrite' ? 'overwritten' : 'created'
+      if (kind === 'created') showToast(t('toast.route_saved', { name }))
+      return { kind, route: saved }
     } catch (err: unknown) {
+      // The /api endpoint returns 409 + route_name_conflict when policy
+      // is "reject" and a duplicate exists. The error is surfaced as an
+      // Error whose `.cause` carries the raw envelope; the api.ts
+      // request helper attaches it. Detect by code first.
+      const code = (err as { code?: string })?.code
+        ?? ((err as { detail?: { code?: string } })?.detail?.code)
+      if (code === 'route_name_conflict') {
+        const { existingId, existingCreatedAt } = parseConflictExtras(err)
+        return { kind: 'conflict', existingId, existingCreatedAt }
+      }
       const message = err instanceof Error ? err.message : ''
       showToast(t('toast.save_failed', { msg: message }))
+      return { kind: 'error', message }
     }
-  }, [refreshRoutes, showToast, t])
+  }, [refreshRoutes, showToast, t, parseConflictExtras])
 
   const handleRouteRename = useCallback(async (id: string, name: string) => {
     try {
@@ -190,6 +269,116 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
       showToast(message)
     }
   }, [refreshRoutes, showToast, t])
+
+  const handleRoutesBatchDelete = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return
+    try {
+      const res = await api.batchDeleteRoutes(ids)
+      await refreshRoutes()
+      showToast(t('toast.routes_batch_deleted', { n: res.deleted }))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.routes_batch_delete_failed', { msg: message }))
+    }
+  }, [refreshRoutes, showToast, t])
+
+  const handleRoutesMoveToCategory = useCallback(async (ids: string[], targetCategoryId: string) => {
+    if (ids.length === 0) return
+    try {
+      const res = await api.moveRoutesToCategory(ids, targetCategoryId)
+      await refreshRoutes()
+      showToast(t('toast.routes_moved', { n: res.moved }))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.routes_move_failed', { msg: message }))
+    }
+  }, [refreshRoutes, showToast, t])
+
+  // Optimistic reorder: the panel reorders its local list visually
+  // during drag, then calls this with the final id sequence on drop.
+  // We re-fetch afterwards so any unknown / dropped ids in the request
+  // converge with the server's view.
+  const handleRoutesReorder = useCallback(async (orderedIds: string[]) => {
+    try {
+      await api.reorderRoutes(orderedIds)
+      await refreshRoutes()
+    } catch (err) {
+      devLog('reorderRoutes failed', err)
+      await refreshRoutes()
+    }
+  }, [refreshRoutes])
+
+  const handleBookmarksReorder = useCallback(async (orderedIds: string[]) => {
+    try {
+      await api.reorderBookmarks(orderedIds)
+      await bm.refresh()
+    } catch (err) {
+      devLog('reorderBookmarks failed', err)
+      await bm.refresh()
+    }
+  }, [bm])
+
+  // ── Route categories ────────────────────────────────────
+  const refreshRouteCategories = useCallback(async () => {
+    try {
+      const cats = await api.getRouteCategories()
+      setRouteCategories(cats)
+    } catch (err) {
+      devLog('Failed to refresh route categories', err)
+    }
+  }, [])
+
+  const handleRouteCategoryCreate = useCallback(
+    async (name: string, color: string): Promise<RouteCategory | null> => {
+      const trimmed = name.trim()
+      if (!trimmed) return null
+      try {
+        const cat = await api.createRouteCategory(trimmed, color)
+        await refreshRouteCategories()
+        return cat
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : ''
+        showToast(t('toast.save_failed', { msg: message }))
+        return null
+      }
+    },
+    [refreshRouteCategories, showToast, t],
+  )
+
+  const handleRouteCategoryUpdate = useCallback(
+    async (id: string, patch: { name?: string; color?: string }) => {
+      try {
+        await api.updateRouteCategory(id, patch)
+        await refreshRouteCategories()
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : ''
+        showToast(t('toast.save_failed', { msg: message }))
+      }
+    },
+    [refreshRouteCategories, showToast, t],
+  )
+
+  const handleRouteCategoryDelete = useCallback(async (id: string) => {
+    try {
+      await api.deleteRouteCategory(id)
+      // Routes pointing at the deleted category server-side fall back to
+      // "default" — re-fetch both so the UI's local view matches.
+      await Promise.all([refreshRouteCategories(), refreshRoutes()])
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.save_failed', { msg: message }))
+    }
+  }, [refreshRouteCategories, refreshRoutes, showToast, t])
+
+  const handleRouteCategoriesReorder = useCallback(async (orderedIds: string[]) => {
+    try {
+      await api.reorderRouteCategories(orderedIds)
+      await refreshRouteCategories()
+    } catch (err) {
+      devLog('reorderRouteCategories failed', err)
+      await refreshRouteCategories()
+    }
+  }, [refreshRouteCategories])
 
   const handleGpxImport = useCallback(async (file: File) => {
     try {
@@ -331,6 +520,16 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     handleRouteSave,
     handleRouteRename,
     handleRouteDelete,
+    handleRoutesBatchDelete,
+    handleRoutesMoveToCategory,
+    handleRoutesReorder,
+    handleBookmarksReorder,
+
+    routeCategories,
+    handleRouteCategoryCreate,
+    handleRouteCategoryUpdate,
+    handleRouteCategoryDelete,
+    handleRouteCategoriesReorder,
 
     handleGpxImport,
     handleGpxExport,
