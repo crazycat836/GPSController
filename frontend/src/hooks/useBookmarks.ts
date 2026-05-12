@@ -139,6 +139,23 @@ export function useBookmarks() {
     [refresh],
   )
 
+  // Fire-and-forget usage tick. Optimistically bumps `last_used_at` so the
+  // "Recent" sort reflects the click immediately without a full list refetch.
+  //
+  // Format must match Python's `datetime.now(timezone.utc).isoformat()` on
+  // the backend (microsecond precision + literal `+00:00`), because the
+  // "Recent" sort compares timestamps as plain strings — `Z` vs `+00:00`
+  // would break lexicographic ordering at the second-and-below boundary.
+  const touchBookmark = useCallback((id: string) => {
+    const now = new Date().toISOString().replace('Z', '000+00:00')
+    setBookmarks((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, last_used_at: now } : b)),
+    )
+    api.touchBookmark(id).catch((err) => {
+      devLog('touchBookmark failed:', err)
+    })
+  }, [])
+
   const moveBookmarks = useCallback(
     async (ids: string[], placeId: string) => {
       await api.moveBookmarks(ids, placeId)
@@ -232,6 +249,7 @@ export function useBookmarks() {
     loading,
     createBookmark,
     updateBookmark,
+    touchBookmark,
     deleteBookmark,
     deleteBookmarksBatch,
     backfillFlags,

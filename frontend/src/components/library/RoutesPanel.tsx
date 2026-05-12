@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Route as RouteIcon, Save, Pencil, Trash2, FileUp, Upload, Download,
   Folder, FolderInput, GripVertical, ListTree, X,
@@ -56,12 +56,28 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   const [editingRouteName, setEditingRouteName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<SavedRoute | null>(null)
   const [confirmBatchDelete, setConfirmBatchDelete] = useState(false)
+  // ``moveMode`` is captured at the moment the conflict is raised so a
+  // mode change while the dialog is open doesn't silently re-stamp the
+  // overwrite with the new profile (the user picked Overwrite to keep
+  // the existing row's identity, including the originally-saved profile
+  // intent).
   const [overwriteDialog, setOverwriteDialog] = useState<null | {
     name: string
     waypoints: { lat: number; lng: number }[]
     categoryId: string
+    moveMode: string
     existingCreatedAt: string | null
   }>(null)
+
+  // Live sim state in a ref so handleSave / resolveOverwrite can read
+  // the current waypoints without re-creating on every position tick.
+  // ``sim.sim.waypoints`` is a fresh array reference each sim tick;
+  // putting it in useCallback deps would invalidate every KebabMenu
+  // and row that captures the resulting handler.
+  const simRef = useRef({ waypoints: sim.sim.waypoints, moveMode: sim.sim.moveMode })
+  useEffect(() => {
+    simRef.current = { waypoints: sim.sim.waypoints, moveMode: sim.sim.moveMode }
+  }, [sim.sim.waypoints, sim.sim.moveMode])
 
   // List controls
   const [search, setSearch] = useState('')
@@ -72,6 +88,11 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   // The previous selection is restored when reorder mode exits.
   const [reorderMode, setReorderMode] = useState(false)
   const [previousSort, setPreviousSort] = useState<SortMode>('default')
+  // Reorder mode operates on the full route list — dragging within a
+  // filtered subset would silently leave hidden routes' sort_order
+  // intact and confuse the user. Snapshot the active chip so we can
+  // restore it on exit.
+  const [previousCategoryId, setPreviousCategoryId] = useState<string>(ALL_ID)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
@@ -84,16 +105,19 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   // must equal the persisted sort_order so drag deltas are meaningful.
   const enterReorderMode = useCallback(() => {
     setPreviousSort(sortMode)
+    setPreviousCategoryId(activeCategoryId)
     setSortMode('default')
+    setActiveCategoryId(ALL_ID)
     setReorderMode(true)
     setSelectionMode(false)
     setSelectedIds(new Set())
-  }, [sortMode])
+  }, [sortMode, activeCategoryId])
 
   const exitReorderMode = useCallback(() => {
     setReorderMode(false)
     setSortMode(previousSort)
-  }, [previousSort])
+    setActiveCategoryId(previousCategoryId)
+  }, [previousSort, previousCategoryId])
 
   // ─── Filter + sort pipeline ───────────────────────────
   const filtered = useMemo(() => {
@@ -149,12 +173,15 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   }, [savedRoutes, routeCategories, t])
 
   // ─── Save (with conflict handling) ────────────────────
+  // Sim state (waypoints + moveMode) is read through simRef so this
+  // callback's identity doesn't churn on every position tick.
   const handleSave = useCallback(async () => {
     const name = routeName.trim()
     if (!name || waypointsCount === 0) return
+    const { waypoints, moveMode } = simRef.current
     // Always try with `on_conflict=reject` first so a same-name match
     // surfaces the overwrite dialog instead of silently double-saving.
-    const result = await bm.handleRouteSave(name, sim.sim.waypoints, sim.sim.moveMode, {
+    const result = await bm.handleRouteSave(name, waypoints, moveMode, {
       categoryId: saveCategoryId,
       onConflict: 'reject',
     })
@@ -163,28 +190,33 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       return
     }
     if (result.kind === 'conflict') {
+      // Snapshot waypoints + moveMode here — the user may change either
+      // (e.g. add a new pin, flip walking→driving) before they pick
+      // Overwrite, and we want the second save to reflect what they
+      // saw when the dialog appeared.
       setOverwriteDialog({
         name,
-        waypoints: sim.sim.waypoints,
+        waypoints,
+        moveMode,
         categoryId: saveCategoryId,
         existingCreatedAt: result.existingCreatedAt,
       })
     }
     // result.kind === 'error' — toast already shown by the context
-  }, [routeName, waypointsCount, bm, sim.sim.waypoints, sim.sim.moveMode, saveCategoryId])
+  }, [routeName, waypointsCount, bm, saveCategoryId])
 
   const resolveOverwrite = useCallback(async (policy: 'overwrite' | 'new') => {
     if (!overwriteDialog) return
-    const { name, waypoints, categoryId } = overwriteDialog
+    const { name, waypoints, moveMode, categoryId } = overwriteDialog
     setOverwriteDialog(null)
-    const result = await bm.handleRouteSave(name, waypoints, sim.sim.moveMode, {
+    const result = await bm.handleRouteSave(name, waypoints, moveMode, {
       categoryId, onConflict: policy,
     })
     if (result.kind === 'overwritten') {
       showToast(t('toast.route_overwritten', { name }))
     }
     if (result.kind !== 'error') setRouteName('')
-  }, [overwriteDialog, bm, sim.sim.moveMode, showToast, t])
+  }, [overwriteDialog, bm, showToast, t])
 
   const handleLoad = useCallback((id: string) => {
     if (selectionMode || reorderMode) return

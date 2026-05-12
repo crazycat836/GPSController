@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
 import { useBookmarks, type Bookmark, type BookmarkPlace, type BookmarkTag } from '../hooks/useBookmarks'
 import * as api from '../services/api'
 import type { SavedRoute, RouteCategory, RouteConflictPolicy } from '../services/api'
@@ -36,6 +36,7 @@ interface BookmarkContextValue {
     placeId?: string,
   ) => Promise<{ created: number; failed: number }>
   updateBookmark: (id: string, data: Partial<Bookmark>) => Promise<Bookmark>
+  touchBookmark: (id: string) => void
   deleteBookmark: (id: string) => Promise<void>
   deleteBookmarksBatch: (ids: string[]) => Promise<number>
   moveBookmarks: (ids: string[], placeId: string) => Promise<void>
@@ -294,29 +295,60 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refreshRoutes, showToast, t])
 
-  // Optimistic reorder: the panel reorders its local list visually
-  // during drag, then calls this with the final id sequence on drop.
-  // We re-fetch afterwards so any unknown / dropped ids in the request
-  // converge with the server's view.
+  // Optimistic reorder with an in-flight guard: a rapid second drag
+  // while the first reorder POST is still landing would otherwise race
+  // — the second drag's id list is computed from the stale pre-refresh
+  // local order, both POSTs hit the server back-to-back, and whichever
+  // refresh lands second wins. We instead serialise the POST and queue
+  // the *latest* ordering on top, so a burst of N drags collapses into
+  // one in-flight call plus one tail call carrying the final order.
+  const routeReorderInflightRef = useRef(false)
+  const routeReorderPendingRef = useRef<string[] | null>(null)
   const handleRoutesReorder = useCallback(async (orderedIds: string[]) => {
+    if (routeReorderInflightRef.current) {
+      routeReorderPendingRef.current = orderedIds
+      return
+    }
+    routeReorderInflightRef.current = true
     try {
       await api.reorderRoutes(orderedIds)
-      await refreshRoutes()
     } catch (err) {
       devLog('reorderRoutes failed', err)
+    } finally {
       await refreshRoutes()
+      routeReorderInflightRef.current = false
+      const queued = routeReorderPendingRef.current
+      routeReorderPendingRef.current = null
+      if (queued) void handleRoutesReorderRef.current(queued)
     }
   }, [refreshRoutes])
+  // Self-ref pattern lets the finally block re-enter without a forward
+  // reference; the ref is updated in an effect below.
+  const handleRoutesReorderRef = useRef(handleRoutesReorder)
+  useEffect(() => { handleRoutesReorderRef.current = handleRoutesReorder }, [handleRoutesReorder])
 
+  const bookmarkReorderInflightRef = useRef(false)
+  const bookmarkReorderPendingRef = useRef<string[] | null>(null)
   const handleBookmarksReorder = useCallback(async (orderedIds: string[]) => {
+    if (bookmarkReorderInflightRef.current) {
+      bookmarkReorderPendingRef.current = orderedIds
+      return
+    }
+    bookmarkReorderInflightRef.current = true
     try {
       await api.reorderBookmarks(orderedIds)
-      await bm.refresh()
     } catch (err) {
       devLog('reorderBookmarks failed', err)
+    } finally {
       await bm.refresh()
+      bookmarkReorderInflightRef.current = false
+      const queued = bookmarkReorderPendingRef.current
+      bookmarkReorderPendingRef.current = null
+      if (queued) void handleBookmarksReorderRef.current(queued)
     }
   }, [bm])
+  const handleBookmarksReorderRef = useRef(handleBookmarksReorder)
+  useEffect(() => { handleBookmarksReorderRef.current = handleBookmarksReorder }, [handleBookmarksReorder])
 
   // ── Route categories ────────────────────────────────────
   const refreshRouteCategories = useCallback(async () => {
@@ -493,6 +525,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     createBookmark: bm.createBookmark,
     createBookmarksBulk,
     updateBookmark: bm.updateBookmark,
+    touchBookmark: bm.touchBookmark,
     deleteBookmark: bm.deleteBookmark,
     deleteBookmarksBatch: bm.deleteBookmarksBatch,
     moveBookmarks: bm.moveBookmarks,

@@ -416,6 +416,7 @@ export const reverseGeocode = (lat: number, lng: number, lang?: string) =>
 export const getBookmarks = () => request<BookmarkStore>('GET', '/api/bookmarks')
 export const createBookmark = (bm: Omit<Bookmark, 'id'>) => request<Bookmark>('POST', '/api/bookmarks', bm)
 export const updateBookmark = (id: string, bm: Partial<Bookmark>) => request<Bookmark>('PUT', `/api/bookmarks/${id}`, bm)
+export const touchBookmark = (id: string) => request<Bookmark>('POST', `/api/bookmarks/${id}/touch`)
 export const deleteBookmark = (id: string) => request<StatusResponse>('DELETE', `/api/bookmarks/${id}`)
 export const deleteBookmarksBatch = (ids: string[]) =>
   request<{ deleted: number; requested: number }>('POST', '/api/bookmarks/batch-delete', { ids })

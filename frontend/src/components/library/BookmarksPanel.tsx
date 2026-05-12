@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Plus, Bookmark as BookmarkIcon, Pencil, Trash2, Copy,
   FolderInput, ClipboardList, ClipboardPaste, GripVertical,
@@ -70,6 +70,13 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [reorderMode, setReorderMode] = useState(false)
+  // Filter snapshot for reorder-mode round-trip. Entering reorder
+  // clears the place/tag filters (so dragging operates on the full
+  // list); exiting restores whatever the user had before.
+  const prevFiltersRef = useRef<{ placeId: string; tagIds: string[] }>({
+    placeId: ALL_ID,
+    tagIds: [],
+  })
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -308,11 +315,28 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       label: reorderMode ? t('generic.cancel') : t('panel.route_reorder_mode'),
       icon: <GripVertical width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
       onSelect: () => {
-        setReorderMode((prev) => !prev)
-        // Exit selection-mode when entering reorder; the two modes are
-        // mutually exclusive (drag handles vs row checkboxes share the
-        // leading slot, so picking both at once would be ambiguous).
-        if (!reorderMode) exitSelection()
+        if (reorderMode) {
+          // Exiting: restore the place/tag filters the user had before.
+          setReorderMode(false)
+          setActivePlaceId(prevFiltersRef.current.placeId)
+          setActiveTagIds(new Set(prevFiltersRef.current.tagIds))
+          return
+        }
+        // Entering: snapshot the current filters and clear them so the
+        // drag list shows every bookmark. Reordering within a filtered
+        // view would silently leave hidden bookmarks' sort_order
+        // untouched, and the user wouldn't see why their drag didn't
+        // "stick" after switching back to All.
+        prevFiltersRef.current = {
+          placeId: activePlaceId,
+          tagIds: Array.from(activeTagIds),
+        }
+        setActivePlaceId(ALL_ID)
+        setActiveTagIds(new Set())
+        setReorderMode(true)
+        // Selection-mode and reorder-mode share the leading row slot
+        // (checkbox vs handle), so they're mutually exclusive.
+        exitSelection()
       },
     },
   ], [t, selectionMode, exitSelection, reorderMode])
@@ -392,6 +416,11 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     void bm.handleBookmarksReorder(next.map((b) => b.id))
   }, [reorderList, bm])
 
+  // Narrow the touchBookmark binding out of the full context value so
+  // BookmarkRow's memo doesn't bust on every BookmarkProvider render
+  // (the provider re-creates ``value`` as a plain object literal each
+  // render; depending on the whole ``bm`` would invalidate every row).
+  const { touchBookmark } = bm
   const renderBookmarkRow = useCallback((b: Bookmark) => (
     <BookmarkRow
       key={b.id}
@@ -410,7 +439,10 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       onStartInlineEdit={startInlineEdit}
       isActive={isBookmarkActive(b)}
       isCopied={copiedId === b.id}
-      onActivate={onBookmarkClick}
+      onActivate={(lat, lng) => {
+        touchBookmark(b.id)
+        onBookmarkClick(lat, lng)
+      }}
       onEdit={editBookmark}
       onDelete={confirmDeleteOne}
       rowMenuItems={rowMenuItems}
@@ -420,7 +452,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     toggleSelected, inlineEditId, inlineEditName,
     commitInlineRename, cancelInlineEdit, startInlineEdit,
     isBookmarkActive, copiedId, onBookmarkClick,
-    editBookmark, confirmDeleteOne, rowMenuItems,
+    editBookmark, confirmDeleteOne, rowMenuItems, touchBookmark,
   ])
 
   return (
