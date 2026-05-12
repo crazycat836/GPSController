@@ -30,6 +30,34 @@ export interface SavedRoute {
   /** OSRM profile / movement mode (e.g. "foot", "car"). Sent by
    *  `saveRoute` and stored by the backend. */
   profile?: string
+  /** Added in route-store v1; legacy rows back-fill to "default". */
+  category_id?: string
+  /** Mirrors created_at on first save; bumped on rename/move/overwrite. */
+  updated_at?: string
+  /** Explicit drag-reorder position; legacy rows default to 0. */
+  sort_order?: number
+}
+
+/** Route bucket — mirrors BookmarkPlace shape on purpose so the
+ *  category-strip component can be shared. */
+export interface RouteCategory {
+  id: string
+  name: string
+  color: string
+  sort_order: number
+  created_at: string
+}
+
+/** Saved-route conflict policy mirroring backend `ConflictPolicy`. */
+export type RouteConflictPolicy = 'new' | 'overwrite' | 'reject'
+
+/** Detail body the backend ships with a 409 ROUTE_NAME_CONFLICT so the
+ *  overwrite-prompt has enough context without a follow-up GET. */
+export interface RouteNameConflictDetail {
+  code: 'route_name_conflict'
+  message: string
+  existing_id: string | null
+  existing_created_at: string | null
 }
 
 /** Store envelope returned by `/api/bookmarks`. */
@@ -486,10 +514,38 @@ export interface RoutePlanResponse {
 export const planRoute = (start: LatLng, end: LatLng, profile: string) =>
   request<RoutePlanResponse>('POST', '/api/route/plan', { start, end, profile })
 export const getSavedRoutes = () => request<SavedRoute[]>('GET', '/api/route/saved')
-export const saveRoute = (route: Omit<SavedRoute, 'id' | 'created_at'>) =>
-  request<SavedRoute>('POST', '/api/route/saved', route)
+export const saveRoute = (
+  route: Omit<SavedRoute, 'id' | 'created_at' | 'updated_at' | 'sort_order'>,
+  onConflict: RouteConflictPolicy = 'new',
+) => request<SavedRoute>('POST', `/api/route/saved?on_conflict=${onConflict}`, route)
 export const deleteRoute = (id: string) => request<StatusResponse>('DELETE', `/api/route/saved/${id}`)
 export const renameRoute = (id: string, name: string) => request<SavedRoute>('PATCH', `/api/route/saved/${id}`, { name })
+
+// Route categories (v0.2.133)
+export const getRouteCategories = () =>
+  request<RouteCategory[]>('GET', '/api/route/saved/categories')
+export const createRouteCategory = (name: string, color: string) =>
+  request<RouteCategory>('POST', '/api/route/saved/categories', { name, color })
+export const updateRouteCategory = (id: string, patch: { name?: string; color?: string }) =>
+  request<RouteCategory>('PUT', `/api/route/saved/categories/${id}`, patch)
+export const deleteRouteCategory = (id: string) =>
+  request<StatusResponse>('DELETE', `/api/route/saved/categories/${id}`)
+export const batchDeleteRoutes = (routeIds: string[]) =>
+  request<{ deleted: number }>('POST', '/api/route/saved/batch-delete', { route_ids: routeIds })
+export const moveRoutesToCategory = (routeIds: string[], targetCategoryId: string) =>
+  request<{ moved: number }>('POST', '/api/route/saved/move', {
+    route_ids: routeIds, target_category_id: targetCategoryId,
+  })
+
+// Drag-reorder (v0.2.146)
+export const reorderRoutes = (orderedIds: string[]) =>
+  request<{ reordered: number }>('POST', '/api/route/saved/reorder', { ordered_ids: orderedIds })
+export const reorderRouteCategories = (orderedIds: string[]) =>
+  request<{ reordered: number }>(
+    'POST', '/api/route/saved/categories/reorder', { ordered_ids: orderedIds },
+  )
+export const reorderBookmarks = (orderedIds: string[]) =>
+  request<{ reordered: number }>('POST', '/api/bookmarks/reorder', { ordered_ids: orderedIds })
 
 // GPX import/export
 export async function importGpx(file: File): Promise<{ status: string; id: string; points: number }> {
