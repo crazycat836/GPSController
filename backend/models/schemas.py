@@ -272,6 +272,13 @@ class Bookmark(BaseModel):
     # existing JSON files without these fields load unchanged.
     country_code: str = ""
     country: str = ""
+    # Insertion-order fallback used by the drag-reorder UI. Stored
+    # explicitly so two bookmarks created milliseconds apart don't drift
+    # when the frontend sorts by sort_order. Defaults to 0 on legacy
+    # rows — they'll all collide at the top until the user drags one,
+    # at which point the reorder endpoint rewrites all neighbouring
+    # sort_order values.
+    sort_order: int = 0
 
 
 class BookmarkMoveRequest(BaseModel):

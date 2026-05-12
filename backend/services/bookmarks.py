@@ -266,7 +266,7 @@ class BookmarkManager:
 
     def _reorder_items(
         self,
-        items_attr_name: Literal["places", "tags"],
+        items_attr_name: Literal["places", "tags", "bookmarks"],
         ordered_ids: list[str],
     ) -> int:
         """Rewrite ``sort_order`` on ``self.store.<items_attr_name>`` to
@@ -411,6 +411,21 @@ class BookmarkManager:
 
     def _find_tag(self, tag_id: str) -> BookmarkTag | None:
         return next((t for t in self.store.tags if t.id == tag_id), None)
+
+    # ------------------------------------------------------------------
+    # Bookmark item ordering (separate from place/tag axis ordering)
+    # ------------------------------------------------------------------
+
+    async def reorder_bookmarks(self, ordered_ids: list[str]) -> int:
+        """Rewrite ``sort_order`` on bookmarks to match the given id
+        sequence. Unknown ids are ignored; bookmarks not in
+        ``ordered_ids`` keep their current sort_order. Returns count
+        whose sort_order actually changed."""
+        async with self._lock:
+            changed = self._reorder_items("bookmarks", ordered_ids)
+            if changed:
+                self._save()
+            return changed
 
     # ------------------------------------------------------------------
     # Bookmarks

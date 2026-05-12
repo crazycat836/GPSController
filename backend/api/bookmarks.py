@@ -230,6 +230,15 @@ async def reorder_tags(req: ReorderRequest):
     return {"reordered": changed}
 
 
+@router.post("/reorder")
+async def reorder_bookmarks(req: ReorderRequest):
+    """Persist a drag-reorder of bookmark items. Distinct from
+    /places/reorder + /tags/reorder which order the *axes*; this orders
+    individual bookmarks within whichever sort the frontend is using."""
+    changed = await _bm().reorder_bookmarks(req.ordered_ids)
+    return {"reordered": changed}
+
+
 # ── Import / Export ───────────────────────────────────────
 
 @router.get("/export")

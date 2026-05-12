@@ -329,3 +329,26 @@ async def batch_delete_routes(req: RouteBatchDeleteRequest):
 async def move_routes_to_category(req: RouteMoveRequest):
     moved = await _store.move(req.route_ids, req.target_category_id)
     return {"moved": moved}
+
+
+# ── Drag-reorder ────────────────────────────────────────────────────
+
+
+class _RouteReorderRequest(BaseModel):
+    ordered_ids: list[str]
+
+
+@router.post("/saved/reorder")
+async def reorder_routes(req: _RouteReorderRequest):
+    """Persist a drag-reorder of route items within the current sort.
+    Unknown ids are ignored — the frontend's optimistic update doesn't
+    have to wait for the server to validate the id set before moving on."""
+    changed = await _store.reorder_routes(req.ordered_ids)
+    return {"reordered": changed}
+
+
+@router.post("/saved/categories/reorder")
+async def reorder_categories(req: _RouteReorderRequest):
+    """Persist a drag-reorder of category items in the sidebar."""
+    changed = await _store.reorder_categories(req.ordered_ids)
+    return {"reordered": changed}

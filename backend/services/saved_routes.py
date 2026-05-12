@@ -396,6 +396,47 @@ class SavedRoutesStore:
             self._persist()
             return updated
 
+    async def reorder_categories(self, ordered_ids: list[str]) -> int:
+        """Rewrite ``sort_order`` on categories to match the given id
+        sequence. Unknown ids are ignored; categories not listed keep
+        their current order. Returns the number whose sort_order
+        actually changed."""
+        async with self._lock:
+            id_to_order = {iid: i for i, iid in enumerate(ordered_ids)}
+            changed = 0
+            new_cats: list[RouteCategory] = []
+            for c in self._store.categories:
+                new_order = id_to_order.get(c.id)
+                if new_order is None or c.sort_order == new_order:
+                    new_cats.append(c)
+                    continue
+                new_cats.append(c.model_copy(update={"sort_order": new_order}))
+                changed += 1
+            if changed:
+                self._store.categories = new_cats
+                self._persist()
+            return changed
+
+    async def reorder_routes(self, ordered_ids: list[str]) -> int:
+        """Rewrite ``sort_order`` on routes to match the given id
+        sequence. Same contract as :meth:`reorder_categories` — unknown
+        ids ignored, untouched routes keep their order."""
+        async with self._lock:
+            id_to_order = {iid: i for i, iid in enumerate(ordered_ids)}
+            changed = 0
+            new_routes: list[SavedRoute] = []
+            for r in self._store.routes:
+                new_order = id_to_order.get(r.id)
+                if new_order is None or r.sort_order == new_order:
+                    new_routes.append(r)
+                    continue
+                new_routes.append(r.model_copy(update={"sort_order": new_order}))
+                changed += 1
+            if changed:
+                self._store.routes = new_routes
+                self._persist()
+            return changed
+
     async def delete_category(self, category_id: str) -> bool:
         """Drop *category_id*; routes pointing at it fall back to ``default``.
         The preset ``default`` category is non-deletable."""
