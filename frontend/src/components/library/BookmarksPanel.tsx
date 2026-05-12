@@ -1,8 +1,17 @@
 import { useCallback, useMemo, useState } from 'react'
 import {
   Plus, Bookmark as BookmarkIcon, Pencil, Trash2, Copy,
-  FolderInput, ClipboardList, ClipboardPaste,
+  FolderInput, ClipboardList, ClipboardPaste, GripVertical,
 } from 'lucide-react'
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor,
+  useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove, SortableContext, sortableKeyboardCoordinates,
+  useSortable, verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
@@ -60,6 +69,12 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   const [inlineEditName, setInlineEditName] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [reorderMode, setReorderMode] = useState(false)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
   const displayPlace = useCallback((name: string) => {
     if (!isDefaultPlace(name)) return name
@@ -288,7 +303,19 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         else setSelectionMode(true)
       },
     },
-  ], [t, selectionMode, exitSelection])
+    {
+      id: 'reorder',
+      label: reorderMode ? t('generic.cancel') : t('panel.route_reorder_mode'),
+      icon: <GripVertical width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
+      onSelect: () => {
+        setReorderMode((prev) => !prev)
+        // Exit selection-mode when entering reorder; the two modes are
+        // mutually exclusive (drag handles vs row checkboxes share the
+        // leading slot, so picking both at once would be ambiguous).
+        if (!reorderMode) exitSelection()
+      },
+    },
+  ], [t, selectionMode, exitSelection, reorderMode])
 
   // ─── Row kebab ──────────────────────────────────────
   const rowMenuItems = useCallback((b: Bookmark): KebabMenuItem[] => {
@@ -345,6 +372,25 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     (bk: Bookmark) => setEditing({ mode: 'edit', bookmark: bk }),
     [],
   )
+
+  // In reorder mode, show a flat list sorted by sort_order so the drag
+  // sequence the user manipulates is the same one we persist on drop.
+  // Sections / sort toggle don't apply — they'd reshuffle on every drag.
+  const reorderList = useMemo<Bookmark[] | null>(() => {
+    if (!reorderMode) return null
+    return [...filtered].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+  }, [reorderMode, filtered])
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    if (!reorderList) return
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = reorderList.findIndex((b) => b.id === active.id)
+    const newIndex = reorderList.findIndex((b) => b.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    const next = arrayMove(reorderList, oldIndex, newIndex)
+    void bm.handleBookmarksReorder(next.map((b) => b.id))
+  }, [reorderList, bm])
 
   const renderBookmarkRow = useCallback((b: Bookmark) => (
     <BookmarkRow
@@ -413,6 +459,18 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
           icon={<BookmarkIcon width={ICON_SIZE.lg} height={ICON_SIZE.lg} />}
           title={anyFilter ? t('bm.search_no_results') : t('bm.blank')}
         />
+      ) : reorderList ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={reorderList.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+            <div className="flex flex-col gap-1.5">
+              {reorderList.map((b) => (
+                <SortableBookmarkWrapper key={b.id} id={b.id}>
+                  {renderBookmarkRow(b)}
+                </SortableBookmarkWrapper>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       ) : sections ? (
         <div className="flex flex-col gap-4">
           {sections.map((section) => (
@@ -526,6 +584,39 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         onManageTags={() => setTagMgrOpen(true)}
         onAdd={() => setEditing({ mode: 'create' })}
       />
+    </div>
+  )
+}
+
+// ── Sortable bookmark wrapper ────────────────────────────
+// Wraps a fully-rendered BookmarkRow with a leading drag handle in
+// reorder mode. Kept inline because BookmarkRow's prop surface is
+// already large and a presentation wrapper that just adds a handle
+// belongs next to the orchestrator that decides when to apply it.
+interface SortableBookmarkWrapperProps {
+  id: string
+  children: React.ReactNode
+}
+
+function SortableBookmarkWrapper({ id, children }: SortableBookmarkWrapperProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.55 : 1,
+  }
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-1.5">
+      <button
+        type="button"
+        className="cursor-grab active:cursor-grabbing px-1 text-[var(--color-text-3)] hover:text-[var(--color-text-1)] focus:outline-none"
+        aria-label="drag handle"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
+      </button>
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   )
 }

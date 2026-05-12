@@ -19,6 +19,8 @@ export interface Bookmark {
   // Empty string for legacy rows until /backfill-flags runs.
   country_code?: string
   country?: string
+  // Explicit drag-reorder position; back-fills to 0 on legacy rows.
+  sort_order?: number
 }
 
 export interface BookmarkPlace {
