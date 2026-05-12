@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
-import { X, Star, Dices, Locate, MapPin, Flag, ChevronDown, Save, FolderOpen, Check, ClipboardPaste } from 'lucide-react'
+import { X, Star, Dices, Locate, MapPin, Flag, ChevronDown, Save, FolderOpen, Check, ClipboardPaste, Wand2 } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
+import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
 import PauseControl from '../PauseControl'
 import RouteCard, { type RoutePoint } from '../RouteCard'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
 import BulkCoordsDialog from '../library/BulkCoordsDialog'
 import { ICON_SIZE } from '../../lib/icons'
+import * as api from '../../services/api'
 
 interface WaypointListProps {
   mode: 'loop' | 'multistop'
@@ -28,6 +30,7 @@ export default function WaypointList({ mode }: WaypointListProps) {
     isRunning,
   } = useSimContext()
   const { handleAddBookmark, savedRoutes, handleRouteSave, handleRouteLoad } = useBookmarkContext()
+  const { showToast } = useToastContext()
   const t = useT()
   const [genOpen, setGenOpen] = useState(false)
   const [savingMode, setSavingMode] = useState(false)
@@ -35,6 +38,25 @@ export default function WaypointList({ mode }: WaypointListProps) {
   const [loadOpen, setLoadOpen] = useState(false)
   const loadRef = useRef<HTMLDivElement>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [optimizing, setOptimizing] = useState(false)
+
+  const handleOptimizeOrder = async () => {
+    if (optimizing || sim.waypoints.length < 2) return
+    setOptimizing(true)
+    try {
+      // Send the current waypoints + selected move mode. The first
+      // index is anchored server-side, so dragging the list afterwards
+      // still works from the user's perspective.
+      const result = await api.optimizeRoute(sim.waypoints, sim.moveMode)
+      sim.setWaypoints(result.waypoints)
+      showToast(t('toast.route_optimized'))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : ''
+      showToast(t('toast.route_optimize_failed', { msg: message }))
+    } finally {
+      setOptimizing(false)
+    }
+  }
 
   useEffect(() => {
     if (!loadOpen) return
@@ -205,7 +227,16 @@ export default function WaypointList({ mode }: WaypointListProps) {
       disabled: isRunning,
       onSelect: () => setBulkOpen(true),
     },
-  ], [t, isRunning])
+    {
+      id: 'optimize',
+      label: t('panel.waypoints_optimize'),
+      icon: <Wand2 width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
+      // Refuse mid-run (sort_order shouldn't shuffle while the engine
+      // is walking the list) and when there's nothing to reorder.
+      disabled: isRunning || optimizing || sim.waypoints.length < 2,
+      onSelect: () => { void handleOptimizeOrder() },
+    },
+  ], [t, isRunning, optimizing, sim.waypoints.length])
 
   /* ── Header extra: save / load icon buttons ── */
   const titleExtra = (

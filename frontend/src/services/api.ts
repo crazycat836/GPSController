@@ -538,9 +538,28 @@ export const moveRoutesToCategory = (routeIds: string[], targetCategoryId: strin
     route_ids: routeIds, target_category_id: targetCategoryId,
   })
 
-// Drag-reorder (v0.2.146)
+// Drag-reorder
 export const reorderRoutes = (orderedIds: string[]) =>
   request<{ reordered: number }>('POST', '/api/route/saved/reorder', { ordered_ids: orderedIds })
+
+// Optimize order — reorders waypoints to minimise total travel time
+// under the given profile. Index 0 is anchored. See backend
+// services/route_optimizer.py for the heuristic.
+export interface OptimizeOrderResponse {
+  order: number[]
+  waypoints: { lat: number; lng: number }[]
+  total_seconds: number
+}
+export const optimizeRoute = (
+  waypoints: { lat: number; lng: number }[],
+  profile: string,
+) => request<OptimizeOrderResponse>('POST', '/api/route/optimize', { waypoints, profile })
+
+// Gold Ditto (拉金盆) one-shot cycle — pushes simulated GPS to ``lat,lng``
+// then immediately restores real GPS. See backend core/gold_ditto.py.
+export const goldDittoCycle = (lat: number, lng: number, udid?: string) =>
+  request<StatusResponse>('POST', '/api/location/gold-ditto',
+    udid ? { lat, lng, udid } : { lat, lng })
 export const reorderRouteCategories = (orderedIds: string[]) =>
   request<{ reordered: number }>(
     'POST', '/api/route/saved/categories/reorder', { ordered_ids: orderedIds },

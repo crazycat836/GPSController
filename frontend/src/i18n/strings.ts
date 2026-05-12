@@ -265,6 +265,8 @@ export const STRINGS = {
 
   // ── Toast / errors ───────────────────────────
   'toast.route_saved': { zh: '已儲存路線「{name}」', en: 'Route "{name}" saved' },
+  'toast.route_optimized': { zh: '路線已最佳化', en: 'Route optimized' },
+  'toast.route_optimize_failed': { zh: '最佳化失敗: {msg}', en: 'Optimize failed: {msg}' },
   'toast.save_failed': { zh: '儲存失敗: {msg}', en: 'Save failed: {msg}' },
   'toast.route_need_waypoint': { zh: '請先加入至少一個路徑點', en: 'Add at least one waypoint first' },
   'toast.route_deleted': { zh: '已刪除路線', en: 'Route deleted' },
@@ -419,6 +421,7 @@ export const STRINGS = {
   'panel.waypoint_fly_to': { zh: '點擊飛到此路徑點 (保留目前模式)', en: 'Fly here (keeps current mode)' },
   'panel.waypoints_menu': { zh: '更多動作', en: 'More actions' },
   'panel.waypoints_bulk_paste': { zh: '批次貼上座標', en: 'Bulk paste…' },
+  'panel.waypoints_optimize': { zh: '最佳化順序', en: 'Optimize order' },
 
   // DDI hints (Phase 7 / upstream v0.2.58-adapted) — shown when the
   // auto-mount attempt fails so the user knows to mount DDI manually
