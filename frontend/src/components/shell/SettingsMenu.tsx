@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import {
   RotateCcw, FileText, MapPin, Timer, Languages, Layers, Info,
-  Sun, ChevronRight, UserCircle2,
+  Sun, ChevronRight, UserCircle2, Wand2,
 } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
@@ -9,6 +9,7 @@ import { useAvatarContext } from '../../contexts/AvatarContext'
 import { useI18n, useT, type Lang } from '../../i18n'
 import AvatarPicker from './AvatarPicker'
 import SetInitialPositionDialog from './SetInitialPositionDialog'
+import GoldDittoDialog from './GoldDittoDialog'
 import SectionHeader from '../ui/SectionHeader'
 import Toggle from '../ui/Toggle'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
@@ -47,6 +48,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
   const device = useDeviceContext()
 
   const [initialOpen, setInitialOpen] = useState(false)
+  const [goldDittoOpen, setGoldDittoOpen] = useState(false)
 
   const popoverRef = useRef<HTMLDivElement>(null)
   const avatarRowRef = useRef<HTMLDivElement>(null)
@@ -88,7 +90,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
     }
   }, [open, onClose])
 
-  if (!open && !initialOpen) return null
+  if (!open && !initialOpen && !goldDittoOpen) return null
 
   return (
     <>
@@ -180,6 +182,18 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
               trailing={<span className="font-mono text-[11px] text-[var(--color-text-3)]">{t('settings.theme_dark')}</span>}
             />
 
+            {/* Game-assist row — opens the Gold Ditto dialog where the
+                user configures the real-position anchor and triggers a
+                cycle. The action lives in Settings rather than the main
+                dock so it stays out of the way of the primary movement
+                modes. */}
+            <SettingsRow
+              icon={<Wand2 className="w-[14px] h-[14px]" />}
+              label={t('settings.gold_ditto')}
+              onClick={() => { setGoldDittoOpen(true); onClose() }}
+              trailing={<ChevronRight className="w-3 h-3 text-[var(--color-text-3)] opacity-60" />}
+            />
+
             {/* Map Pin Avatar — previously lived in the top-left status pair.
                 Moved here so configuration sits where users look for it,
                 and the status pair can stay focused on passive status.
@@ -243,6 +257,11 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
       <SetInitialPositionDialog
         open={initialOpen}
         onClose={() => setInitialOpen(false)}
+      />
+
+      <GoldDittoDialog
+        open={goldDittoOpen}
+        onClose={() => setGoldDittoOpen(false)}
       />
     </>
   )

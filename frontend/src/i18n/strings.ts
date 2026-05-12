@@ -422,6 +422,20 @@ export const STRINGS = {
   'panel.waypoints_menu': { zh: '更多動作', en: 'More actions' },
   'panel.waypoints_bulk_paste': { zh: '批次貼上座標', en: 'Bulk paste…' },
   'panel.waypoints_optimize': { zh: '最佳化順序', en: 'Optimize order' },
+  // Gold Ditto (拉金盆) — Pikmin Bloom game-assist one-shot action.
+  // Settings menu row + dialog body.
+  'settings.gold_ditto': { zh: '拉金盆', en: 'Gold Ditto' },
+  'settings.gold_ditto_title': { zh: '拉金盆設定', en: 'Gold Ditto' },
+  'settings.gold_ditto_help': { zh: '操作流程:手動飛到金盆點開花苞,等看到「在特殊花朵上往下滑動就能獲得獎勵」提示後,按下「拉金盆」即可。下方座標為你的真實位置 (A),只需設定一次。', en: 'Workflow: manually fly to a gold flower spot, open the bud in-game, wait for the "swipe down" prompt, then press Pull. The coordinate below is your real-world position (A); set it once.' },
+  'settings.gold_ditto_use_current': { zh: '帶入目前位置', en: 'Use current position' },
+  'settings.gold_ditto_use_current_hint': { zh: '從目前 iPhone 位置帶入座標', en: 'Fill from the device\'s current position' },
+  'settings.gold_ditto_pull': { zh: '拉金盆', en: 'Pull' },
+  'settings.gold_ditto_pull_hint': { zh: '儲存座標並執行一次拉金盆', en: 'Save coordinate and run one Gold Ditto cycle' },
+  'settings.gold_ditto_saved': { zh: '已儲存拉金盆座標', en: 'Gold Ditto anchor saved' },
+  'settings.gold_ditto_pulled': { zh: '拉金盆完成', en: 'Gold Ditto cycle done' },
+  'settings.gold_ditto_invalid': { zh: '座標無效,請檢查 lat / lng 範圍', en: 'Invalid coordinate — check lat/lng range' },
+  'settings.gold_ditto_no_position': { zh: '目前沒有位置可用', en: 'No current position available' },
+  'settings.gold_ditto_failed': { zh: '拉金盆失敗: {msg}', en: 'Gold Ditto failed: {msg}' },
 
   // DDI hints (Phase 7 / upstream v0.2.58-adapted) — shown when the
   // auto-mount attempt fails so the user knows to mount DDI manually

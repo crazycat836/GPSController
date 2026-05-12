@@ -12,6 +12,10 @@ export const STORAGE_KEYS = {
   updateLastCheck: 'gpscontroller.update_check.last_check',
   avatarSelection: 'gpscontroller.avatar_selection',
   avatarCustom: 'gpscontroller.avatar_custom',
+  // Gold Ditto (拉金盆) anchor — user's real-world coordinate. JSON-
+  // serialised ``{lat, lng}`` so absent / malformed entries decode to
+  // null cleanly and the UI re-prompts.
+  goldDittoAnchor: 'gpscontroller.gold_ditto.anchor',
 } as const
 
 // Legacy avatar keys (camelCase prefix + camelCase suffix) used before the
