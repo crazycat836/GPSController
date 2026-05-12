@@ -30,8 +30,6 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 // function without baking i18n knowledge into the hook itself.
 const SIM_ERROR_KEYS: Record<SimErrorCode, StringKey> = {
   tunnel_lost: 'err.tunnel_lost',
-  simulation_error: 'err.simulation_error',
-  no_device_connected: 'err.no_device',
 }
 
 // Re-export for consumers

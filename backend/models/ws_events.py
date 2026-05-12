@@ -168,7 +168,12 @@ class TeleportEvent(BaseModel):
 
 
 class WaypointProgressEvent(BaseModel):
-    """Drives the waypoint highlight pulse in the dock route card."""
+    """Drives the waypoint highlight pulse in the dock route card.
+
+    ``udid`` is injected by AppState.event_callback when the engine emits
+    via ``_emit`` so the frontend can route per-device in group mode.
+    """
+    udid: str | None = None
     current_index: int
     next_index: int
     total: int
@@ -191,53 +196,98 @@ class RoutePathEvent(BaseModel):
     coords: list[dict[str, float]]
 
 
+PauseSource = Literal["loop", "multi_stop", "random_walk"]
+
+
 class PauseCountdownEvent(BaseModel):
     """Inter-leg / inter-lap pause begins — countdown timer in the dock
     activates."""
     duration_seconds: float
     udid: str | None = None
+    source: PauseSource | None = None
 
 
 class PauseCountdownEndEvent(BaseModel):
-    """Pause finished — countdown UI clears and movement resumes."""
+    """Pause finished — countdown UI clears and movement resumes.
+
+    Currently informational only; the frontend treats all three pause
+    sources identically.
+    """
     udid: str | None = None
+    source: PauseSource | None = None
 
 
 class LapCompleteEvent(BaseModel):
     """One loop / multi-stop lap finished. Frontend increments the lap
     counter; the simulation continues until ``multi_stop_complete`` /
-    ``state_change=idle`` arrives."""
+    ``state_change=idle`` arrives.
+
+    ``total`` is the user-configured lap target (``None`` = unlimited /
+    "loop forever" mode).
+    """
     udid: str | None = None
-    lap_index: int
+    lap: int
+    total: int | None = None
 
 
 class StopReachedEvent(BaseModel):
     """Multi-stop: arrived at one waypoint inside the leg sequence (not
-    the final stop). Frontend pulses the corresponding waypoint pin."""
+    the final stop). Frontend pulses the corresponding waypoint pin.
+
+    ``index`` is the 1-based stop number; ``total`` is the count of all
+    waypoints in the run; ``lat``/``lng`` mirror the reached coordinate
+    so the renderer can highlight without a separate lookup.
+    """
     udid: str | None = None
-    stop_index: int
+    index: int
+    total: int
+    lat: float
+    lng: float
 
 
 class MultiStopCompleteEvent(BaseModel):
     """All waypoints visited (and laps run, when looping). Frontend
-    flips the dock back to idle."""
+    flips the dock back to idle.
+
+    ``laps`` is how many full loops completed when looping was on (0 on
+    a one-shot run).
+    """
     udid: str | None = None
+    laps: int
 
 
 class NavigationCompleteEvent(BaseModel):
     """Navigate-to-destination arrived. Frontend clears the destination
-    pin and the route polyline."""
+    pin and the route polyline.
+
+    ``destination`` mirrors the coordinate the run targeted so consumers
+    that store the destination separately (e.g. a recent-destinations
+    list) don't have to recover it from the active route.
+    """
     udid: str | None = None
+    destination: dict[str, float] | None = None
 
 
 class RandomWalkArrivedEvent(BaseModel):
-    """Reached one randomly-picked waypoint inside a random-walk loop."""
+    """Reached one randomly-picked waypoint inside a random-walk loop.
+
+    ``count`` is the 1-based arrival number this run; ``lat``/``lng``
+    mirror the reached coordinate so the renderer can pin it without
+    correlating with the previous ``position_update``.
+    """
     udid: str | None = None
+    count: int
+    lat: float
+    lng: float
 
 
 class RandomWalkCompleteEvent(BaseModel):
-    """Random-walk handler exited (user stopped or unrecoverable error)."""
+    """Random-walk handler exited (user stopped or unrecoverable error).
+
+    ``destinations_visited`` is the total arrival count for this run.
+    """
     udid: str | None = None
+    destinations_visited: int
 
 
 class RestoredEvent(BaseModel):

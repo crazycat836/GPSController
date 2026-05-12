@@ -393,8 +393,8 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     setWaypointProgress(null)
     // Clear the lap progress counter too — otherwise a stopped run
     // keeps showing "3 / 5" in the Loop / MultiStop panel until the
-    // next `simulation_complete` WS event (which never arrives on a
-    // manual Stop in some edge cases).
+    // next `multi_stop_complete` / `random_walk_complete` WS event
+    // (which never arrives on a manual Stop in some edge cases).
     setLapProgress(null)
     setEffectiveSpeed(null)
     // Clear the destination so the red "target" marker goes away —

@@ -25,6 +25,11 @@ wifi_tunnel_info.json
 backend/wifi_tunnel_info.json
 *.log
 
+# ── Local env overrides (start.py auto-loads .env.dev) ──
+.env
+.env.*
+!.env.*.example
+
 # ── IDE / OS ────────────────────────────────────────
 .vscode/
 .idea/

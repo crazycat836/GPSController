@@ -285,7 +285,6 @@ export const STRINGS = {
   'err.cooldown_active': { zh: '冷卻中,請等待後再跳點', en: 'Cooldown active, wait before teleporting' },
   'err.cooldown_toggle_failed': { zh: '冷卻設定切換失敗,已還原', en: 'Could not change cooldown setting; reverted' },
   'err.teleport_failed': { zh: '跳點失敗', en: 'Teleport failed' },
-  'err.simulation_error': { zh: '模擬錯誤', en: 'Simulation error' },
   // Codes returned by the backend's HTTPException flow that the frontend
   // surfaces as toasts via services/api.ts/formatError.
   'err.repair_needs_usb': { zh: '重新配對需要 USB, 請先用線連接 iPhone', en: 'Re-pair needs USB, please connect the iPhone first' },

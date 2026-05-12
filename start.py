@@ -41,6 +41,44 @@ def _app_version() -> str:
 
 APP_VERSION = _app_version()
 
+
+def load_dotenv_dev() -> str | None:
+    """Load `.env.dev` from the repo root into os.environ.
+
+    Real env vars already exported by the user take precedence (dotenv
+    convention) so a one-off `GPSCONTROLLER_DEV_NOAUTH=0 python start.py`
+    can still flip auth back on without editing the file. Returns the
+    path that was loaded for the launcher banner, or None when no file
+    is present. Kept tiny so we don't drag in python-dotenv just for
+    a five-key dev override.
+    """
+    path = os.path.join(ROOT, ".env.dev")
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.readlines()
+    except OSError:
+        return None
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        # Strip surrounding quotes if both ends match — leave inner
+        # quotes alone (a value of {"a":1} should survive untouched).
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        if not key or key in os.environ:
+            continue
+        os.environ[key] = value
+    return path
+
+
 procs = []
 
 BOX_WIDTH = 46
@@ -249,6 +287,11 @@ def main():
     if os.name == "nt":
         os.system("title GPSController")
     print_banner()
+
+    loaded_env = load_dotenv_dev()
+    if loaded_env:
+        print(f"  [i] Loaded {os.path.relpath(loaded_env, ROOT)} (exported env still wins)")
+        print()
 
     # 檢查管理員權限 (iOS 17+ 需要)
     if not check_admin():

@@ -118,6 +118,7 @@ export interface TeleportEvent {
 
 /** Drives the waypoint highlight pulse in the dock route card. */
 export interface WaypointProgressEvent {
+  udid?: string
   current_index: number
   next_index: number
   total: number
@@ -140,43 +141,55 @@ export interface RoutePathEvent {
 export interface PauseCountdownEvent {
   duration_seconds: number
   udid?: string
+  source?: 'loop' | 'multi_stop' | 'random_walk'
 }
 
 /** Pause finished — countdown UI clears and movement resumes. */
 export interface PauseCountdownEndEvent {
   udid?: string
+  source?: 'loop' | 'multi_stop' | 'random_walk'
 }
 
 /** One loop / multi-stop lap finished. Frontend increments the lap */
 export interface LapCompleteEvent {
   udid?: string
-  lap_index: number
+  lap: number
+  total?: number
 }
 
 /** Multi-stop: arrived at one waypoint inside the leg sequence (not */
 export interface StopReachedEvent {
   udid?: string
-  stop_index: number
+  index: number
+  total: number
+  lat: number
+  lng: number
 }
 
 /** All waypoints visited (and laps run, when looping). Frontend */
 export interface MultiStopCompleteEvent {
   udid?: string
+  laps: number
 }
 
 /** Navigate-to-destination arrived. Frontend clears the destination */
 export interface NavigationCompleteEvent {
   udid?: string
+  destination?: Record<string, number>
 }
 
 /** Reached one randomly-picked waypoint inside a random-walk loop. */
 export interface RandomWalkArrivedEvent {
   udid?: string
+  count: number
+  lat: number
+  lng: number
 }
 
 /** Random-walk handler exited (user stopped or unrecoverable error). */
 export interface RandomWalkCompleteEvent {
   udid?: string
+  destinations_visited: number
 }
 
 /** User-initiated Restore finished — virtual location cleared, the */

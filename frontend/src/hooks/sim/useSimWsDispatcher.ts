@@ -39,21 +39,6 @@ interface PositionUpdatePayload {
   speed_mps?: number
 }
 
-interface SimulationStatePayload {
-  udid?: string
-  running?: boolean
-  paused?: boolean
-  speed?: number
-  state?: string
-  mode?: string
-  progress?: number
-  eta?: number
-  destination?: LatLng
-  waypoints?: LatLng[]
-  distance_remaining?: number
-  distance_traveled?: number
-}
-
 interface RoutePathPayload {
   udid?: string
   coords?: ReadonlyArray<{ lat?: number; lng?: number } | [number, number]>
@@ -85,10 +70,6 @@ interface DdiMountMissingPayload {
   stage?: string
 }
 
-interface SimulationErrorPayload {
-  message?: string
-}
-
 // ── Type guards ────────────────────────────────────────────────────────
 
 function asObject(v: unknown): Record<string, unknown> | null {
@@ -101,10 +82,6 @@ function asString(v: unknown): string | undefined {
 
 function asNumber(v: unknown): number | undefined {
   return typeof v === 'number' ? v : undefined
-}
-
-function asBool(v: unknown): boolean | undefined {
-  return typeof v === 'boolean' ? v : undefined
 }
 
 function parsePositionUpdate(data: unknown): PositionUpdatePayload | null {
@@ -120,37 +97,6 @@ function parsePositionUpdate(data: unknown): PositionUpdatePayload | null {
     distance_remaining: asNumber(o.distance_remaining),
     distance_traveled: asNumber(o.distance_traveled),
     speed_mps: asNumber(o.speed_mps),
-  }
-}
-
-function parseSimulationState(data: unknown): SimulationStatePayload | null {
-  const o = asObject(data)
-  if (!o) return null
-  const dest = asObject(o.destination)
-  return {
-    udid: asString(o.udid),
-    running: asBool(o.running),
-    paused: asBool(o.paused),
-    speed: asNumber(o.speed),
-    state: asString(o.state),
-    mode: asString(o.mode),
-    progress: asNumber(o.progress),
-    eta: asNumber(o.eta),
-    destination: dest && asNumber(dest.lat) != null && asNumber(dest.lng) != null
-      ? { lat: dest.lat as number, lng: dest.lng as number }
-      : undefined,
-    waypoints: Array.isArray(o.waypoints)
-      ? o.waypoints
-          .map((w) => {
-            const wo = asObject(w)
-            const lat = wo ? asNumber(wo.lat) : undefined
-            const lng = wo ? asNumber(wo.lng) : undefined
-            return lat != null && lng != null ? { lat, lng } : null
-          })
-          .filter((w): w is LatLng => w !== null)
-      : undefined,
-    distance_remaining: asNumber(o.distance_remaining),
-    distance_traveled: asNumber(o.distance_traveled),
   }
 }
 
@@ -197,11 +143,6 @@ function parseDdiMountMissing(data: unknown): DdiMountMissingPayload {
   return { reason: asString(o.reason), stage: asString(o.stage) }
 }
 
-function parseSimulationError(data: unknown): SimulationErrorPayload {
-  const o = asObject(data) ?? {}
-  return { message: asString(o.message) }
-}
-
 function extractUdid(data: unknown): string | undefined {
   const o = asObject(data)
   return o ? asString(o.udid) : undefined
@@ -220,14 +161,12 @@ function coordOf(p: { lat?: number; lng?: number } | [number, number] | unknown)
 export type WsSubscribe = (fn: (m: WsMessage) => void) => () => void
 
 // SimErrorCode tags an error surface this hook hands to consumers via
-// `localizeError`. `tunnel_lost` is a real WS event — anchored to
-// the generated `WsEventType` union so a backend rename/removal of it
-// propagates as a TypeScript error here instead of a silent miss.
-// `simulation_error` and `no_device_connected` are synthetic markers
-// (not WS event names) and stay as bare literals.
+// `localizeError`. Currently the only real producer is the `tunnel_lost`
+// WS handler below — anchored to the generated `WsEventType` union so a
+// backend rename/removal propagates as a TypeScript error here instead
+// of a silent miss.
 import type { WsEventType } from '../../generated/api-contract'
-type _TunnelLostCode = Extract<WsEventType, 'tunnel_lost'>
-export type SimErrorCode = _TunnelLostCode | 'simulation_error' | 'no_device_connected'
+export type SimErrorCode = Extract<WsEventType, 'tunnel_lost'>
 
 export interface SimulationStatus {
   running: boolean
@@ -344,7 +283,9 @@ export function useSimWsDispatcher(
             s.updateRuntime(udid, { state: 'disconnected' })
             break
           }
-          case 'simulation_complete': {
+          case 'multi_stop_complete':
+          case 'navigation_complete':
+          case 'random_walk_complete': {
             s.updateRuntime(udid, { progress: 1, state: 'idle' })
             break
           }
@@ -379,33 +320,19 @@ export function useSimWsDispatcher(
           }
           break
         }
-        case 'simulation_state': {
-          const d = parseSimulationState(wsMessage.data)
-          if (!d) break
-          s.setStatus({
-            running: !!d.running,
-            paused: !!d.paused,
-            speed: d.speed ?? 0,
-            state: d.state,
-            distance_remaining: d.distance_remaining,
-            distance_traveled: d.distance_traveled,
-          })
-          if (d.mode) s.setMode(d.mode)
-          if (d.progress != null) s.setProgress(d.progress)
-          if (d.eta != null) s.setEta(d.eta)
-          if (d.destination) s.setDestination(d.destination)
-          if (d.waypoints) s.setWaypoints(d.waypoints)
-          break
-        }
-        case 'simulation_complete': {
-          s.setStatus((prev) => ({ ...prev, running: false, paused: false }))
+        case 'multi_stop_complete':
+        case 'navigation_complete':
+        case 'random_walk_complete': {
+          // Run finished — collapse the dock back to idle. `state_change`
+          // → 'idle' arrives separately and clears `running`/`paused`/
+          // `routePath`; this case clears the per-run progress overlays
+          // those don't touch.
           s.setProgress(1)
           s.setEta(null)
           s.setPauseEndAt(null)
           s.setWaypointProgress(null)
           s.setLapProgress(null)
           s.setDestination(null)
-          s.setRoutePath([])
           break
         }
         case 'waypoint_progress': {
@@ -466,8 +393,7 @@ export function useSimWsDispatcher(
         // `device_reconnected` removed — the watchdog now emits
         // `device_connected` after a re-plug, which clears the error
         // via the existing case below.
-        case 'pause_countdown':
-        case 'random_walk_pause': {
+        case 'pause_countdown': {
           const d = parsePauseCountdown(wsMessage.data)
           const dur = d?.duration_seconds
           if (typeof dur === 'number' && dur > 0) {
@@ -475,8 +401,7 @@ export function useSimWsDispatcher(
           }
           break
         }
-        case 'pause_countdown_end':
-        case 'random_walk_pause_end': {
+        case 'pause_countdown_end': {
           s.setPauseEndAt(null)
           break
         }
@@ -499,11 +424,6 @@ export function useSimWsDispatcher(
           } else if (st) {
             s.setStatus((prev) => ({ ...prev, running: true, paused: false, state: st }))
           }
-          break
-        }
-        case 'simulation_error': {
-          const d = parseSimulationError(wsMessage.data)
-          s.setError(d.message ?? s.localizeError('simulation_error'))
           break
         }
       }

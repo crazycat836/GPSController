@@ -242,28 +242,6 @@ app = FastAPI(
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
-app.add_middleware(
-    CORSMiddleware,
-    # Loopback-only API; legitimate callers are the Electron renderer
-    # (app://. / file://) and the Vite dev server. A wildcard let any
-    # browser tab on the user's machine issue requests through the
-    # user-agent, which the bearer-token middleware can't catch on
-    # pre-flight. Lock this down explicitly.
-    allow_origins=[
-        "app://.",
-        "file://",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_credentials=False,
-    allow_methods=["*"],
-    # Only the headers the renderer actually sends. The bearer token rides
-    # in X-GPS-Token; JSON bodies need Content-Type. A wildcard would let
-    # any same-origin browser tab probe arbitrary headers through CORS.
-    allow_headers=["X-GPS-Token", "Content-Type"],
-)
-
-
 class _TokenAuthMiddleware(BaseHTTPMiddleware):
     """Gate every request by an `X-GPS-Token` header.
 
@@ -293,7 +271,38 @@ class _TokenAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+# Order matters: Starlette wraps later-added middleware around earlier ones,
+# so the LAST `add_middleware` call becomes the OUTERMOST layer. We want
+# CORSMiddleware on the outside so:
+#   1. Browser preflight (OPTIONS) — which never carries X-GPS-Token by
+#      spec — is answered by CORS directly and never hits the auth gate.
+#   2. Auth-rejected 401s still get the Access-Control-Allow-Origin header
+#      tacked on for the browser to surface a real error instead of a
+#      generic CORS failure.
+# Electron packaging is same-origin (file:// / app://.) and skips preflight
+# entirely, so this ordering matters only for the Vite dev server.
 app.add_middleware(_TokenAuthMiddleware)
+
+app.add_middleware(
+    CORSMiddleware,
+    # Loopback-only API; legitimate callers are the Electron renderer
+    # (app://. / file://) and the Vite dev server. A wildcard let any
+    # browser tab on the user's machine issue requests through the
+    # user-agent, which the bearer-token middleware can't catch on
+    # pre-flight. Lock this down explicitly.
+    allow_origins=[
+        "app://.",
+        "file://",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    # Only the headers the renderer actually sends. The bearer token rides
+    # in X-GPS-Token; JSON bodies need Content-Type. A wildcard would let
+    # any same-origin browser tab probe arbitrary headers through CORS.
+    allow_headers=["X-GPS-Token", "Content-Type"],
+)
 
 # Register routers
 from api.device import router as device_router
