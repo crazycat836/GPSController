@@ -305,6 +305,23 @@ class ConnectionLostEvent(BaseModel):
     udid: str | None = None
 
 
+class GoldDittoCycleEvent(BaseModel):
+    """Phase update for a Gold Ditto (拉金盆) cycle. Two phases:
+
+    - ``teleported`` — simulated location was just pushed to the anchor;
+      ``lat`` and ``lng`` carry the anchor coordinate (Pikmin Bloom users
+      see this as the moment the "swipe" registers).
+    - ``restored`` — real GPS is back; the cycle is complete.
+
+    Frontend surfaces this as a single transient toast spanning both
+    phases ("Gold Ditto applied"); no in-flight UI state is required.
+    """
+    udid: str | None = None
+    phase: Literal["teleported", "restored"]
+    lat: float | None = None
+    lng: float | None = None
+
+
 # ── Registry ─────────────────────────────────────────────────────
 
 
@@ -342,4 +359,6 @@ WS_EVENTS: dict[str, type[BaseModel]] = {
     "random_walk_complete": RandomWalkCompleteEvent,
     "restored": RestoredEvent,
     "connection_lost": ConnectionLostEvent,
+    # Game-assist (Pikmin Bloom)
+    "gold_ditto_cycle": GoldDittoCycleEvent,
 }

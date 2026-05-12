@@ -24,6 +24,7 @@ from models.schemas import (
 )
 from services.route_service import RouteService
 from services.gpx_service import GpxService
+from services.route_optimizer import optimize_order
 from services.saved_routes import ConflictPolicy, SavedRoutesStore
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,39 @@ _store = SavedRoutesStore(ROUTES_FILE)
 async def plan_route(req: RoutePlanRequest):
     result = await route_service.get_route(req.start.lat, req.start.lng, req.end.lat, req.end.lng, req.profile)
     return result
+
+
+class _OptimizeOrderRequest(BaseModel):
+    """Reorder *waypoints* to minimise total travel time under *profile*.
+    Index 0 is anchored (it usually matches the user's current device
+    position), the rest are reshuffled. See
+    :mod:`backend.services.route_optimizer` for the solver."""
+    waypoints: list[Coordinate] = Field(min_length=2, max_length=64)
+    profile: str = Field(default="walking", max_length=32)
+
+
+class _OptimizeOrderResponse(BaseModel):
+    order: list[int]
+    waypoints: list[Coordinate]
+    total_seconds: float
+
+
+@router.post("/optimize", response_model=_OptimizeOrderResponse)
+async def optimize_route_order(req: _OptimizeOrderRequest):
+    """Return the waypoint indices in optimised order plus the reshuffled
+    coordinate list for direct UI consumption. The frontend typically
+    replaces its local waypoints array with ``response.waypoints``."""
+    points: list[tuple[float, float]] = [(c.lat, c.lng) for c in req.waypoints]
+    try:
+        order, total = await optimize_order(points, req.profile)
+    except ValueError as exc:
+        raise http_err(400, ErrorCode.VALIDATION_FAILED, str(exc))
+    reordered = [req.waypoints[i] for i in order]
+    return _OptimizeOrderResponse(
+        order=order,
+        waypoints=reordered,
+        total_seconds=total,
+    )
 
 
 @router.get("/saved", response_model=list[SavedRoute])

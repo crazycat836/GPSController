@@ -239,12 +239,32 @@ class SimulationEngine:
         self._multi_stop = MultiStopNavigator(self)
         self._random_walk = RandomWalkHandler(self)
         self._restore_handler = RestoreHandler(self)
+        # Game-assist sub-handler — distinct from the movement modes
+        # because the cycle is a one-shot location swap, not a
+        # continuous loop. Local import keeps a clean dependency arrow
+        # (gold_ditto only needs the engine's state / location_service /
+        # _emit; importing it at module top would form a cycle if the
+        # handler ever grows engine-class type hints).
+        from core.gold_ditto import GoldDittoHandler
+        self._gold_ditto = GoldDittoHandler(self)
 
     # ── Public API ───────────────────────────────────────────
 
     async def teleport(self, lat: float, lng: float) -> Coordinate:
         """Instantly move to a coordinate."""
         return await self._teleport_handler.teleport(lat, lng)
+
+    async def gold_ditto_cycle(self, lat: float, lng: float) -> None:
+        """Run one Gold Ditto (拉金盆) anchor-and-restore cycle.
+
+        Stops any active simulation, pushes the iPhone GPS to
+        ``(lat, lng)`` (the user's real position), then calls
+        :meth:`restore` to flip the device back to real GPS. The
+        position push deliberately bypasses :meth:`teleport` to avoid
+        broadcasting ``position_update`` — the desktop map keeps
+        showing the gold-flower spot the user manually flew to.
+        """
+        await self._gold_ditto.cycle(lat, lng)
 
     async def _run_handler(self, coro, label: str) -> None:
         """Run a simulation handler coroutine with uniform cleanup.

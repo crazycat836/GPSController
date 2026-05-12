@@ -478,6 +478,40 @@ async def restore(udid: str | None = None):
     return {"status": "restored"}
 
 
+class _GoldDittoRequest(BaseModel):
+    """``lat``/``lng`` is the user's real-world position (the in-app
+    "A coordinate"). The handler pushes simulated GPS to this anchor
+    then immediately restores real GPS — the apparent jump back from
+    the gold-flower spot is what Pikmin Bloom registers as a swipe."""
+    lat: float = Field(ge=-90.0, le=90.0)
+    lng: float = Field(ge=-180.0, le=180.0)
+    udid: str | None = None
+
+
+@router.post("/gold-ditto")
+async def gold_ditto(req: _GoldDittoRequest):
+    """One-shot Gold Ditto (拉金盆) cycle.
+
+    Cooldown is bypassed by design — the action is itself a "restore"
+    flavour and the user has just manually stopped any sim to open the
+    flower bud. ``_exec_with_retry`` is used so a transient DVT drop
+    triggers a single hard-reconnect retry, matching teleport's
+    resilience semantics.
+    """
+    engine = await _engine(req.udid)
+    try:
+        await _exec_with_retry(
+            req.udid, engine, "gold_ditto",
+            lambda e: e.gold_ditto_cycle(req.lat, req.lng),
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Gold Ditto cycle failed")
+        raise http_err(500, ErrorCode.TELEPORT_FAILED, "Gold Ditto failed; see backend.log")
+    return {"status": "done"}
+
+
 @router.post("/stop")
 async def stop_movement(udid: str | None = None):
     """Stop active movement without clearing the simulated location.

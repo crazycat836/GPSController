@@ -205,7 +205,15 @@ export interface ConnectionLostEvent {
   udid?: string
 }
 
-export type WsEventType = "device_connected" | "device_disconnected" | "device_snapshot" | "device_error" | "dual_sync_start" | "tunnel_lost" | "tunnel_degraded" | "tunnel_recovered" | "ddi_mounting" | "ddi_mounted" | "ddi_mount_failed" | "ddi_mount_missing" | "cooldown_update" | "position_update" | "teleport" | "waypoint_progress" | "state_change" | "route_path" | "pause_countdown" | "pause_countdown_end" | "lap_complete" | "stop_reached" | "multi_stop_complete" | "navigation_complete" | "random_walk_arrived" | "random_walk_complete" | "restored" | "connection_lost";
+/** Phase update for a Gold Ditto (拉金盆) cycle. Two phases: */
+export interface GoldDittoCycleEvent {
+  udid?: string
+  phase: 'teleported' | 'restored'
+  lat?: number
+  lng?: number
+}
+
+export type WsEventType = "device_connected" | "device_disconnected" | "device_snapshot" | "device_error" | "dual_sync_start" | "tunnel_lost" | "tunnel_degraded" | "tunnel_recovered" | "ddi_mounting" | "ddi_mounted" | "ddi_mount_failed" | "ddi_mount_missing" | "cooldown_update" | "position_update" | "teleport" | "waypoint_progress" | "state_change" | "route_path" | "pause_countdown" | "pause_countdown_end" | "lap_complete" | "stop_reached" | "multi_stop_complete" | "navigation_complete" | "random_walk_arrived" | "random_walk_complete" | "restored" | "connection_lost" | "gold_ditto_cycle";
 
 /**
  * Discriminated union of every WebSocket event the backend emits.
@@ -239,7 +247,8 @@ export type WsEvent =
   | { type: "random_walk_arrived"; data: RandomWalkArrivedEvent }
   | { type: "random_walk_complete"; data: RandomWalkCompleteEvent }
   | { type: "restored"; data: RestoredEvent }
-  | { type: "connection_lost"; data: ConnectionLostEvent };
+  | { type: "connection_lost"; data: ConnectionLostEvent }
+  | { type: "gold_ditto_cycle"; data: GoldDittoCycleEvent };
 
 /**
  * Mirrors backend/api/_errors.py::ErrorCode. Used by the i18n
