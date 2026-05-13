@@ -1,5 +1,6 @@
 import { Locate, Clock } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
+import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useDisabledByConnection } from '../../hooks/useDisabledByConnection'
 import { useT } from '../../i18n'
 import { haversineM } from '../../lib/geo'
@@ -8,12 +9,8 @@ import { useOriginDestPoints } from '../../hooks/useOriginDestPoints'
 import RouteCard from '../RouteCard'
 
 export default function TeleportPanel() {
-  const {
-    currentPos,
-    destPos,
-    handleTeleport,
-    handleClearTeleportDest,
-  } = useSimContext()
+  const { handleTeleport, handleClearTeleportDest } = useSimContext()
+  const { currentPos, destPos } = useSimDerived()
   const conn = useDisabledByConnection()
   const t = useT()
   const points = useOriginDestPoints(currentPos, destPos)

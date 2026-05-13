@@ -83,14 +83,22 @@ class TunnelLostEvent(BaseModel):
 
 class TunnelDegradedEvent(BaseModel):
     """Liveness probe couldn't reach the RSD endpoint — we haven't torn
-    down yet, but the user should know the tunnel is wobbly."""
+    down yet, but the user should know the tunnel is wobbly.
+
+    ``udid`` is optional: emitters that know which device owns the
+    wobbling tunnel populate it (DvtLocationService._reconnect, per-
+    device watchdog). Sources without a UDID (the global tunnel watchdog
+    in api/tunnel_router) leave it None, and the renderer falls back
+    to applying the hint to every known device — safe today since each
+    device owns its own tunnel."""
     reason: str
+    udid: str | None = None
 
 
 class TunnelRecoveredEvent(BaseModel):
     """Liveness probe answered again after a degraded period — banner
-    can clear."""
-    pass
+    can clear. Same UDID-targeting semantics as :class:`TunnelDegradedEvent`."""
+    udid: str | None = None
 
 
 # ── DDI mount lifecycle ──────────────────────────────────────────

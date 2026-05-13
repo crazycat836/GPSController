@@ -53,11 +53,12 @@ export interface TunnelLostEvent {
 /** Liveness probe couldn't reach the RSD endpoint — we haven't torn */
 export interface TunnelDegradedEvent {
   reason: string
+  udid?: string
 }
 
 /** Liveness probe answered again after a degraded period — banner */
 export interface TunnelRecoveredEvent {
-  // (empty payload)
+  udid?: string
 }
 
 /** In-progress mount — surfaces a transient "mounting Developer Disk */

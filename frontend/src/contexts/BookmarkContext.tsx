@@ -5,6 +5,17 @@ import type { SavedRoute, RouteCategory, RouteConflictPolicy } from '../services
 import { useToastContext } from './ToastContext'
 import { useT } from '../i18n'
 import { devLog } from '../lib/dev-log'
+import {
+  parseConflictExtras,
+  safeFilenameStem,
+  validateBookmarkImport,
+  validateRoutesImport,
+  type SaveRouteResult,
+} from '../lib/bookmark_helpers'
+
+// Re-export so existing consumers (`RoutesPanel`, etc.) can keep
+// importing `SaveRouteResult` from `'../contexts/BookmarkContext'`.
+export type { SaveRouteResult }
 
 interface AddBmDialog {
   lat: number
@@ -12,18 +23,6 @@ interface AddBmDialog {
   name: string
   place: string
 }
-
-/** Outcome of `handleRouteSave`. The panel uses this to decide whether
- *  to surface the "overwrite / save as new / cancel" dialog. */
-export type SaveRouteResult =
-  | { kind: 'created'; route: SavedRoute }
-  | { kind: 'overwritten'; route: SavedRoute }
-  | {
-      kind: 'conflict'
-      existingId: string | null
-      existingCreatedAt: string | null
-    }
-  | { kind: 'error'; message: string }
 
 interface BookmarkContextValue {
   // From useBookmarks
@@ -144,14 +143,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     try {
       const text = await file.text()
       const data = JSON.parse(text)
-      if (
-        !data ||
-        typeof data !== 'object' ||
-        !Array.isArray(data.places) ||
-        !Array.isArray(data.bookmarks)
-      ) {
-        throw new Error('invalid file: missing places or bookmarks array')
-      }
+      validateBookmarkImport(data)
       const res = await api.importBookmarks(data)
       await bm.refresh()
       showToast(t('bm.import_success', { n: res.imported }))
@@ -185,25 +177,9 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Pull the {existing_id, existing_created_at} fields out of the 409
-  // response body so the conflict dialog can show "saved YYYY-MM-DD"
-  // without a follow-up GET. Defensive against shape drift — every field
-  // is independently checked.
-  const parseConflictExtras = useCallback((err: unknown): {
-    existingId: string | null
-    existingCreatedAt: string | null
-  } => {
-    const fallback = { existingId: null, existingCreatedAt: null }
-    if (typeof err !== 'object' || err === null) return fallback
-    const detail = (err as { detail?: unknown }).detail
-    if (typeof detail !== 'object' || detail === null) return fallback
-    const eid = (detail as Record<string, unknown>).existing_id
-    const ets = (detail as Record<string, unknown>).existing_created_at
-    return {
-      existingId: typeof eid === 'string' ? eid : null,
-      existingCreatedAt: typeof ets === 'string' ? ets : null,
-    }
-  }, [])
+  // parseConflictExtras / safeFilenameStem / validate*Import live in
+  // lib/bookmark_helpers.ts so this provider stays focused on the
+  // state-machine + handlers shape.
 
   const handleRouteSave = useCallback(async (
     name: string,
@@ -423,27 +399,16 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refreshRoutes, showToast, t])
 
-  // Slugify a route name into a filename-safe stem. Falls back to the
-  // route id when the name has no usable characters left.
-  // (Replaces the prior window.open(url, '_blank', 'noopener,noreferrer')
-  // approach: the new Blob-download path through api.downloadGpx supersedes
-  // it entirely — auth-required exports can't be done via window.open
-  // anyway because the browser's GET wouldn't carry the X-GPS-Token header.)
-  const safeStem = useCallback((name: string, fallback: string) => {
-    const cleaned = name.trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_')
-    return cleaned || fallback
-  }, [])
-
   const handleGpxExport = useCallback(async (id: string) => {
     const route = savedRoutes.find((r) => r.id === id)
-    const stem = safeStem(route?.name ?? '', id)
+    const stem = safeFilenameStem(route?.name ?? '', id)
     try {
       await api.downloadGpx(id, `${stem}.gpx`)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : ''
       showToast(t('toast.export_failed', { msg: message }))
     }
-  }, [savedRoutes, safeStem, showToast, t])
+  }, [savedRoutes, showToast, t])
 
   const handleBookmarkExport = useCallback(async () => {
     try {
@@ -467,9 +432,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     try {
       const text = await file.text()
       const data = JSON.parse(text)
-      if (!Array.isArray(data?.routes)) {
-        throw new Error('invalid file: missing routes array')
-      }
+      validateRoutesImport(data)
       const res = await api.importAllRoutes({ routes: data.routes })
       const routes = await api.getSavedRoutes()
       setSavedRoutes(routes)

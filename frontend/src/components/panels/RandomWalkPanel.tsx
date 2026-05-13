@@ -1,5 +1,6 @@
 import React from 'react'
 import { useSimContext } from '../../contexts/SimContext'
+import { useSimSettings } from '../../contexts/SimSettingsContext'
 import { useT } from '../../i18n'
 import { RADIUS_PRESETS } from '../../lib/constants'
 import PauseControl from '../PauseControl'
@@ -7,7 +8,8 @@ import SpeedControls from './SpeedControls'
 import ActionButtons from './ActionButtons'
 
 export default function RandomWalkPanel() {
-  const { sim, randomWalkRadius, setRandomWalkRadius } = useSimContext()
+  const { sim } = useSimContext()
+  const { randomWalkRadius, setRandomWalkRadius } = useSimSettings()
   const t = useT()
 
   return (

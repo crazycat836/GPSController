@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pymobiledevice3.exceptions import DeviceNotFoundError
 from pymobiledevice3.lockdown import create_using_usbmux, create_using_tcp
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
 from pymobiledevice3.remote.tunnel_service import CoreDeviceTunnelProxy
@@ -36,6 +37,7 @@ from core.ddi_mount import (
     create_dvt_location_service,
     create_legacy_location_service,
 )
+from core.device_connect import connect_via_legacy, connect_via_tunnel
 from models.schemas import DeviceInfo
 from services.location_service import LocationService
 
@@ -347,6 +349,17 @@ class DeviceManager:
         # Create a fresh lockdown client to read the iOS version.
         try:
             lockdown = await create_using_usbmux(serial=udid)
+        except DeviceNotFoundError:
+            # Device is genuinely absent from usbmux (unplugged / WiFi
+            # tunnel dead). Log without traceback — the user-facing path
+            # already surfaces this as "no_device" and a stack frame
+            # from pymobiledevice3 internals adds no diagnostic value.
+            logger.warning(
+                "Device %s not present in usbmux (connection_type=%s); "
+                "user must re-plug or restart the tunnel",
+                udid, connection_type,
+            )
+            raise
         except Exception:
             logger.exception("Cannot create lockdown client for %s via %s", udid, connection_type)
             raise
@@ -362,9 +375,9 @@ class DeviceManager:
             raise UnsupportedIosVersionError(ios_version_str)
 
         if ver >= (17, 0):
-            conn = await self._connect_tunnel(udid, lockdown, ios_version_str)
+            conn = await connect_via_tunnel(udid, lockdown, ios_version_str)
         else:
-            conn = self._connect_legacy(udid, lockdown, ios_version_str)
+            conn = connect_via_legacy(udid, lockdown, ios_version_str)
         conn.connection_type = connection_type
 
         async with self._lock:
@@ -373,66 +386,8 @@ class DeviceManager:
 
         logger.info("Connected to %s (iOS %s) via %s", udid, ios_version_str, connection_type)
 
-    # -- iOS 17+ via CoreDeviceTunnelProxy ---------------------------------
-
-    async def _connect_tunnel(
-        self, udid: str, lockdown: Any, ios_version: str
-    ) -> _ActiveConnection:
-        # `lockdown`: pymobiledevice3 lockdown handle (LockdownClient or
-        # similar). Typed as Any since pymobiledevice3 doesn't export a
-        # stable public protocol for it.
-        """TCP tunnel for iOS 17+ using CoreDeviceTunnelProxy + RSD."""
-        logger.debug("Establishing TCP tunnel for %s (iOS %s)", udid, ios_version)
-
-        try:
-            proxy = await CoreDeviceTunnelProxy.create(lockdown)
-            tunnel_ctx = proxy.start_tcp_tunnel()
-            tunnel_result = await tunnel_ctx.__aenter__()
-
-            logger.info("Tunnel established for %s: %s:%s",
-                        udid, tunnel_result.address, tunnel_result.port)
-
-            # Create RSD over the tunnel
-            rsd = RemoteServiceDiscoveryService((tunnel_result.address, tunnel_result.port))
-            await rsd.connect()
-            logger.info("RSD connected for %s", udid)
-
-            return _ActiveConnection(
-                udid=udid,
-                lockdown=rsd,
-                ios_version=ios_version,
-                tunnel_proxy=proxy,
-                tunnel_context=tunnel_ctx,
-                rsd=rsd,
-                usbmux_lockdown=lockdown,
-            )
-        except Exception:
-            logger.exception(
-                "TCP tunnel failed for %s (iOS %s). "
-                "Ensure you are running as administrator.",
-                udid, ios_version,
-            )
-            raise RuntimeError(
-                f"Could not establish device tunnel (iOS {ios_version}). "
-                f"Please run GPSController as Administrator."
-            )
-
-    # iOS < 17 path removed in v0.1.49 — see UnsupportedIosVersionError.
-
-    def _connect_legacy(
-        self, udid: str, lockdown: Any, ios_version: str
-    ) -> _ActiveConnection:
-        """Direct usbmux lockdown connection for iOS 16.x devices.
-
-        ``lockdown`` is a pymobiledevice3 lockdown handle (typed Any
-        because pymobiledevice3 has no stable public protocol)."""
-        logger.info("Using legacy lockdown connection for %s (iOS %s)", udid, ios_version)
-        return _ActiveConnection(
-            udid=udid,
-            lockdown=lockdown,
-            ios_version=ios_version,
-            usbmux_lockdown=lockdown,
-        )
+    # Per-iOS connection establishers live in core/device_connect.py so
+    # the DeviceManager class stays focused on registry / lifecycle.
 
     # ------------------------------------------------------------------
     # Disconnection

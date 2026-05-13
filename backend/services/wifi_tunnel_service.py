@@ -26,6 +26,7 @@ import logging
 from context import ctx
 from core.wifi_tunnel import TunnelRunner
 from services.location_service import DeviceLostCause
+from services.disconnect_dedup import emit_device_disconnected
 from services.ws_broadcaster import broadcast
 
 logger = logging.getLogger("wifi_tunnel")
@@ -95,7 +96,7 @@ async def cleanup_wifi_connections(reason: str = "wifi_tunnel_stopped") -> list[
                 # cleanup is always a tunnel/network condition — whether
                 # triggered by user stop, watchdog, or liveness probe, the
                 # device-level effect is the same: WiFi-side path is gone.
-                await broadcast("device_disconnected", {
+                await emit_device_disconnected({
                     "udids": udids,
                     "reason": reason,
                     "cause": DeviceLostCause.WIFI_DROPPED.value,

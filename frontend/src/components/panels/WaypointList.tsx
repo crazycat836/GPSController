@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { X, Star, Dices, Locate, MapPin, Flag, ChevronDown, Save, FolderOpen, Check, ClipboardPaste, Wand2 } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
+import { useSimDerived } from '../../contexts/SimDerivedContext'
+import { useSimSettings } from '../../contexts/SimSettingsContext'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
@@ -18,17 +20,14 @@ interface WaypointListProps {
 export default function WaypointList({ mode }: WaypointListProps) {
   const {
     sim,
-    wpGenRadius,
-    setWpGenRadius,
-    wpGenCount,
-    setWpGenCount,
     handleGenerateRandomWaypoints,
     handleGenerateAllRandom,
     handleRemoveWaypoint,
     handleClearWaypoints,
     handleTeleport,
-    isRunning,
   } = useSimContext()
+  const { wpGenRadius, setWpGenRadius, wpGenCount, setWpGenCount } = useSimSettings()
+  const { isRunning } = useSimDerived()
   const { handleAddBookmark, savedRoutes, handleRouteSave, handleRouteLoad } = useBookmarkContext()
   const { showToast } = useToastContext()
   const t = useT()

@@ -4,6 +4,7 @@ import {
   Sun, ChevronRight, UserCircle2, Wand2,
 } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
+import { useSimSettings } from '../../contexts/SimSettingsContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useAvatarContext } from '../../contexts/AvatarContext'
 import { useI18n, useT, type Lang } from '../../i18n'
@@ -44,7 +45,8 @@ interface SettingsMenuProps {
 export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }: SettingsMenuProps) {
   const t = useT()
   const { lang, setLang } = useI18n()
-  const { handleRestore, handleOpenLog, cooldown, cooldownEnabled, handleToggleCooldown } = useSimContext()
+  const { sim, handleRestore, handleOpenLog } = useSimContext()
+  const { cooldown, cooldownEnabled, handleToggleCooldown } = useSimSettings()
   const device = useDeviceContext()
 
   const [initialOpen, setInitialOpen] = useState(false)
@@ -61,7 +63,14 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
     : null
   const AvatarIcon = avatarPreset?.Icon
 
-  const dualDevice = device.connectedDevices.length >= 2
+  // "Dual" means "two devices we can act on right now." Exclude any
+  // peer mid-tunnel-reconnect from the count — the user shouldn't see
+  // the cooldown toggle grayed out just because the second phone is
+  // re-handshaking its DVT channel. A truly disconnected device is
+  // already excluded by the upstream `is_connected` filter on
+  // `connectedDevices`.
+  const dualDevice =
+    device.connectedDevices.filter((d) => !sim.runtimes[d.udid]?.tunnelDegraded).length >= 2
 
   // Outside-click dismissal — kept inline (rather than `useOutsideClick`)
   // because the predicate has trigger and avatar-picker exemptions that

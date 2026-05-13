@@ -158,9 +158,20 @@ class DvtLocationService(LocationService):
         Needed for reconnection.
     """
 
-    def __init__(self, dvt_provider: DvtProvider, lockdown=None) -> None:
+    def __init__(
+        self,
+        dvt_provider: DvtProvider,
+        lockdown=None,
+        udid: str | None = None,
+    ) -> None:
         self._dvt = dvt_provider
         self._lockdown = lockdown
+        # Stamped onto tunnel_degraded/tunnel_recovered emits so the
+        # renderer can target the matching device chip. Optional — older
+        # call sites that don't supply it fall back to "apply hint to
+        # every known device", which is still correct in single-device
+        # mode and any "one tunnel per device" group setup.
+        self._udid = udid
         self._location_sim: LocationSimulation | None = None
         self._active = False
         self._reconnect_lock = asyncio.Lock()
@@ -200,7 +211,10 @@ class DvtLocationService(LocationService):
         from services.ws_broadcaster import broadcast
 
         async with self._reconnect_lock:
-            await broadcast("tunnel_degraded", {"reason": "dvt_channel_dropped"})
+            await broadcast(
+                "tunnel_degraded",
+                {"reason": "dvt_channel_dropped", "udid": self._udid},
+            )
 
             # Close the old DVT provider gracefully
             try:
@@ -223,7 +237,7 @@ class DvtLocationService(LocationService):
                     await new_dvt.__aenter__()
                     self._dvt = new_dvt
                     logger.info("DVT provider reconnected on attempt %d", attempt)
-                    await broadcast("tunnel_recovered", {})
+                    await broadcast("tunnel_recovered", {"udid": self._udid})
                     return
                 except Exception as exc:
                     last_exc = exc

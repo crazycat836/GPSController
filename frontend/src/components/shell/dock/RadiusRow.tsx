@@ -1,4 +1,4 @@
-import { useSimContext } from '../../../contexts/SimContext'
+import { useSimSettings } from '../../../contexts/SimSettingsContext'
 import { useT } from '../../../i18n'
 import { RADIUS_PRESETS } from '../../../lib/constants'
 
@@ -9,7 +9,7 @@ const KM_THRESHOLD_M = 1000
 // active value lives on the simulation context.
 export default function RadiusRow() {
   const t = useT()
-  const { randomWalkRadius, setRandomWalkRadius } = useSimContext()
+  const { randomWalkRadius, setRandomWalkRadius } = useSimSettings()
   const valText = formatRadius(randomWalkRadius)
   return (
     <div className="mt-3.5 flex items-center gap-2.5 flex-wrap">

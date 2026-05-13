@@ -1,10 +1,10 @@
 import { Timer } from 'lucide-react'
-import { useSimContext } from '../../contexts/SimContext'
+import { useSimSettings } from '../../contexts/SimSettingsContext'
 import { useT } from '../../i18n'
 import Toast from './Toast'
 
 export default function CooldownBadge() {
-  const { cooldown, cooldownEnabled } = useSimContext()
+  const { cooldown, cooldownEnabled } = useSimSettings()
   const t = useT()
 
   if (!cooldownEnabled || cooldown <= 0) return null

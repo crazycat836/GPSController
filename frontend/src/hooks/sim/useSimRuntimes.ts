@@ -26,6 +26,12 @@ export interface DeviceRuntime {
   error: string | null
   lapCount: number
   cooldown: number
+  // True between a `tunnel_degraded` and the next `tunnel_recovered` /
+  // terminal `device_disconnected`. Orthogonal to `state` — the engine
+  // can still be NAVIGATING while the underlying DVT channel is being
+  // re-handshaked. DeviceChip overlays the "reconnecting" pulse on top
+  // of whatever state is showing.
+  tunnelDegraded: boolean
 }
 
 export type RuntimesMap = Record<string, DeviceRuntime>
@@ -46,6 +52,7 @@ export function emptyRuntime(udid: string): DeviceRuntime {
     error: null,
     lapCount: 0,
     cooldown: 0,
+    tunnelDegraded: false,
   }
 }
 

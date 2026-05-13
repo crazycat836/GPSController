@@ -20,8 +20,13 @@ class SimulationState(str, Enum):
     RANDOM_WALK = "random_walk"
     MULTI_STOP = "multi_stop"
     PAUSED = "paused"
-    RECONNECTING = "reconnecting"
     DISCONNECTED = "disconnected"
+    # NOTE: "reconnecting" is no longer a SimulationState. Tunnel/DVT
+    # reconnect is an orthogonal axis from what the engine is *doing*
+    # (a tunnel can wobble mid-NAVIGATING without changing the engine's
+    # target). It is signalled via the `tunnel_degraded` /
+    # `tunnel_recovered` WS events instead, and the renderer overlays a
+    # "reconnecting" hint on top of the existing state.
 
 
 class MovementMode(str, Enum):

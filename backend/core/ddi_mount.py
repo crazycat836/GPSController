@@ -240,7 +240,7 @@ async def create_dvt_location_service(
         await dvt.__aenter__()
         conn.dvt_provider = dvt
         logger.debug("DVT provider opened for %s", conn.udid)
-        return DvtLocationService(dvt, lockdown=conn.lockdown)
+        return DvtLocationService(dvt, lockdown=conn.lockdown, udid=conn.udid)
     except Exception as dvt_exc:
         logger.warning(
             "DVT location service failed for %s (%s). Falling back to "

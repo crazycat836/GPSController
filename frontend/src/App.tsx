@@ -14,7 +14,8 @@ import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketCont
 import { DeviceProvider, useDeviceContext } from './contexts/DeviceContext'
 import { ConnectionHealthProvider } from './contexts/ConnectionHealthContext'
 import { SimProvider, useSimContext, SPEED_MAP } from './contexts/SimContext'
-import { SimDerivedProvider } from './contexts/SimDerivedContext'
+import { SimSettingsProvider, useSimSettings } from './contexts/SimSettingsContext'
+import { SimDerivedProvider, useSimDerived } from './contexts/SimDerivedContext'
 import { BookmarkProvider, useBookmarkContext } from './contexts/BookmarkContext'
 import { AvatarProvider } from './contexts/AvatarContext'
 
@@ -77,15 +78,17 @@ function App() {
       <WebSocketProvider>
         <DeviceProvider>
           <ConnectionHealthProvider>
-            <SimProvider>
-              <SimDerivedProvider>
-                <BookmarkProvider>
-                  <AvatarProvider>
-                    <AppShell />
-                  </AvatarProvider>
-                </BookmarkProvider>
-              </SimDerivedProvider>
-            </SimProvider>
+            <SimSettingsProvider>
+              <SimProvider>
+                <SimDerivedProvider>
+                  <BookmarkProvider>
+                    <AvatarProvider>
+                      <AppShell />
+                    </AvatarProvider>
+                  </BookmarkProvider>
+                </SimDerivedProvider>
+              </SimProvider>
+            </SimSettingsProvider>
           </ConnectionHealthProvider>
         </DeviceProvider>
       </WebSocketProvider>
@@ -133,6 +136,8 @@ function AppShell() {
   const toast = useToastContext()
   const device = useDeviceContext()
   const simCtx = useSimContext()
+  const { currentPos: simCurrentPos, destPos: simDestPos } = useSimDerived()
+  const simSettings = useSimSettings()
   const bm = useBookmarkContext()
   const health = useConnectionHealth()
   const { connected: wsConnected } = useWebSocketContext()
@@ -148,8 +153,8 @@ function AppShell() {
   const plannedDistanceM = useMemo(() => {
     const { mode, waypoints } = sim
     if (mode === SimMode.Navigate) {
-      return simCtx.currentPos && simCtx.destPos
-        ? haversineM(simCtx.currentPos, simCtx.destPos)
+      return simCurrentPos && simDestPos
+        ? haversineM(simCurrentPos, simDestPos)
         : 0
     }
     if (mode === SimMode.Loop) {
@@ -160,7 +165,7 @@ function AppShell() {
       return waypoints.length < 2 ? 0 : polylineDistanceM(waypoints)
     }
     return 0
-  }, [sim.mode, sim.waypoints, simCtx.currentPos, simCtx.destPos])
+  }, [sim.mode, sim.waypoints, simCurrentPos, simDestPos])
 
   const plannedEtaSeconds = useMemo(() => {
     if (plannedDistanceM <= 0) return 0
@@ -320,14 +325,14 @@ function AppShell() {
         </Toast>
 
         <MapView
-          currentPosition={simCtx.currentPos}
-          currentPositionUnsynced={!!simCtx.currentPos && !sim.backendPositionSynced}
-          destination={simCtx.destPos}
+          currentPosition={simCurrentPos}
+          currentPositionUnsynced={!!simCurrentPos && !sim.backendPositionSynced}
+          destination={simDestPos}
           waypoints={mapWaypoints}
           routePath={sim.routePath}
           randomWalkRadius={
-            sim.mode === SimMode.RandomWalk ? simCtx.randomWalkRadius :
-            (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) ? simCtx.wpGenRadius :
+            sim.mode === SimMode.RandomWalk ? simSettings.randomWalkRadius :
+            (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) ? simSettings.wpGenRadius :
             null
           }
           onMapClick={simCtx.handleMapClick}

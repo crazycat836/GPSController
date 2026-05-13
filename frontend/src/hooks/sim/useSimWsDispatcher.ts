@@ -271,16 +271,24 @@ export function useSimWsDispatcher(
             break
           }
           case 'device_connected': {
-            s.setRuntimes((prev) => prev[udid] ? prev : { ...prev, [udid]: emptyRuntime(udid) })
-            // A device reconnecting implicitly resolves any prior connection-
-            // loss banner (watchdog auto-connect now broadcasts `device_connected`
-            // rather than `device_reconnected`; the legacy case still handles
-            // the latter).
+            // `device_connected` is the authoritative "fresh connection"
+            // signal — a hard-reset reconnect cycle does NOT re-emit
+            // `tunnel_recovered`, so any stale `tunnelDegraded` left over
+            // from before the disconnect must be cleared here. Without
+            // this the left chip sticks at "重連中" even after the right
+            // card flips to "已連線".
+            s.setRuntimes((prev) => ({
+              ...prev,
+              [udid]: { ...(prev[udid] ?? emptyRuntime(udid)), tunnelDegraded: false },
+            }))
             s.setError(null)
             break
           }
           case 'device_disconnected': {
-            s.updateRuntime(udid, { state: 'disconnected' })
+            // Device leaves the connected pool — chip switches to
+            // "已斷線" via `device.connectedDevices`. Reset transient
+            // tunnel-degraded so the next reconnect doesn't inherit it.
+            s.updateRuntime(udid, { state: 'disconnected', tunnelDegraded: false })
             break
           }
           case 'multi_stop_complete':
@@ -379,6 +387,34 @@ export function useSimWsDispatcher(
         }
         case 'tunnel_lost': {
           s.setError(s.localizeError('tunnel_lost'))
+          break
+        }
+        case 'tunnel_degraded':
+        case 'tunnel_recovered': {
+          // Backend emits these around a DVT channel drop / liveness probe
+          // miss. The `udid` field (optional in the contract) targets one
+          // device when known; otherwise we apply the hint to every runtime
+          // so the "reconnecting" chip pulse shows up even in single-device
+          // mode where the emit doesn't carry a UDID.
+          const degraded = wsMessage.type === 'tunnel_degraded'
+          const targetUdid = extractUdid(wsMessage.data)
+          if (targetUdid) {
+            s.updateRuntime(targetUdid, { tunnelDegraded: degraded })
+          } else {
+            s.setRuntimes((prev) => {
+              let changed = false
+              const next: RuntimesMap = {}
+              for (const [k, v] of Object.entries(prev)) {
+                if (v.tunnelDegraded !== degraded) {
+                  next[k] = { ...v, tunnelDegraded: degraded }
+                  changed = true
+                } else {
+                  next[k] = v
+                }
+              }
+              return changed ? next : prev
+            })
+          }
           break
         }
         case 'device_disconnected': {

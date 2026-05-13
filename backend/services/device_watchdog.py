@@ -29,6 +29,7 @@ import time
 
 from config import MAX_DEVICES
 from services.location_service import DeviceLostCause
+from services.disconnect_dedup import emit_device_disconnected
 from services.ws_broadcaster import broadcast
 
 logger = logging.getLogger("gpscontroller")
@@ -99,7 +100,10 @@ async def usbmux_presence_watchdog(app_state) -> None:
                     except Exception:
                         logger.exception("watchdog: disconnect failed for %s", udid)
                 try:
-                    await broadcast("device_disconnected", {
+                    # Routed through emit_device_disconnected so a tunnel
+                    # liveness probe that notices the same loss event ~12s
+                    # later doesn't show a second toast for the same drop.
+                    await emit_device_disconnected({
                         "udids": lost_now,
                         "reason": "usb_unplugged",
                         "cause": DeviceLostCause.USB_REMOVED.value,

@@ -4,6 +4,7 @@ import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import { usePcLocation, type PcLocationErrorCode } from '../../hooks/usePcLocation'
 import { useSimContext } from '../../contexts/SimContext'
+import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useT } from '../../i18n'
 
 interface LocatePcButtonProps {
@@ -30,9 +31,10 @@ function errorLabelKey(code: PcLocationErrorCode): string {
 export default function LocatePcButton({ onFlyToCoordinate, onPcLocated }: LocatePcButtonProps) {
   const t = useT()
   const simCtx = useSimContext()
+  const { isRunning, isPaused } = useSimDerived()
   const { coord, loading, error, request, clear } = usePcLocation()
 
-  const needsConfirm = simCtx.isRunning || simCtx.isPaused
+  const needsConfirm = isRunning || isPaused
   const [pendingTeleport, setPendingTeleport] = useState<{ lat: number; lng: number } | null>(null)
 
   const handleTriggerClick = useCallback(() => {

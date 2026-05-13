@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Footprints, Rabbit, Car, Check, Gauge } from 'lucide-react'
 import { useSimContext, MoveMode } from '../../contexts/SimContext'
+import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useT, type StringKey } from '../../i18n'
 import {
   SPEED_PRESETS as BASE_SPEED_PRESETS,
@@ -48,7 +49,8 @@ const fmtSpeed = (v: number): string =>
   v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : String(Math.round(v))
 
 export default function SpeedControls() {
-  const { sim, handleApplySpeed, isRunning } = useSimContext()
+  const { sim, handleApplySpeed } = useSimContext()
+  const { isRunning } = useSimDerived()
   const t = useT()
 
   const hasCustom = sim.customSpeedKmh != null

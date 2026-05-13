@@ -26,27 +26,18 @@ from models.schemas import (
     BookmarkStore,
     BookmarkTag,
 )
+from services.bookmarks_migration import (
+    PRESET_PLACES as _PRESET_PLACES,
+    PRESET_TAGS as _PRESET_TAGS,
+    build_preset_places as _build_preset_places,
+    build_preset_tags as _build_preset_tags,
+    migrate_v0_to_v1 as _migrate_v0_to_v1,
+    now_iso as _now_iso,
+)
 from services.json_safe import safe_load_json, safe_write_json
 
 logger = logging.getLogger(__name__)
 
-
-# (id, name, color, sort_order). Stable ids so _ensure_presets can idempotently
-# detect whether a preset is already in a loaded store.
-_PRESET_PLACES: tuple[tuple[str, str, str, int], ...] = (
-    ("default", "預設", "#6c8cff", 0),
-)
-
-_PRESET_TAGS: tuple[tuple[str, str, str, int], ...] = (
-    ("preset_scanner",  "掃描器", "#4A90E2", 0),
-    ("preset_mushroom", "菇",     "#A855F7", 1),
-    ("preset_flower",   "花",     "#EC4899", 2),
-)
-
-# Old `category_id` values that should become tags after migration. Anything
-# not in this set (including "default" and user-created categories like
-# "寺廟" / "富士山") becomes a place.
-_PRESET_TAG_IDS = {pid for pid, *_ in _PRESET_TAGS}
 
 # Touch endpoint debounce window. Each `touch_bookmark` call writes the
 # full bookmark JSON to disk, so a misbehaving renderer that fires the
@@ -54,93 +45,6 @@ _PRESET_TAG_IDS = {pid for pid, *_ in _PRESET_TAGS}
 # into a single bump per window. 5s matches the user-perceptible
 # resolution of "recently used" sorting; bumping faster has no UI value.
 _TOUCH_DEBOUNCE_S = 5.0
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _build_preset_places() -> list[BookmarkPlace]:
-    now = _now_iso()
-    return [
-        BookmarkPlace(id=pid, name=name, color=color, sort_order=order, created_at=now)
-        for pid, name, color, order in _PRESET_PLACES
-    ]
-
-
-def _build_preset_tags() -> list[BookmarkTag]:
-    now = _now_iso()
-    return [
-        BookmarkTag(id=pid, name=name, color=color, sort_order=order, created_at=now)
-        for pid, name, color, order in _PRESET_TAGS
-    ]
-
-
-def _migrate_v0_to_v1(raw: dict) -> tuple[dict, bool]:
-    """Transform a v0 bookmark store dict into v1 shape.
-
-    v0: ``{categories: [...], bookmarks: [{category_id, ...}]}``
-    v1: ``{version: 1, places: [...], tags: [...], bookmarks: [{place_id, tags, ...}]}``
-
-    Preset tag-like categories (ids in :data:`_PRESET_TAG_IDS`) become tags;
-    every other category — including user-created ones like 寺廟 / 富士山 /
-    隱藏 — becomes a place. The "default" place is always kept as the
-    fallback for bookmarks whose old category was migrated to a tag.
-
-    Returns ``(new_raw, did_migrate)`` — ``did_migrate=True`` means the dict
-    was re-shaped and the caller should write the file back to disk.
-    """
-    version = raw.get("version", 0)
-    if version >= BOOKMARK_STORE_VERSION:
-        return raw, False
-
-    old_categories = raw.get("categories", []) or []
-    places: list[dict] = []
-    tags: list[dict] = []
-    for cat in old_categories:
-        cid = cat.get("id", "")
-        if cid in _PRESET_TAG_IDS:
-            tags.append(cat)
-        else:
-            places.append(cat)
-
-    # Pre-compute the set of surviving place ids so orphaned bookmarks
-    # collapse to default instead of dangling.
-    place_ids = {p.get("id", "") for p in places}
-    place_ids.add("default")
-
-    old_bookmarks = raw.get("bookmarks", []) or []
-    new_bookmarks: list[dict] = []
-    for bm in old_bookmarks:
-        new_bm = dict(bm)
-        old_cat = new_bm.pop("category_id", "default") or "default"
-        if old_cat in _PRESET_TAG_IDS:
-            # The bookmark was in a tag-like category — hoist to default place
-            # and stamp the tag on it.
-            new_bm["place_id"] = "default"
-            existing_tags = list(new_bm.get("tags", []) or [])
-            if old_cat not in existing_tags:
-                existing_tags.append(old_cat)
-            new_bm["tags"] = existing_tags
-        else:
-            new_bm["place_id"] = old_cat if old_cat in place_ids else "default"
-            new_bm.setdefault("tags", [])
-        new_bookmarks.append(new_bm)
-
-    logger.info(
-        "Migrated bookmark store v0→v1: %d places, %d tags, %d bookmarks",
-        len(places), len(tags), len(new_bookmarks),
-    )
-
-    return (
-        {
-            "version": BOOKMARK_STORE_VERSION,
-            "places": places,
-            "tags": tags,
-            "bookmarks": new_bookmarks,
-        },
-        True,
-    )
 
 
 class BookmarkManager:

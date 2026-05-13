@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useSimContext } from '../../contexts/SimContext'
+import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { SimMode } from '../../hooks/useSimulation'
 import { useT } from '../../i18n'
 import WaypointChain from '../WaypointChain'
@@ -21,9 +22,10 @@ export default function BottomDock() {
   const t = useT()
   const simCtx = useSimContext()
   const {
-    sim, currentPos, destPos,
+    sim,
     handleRemoveWaypoint, handleGenerateRandomWaypoints,
   } = simCtx
+  const { currentPos, destPos } = useSimDerived()
 
   const ctx = useMemo(
     () => buildDockContext(sim.mode, sim, currentPos, destPos, t),

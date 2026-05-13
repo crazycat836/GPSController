@@ -67,7 +67,13 @@ export default function MiniStatusBar() {
       ) : isDual ? (
         <DualDevicePills devices={device.connectedDevices.slice(0, 2)} stale={isStale} />
       ) : (
-        <DevicePill dev={device.connectedDevices[0]} letter={DEVICE_LETTERS[0]} color={DEVICE_COLORS[0]} stale={isStale} />
+        <DevicePill
+          dev={device.connectedDevices[0]}
+          letter={DEVICE_LETTERS[0]}
+          color={DEVICE_COLORS[0]}
+          stale={isStale}
+          degraded={!!sim.runtimes[device.connectedDevices[0]?.udid ?? '']?.tunnelDegraded}
+        />
       )}
 
       {/* Live-position card — suppressed in dual-device mode because
@@ -99,17 +105,29 @@ interface DevicePillProps {
   color: string
   coord?: { lat: number; lng: number } | null
   stale?: boolean
+  /** True while a `tunnel_degraded` is outstanding for this device — the
+   *  DVT channel is reconnecting. Orthogonal to `stale` (which is about
+   *  the WS transport between renderer and backend, not the renderer-
+   *  to-iPhone tunnel). Both can be true simultaneously; the tooltip
+   *  prefers `degraded` because that's the user-actionable state. */
+  degraded?: boolean
 }
 
-function DevicePill({ dev, letter, color, coord, stale }: DevicePillProps) {
+function DevicePill({ dev, letter, color, coord, stale, degraded }: DevicePillProps) {
   const t = useT()
   if (!dev) return null
   const isNetwork = dev.connection_type === 'Network'
+  const titleText = degraded
+    ? `${dev.name} · ${t('device.chip_state_reconnecting')}`
+    : stale
+      ? `${dev.name} · ${t('conn.stale_tooltip')}`
+      : dev.name
   return (
     <div
       className="glass-pill-medium inline-flex items-center gap-2.5 h-10 pl-2 pr-4 text-[12px] font-medium transition-opacity"
-      title={stale ? `${dev.name} · ${t('conn.stale_tooltip')}` : dev.name}
+      title={titleText}
       data-stale={stale ? 'true' : undefined}
+      data-degraded={degraded ? 'true' : undefined}
       style={stale ? { opacity: 0.55 } : undefined}
     >
       <span
@@ -134,15 +152,28 @@ function DevicePill({ dev, letter, color, coord, stale }: DevicePillProps) {
         )}
       </div>
       <span className="w-px h-4 bg-[var(--color-border-strong)] shrink-0" aria-hidden="true" />
-      <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[var(--color-success-text)] shrink-0">
+      <span
+        className="inline-flex items-center gap-1.5 font-mono text-[10px] shrink-0"
+        style={{
+          color: degraded ? 'var(--color-device-paused)' : 'var(--color-success-text)',
+        }}
+      >
         <span
-          className="w-1.5 h-1.5 rounded-full bg-[var(--color-success-text)]"
-          style={{ boxShadow: '0 0 6px var(--color-success-text)' }}
+          className="w-1.5 h-1.5 rounded-full"
+          style={{
+            background: degraded ? 'var(--color-device-paused)' : 'var(--color-success-text)',
+            boxShadow: degraded
+              ? '0 0 6px var(--color-device-paused)'
+              : '0 0 6px var(--color-success-text)',
+            animation: degraded ? 'chip-pulse 1.6s ease-in-out infinite' : undefined,
+          }}
           aria-hidden="true"
         />
-        {isNetwork
-          ? <><Wifi className="w-2.5 h-2.5" />Wi-Fi</>
-          : <><Usb className="w-2.5 h-2.5" />USB</>}
+        {degraded
+          ? t('device.chip_state_reconnecting')
+          : isNetwork
+            ? <><Wifi className="w-2.5 h-2.5" />Wi-Fi</>
+            : <><Usb className="w-2.5 h-2.5" />USB</>}
       </span>
     </div>
   )
@@ -160,6 +191,7 @@ function DualDevicePills({ devices, stale }: { devices: DeviceInfo[]; stale?: bo
           color={DEVICE_COLORS[i]}
           coord={sim.runtimes[dev.udid]?.currentPos ?? null}
           stale={stale}
+          degraded={!!sim.runtimes[dev.udid]?.tunnelDegraded}
         />
       ))}
     </>

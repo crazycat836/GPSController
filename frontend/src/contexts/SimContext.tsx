@@ -1,12 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSimulation, SimMode, MoveMode } from '../hooks/useSimulation'
 import type { FanoutOutcome, SimErrorCode } from '../hooks/useSimulation'
 import { useJoystick } from '../hooks/useJoystick'
 import * as api from '../services/api'
 import {
-  DEFAULT_RANDOM_WALK_RADIUS,
-  DEFAULT_WP_GEN_COUNT,
-  DEFAULT_WP_GEN_RADIUS,
   RANDOM_GEN_COUNT_MAX,
   RANDOM_GEN_COUNT_MIN,
   RANDOM_GEN_RADIUS_MAX_M,
@@ -14,13 +11,12 @@ import {
   RESTORE_MIN_DISPLAY_MS,
   SPEED_MAP,
 } from '../lib/constants'
-import { pickDisplaySpeed, toLatLng } from '../lib/sim-derive'
 import { devWarn } from '../lib/dev-log'
 import { generateRandomTour } from '../lib/waypoint_gen'
-import { useCooldownSync } from '../hooks/useCooldownSync'
 import { useDeviceContext } from './DeviceContext'
 import { useToastContext } from './ToastContext'
 import { useWebSocketContext } from './WebSocketContext'
+import { useSimSettings } from './SimSettingsContext'
 import { useT } from '../i18n'
 import type { StringKey } from '../i18n'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
@@ -110,20 +106,14 @@ async function runWithFanout<T>(params: {
 export { SPEED_MAP }
 
 interface SimContextValue {
-  // From useSimulation - pass through everything
+  // From useSimulation — full simulation state passthrough.
   sim: ReturnType<typeof useSimulation>
-  // From useJoystick
+  // From useJoystick — direction/intensity for the active joystick UI.
   joystick: ReturnType<typeof useJoystick>
-  // Local state
-  randomWalkRadius: number
-  setRandomWalkRadius: (r: number) => void
-  wpGenRadius: number
-  setWpGenRadius: (r: number) => void
-  wpGenCount: number
-  setWpGenCount: (c: number) => void
-  cooldown: number
-  cooldownEnabled: boolean
-  // Handlers
+  // Action dispatchers. Settings (randomWalkRadius / wpGen* / cooldown)
+  // live in `SimSettingsContext` and derived values
+  // (currentPos / destPos / displaySpeed / isRunning / isPaused) live in
+  // `SimDerivedContext`; both expose their own hooks.
   handleTeleport: (lat: number, lng: number) => void
   handleNavigate: (lat: number, lng: number) => void
   handleStart: () => void
@@ -132,7 +122,6 @@ interface SimContextValue {
   handleResume: () => void
   handleRestore: () => void
   handleApplySpeed: () => Promise<void>
-  handleToggleCooldown: (enabled: boolean) => void
   handleAddWaypoint: (lat: number, lng: number) => void
   handleClearWaypoints: () => void
   handleRemoveWaypoint: (index: number) => void
@@ -142,13 +131,6 @@ interface SimContextValue {
   handleSetTeleportDest: (lat: number, lng: number) => void
   handleClearTeleportDest: () => void
   handleMapClick: (lat: number, lng: number) => void
-  // Derived
-  displaySpeed: number | string
-  isRunning: boolean
-  isPaused: boolean
-  currentPos: { lat: number; lng: number } | null
-  destPos: { lat: number; lng: number } | null
-  speed: number
 }
 
 const SimContext = createContext<SimContextValue | null>(null)
@@ -176,8 +158,16 @@ export function SimProvider({ children }: SimProviderProps) {
     sim.mode === SimMode.Joystick,
   )
 
-  const [cooldown, setCooldown] = useState(0)
-  const [cooldownEnabled, setCooldownEnabled] = useState(false)
+  // Settings live in `SimSettingsContext`. Handlers below pull values
+  // from there; consumers that read settings directly should call
+  // `useSimSettings()` not `useSimContext()`.
+  const {
+    randomWalkRadius,
+    wpGenRadius,
+    setWpGenRadius,
+    wpGenCount,
+    setWpGenCount,
+  } = useSimSettings()
 
   // ── Start-from-cached-position confirmation ────────────────────────
   // After a server restart the UI rehydrates the last-known position
@@ -240,10 +230,6 @@ export function SimProvider({ children }: SimProviderProps) {
     pendingSyncRef.current = null
     setSyncPrompt(null)
   }, [])
-  const [randomWalkRadius, setRandomWalkRadius] = useState(DEFAULT_RANDOM_WALK_RADIUS)
-  const [wpGenRadius, setWpGenRadius] = useState(DEFAULT_WP_GEN_RADIUS)
-  const [wpGenCount, setWpGenCount] = useState(DEFAULT_WP_GEN_COUNT)
-
   // Surface a user-facing hint when the backend reports a DDI mount
   // failure. `ts` on the signal dedupes repeat failures across
   // re-renders; reason + stage go to the console only in dev.
@@ -306,20 +292,7 @@ export function SimProvider({ children }: SimProviderProps) {
     setWpGenRadius(radius)
     setWpGenCount(count)
     generateWaypoints(radius, count)
-  }, [generateWaypoints])
-
-  const handleToggleCooldown = useCallback((enabled: boolean) => {
-    // Optimistic update — flip the toggle immediately so the UI feels
-    // responsive. On backend failure, revert to the explicit prior value
-    // (the negation of `enabled`) rather than a functional `!v` setter.
-    // The functional form runs twice in StrictMode dev and double-toggles
-    // back to the failed state, which silently masks the error.
-    setCooldownEnabled(enabled)
-    api.setCooldownEnabled(enabled).catch(() => {
-      setCooldownEnabled(!enabled)
-      showToast(t('err.cooldown_toggle_failed'))
-    })
-  }, [showToast, t])
+  }, [generateWaypoints, setWpGenRadius, setWpGenCount])
 
   const handleMapClick = useCallback((lat: number, lng: number) => {
     const nlat = clampLat(lat)
@@ -602,87 +575,12 @@ export function SimProvider({ children }: SimProviderProps) {
     }
   }, [showToast, t])
 
-  // --- Effects ---
-
-  // Cooldown timer mirroring (initial REST fetch + WS updates) lives in
-  // useCooldownSync so this provider can stay focused on dispatching
-  // simulation actions.
-  useCooldownSync(subscribe, setCooldown, setCooldownEnabled)
-
-  // --- Derived values ---
-
-  // Shared derivations live in `lib/sim-derive.ts` so `SimDerivedContext`
-  // stays in lockstep with this provider — there is exactly one definition
-  // of `toLatLng` / `pickDisplaySpeed` in the codebase.
-  const currentPos = useMemo(
-    () => toLatLng(sim.currentPosition),
-    [sim.currentPosition?.lat, sim.currentPosition?.lng],
-  )
-
-  const destPos = useMemo(
-    () => toLatLng(sim.destination),
-    [sim.destination?.lat, sim.destination?.lng],
-  )
-
-  const speed = SPEED_MAP[sim.moveMode] || 5
-
-  // displaySpeed used to be re-computed on every parent render (string
-  // template + ternary allocate fresh each time). The memo below keys
-  // on the primitive inputs so the value object sees a stable reference
-  // when only unrelated sim state changed (e.g. lat/lng tick).
-  const displaySpeed: number | string = useMemo(
-    () => pickDisplaySpeed({
-      running: sim.status.running,
-      moveMode: sim.moveMode,
-      effectiveSpeed: sim.effectiveSpeed,
-      customSpeedKmh: sim.customSpeedKmh,
-      speedMinKmh: sim.speedMinKmh,
-      speedMaxKmh: sim.speedMaxKmh,
-    }),
-    [
-      sim.status.running,
-      sim.moveMode,
-      sim.effectiveSpeed?.kmh,
-      sim.effectiveSpeed?.min,
-      sim.effectiveSpeed?.max,
-      sim.customSpeedKmh,
-      sim.speedMinKmh,
-      sim.speedMaxKmh,
-    ],
-  )
-
-  const isRunning = sim.status.running
-  const isPaused = sim.status.paused
-
-  // value memo trade-off:
-  //   The dep list still includes `sim` and `joystick` because the value
-  //   object holds a reference to each, and consumers reading
-  //   `value.sim.foo` must see the latest state. Their identity churns
-  //   on every WS event from `useSimulation` / `useJoystick`, so this
-  //   memo will recompute on every such update — that is correct.
-  //
-  //   To actually stabilise consumer re-renders (so a panel that only
-  //   uses `handleStart` doesn't re-render on every position tick) the
-  //   context needs to be split into focused contexts (state vs handlers
-  //   vs derived) so handler-only consumers can subscribe to a stable
-  //   slice. Every existing consumer reads through `useSimContext()`
-  //   today, so that split is a 16-file follow-up — see the 2026-05-01
-  //   review (`docs/code-review-2026-05-01.md`) for the plan.
-  //
-  //   The displaySpeed memo above is a small step in the right direction:
-  //   one less per-render allocation, and the value memo at least sees a
-  //   stable `displaySpeed` reference when unrelated sim state moves.
+  // Derived values (currentPos / destPos / displaySpeed / isRunning /
+  // isPaused) live in SimDerivedContext — single source via
+  // `lib/sim-derive.ts`, no duplicate computation here.
   const value = useMemo<SimContextValue>(() => ({
     sim,
     joystick,
-    randomWalkRadius,
-    setRandomWalkRadius,
-    wpGenRadius,
-    setWpGenRadius,
-    wpGenCount,
-    setWpGenCount,
-    cooldown,
-    cooldownEnabled,
     handleSetTeleportDest,
     handleClearTeleportDest,
     handleTeleport,
@@ -693,7 +591,6 @@ export function SimProvider({ children }: SimProviderProps) {
     handleResume,
     handleRestore,
     handleApplySpeed,
-    handleToggleCooldown,
     handleAddWaypoint,
     handleClearWaypoints,
     handleRemoveWaypoint,
@@ -701,23 +598,9 @@ export function SimProvider({ children }: SimProviderProps) {
     handleGenerateAllRandom,
     handleOpenLog,
     handleMapClick,
-    displaySpeed,
-    isRunning,
-    isPaused,
-    currentPos,
-    destPos,
-    speed,
   }), [
     sim,
     joystick,
-    randomWalkRadius,
-    setRandomWalkRadius,
-    wpGenRadius,
-    setWpGenRadius,
-    wpGenCount,
-    setWpGenCount,
-    cooldown,
-    cooldownEnabled,
     handleSetTeleportDest,
     handleClearTeleportDest,
     handleTeleport,
@@ -728,7 +611,6 @@ export function SimProvider({ children }: SimProviderProps) {
     handleResume,
     handleRestore,
     handleApplySpeed,
-    handleToggleCooldown,
     handleAddWaypoint,
     handleClearWaypoints,
     handleRemoveWaypoint,
@@ -736,12 +618,6 @@ export function SimProvider({ children }: SimProviderProps) {
     handleGenerateAllRandom,
     handleOpenLog,
     handleMapClick,
-    displaySpeed,
-    isRunning,
-    isPaused,
-    currentPos,
-    destPos,
-    speed,
   ])
 
   return (
