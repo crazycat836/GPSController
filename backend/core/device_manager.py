@@ -415,10 +415,13 @@ class DeviceManager:
             return
         self._invalidate_discover_cache()
 
-        # Clear any active location simulation first.
+        # Clear any active location simulation first. ``quick=True`` so a
+        # dead DVT channel doesn't drag us through a 15s reconnect ladder
+        # we're about to invalidate anyway by tearing down the tunnel
+        # underneath it.
         if conn.location_service is not None:
             try:
-                await conn.location_service.clear()
+                await conn.location_service.clear(quick=True)
                 # stopLocationSimulation is declared `expects_reply=False`
                 # in pymobiledevice3, so clear() returns as soon as the DTX
                 # message is queued — iOS has not necessarily processed it

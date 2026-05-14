@@ -123,8 +123,16 @@ class LocationService(ABC):
         """Simulate the device location to the given coordinates."""
 
     @abstractmethod
-    async def clear(self) -> None:
-        """Stop simulating and restore the real device location."""
+    async def clear(self, *, quick: bool = False) -> None:
+        """Stop simulating and restore the real device location.
+
+        When ``quick=True``, a channel-drop during the clear call is
+        logged and swallowed instead of triggering the 15s reconnect
+        ladder — the caller is signalling that the connection is about
+        to be torn down anyway, so trying to revive DVT on a dead
+        tunnel is pure overhead. Default ``False`` preserves the
+        previous retry-on-drop behaviour for the normal restore path.
+        """
 
     @property
     def active_state(self) -> bool:
@@ -204,17 +212,37 @@ class DvtLocationService(LocationService):
         failure falls through to ``_raise_device_lost`` whose
         ``device_disconnected`` broadcast supersedes the degraded state.
         """
-        # Local import: ``ws_broadcaster`` itself imports nothing from
-        # this module, but several ``core/`` modules pull
-        # ``location_service`` in at load time. Keeping the broadcaster
-        # import lazy sidesteps any future re-ordering hazard.
+        # Local imports: ``connection_state`` / ``ws_broadcaster`` import
+        # nothing from this module, but several ``core/`` modules pull
+        # ``location_service`` in at load time. Keeping these lazy
+        # sidesteps any future re-ordering hazard.
+        from services import connection_state
         from services.ws_broadcaster import broadcast
 
+        async def _emit_degraded() -> None:
+            if self._udid:
+                await connection_state.mark_degraded(
+                    self._udid, cause="dvt_channel_dropped",
+                )
+            else:
+                # No UDID known — fall back to the legacy global broadcast
+                # so the renderer's "apply to all runtimes" path still
+                # triggers. This branch shouldn't fire in production
+                # (DeviceManager always supplies a UDID) but keeps the
+                # test surface and old callers happy.
+                await broadcast(
+                    "tunnel_degraded",
+                    {"reason": "dvt_channel_dropped", "udid": None},
+                )
+
+        async def _emit_recovered() -> None:
+            if self._udid:
+                await connection_state.mark_recovered(self._udid)
+            else:
+                await broadcast("tunnel_recovered", {})
+
         async with self._reconnect_lock:
-            await broadcast(
-                "tunnel_degraded",
-                {"reason": "dvt_channel_dropped", "udid": self._udid},
-            )
+            await _emit_degraded()
 
             # Close the old DVT provider gracefully
             try:
@@ -237,7 +265,7 @@ class DvtLocationService(LocationService):
                     await new_dvt.__aenter__()
                     self._dvt = new_dvt
                     logger.info("DVT provider reconnected on attempt %d", attempt)
-                    await broadcast("tunnel_recovered", {"udid": self._udid})
+                    await _emit_recovered()
                     return
                 except Exception as exc:
                     last_exc = exc
@@ -252,7 +280,7 @@ class DvtLocationService(LocationService):
                 await new_dvt.__aenter__()
                 self._dvt = new_dvt
                 logger.info("DVT provider reconnected on final attempt")
-                await broadcast("tunnel_recovered", {})
+                await _emit_recovered()
                 return
             except Exception as exc:
                 last_exc = exc
@@ -279,12 +307,15 @@ class DvtLocationService(LocationService):
             logger.exception("Failed to set DVT simulated location")
             raise
 
-    async def clear(self) -> None:
+    async def clear(self, *, quick: bool = False) -> None:
         """Clear the simulated location via the DVT instrument channel.
 
         Always sends clear to the device even when _active is False —
         the device may hold a stale simulated location from a prior
-        session or backend restart.
+        session or backend restart. ``quick=True`` (used by
+        DeviceManager.disconnect) skips the 15s reconnect ladder on a
+        channel drop: the tunnel is about to be torn down anyway, so
+        trying to revive DVT on a dead transport is wasted time.
         """
         try:
             sim = await self._ensure_instrument()
@@ -293,6 +324,14 @@ class DvtLocationService(LocationService):
             logger.info("DVT simulated location cleared")
         except (ConnectionTerminatedError, OSError, EOFError, BrokenPipeError,
                 ConnectionResetError, asyncio.TimeoutError) as exc:
+            if quick:
+                logger.info(
+                    "DVT channel dropped during teardown clear (%s); "
+                    "skipping reconnect — caller is about to disconnect",
+                    type(exc).__name__,
+                )
+                self._active = False
+                return
             logger.warning("DVT channel dropped during clear (%s: %s); reconnecting",
                            type(exc).__name__, exc)
             await self._reconnect()
@@ -363,17 +402,17 @@ class LegacyLocationService(LocationService):
             logger.exception("Failed to set legacy simulated location")
             raise
 
-    async def clear(self) -> None:
+    async def clear(self, *, quick: bool = False) -> None:
         """Clear the simulated location using the legacy service.
 
         Always sends clear to the device even when _active is False —
         the device may hold a stale simulated location from a prior
-        session or backend restart.
+        session or backend restart. ``quick=True`` (used by
+        DeviceManager.disconnect) skips the reconnect-and-retry path on
+        a channel drop, matching DvtLocationService for parity.
 
-        Raises DeviceLostError on retry-after-reconnect failure, matching
-        the discipline in set(). Without this, a clear() on a dead device
-        would silently log + return, leaving the engine task convinced
-        the simulation was cleanly torn down.
+        Raises DeviceLostError on retry-after-reconnect failure (only
+        on the normal path), matching the discipline in set().
         """
         try:
             svc = self._ensure_service()
@@ -381,6 +420,14 @@ class LegacyLocationService(LocationService):
             self._active = False
             logger.info("Legacy simulated location cleared")
         except (OSError, EOFError, BrokenPipeError, ConnectionResetError) as exc:
+            if quick:
+                logger.info(
+                    "Legacy clear channel dropped during teardown (%s); "
+                    "skipping reconnect — caller is about to disconnect",
+                    type(exc).__name__,
+                )
+                self._active = False
+                return
             logger.warning("Legacy clear channel dropped (%s: %s); reconnecting",
                            type(exc).__name__, exc)
             self._reset_service()

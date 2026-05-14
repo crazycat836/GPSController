@@ -28,9 +28,8 @@ import logging
 import time
 
 from config import MAX_DEVICES
+from services import connection_state
 from services.location_service import DeviceLostCause
-from services.disconnect_dedup import emit_device_disconnected
-from services.ws_broadcaster import broadcast
 
 logger = logging.getLogger("gpscontroller")
 
@@ -95,21 +94,14 @@ async def usbmux_presence_watchdog(app_state) -> None:
                         await app_state.terminate_engine(udid)
                     except Exception:
                         logger.exception("watchdog: terminate_engine failed for %s", udid)
-                    try:
-                        await dm.disconnect(udid)
-                    except Exception:
-                        logger.exception("watchdog: disconnect failed for %s", udid)
-                try:
-                    # Routed through emit_device_disconnected so a tunnel
-                    # liveness probe that notices the same loss event ~12s
-                    # later doesn't show a second toast for the same drop.
-                    await emit_device_disconnected({
-                        "udids": lost_now,
-                        "reason": "usb_unplugged",
-                        "cause": DeviceLostCause.USB_REMOVED.value,
-                    })
-                except Exception:
-                    logger.exception("watchdog: broadcast (disconnected) failed")
+                    # Single call: drops the transport AND broadcasts
+                    # device_disconnected via the connection_state WS
+                    # observer (which routes through dedup so a
+                    # near-simultaneous tunnel-liveness emit doesn't
+                    # double-toast).
+                    await connection_state.disconnect_device(
+                        dm, udid, cause=DeviceLostCause.USB_REMOVED.value,
+                    )
                 continue  # skip appearance logic this tick
 
             # --- Appearance (auto-connect up to MAX_DEVICES, group mode) ---
@@ -135,25 +127,15 @@ async def usbmux_presence_watchdog(app_state) -> None:
                 last_reconnect_attempt[udid] = now
                 logger.info("usbmux watchdog: new USB device %s detected, auto-connecting", udid)
                 try:
-                    await dm.connect(udid)
+                    # Single call: dm.connect + state transition →
+                    # device_connected broadcast via the WS observer.
+                    await connection_state.connect_device(dm, udid, cause="auto_usb")
                     # Skip engine creation if one already exists (e.g. lifespan already built it)
                     if udid in app_state.simulation_engines:
                         logger.debug("watchdog: engine already exists for %s, skipping", udid)
                         last_reconnect_attempt.pop(udid, None)
                         continue
                     await app_state.create_engine_for_device(udid)
-                    # Broadcast device_connected so the frontend chip row updates.
-                    try:
-                        devs = await dm.discover_devices()
-                        info = next((d for d in devs if d.udid == udid), None)
-                        await broadcast("device_connected", {
-                            "udid": udid,
-                            "name": info.name if info else "",
-                            "ios_version": info.ios_version if info else "",
-                            "connection_type": info.connection_type if info else "USB",
-                        })
-                    except Exception:
-                        logger.exception("watchdog: broadcast (connected) failed")
                     logger.info("Auto-connect succeeded for %s", udid)
                     last_reconnect_attempt.pop(udid, None)
                 except Exception:

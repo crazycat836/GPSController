@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 
 from api._deps import get_device_manager
 from api._errors import ErrorCode, http_err, ios_unsupported_error, max_devices_error
-from services.ws_broadcaster import broadcast
+from services import connection_state
 from config import MAX_DEVICES
 from context import ctx
 from core.device_manager import UnsupportedIosVersionError, parse_ios_version
@@ -41,22 +41,12 @@ async def connect_device(udid: str):
     if not dm.is_connected(udid) and dm.connected_count >= MAX_DEVICES:
         raise max_devices_error()
     try:
-        await dm.connect(udid)
+        # `connect_device` runs ``dm.connect`` and broadcasts
+        # ``device_connected`` via the installed WS observer. The engine
+        # rebuild stays here since it's not part of the transport state
+        # machine.
+        await connection_state.connect_device(dm, udid, cause="user")
         await app_state.create_engine_for_device(udid)
-        try:
-            devs = await dm.discover_devices()
-            info = next((d for d in devs if d.udid == udid), None)
-            await broadcast("device_connected", {
-                "udid": udid,
-                "name": info.name if info else "",
-                "ios_version": info.ios_version if info else "",
-                "connection_type": info.connection_type if info else "USB",
-            })
-        except Exception as exc:
-            logger.debug(
-                "connect_device(%s): device_connected broadcast failed (%s)",
-                udid, exc.__class__.__name__, exc_info=True,
-            )
         return {"status": "connected", "udid": udid}
     except UnsupportedIosVersionError as e:
         raise ios_unsupported_error(e.version)
@@ -86,14 +76,9 @@ async def disconnect_device(udid: str):
     # Terminate the simulation engine *before* the transport goes away so
     # any running Navigate/Loop/MultiStop/RandomWalk task exits cleanly.
     await app_state.terminate_engine(udid)
-    await dm.disconnect(udid)
-    try:
-        await broadcast("device_disconnected", {"udid": udid, "udids": [udid], "reason": "user"})
-    except Exception as exc:
-        logger.debug(
-            "disconnect_device(%s): device_disconnected broadcast failed (%s)",
-            udid, exc.__class__.__name__, exc_info=True,
-        )
+    # `disconnect_device` runs ``dm.disconnect`` and broadcasts
+    # ``device_disconnected`` (via dedup) through the installed WS observer.
+    await connection_state.disconnect_device(dm, udid, cause="user")
     return {"status": "disconnected", "udid": udid}
 
 
@@ -144,7 +129,9 @@ async def forget_device(udid: str):
                 "lockdown.unpair() failed for %s; will still remove local record",
                 udid, exc_info=True,
             )
-        await dm.disconnect(udid)
+        # Routed through connection_state so the WS observer broadcasts
+        # ``device_disconnected`` with cause="forget" exactly once.
+        await connection_state.disconnect_device(dm, udid, cause="forget")
 
     # One syscall per candidate — atomic, no TOCTOU. FileNotFoundError
     # means the path already absent (fine); other OSErrors are tracked so
@@ -169,10 +156,8 @@ async def forget_device(udid: str):
     # auto-connect to work again — drop the stale blocklist entry.
     app_state.unblock_auto_reconnect(udid)
 
-    try:
-        await broadcast("device_disconnected", {"udid": udid, "udids": [udid], "reason": "forget"})
-    except Exception:
-        logger.warning("forget_device: device_disconnected broadcast failed", exc_info=True)
+    # device_disconnected broadcast already happened in disconnect_device
+    # above — no need to fire it again here.
 
     # Only treat the request as a hard failure when *every* candidate that
     # existed errored out. If at least one record was actually removed we

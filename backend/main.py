@@ -101,8 +101,14 @@ ctx.app_state = app_state
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    from services.ws_broadcaster import broadcast
+    from services import connection_state
     global API_TOKEN
+
+    # Wire the single WS observer that translates every per-device state
+    # transition into the existing WS event contract. Done first so the
+    # startup auto-connect below routes through it instead of duplicating
+    # the broadcast logic inline.
+    connection_state.install_ws_observer()
 
     # ── Startup ──
     # Create ~/.gpscontroller before anything tries to write inside it
@@ -137,18 +143,14 @@ async def lifespan(application: FastAPI):
         if devices:
             target = devices[0]
             logger.info("Found device %s (%s), auto-connecting…", target.name, target.udid)
-            await app_state.device_manager.connect(target.udid)
+            # `connect_device` runs ``dm.connect`` and then transitions
+            # state → CONNECTED; the installed WS observer broadcasts
+            # ``device_connected`` for us, so no manual broadcast here.
+            await connection_state.connect_device(
+                app_state.device_manager, target.udid, cause="startup",
+            )
             await app_state.create_engine_for_device(target.udid)
             logger.info("Auto-connected to %s", target.udid)
-            try:
-                await broadcast("device_connected", {
-                    "udid": target.udid,
-                    "name": target.name,
-                    "ios_version": target.ios_version,
-                    "connection_type": target.connection_type,
-                })
-            except Exception:
-                logger.exception("Startup broadcast device_connected failed")
         else:
             logger.info("No iOS devices found on startup")
     except Exception:

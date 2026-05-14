@@ -16,7 +16,7 @@ from fastapi import HTTPException
 
 from api._errors import ErrorCode, http_err
 from context import ctx
-from services.disconnect_dedup import emit_device_disconnected
+from services import connection_state
 from services.location_service import (
     DeviceLostCause,
     DeviceLostError,
@@ -90,14 +90,18 @@ async def _force_reconnect(app_state, dm, target_udid: str):
     for the iOS 17+ "RSD tunnel alive but DVT channel stale" case.
 
     Returns the rebuilt engine on success or None if reconnect/rebuild fails.
+
+    Routes both transport calls through :mod:`services.connection_state`
+    so the renderer receives ``device_disconnected`` then
+    ``device_connected`` exactly once (via the installed WS observer).
+    Without these emits the underlying lockdown is rebuilt fresh but
+    the chip stays at "重連中" because nothing tells the dispatcher the
+    tunnel recovered.
     """
     logger.info("attempt 2 (hard reset) for %s", target_udid)
     try:
-        try:
-            await dm.disconnect(target_udid)
-        except Exception:
-            logger.warning("disconnect during hard reset failed; proceeding", exc_info=True)
-        await dm.connect(target_udid)
+        await connection_state.disconnect_device(dm, target_udid, cause="hard_reset")
+        await connection_state.connect_device(dm, target_udid, cause="hard_reset")
         await app_state.create_engine_for_device(target_udid)
         if app_state.simulation_engine is not None:
             logger.info("Engine rebuild succeeded on attempt 2")
@@ -158,11 +162,14 @@ async def handle_device_lost(exc: DeviceLostError) -> HTTPException:
     dm = app_state.device_manager
     lost_udids = dm.connected_udids
     for udid in lost_udids:
-        try:
-            await dm.disconnect(udid)
-            logger.info("device_lost cleanup: disconnected %s", udid)
-        except Exception:
-            logger.exception("device_lost cleanup: disconnect failed for %s", udid)
+        # disconnect_device drops the transport (swallows transport
+        # errors, since on a device-lost path every close step is
+        # expected to fail) and broadcasts device_disconnected via the
+        # connection_state WS observer. Routed through dedup so a
+        # parallel watchdog emit doesn't double-toast. ``cause`` is the
+        # DeviceLostCause string ("usb_removed", "wifi_dropped", …) so
+        # the renderer can localize the toast.
+        await connection_state.disconnect_device(dm, udid, cause=cause.value)
         # Only remove this udid's engine; the legacy `= None` setter clears
         # every engine (bad for dual mode). terminate_engine cancels any
         # in-flight task, pops the registry slot, and rotates _primary_udid.
@@ -170,16 +177,6 @@ async def handle_device_lost(exc: DeviceLostError) -> HTTPException:
             await app_state.terminate_engine(udid)
         except Exception:
             logger.exception("device_lost cleanup: terminate_engine failed for %s", udid)
-
-    try:
-        await emit_device_disconnected({
-            "udids": lost_udids,
-            "reason": "device_lost",
-            "cause": cause.value,
-            "error": str(exc),
-        })
-    except Exception:
-        logger.exception("Failed to broadcast device_disconnected")
 
     return HTTPException(
         status_code=503,
