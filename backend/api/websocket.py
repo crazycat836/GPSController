@@ -43,7 +43,18 @@ async def _send_initial_state(ws: WebSocket) -> None:
     keep whatever stale list it had from before the WS drop and show
     phantom "connected" pills until the next REST-poll-driven scan completes
     (~30s worst case).
+
+    Reads from ``connection_state.store`` — the unified SSoT — instead of
+    re-running ``discover_devices``. The store caches name / ios_version /
+    connection_type from the original connect, so the payload is identical
+    without paying a fresh usbmux round-trip on every renderer reload. A
+    DEGRADED device also gets a follow-up ``tunnel_degraded`` so the new
+    client sees the "reconnecting…" hint that earlier clients received as
+    a transition event.
     """
+    from services import connection_state
+    from services.connection_state import DeviceState
+
     app_state = ctx.app_state
     # Current position from any active engine
     for engine in app_state.simulation_engines.values():
@@ -58,28 +69,40 @@ async def _send_initial_state(ws: WebSocket) -> None:
     cd = app_state.cooldown_timer.get_status()
     await ws.send_text(json.dumps({"type": "cooldown_update", "data": cd}))
 
-    # Device snapshot — only the currently-connected entries. discover_devices
-    # is cached (0.5s TTL) so this is cheap on bursty reconnects.
-    try:
-        all_devices = await app_state.device_manager.discover_devices()
-        connected = [
-            {
-                "udid": d.udid,
-                "name": d.name,
-                "ios_version": d.ios_version,
-                "connection_type": d.connection_type,
-            }
-            for d in all_devices
-            if getattr(d, "is_connected", False)
-        ]
+    # Device snapshot — pulled directly from the unified state store. Both
+    # CONNECTED and DEGRADED count as "this device exists" for the list;
+    # DEGRADED additionally gets a tunnel_degraded follow-up below.
+    snapshot = connection_state.store.snapshot()
+    connected: list[dict[str, str]] = []
+    degraded_udids: list[str] = []
+    for udid, state in snapshot.items():
+        if state not in (DeviceState.CONNECTED, DeviceState.DEGRADED):
+            continue
+        md = connection_state.store.metadata_for(udid)
+        connected.append({
+            "udid": udid,
+            "name": md.get("name", ""),
+            "ios_version": md.get("ios_version", ""),
+            "connection_type": md.get("connection_type", "USB"),
+        })
+        if state == DeviceState.DEGRADED:
+            degraded_udids.append(udid)
+
+    await ws.send_text(json.dumps({
+        "type": "device_snapshot",
+        "data": {"devices": connected},
+    }))
+
+    # Re-emit tunnel_degraded for any device currently mid-reconnect so the
+    # fresh client's chip shows the same "reconnecting…" hint other clients
+    # already have. The store doesn't remember the original cause string,
+    # so we use a generic "snapshot" tag — the renderer cares about the
+    # event, not the reason text.
+    for udid in degraded_udids:
         await ws.send_text(json.dumps({
-            "type": "device_snapshot",
-            "data": {"devices": connected},
+            "type": "tunnel_degraded",
+            "data": {"udid": udid, "reason": "snapshot"},
         }))
-    except Exception:
-        # Snapshot is a hint, not a contract — frontend has a polling
-        # fallback. Don't fail the whole handshake on a discovery hiccup.
-        logger.debug("Failed to send device_snapshot to new WS client", exc_info=True)
 
 
 async def _require_auth_frame(ws: WebSocket) -> bool:
