@@ -10,7 +10,7 @@ import { haversineM, polylineDistanceM } from './lib/geo'
 
 // Context providers
 import { ToastProvider, useToastContext } from './contexts/ToastContext'
-import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext'
+import { WebSocketProvider } from './contexts/WebSocketContext'
 import { DeviceProvider, useDeviceContext } from './contexts/DeviceContext'
 import { ConnectionHealthProvider } from './contexts/ConnectionHealthContext'
 import { SimProvider, useSimContext, SPEED_MAP } from './contexts/SimContext'
@@ -140,7 +140,6 @@ function AppShell() {
   const simSettings = useSimSettings()
   const bm = useBookmarkContext()
   const health = useConnectionHealth()
-  const { connected: wsConnected } = useWebSocketContext()
   const { sim, joystick, handlePause, handleResume } = simCtx
 
   const mapWaypoints = useMemo(
@@ -211,31 +210,16 @@ function AppShell() {
     try { localStorage.setItem(STORAGE_KEYS.tileLayer, key) } catch {}
   }, [])
 
-  // Auto-scan on WebSocket connect, debounced.
-  //
-  // `device` is intentionally NOT a dependency: `device.scan()` mutates
-  // state that feeds into the memoized context value, which would then
-  // invalidate this effect and re-fire it, producing an infinite
-  // `/api/device/list` loop. We only care about the rising edge of
-  // `wsConnected`. `device.scan` itself is a stable `useCallback(…, [])`
-  // so reading it through the closure is safe.
-  //
-  // Debounce: StrictMode double-mount and dev-mode HMR can toggle
-  // `wsConnected` several times within a few hundred ms. Trailing 200ms
-  // collapses those into one scan per settled connect.
-  const wsScanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!wsConnected) return
-    if (wsScanTimer.current) clearTimeout(wsScanTimer.current)
-    wsScanTimer.current = setTimeout(() => { device.scan() }, 200)
-    return () => {
-      if (wsScanTimer.current) {
-        clearTimeout(wsScanTimer.current)
-        wsScanTimer.current = null
-      }
-    }
-  }, [wsConnected])
+  // No auto-scan on WebSocket connect. The backend's _send_initial_state
+  // pushes a ``device_snapshot`` frame on every WS (re)connect built from
+  // ``connection_state.store`` — that's the SSoT. A REST follow-up here
+  // used to clobber it: a WiFi-tunnel device is in the store but invisible
+  // to usbmux, so /api/device/list could briefly return ``[]`` and the
+  // post-await ``setDevices(list)`` would wipe the snapshot-derived state.
+  // The 30s background poll + visibility-change scan in ``useDevice`` still
+  // act as a safety net for missed WS events; that path is now also safe
+  // because /api/device/list merges store entries (see backend
+  // ``api/device.py:list_devices``).
 
   // Fires one cause-specific toast per involuntary disconnect.
   const prevLastDisconnectTs = useRef(0)

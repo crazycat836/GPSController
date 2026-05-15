@@ -23,8 +23,45 @@ logger = logging.getLogger(__name__)
 
 @router.get("/list", response_model=list[DeviceInfo])
 async def list_devices():
+    """Return every device the renderer should show on the device chip rail.
+
+    Composed from two sources because neither alone is complete:
+
+      1. ``dm.discover_devices()`` — usbmux's view, which sees plugged-in
+         USB devices (connected or not) and lets the renderer offer a
+         Connect button on a freshly trusted phone.
+      2. ``connection_state.store`` — the unified SSoT for transport state.
+         Picks up WiFi-tunnel connections that usbmux never enumerates,
+         so a renderer reload mid-tunnel session doesn't see "no device"
+         and clobber the WS ``device_snapshot`` that just told the truth.
+
+    Anything live in the store but missing from usbmux is appended with
+    metadata replayed from the store's cache (the same payload the WS
+    ``device_connected`` event originally carried).
+    """
     dm = get_device_manager()
-    return await dm.discover_devices()
+    discovered = await dm.discover_devices()
+    discovered_udids = {d.udid for d in discovered}
+
+    snapshot = connection_state.store.snapshot()
+    extras: list[DeviceInfo] = []
+    for udid, state in snapshot.items():
+        if udid in discovered_udids:
+            continue
+        # CONNECTED + DEGRADED both mean "this device is live"; DISCONNECTED
+        # entries in the store have already been broadcast as gone and
+        # would just confuse the UI if surfaced here.
+        if state.value not in ("connected", "degraded"):
+            continue
+        md = connection_state.store.metadata_for(udid)
+        extras.append(DeviceInfo(
+            udid=udid,
+            name=md.get("name", ""),
+            ios_version=md.get("ios_version", ""),
+            connection_type=md.get("connection_type", "USB"),
+            is_connected=True,
+        ))
+    return discovered + extras
 
 
 # ── Generic UDID routes (MUST be defined after all specific /wifi/* routes
