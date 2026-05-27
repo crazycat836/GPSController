@@ -161,7 +161,7 @@ function Stepper({ value, onDec, onInc }: { value: string; onDec?: () => void; o
 
 // ── Card shell ────────────────────────────────────────────────────────
 
-function CardShell({ children }: { children: React.ReactNode }) {
+export function CardShell({ children }: { children: React.ReactNode }) {
   return (
     <div
       className="rounded-[14px] border border-[var(--color-border)] overflow-hidden relative"

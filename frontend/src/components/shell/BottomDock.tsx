@@ -11,7 +11,7 @@ import { RADIUS_PRESETS } from '../../lib/constants'
 import DockRouteCard from './dock/DockRouteCard'
 import WaypointList from './dock/WaypointList'
 import JoyPreview from './dock/JoyPreview'
-import ModeStatsCard from './dock/ModeStatsCard'
+import ModeStatsCard, { CardShell } from './dock/ModeStatsCard'
 import SpeedToggle from './dock/SpeedToggle'
 import ActionGroup from './dock/ActionGroup'
 import { buildDockContext } from './dock/buildDockContext'
@@ -164,17 +164,7 @@ function RandomConfigPanel({ onCancel, onGenerate }: { onCancel: () => void; onG
   const KM = 1000
   return (
     <>
-      <div
-        className="rounded-[14px] border border-[var(--color-border)] overflow-hidden relative"
-        style={{
-          background: `radial-gradient(120% 100% at 0% 0%, rgba(108,140,255,0.10) 0%, transparent 55%),
-                       linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.02) 100%)`,
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(0,0,0,0.25)',
-        }}
-      >
-        {/* Accent hairline — matches CardShell */}
-        <div className="absolute left-4 right-4 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, var(--color-accent-strong), transparent)', opacity: 0.5 }} aria-hidden="true" />
-
+      <CardShell>
         <div className="grid grid-cols-2 relative">
           {/* Radius */}
           <div className="flex flex-col gap-2 p-4 hover:bg-white/[0.025] transition-colors">
@@ -220,7 +210,7 @@ function RandomConfigPanel({ onCancel, onGenerate }: { onCancel: () => void; onG
             </div>
           </div>
         </div>
-      </div>
+      </CardShell>
       {/* Cancel / Generate buttons */}
       <div className="grid grid-cols-2 gap-2">
         <button
