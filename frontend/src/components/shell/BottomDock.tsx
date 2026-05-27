@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Repeat, Route, Shuffle, Crosshair, Navigation, Gamepad2, SquareCheckBig, X, Check } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ChainPoint } from '../WaypointChain'
@@ -31,6 +31,8 @@ export default function BottomDock() {
   const { sim, handleRemoveWaypoint, handleGenerateRandomWaypoints } = simCtx
   const { currentPos, destPos } = useSimDerived()
   const [showRandomConfig, setShowRandomConfig] = useState(false)
+
+  useEffect(() => { setShowRandomConfig(false) }, [sim.mode])
 
   const ctx = useMemo(
     () => buildDockContext(sim.mode, sim, currentPos, destPos, t),
@@ -165,13 +167,17 @@ function RandomConfigPanel({ onCancel, onGenerate }: { onCancel: () => void; onG
       <div
         className="rounded-[14px] border border-[var(--color-border)] overflow-hidden relative"
         style={{
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.02) 100%)',
+          background: `radial-gradient(120% 100% at 0% 0%, rgba(108,140,255,0.10) 0%, transparent 55%),
+                       linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.02) 100%)`,
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(0,0,0,0.25)',
         }}
       >
-        <div className="grid grid-cols-2">
+        {/* Accent hairline — matches CardShell */}
+        <div className="absolute left-4 right-4 top-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, var(--color-accent-strong), transparent)', opacity: 0.5 }} aria-hidden="true" />
+
+        <div className="grid grid-cols-2 relative">
           {/* Radius */}
-          <div className="flex flex-col gap-2 p-4">
+          <div className="flex flex-col gap-2 p-4 hover:bg-white/[0.025] transition-colors">
             <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.10em] text-[var(--color-text-3)]">
               <span className="w-1 h-1 rounded-full bg-[var(--color-accent)] shadow-[0_0_6px_var(--color-accent)] opacity-70" aria-hidden="true" />
               {t('dock.radius')}
@@ -201,33 +207,16 @@ function RandomConfigPanel({ onCancel, onGenerate }: { onCancel: () => void; onG
             </div>
           </div>
           {/* Waypoint count */}
-          <div className="flex flex-col gap-2 p-4 relative">
-            <span
-              className="absolute left-0 top-[18%] bottom-[18%] w-px"
-              style={{ background: 'linear-gradient(180deg, transparent, var(--color-border) 25%, var(--color-border) 75%, transparent)' }}
-              aria-hidden="true"
-            />
+          <div className="flex flex-col gap-2 p-4 hover:bg-white/[0.025] transition-colors relative">
+            <span className="absolute left-0 top-[18%] bottom-[18%] w-px" style={{ background: 'linear-gradient(180deg, transparent, var(--color-border) 25%, var(--color-border) 75%, transparent)' }} aria-hidden="true" />
             <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.10em] text-[var(--color-text-3)]">
               <span className="w-1 h-1 rounded-full bg-[var(--color-accent)] shadow-[0_0_6px_var(--color-accent)] opacity-70" aria-hidden="true" />
               {t('dock.waypoints')}
             </span>
-            <div
-              className="flex items-center gap-1 p-[3px] rounded-[10px] border border-[var(--color-border)]"
-              style={{ background: 'rgba(0,0,0,0.25)' }}
-            >
-              <button
-                type="button"
-                onClick={() => setWpGenCount(Math.max(2, wpGenCount - 1))}
-                className="w-[30px] h-[30px] rounded-[7px] grid place-items-center text-[16px] text-[var(--color-text-2)] bg-white/[0.04] hover:bg-[rgba(108,140,255,0.18)] transition-colors cursor-pointer"
-              >−</button>
-              <span className="font-mono text-[17px] font-semibold text-[var(--color-text-1)] min-w-[36px] text-center tabular-nums">
-                {wpGenCount}
-              </span>
-              <button
-                type="button"
-                onClick={() => setWpGenCount(Math.min(20, wpGenCount + 1))}
-                className="w-[30px] h-[30px] rounded-[7px] grid place-items-center text-[16px] text-[var(--color-text-2)] bg-white/[0.04] hover:bg-[rgba(108,140,255,0.18)] transition-colors cursor-pointer"
-              >+</button>
+            <div className="inline-flex items-center gap-0.5 h-6 px-0.5 rounded-xl" style={{ background: 'rgba(255,255,255,0.12)' }}>
+              <button type="button" onClick={() => setWpGenCount(Math.max(2, wpGenCount - 1))} className="w-7 h-7 rounded-lg grid place-items-center text-[14px] text-[var(--color-text-2)] bg-white/[0.06] hover:bg-[rgba(167,139,250,0.18)] transition-colors cursor-pointer">−</button>
+              <span className="font-mono text-[13px] font-semibold text-[var(--color-text-1)] min-w-[28px] text-center tabular-nums">{wpGenCount}</span>
+              <button type="button" onClick={() => setWpGenCount(Math.min(20, wpGenCount + 1))} className="w-7 h-7 rounded-lg grid place-items-center text-[14px] text-[var(--color-text-2)] bg-white/[0.06] hover:bg-[rgba(167,139,250,0.18)] transition-colors cursor-pointer">+</button>
             </div>
           </div>
         </div>
