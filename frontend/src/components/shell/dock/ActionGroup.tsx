@@ -12,7 +12,7 @@ const MIN_WAYPOINTS_FOR_PATH = 2
 //   * Teleport — single "Move" (disabled without dest).
 //   * Running  — Pause/Resume + Stop.
 //   * Idle     — single "Start" (disabled until setup is valid).
-export default function ActionGroup() {
+export default function ActionGroup({ fullWidth }: { fullWidth?: boolean } = {}) {
   const t = useT()
   const {
     sim,
@@ -24,11 +24,12 @@ export default function ActionGroup() {
 
   if (mode === SimMode.Teleport) {
     return (
-      <div className="flex gap-1.5">
+      <div className={fullWidth ? 'flex flex-col gap-1.5' : 'flex gap-1.5'}>
         <ActionBtn
           tone="accent"
           disabled={!destPos}
           onClick={() => { if (destPos) handleTeleport(destPos.lat, destPos.lng) }}
+          fullWidth={fullWidth}
         >
           <ArrowRight className="w-3 h-3" strokeWidth={3} />
           {t('teleport.move')}
@@ -41,17 +42,17 @@ export default function ActionGroup() {
     return (
       <div className="flex gap-1.5">
         {isPaused ? (
-          <ActionBtn tone="accent" onClick={handleResume}>
+          <ActionBtn tone="accent" onClick={handleResume} fullWidth={fullWidth}>
             <Play className="w-3 h-3" fill="currentColor" />
             {t('generic.resume')}
           </ActionBtn>
         ) : (
-          <ActionBtn tone="ghost" onClick={handlePause}>
+          <ActionBtn tone="ghost" onClick={handlePause} fullWidth={fullWidth}>
             <Pause className="w-3 h-3" fill="currentColor" />
             {t('generic.pause')}
           </ActionBtn>
         )}
-        <ActionBtn tone="danger" onClick={handleStop}>
+        <ActionBtn tone="danger" onClick={handleStop} fullWidth={fullWidth}>
           <Square className="w-[10px] h-[10px]" fill="currentColor" />
           {t('generic.stop')}
         </ActionBtn>
@@ -62,8 +63,8 @@ export default function ActionGroup() {
   // Idle — Start (disabled until setup is valid).
   const disabled = isStartDisabled(mode, destPos, waypointCount)
   return (
-    <div className="flex gap-1.5">
-      <ActionBtn tone="accent" disabled={disabled} onClick={handleStart}>
+    <div className={fullWidth ? 'flex flex-col gap-1.5' : 'flex gap-1.5'}>
+      <ActionBtn tone="accent" disabled={disabled} onClick={handleStart} fullWidth={fullWidth}>
         <Play className="w-3 h-3" fill="currentColor" />
         {t('generic.start')}
       </ActionBtn>
@@ -87,10 +88,11 @@ interface ActionBtnProps {
   tone: 'accent' | 'danger' | 'ghost'
   onClick: () => void
   disabled?: boolean
+  fullWidth?: boolean
   children: React.ReactNode
 }
 
-function ActionBtn({ tone, onClick, disabled, children }: ActionBtnProps) {
+function ActionBtn({ tone, onClick, disabled, fullWidth, children }: ActionBtnProps) {
   const palette = tone === 'danger'
     ? { bg: 'var(--color-danger-dim)', border: '1px solid rgba(255,71,87,0.35)', color: 'var(--color-danger-text)', hover: 'rgba(255,71,87,0.22)' }
     : tone === 'ghost'
@@ -107,6 +109,7 @@ function ActionBtn({ tone, onClick, disabled, children }: ActionBtnProps) {
       disabled={disabled}
       className={[
         'dock-action-btn',
+        fullWidth ? 'w-full' : '',
         'inline-flex items-center justify-center gap-2 h-11 px-[18px] rounded-xl',
         'text-[13px] font-semibold whitespace-nowrap',
         'transition-[background,opacity,box-shadow] duration-150 cursor-pointer',
