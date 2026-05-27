@@ -5,7 +5,7 @@ import { useSimSettings } from '../../../contexts/SimSettingsContext'
 import { SimMode } from '../../../hooks/useSimulation'
 import { useT } from '../../../i18n'
 import { haversineM } from '../../../lib/geo'
-import { RADIUS_PRESETS } from '../../../lib/constants'
+import { RADIUS_PRESETS, SPEED_MAP, type SpeedPresetMode } from '../../../lib/constants'
 
 // ── Shared visual primitives ──────────────────────────────────────────
 
@@ -187,6 +187,25 @@ function formatDist(m: number): string {
   return `${Math.round(m)} m`
 }
 
+function useActiveSpeedKmh(): number {
+  const { sim } = useSimContext()
+  if (sim.customSpeedKmh != null) return sim.customSpeedKmh
+  return SPEED_MAP[sim.moveMode as SpeedPresetMode] ?? 10.8
+}
+
+function formatEta(distM: number, speedKmh: number, laps: number | null): string {
+  if (distM <= 0 || speedKmh <= 0) return '--'
+  if (laps === null) return '∞'
+  const totalM = distM * laps
+  const hours = totalM / 1000 / speedKmh
+  const mins = Math.round(hours * 60)
+  if (mins < 1) return '< 1 min'
+  if (mins < 60) return `${mins} min`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m === 0 ? `${h} h` : `${h} h ${m} m`
+}
+
 function formatRadius(m: number): string {
   if (m >= KM_THRESHOLD_M) {
     const km = m / KM_THRESHOLD_M
@@ -257,13 +276,15 @@ function TeleportCard() {
 function NavigateCard() {
   const t = useT()
   const distM = useNavDist()
+  const speedKmh = useActiveSpeedKmh()
+  const eta = formatEta(distM, speedKmh, 1)
   return (
     <CardShell>
       <div className="grid grid-cols-2 relative">
         <StatCell label={t('dock.distance')} value={formatDist(distM)} />
         <StatCell
           label={t('dock.est_time')}
-          value="--"
+          value={eta}
           accent
           divider
         />
@@ -288,6 +309,8 @@ function LoopCard() {
   const { sim } = useSimContext()
   const loopEnabled = sim.loopLapCount !== 1
   const totalDist = useTotalWaypointDist(loopEnabled)
+  const speedKmh = useActiveSpeedKmh()
+  const eta = formatEta(totalDist, speedKmh, sim.loopLapCount)
   const displayCount = sim.loopLapCount === null ? '∞' : String(sim.loopLapCount)
 
   const handleToggle = (on: boolean) => {
@@ -309,7 +332,7 @@ function LoopCard() {
         <StatCell label={t('dock.distance')} value={formatDist(totalDist)} />
         <StatCell
           label={t('dock.est_time')}
-          value={loopEnabled ? '∞' : '--'}
+          value={eta}
           accent
           divider
         />
