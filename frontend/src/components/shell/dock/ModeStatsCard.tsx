@@ -144,14 +144,14 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange?: (v: 
 // ── Stepper ──────────────────────────────────────────────────────────
 
 function Stepper({ value, onDec, onInc }: { value: string; onDec?: () => void; onInc?: () => void }) {
-  const btnCls = 'w-[30px] h-[30px] rounded-[7px] grid place-items-center text-[16px] text-[var(--color-text-2)] bg-white/[0.04] hover:bg-[rgba(108,140,255,0.18)] hover:text-[var(--color-text-1)] transition-colors cursor-pointer'
+  const btnCls = 'w-7 h-7 rounded-lg grid place-items-center text-[14px] text-[var(--color-text-2)] bg-white/[0.06] hover:bg-[rgba(167,139,250,0.18)] hover:text-[var(--color-text-1)] transition-colors cursor-pointer'
   return (
     <div
-      className="flex items-center gap-1 p-[3px] rounded-[10px] border border-[var(--color-border)]"
-      style={{ background: 'rgba(0,0,0,0.25)' }}
+      className="inline-flex items-center gap-0.5 h-6 px-0.5 rounded-xl"
+      style={{ background: 'rgba(255,255,255,0.12)' }}
     >
       <button type="button" className={btnCls} onClick={onDec}>−</button>
-      <span className="font-mono text-[17px] font-semibold text-[var(--color-text-1)] min-w-[36px] text-center tabular-nums">
+      <span className="font-mono text-[13px] font-semibold text-[var(--color-text-1)] min-w-[28px] text-center tabular-nums">
         {value}
       </span>
       <button type="button" className={btnCls} onClick={onInc}>+</button>

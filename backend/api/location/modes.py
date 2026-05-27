@@ -76,6 +76,8 @@ async def teleport(req: TeleportRequest):
     if old_pos and cooldown.enabled and not dual_mode:
         await cooldown.start(old_pos.lat, old_pos.lng, req.lat, req.lng)
 
+    _app_state.update_last_position(req.lat, req.lng)
+
     return {"status": "ok", "lat": req.lat, "lng": req.lng}
 
 
