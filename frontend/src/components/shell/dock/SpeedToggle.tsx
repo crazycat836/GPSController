@@ -31,9 +31,6 @@ const SPEED_PRESETS: readonly SpeedPreset[] = BASE_SPEED_PRESETS.map((p) => ({
   ...PRESET_UI[p.mode],
 }))
 
-// Speed preset toggle group. A preset is "active" only when the live
-// move mode matches AND no custom/min/max override is set, so flipping
-// to a preset always wipes the custom override fields.
 export default function SpeedToggle() {
   const t = useT()
   const { sim } = useSimContext()
@@ -47,10 +44,10 @@ export default function SpeedToggle() {
 
   return (
     <div
-      role="group"
+      role="radiogroup"
       aria-label={t('panel.speed')}
-      className="flex gap-0.5 p-[3px] h-11 rounded-xl border border-[var(--color-border)]"
-      style={{ background: 'var(--color-surface-ghost)' }}
+      className="flex gap-1 p-[3px] rounded-[10px] border border-[var(--color-border)] w-full"
+      style={{ background: 'rgba(255,255,255,0.04)' }}
     >
       {SPEED_PRESETS.map(({ mode, Icon, labelKey, value }) => {
         const on = isSpeedPresetActive(mode, sim)
@@ -58,21 +55,41 @@ export default function SpeedToggle() {
           <button
             key={mode}
             type="button"
+            role="radio"
+            aria-checked={on}
             onClick={() => onPreset(mode)}
-            aria-pressed={on}
             className={[
-              'inline-flex items-center gap-1.5 px-3.5 rounded-[9px] text-[13px] font-medium',
-              'transition-colors duration-150',
-              on ? 'text-[var(--color-accent-strong)]' : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
+              'flex-1 inline-flex items-center justify-center gap-[7px]',
+              'h-11 px-3.5 rounded-lg',
+              'text-[13px] font-medium',
+              'transition-all duration-150 cursor-pointer',
+              on
+                ? 'text-[var(--color-accent-strong)]'
+                : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)] hover:bg-white/[0.04]',
             ].join(' ')}
             style={on ? {
               background: 'var(--color-accent-dim)',
-              border: '1px solid rgba(255,255,255,0.06)',
             } : undefined}
           >
             <Icon className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">{t(labelKey)}</span>
-            <span className="font-mono text-[11px] opacity-65 tabular-nums">{value}</span>
+            <span>{t(labelKey)}</span>
+            <span
+              className={[
+                'font-mono text-[12px] font-semibold tabular-nums tracking-[-0.02em]',
+                on ? 'text-[var(--color-accent-strong)]' : 'text-[var(--color-text-2)]',
+              ].join(' ')}
+              style={on
+                ? { background: 'transparent', padding: '2px 0' }
+                : { background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '4px' }
+              }
+            >
+              {value}
+              {on && (
+                <span className="text-[9px] font-medium tracking-[0.08em] uppercase opacity-60 ml-1">
+                  km/h
+                </span>
+              )}
+            </span>
           </button>
         )
       })}

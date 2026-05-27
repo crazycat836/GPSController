@@ -22,7 +22,7 @@ export default function DockRouteCard({ mode }: DockRouteCardProps) {
   return (
     <div
       className={[
-        'mt-3.5 flex flex-col overflow-hidden',
+        'flex flex-col overflow-hidden',
         'bg-white/[0.03] border border-[var(--color-border)] rounded-xl',
       ].join(' ')}
     >

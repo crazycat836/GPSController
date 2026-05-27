@@ -158,7 +158,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const [waypointProgress, setWaypointProgress] = useState<{ current: number; next: number; total: number } | null>(null)
   // Loop / MultiStop target lap count. null = unlimited (existing
   // behaviour). Positive = backend will auto-stop after N laps.
-  const [loopLapCount, setLoopLapCount] = useState<number | null>(null)
+  const [loopLapCount, setLoopLapCount] = useState<number | null>(1)
   // Progress readout from the `lap_complete` WS event. total is the
   // target (when set) so the UI can render "3 / 5" style.
   const [lapProgress, setLapProgress] = useState<{ current: number; total: number | null } | null>(null)

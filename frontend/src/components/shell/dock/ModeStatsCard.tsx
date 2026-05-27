@@ -1,0 +1,481 @@
+import { useMemo, useState } from 'react'
+import { useSimContext } from '../../../contexts/SimContext'
+import { useSimDerived } from '../../../contexts/SimDerivedContext'
+import { useSimSettings } from '../../../contexts/SimSettingsContext'
+import { SimMode } from '../../../hooks/useSimulation'
+import { useT } from '../../../i18n'
+import { haversineM } from '../../../lib/geo'
+import { RADIUS_PRESETS } from '../../../lib/constants'
+
+// ── Shared visual primitives ──────────────────────────────────────────
+
+function AccentHairline() {
+  return (
+    <div
+      className="absolute left-4 right-4 top-0 h-px"
+      style={{
+        background:
+          'linear-gradient(90deg, transparent, var(--color-accent-strong), transparent)',
+        opacity: 0.5,
+      }}
+      aria-hidden="true"
+    />
+  )
+}
+
+function ColDivider() {
+  return (
+    <span
+      className="absolute left-0 top-[18%] bottom-[18%] w-px"
+      style={{
+        background:
+          'linear-gradient(180deg, transparent, var(--color-border) 25%, var(--color-border) 75%, transparent)',
+      }}
+      aria-hidden="true"
+    />
+  )
+}
+
+function RowDivider() {
+  return (
+    <div
+      className="absolute left-[18px] right-[18px] bottom-0 h-px"
+      style={{
+        background:
+          'linear-gradient(90deg, transparent, var(--color-border) 20%, var(--color-border) 80%, transparent)',
+      }}
+      aria-hidden="true"
+    />
+  )
+}
+
+// ── Stat cell ─────────────────────────────────────────────────────────
+
+interface StatCellProps {
+  label: string
+  value: string
+  accent?: boolean
+  divider?: boolean
+}
+
+function StatCell({ label, value, accent = false, divider = false }: StatCellProps) {
+  return (
+    <div
+      className={[
+        'flex flex-col gap-2 p-4 hover:bg-white/[0.025] transition-colors',
+        divider ? 'relative' : '',
+      ].join(' ')}
+    >
+      {divider && <ColDivider />}
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.10em] text-[var(--color-text-3)]">
+        <span
+          className="w-1 h-1 rounded-full bg-[var(--color-accent)] shadow-[0_0_6px_var(--color-accent)] opacity-70"
+          aria-hidden="true"
+        />
+        {label}
+      </span>
+      <span
+        className={[
+          'font-mono text-[24px] font-semibold tabular-nums leading-none tracking-[-0.02em]',
+          accent
+            ? 'text-[var(--color-accent-strong)]'
+            : 'text-[var(--color-text-1)]',
+        ].join(' ')}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
+
+// ── Control cell ──────────────────────────────────────────────────────
+
+interface ControlCellProps {
+  label: string
+  divider?: boolean
+  children: React.ReactNode
+}
+
+function ControlCell({ label, divider = false, children }: ControlCellProps) {
+  return (
+    <div
+      className={[
+        'flex items-center justify-between gap-3 px-[18px] py-3.5',
+        divider ? 'relative' : '',
+      ].join(' ')}
+    >
+      {divider && <ColDivider />}
+      <span className="text-[13px] font-medium text-[var(--color-text-2)]">
+        {label}
+      </span>
+      {children}
+    </div>
+  )
+}
+
+// ── Toggle switch ────────────────────────────────────────────────────
+
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange?: (v: boolean) => void }) {
+  const [localOn, setLocalOn] = useState(checked)
+  const on = onChange ? checked : localOn
+  const toggle = () => {
+    if (onChange) { onChange(!checked) }
+    else { setLocalOn((v) => !v) }
+  }
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={toggle}
+      className="w-11 h-6 rounded-xl relative cursor-pointer transition-colors"
+      style={{ background: on ? 'var(--color-accent)' : 'rgba(255,255,255,0.12)' }}
+    >
+      <div
+        className="absolute top-[2px] w-5 h-5 rounded-full bg-white shadow-sm transition-transform"
+        style={{
+          left: '2px',
+          transform: on ? 'translateX(20px)' : 'translateX(0)',
+        }}
+      />
+    </button>
+  )
+}
+
+// ── Stepper ──────────────────────────────────────────────────────────
+
+function Stepper({ value, onDec, onInc }: { value: string; onDec?: () => void; onInc?: () => void }) {
+  const btnCls = 'w-[30px] h-[30px] rounded-[7px] grid place-items-center text-[16px] text-[var(--color-text-2)] bg-white/[0.04] hover:bg-[rgba(108,140,255,0.18)] hover:text-[var(--color-text-1)] transition-colors cursor-pointer'
+  return (
+    <div
+      className="flex items-center gap-1 p-[3px] rounded-[10px] border border-[var(--color-border)]"
+      style={{ background: 'rgba(0,0,0,0.25)' }}
+    >
+      <button type="button" className={btnCls} onClick={onDec}>−</button>
+      <span className="font-mono text-[17px] font-semibold text-[var(--color-text-1)] min-w-[36px] text-center tabular-nums">
+        {value}
+      </span>
+      <button type="button" className={btnCls} onClick={onInc}>+</button>
+    </div>
+  )
+}
+
+// ── Card shell ────────────────────────────────────────────────────────
+
+function CardShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="rounded-[14px] border border-[var(--color-border)] overflow-hidden relative"
+      style={{
+        background: `radial-gradient(120% 100% at 0% 0%, rgba(108,140,255,0.10) 0%, transparent 55%),
+                     linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.02) 100%)`,
+        boxShadow:
+          'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(0,0,0,0.25)',
+      }}
+    >
+      <AccentHairline />
+      {children}
+    </div>
+  )
+}
+
+// ── Formatting helpers ────────────────────────────────────────────────
+
+const KM_THRESHOLD_M = 1000
+
+function formatDist(m: number): string {
+  if (m >= KM_THRESHOLD_M) return `${(m / KM_THRESHOLD_M).toFixed(2)} km`
+  return `${Math.round(m)} m`
+}
+
+function formatRadius(m: number): string {
+  if (m >= KM_THRESHOLD_M) {
+    const km = m / KM_THRESHOLD_M
+    return m % KM_THRESHOLD_M === 0 ? `${km} km` : `${km.toFixed(1)} km`
+  }
+  return `${m} m`
+}
+
+// ── Per-mode card content ─────────────────────────────────────────────
+
+function useTotalWaypointDist(loop: boolean): number {
+  const { sim } = useSimContext()
+  return useMemo(() => {
+    if (sim.waypoints.length < 2) return 0
+    let d = 0
+    for (let i = 1; i < sim.waypoints.length; i++) {
+      d += haversineM(sim.waypoints[i - 1], sim.waypoints[i])
+    }
+    if (loop && sim.waypoints.length >= 2) {
+      d += haversineM(
+        sim.waypoints[sim.waypoints.length - 1],
+        sim.waypoints[0],
+      )
+    }
+    return d
+  }, [sim.waypoints, loop])
+}
+
+function useNavDist(): number {
+  const { currentPos, destPos } = useSimDerived()
+  return useMemo(() => {
+    if (!currentPos || !destPos) return 0
+    return haversineM(currentPos, destPos)
+  }, [currentPos, destPos])
+}
+
+// ── Teleport card ─────────────────────────────────────────────────────
+
+function TeleportCard() {
+  const t = useT()
+  const distM = useNavDist()
+  return (
+    <CardShell>
+      <div className="grid grid-cols-2 relative">
+        <StatCell label={t('dock.distance')} value={formatDist(distM)} />
+        <StatCell
+          label={t('dock.cooldown')}
+          value="--"
+          accent
+          divider
+        />
+        <RowDivider />
+      </div>
+      <div className="grid grid-cols-2">
+        <ControlCell label={t('dock.auto_jitter')}>
+          <ToggleSwitch checked={true} />
+        </ControlCell>
+        <ControlCell label={t('dock.bypass')} divider>
+          <ToggleSwitch checked={false} />
+        </ControlCell>
+      </div>
+    </CardShell>
+  )
+}
+
+// ── Navigate card ─────────────────────────────────────────────────────
+
+function NavigateCard() {
+  const t = useT()
+  const distM = useNavDist()
+  return (
+    <CardShell>
+      <div className="grid grid-cols-2 relative">
+        <StatCell label={t('dock.distance')} value={formatDist(distM)} />
+        <StatCell
+          label={t('dock.est_time')}
+          value="--"
+          accent
+          divider
+        />
+        <RowDivider />
+      </div>
+      <div className="grid grid-cols-2">
+        <ControlCell label={t('dock.auto_stop')}>
+          <ToggleSwitch checked={true} />
+        </ControlCell>
+        <ControlCell label={t('dock.reroute')} divider>
+          <ToggleSwitch checked={true} />
+        </ControlCell>
+      </div>
+    </CardShell>
+  )
+}
+
+// ── Loop card ─────────────────────────────────────────────────────────
+
+function LoopCard() {
+  const t = useT()
+  const { sim } = useSimContext()
+  const loopEnabled = sim.loopLapCount !== 1
+  const totalDist = useTotalWaypointDist(loopEnabled)
+  const displayCount = sim.loopLapCount === null ? '∞' : String(sim.loopLapCount)
+
+  const handleToggle = (on: boolean) => {
+    sim.setLoopLapCount(on ? null : 1)
+  }
+  const handleDec = () => {
+    if (sim.loopLapCount === null) { sim.setLoopLapCount(10) }
+    else if (sim.loopLapCount > 2) { sim.setLoopLapCount(sim.loopLapCount - 1) }
+  }
+  const handleInc = () => {
+    if (sim.loopLapCount === null) return
+    if (sim.loopLapCount >= 99) { sim.setLoopLapCount(null) }
+    else { sim.setLoopLapCount(sim.loopLapCount + 1) }
+  }
+
+  return (
+    <CardShell>
+      <div className="grid grid-cols-2 relative">
+        <StatCell label={t('dock.distance')} value={formatDist(totalDist)} />
+        <StatCell
+          label={t('dock.est_time')}
+          value={loopEnabled ? '∞' : '--'}
+          accent
+          divider
+        />
+        <RowDivider />
+      </div>
+      <div className="grid grid-cols-2">
+        <ControlCell label={t('dock.loop')}>
+          <ToggleSwitch checked={loopEnabled} onChange={handleToggle} />
+        </ControlCell>
+        <ControlCell label={t('dock.count')} divider>
+          <Stepper value={displayCount} onDec={handleDec} onInc={handleInc} />
+        </ControlCell>
+      </div>
+    </CardShell>
+  )
+}
+
+// ── Multi-Stop card ───────────────────────────────────────────────────
+
+function MultiStopCard() {
+  const t = useT()
+  const { sim } = useSimContext()
+  const totalDist = useTotalWaypointDist(false)
+  return (
+    <CardShell>
+      <div className="grid grid-cols-2 relative">
+        <StatCell
+          label={t('dock.total_distance')}
+          value={formatDist(totalDist)}
+        />
+        <StatCell
+          label={t('dock.est_time')}
+          value="--"
+          accent
+          divider
+        />
+        <RowDivider />
+      </div>
+      <div className="grid grid-cols-2">
+        <ControlCell label={t('dock.pause_toggle')}>
+          <ToggleSwitch checked={true} />
+        </ControlCell>
+        <ControlCell label={t('dock.stops')} divider>
+          <Stepper value={String(sim.waypoints.length)} />
+        </ControlCell>
+      </div>
+    </CardShell>
+  )
+}
+
+// ── Random Walk card ──────────────────────────────────────────────────
+
+function RandomWalkCard() {
+  const t = useT()
+  const { randomWalkRadius, setRandomWalkRadius } = useSimSettings()
+  return (
+    <CardShell>
+      <div className="grid grid-cols-2 relative">
+        {/* Radius with preset chips */}
+        <div className="flex flex-col gap-2 p-4 hover:bg-white/[0.025] transition-colors">
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.10em] text-[var(--color-text-3)]">
+            <span
+              className="w-1 h-1 rounded-full bg-[var(--color-accent)] shadow-[0_0_6px_var(--color-accent)] opacity-70"
+              aria-hidden="true"
+            />
+            {t('dock.radius')}
+          </span>
+          <div className="flex gap-1 flex-wrap">
+            {RADIUS_PRESETS.map((r) => {
+              const active = r === randomWalkRadius
+              const label =
+                r >= KM_THRESHOLD_M ? `${r / KM_THRESHOLD_M}km` : `${r}m`
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRandomWalkRadius(r)}
+                  aria-pressed={active}
+                  className={[
+                    'h-7 px-2.5 rounded-[7px] font-mono text-[12px] font-medium',
+                    'transition-colors duration-120 cursor-pointer',
+                    active
+                      ? 'text-[var(--color-accent-strong)]'
+                      : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
+                  ].join(' ')}
+                  style={
+                    active
+                      ? {
+                          background: 'var(--color-accent-dim)',
+                          boxShadow:
+                            'var(--shadow-avatar-ring-subtle)',
+                        }
+                      : undefined
+                  }
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Waypoints stepper */}
+        <div className="flex flex-col gap-2 p-4 hover:bg-white/[0.025] transition-colors relative">
+          <ColDivider />
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.10em] text-[var(--color-text-3)]">
+            <span
+              className="w-1 h-1 rounded-full bg-[var(--color-accent)] shadow-[0_0_6px_var(--color-accent)] opacity-70"
+              aria-hidden="true"
+            />
+            {t('dock.waypoints')}
+          </span>
+          <span className="font-mono text-[24px] font-semibold text-[var(--color-accent-strong)] tabular-nums leading-none tracking-[-0.02em]">
+            {formatRadius(randomWalkRadius)}
+          </span>
+        </div>
+      </div>
+    </CardShell>
+  )
+}
+
+// ── Joystick card ─────────────────────────────────────────────────────
+
+function JoystickCard() {
+  const t = useT()
+  return (
+    <CardShell>
+      <div className="grid grid-cols-2 relative">
+        <StatCell label={t('dock.speed')} value="0.0 m/s" />
+        <StatCell
+          label={t('dock.heading')}
+          value="—"
+          accent
+          divider
+        />
+        <RowDivider />
+      </div>
+      <div className="grid grid-cols-2">
+        <ControlCell label={t('dock.sensitivity')}>
+          <Stepper value="3" />
+        </ControlCell>
+        <ControlCell label={t('dock.recenter')} divider>
+          <ToggleSwitch checked={true} />
+        </ControlCell>
+      </div>
+    </CardShell>
+  )
+}
+
+// ── Public component ──────────────────────────────────────────────────
+
+export default function ModeStatsCard() {
+  const { sim } = useSimContext()
+
+  switch (sim.mode) {
+    case SimMode.Teleport:
+      return <TeleportCard />
+    case SimMode.Navigate:
+      return <NavigateCard />
+    case SimMode.Loop:
+      return <LoopCard />
+    case SimMode.MultiStop:
+      return <MultiStopCard />
+    case SimMode.RandomWalk:
+      return <RandomWalkCard />
+    case SimMode.Joystick:
+      return <JoystickCard />
+  }
+}

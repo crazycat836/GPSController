@@ -1,29 +1,67 @@
 import React from 'react'
-import { Crosshair, Navigation, Repeat, Route, Shuffle, Gamepad2 } from 'lucide-react'
+import { Crosshair, Navigation, SquareCheckBig, Gamepad2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SimMode } from '../../hooks/useSimulation'
 import { useT } from '../../i18n'
 import type { StringKey } from '../../i18n'
 
-const modes: Array<{ mode: SimMode; icon: LucideIcon; labelKey: StringKey; kbd: string }> = [
-  { mode: SimMode.Teleport,   icon: Crosshair,  labelKey: 'mode.teleport',    kbd: '1' },
-  { mode: SimMode.Navigate,   icon: Navigation, labelKey: 'mode.navigate',    kbd: '2' },
-  { mode: SimMode.Loop,       icon: Repeat,     labelKey: 'mode.loop',        kbd: '3' },
-  { mode: SimMode.MultiStop,  icon: Route,      labelKey: 'mode.multi_stop',  kbd: '4' },
-  { mode: SimMode.RandomWalk, icon: Shuffle,    labelKey: 'mode.random_walk', kbd: '5' },
-  { mode: SimMode.Joystick,   icon: Gamepad2,   labelKey: 'mode.joystick',    kbd: '6' },
+const ROUTE_SUB_MODES = new Set([SimMode.Loop, SimMode.MultiStop, SimMode.RandomWalk])
+
+export function isRouteSubMode(mode: SimMode): boolean {
+  return ROUTE_SUB_MODES.has(mode)
+}
+
+interface DockModeEntry {
+  id: string
+  icon: LucideIcon
+  labelKey: StringKey
+  kbd: string
+  isActive: (mode: SimMode) => boolean
+  onSelect: (current: SimMode, lastRouteSub: SimMode) => SimMode
+}
+
+const dockModes: DockModeEntry[] = [
+  {
+    id: 'teleport',
+    icon: Crosshair,
+    labelKey: 'mode.teleport',
+    kbd: '1',
+    isActive: (m) => m === SimMode.Teleport,
+    onSelect: () => SimMode.Teleport,
+  },
+  {
+    id: 'navigate',
+    icon: Navigation,
+    labelKey: 'mode.navigate',
+    kbd: '2',
+    isActive: (m) => m === SimMode.Navigate,
+    onSelect: () => SimMode.Navigate,
+  },
+  {
+    id: 'route',
+    icon: SquareCheckBig,
+    labelKey: 'mode.route',
+    kbd: '3',
+    isActive: (m) => isRouteSubMode(m),
+    onSelect: (_cur, lastRouteSub) => lastRouteSub,
+  },
+  {
+    id: 'joystick',
+    icon: Gamepad2,
+    labelKey: 'mode.joystick',
+    kbd: '4',
+    isActive: (m) => m === SimMode.Joystick,
+    onSelect: () => SimMode.Joystick,
+  },
 ]
 
 interface BottomModeBarProps {
   activeMode: SimMode
   onModeChange: (mode: SimMode) => void
+  lastRouteSubMode: SimMode
 }
 
-// Horizontal glass-pill mode selector pinned to the bottom-center.
-// Mirrors the redesign/Home dock-modes: translucent pill, per-mode button
-// expands to a lozenge when active (accent bg + keyboard chip), icon-only
-// when inactive so the bar stays narrow.
-export default function BottomModeBar({ activeMode, onModeChange }: BottomModeBarProps) {
+export default function BottomModeBar({ activeMode, onModeChange, lastRouteSubMode }: BottomModeBarProps) {
   const t = useT()
 
   return (
@@ -32,43 +70,47 @@ export default function BottomModeBar({ activeMode, onModeChange }: BottomModeBa
       aria-label={t('shell.modes_aria')}
       className={[
         'glass-pill-strong fixed bottom-3 left-1/2 -translate-x-1/2 z-[var(--z-ui)]',
-        'flex items-center gap-1.5 px-1.5 py-1.5',
-        'max-w-[calc(100vw-24px)] overflow-x-auto scrollbar-none',
+        'flex items-center gap-1.5 p-2',
+        'w-[min(920px,calc(100vw-48px))] overflow-x-auto scrollbar-none',
       ].join(' ')}
       role="tablist"
     >
-      {modes.map(({ mode, icon: Icon, labelKey, kbd }) => {
-        const active = activeMode === mode
+      {dockModes.map(({ id, icon: Icon, labelKey, kbd, isActive, onSelect }) => {
+        const active = isActive(activeMode)
         return (
           <button
-            key={mode}
+            key={id}
             type="button"
             role="tab"
             aria-selected={active}
             aria-label={t(labelKey)}
             title={`${t(labelKey)} (${kbd})`}
-            onClick={() => onModeChange(mode)}
+            onClick={() => onModeChange(onSelect(activeMode, lastRouteSubMode))}
             className={[
-              'inline-flex items-center gap-2 h-11 px-4 rounded-full',
-              'text-[13px] font-medium whitespace-nowrap shrink-0',
+              'flex-1 inline-flex items-center justify-center gap-2 h-11 px-4 rounded-full',
+              'text-[13px] font-medium whitespace-nowrap',
               'transition-[background,color,box-shadow] duration-150 cursor-pointer',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]',
               active
-                ? 'bg-[var(--color-accent)] text-[var(--color-surface-0)] font-semibold shadow-[var(--shadow-glow)]'
+                ? 'bg-[var(--color-accent)] text-[var(--color-surface-0)] font-semibold'
                 : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)] hover:bg-white/[0.04]',
             ].join(' ')}
+            style={active ? { boxShadow: 'var(--shadow-glow)' } : undefined}
           >
-            <Icon className="w-5 h-5 shrink-0" />
+            <span className="w-5 h-5 inline-flex items-center justify-center shrink-0">
+              <Icon className="w-5 h-5" />
+            </span>
             <span className={active ? '' : 'hidden sm:inline'}>{t(labelKey)}</span>
-            {active && (
-              <span
-                className="font-mono text-[10px] px-1 py-px rounded"
-                style={{ background: 'rgba(0,0,0,0.15)', color: 'rgba(0,0,0,0.6)' }}
-                aria-hidden="true"
-              >
-                {kbd}
-              </span>
-            )}
+            <span
+              className="font-mono text-[10px] px-[5px] py-px rounded"
+              style={active
+                ? { background: 'rgba(0,0,0,0.15)', color: 'rgba(0,0,0,0.6)' }
+                : { background: 'rgba(255,255,255,0.06)', color: 'var(--color-text-3)' }
+              }
+              aria-hidden="true"
+            >
+              {kbd}
+            </span>
           </button>
         )
       })}
