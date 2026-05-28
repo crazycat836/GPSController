@@ -59,18 +59,29 @@ function JoystickPad({
       const dt = lastTickRef.current ? Math.min(now - lastTickRef.current, 100) : 16;
       lastTickRef.current = now;
       const alpha = 1 - Math.exp(-dt / SMOOTH_TAU_MS);
+      // The updater MUST stay pure — under React.StrictMode (dev) it runs
+      // twice, so scheduling the next RAF inside it would spawn two loops
+      // per frame and double every tick until the tab freezes. We only
+      // compute the next position here and decide whether we've settled
+      // via a closure flag, then schedule (or stop) the RAF exactly once
+      // outside the updater.
+      let settled = false;
       setVisualPos((prev) => {
         const tx = targetPosRef.current.x;
         const ty = targetPosRef.current.y;
         const nx = prev.x + (tx - prev.x) * alpha;
         const ny = prev.y + (ty - prev.y) * alpha;
         if (Math.abs(tx - nx) < SETTLE_EPS && Math.abs(ty - ny) < SETTLE_EPS) {
-          rafRef.current = null;
+          settled = true;
           return { x: tx, y: ty };
         }
-        rafRef.current = requestAnimationFrame(tick);
         return { x: nx, y: ny };
       });
+      if (settled) {
+        rafRef.current = null;
+      } else {
+        rafRef.current = requestAnimationFrame(tick);
+      }
     };
     rafRef.current = requestAnimationFrame(tick);
   }, []);
