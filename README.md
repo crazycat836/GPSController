@@ -2,11 +2,6 @@
 
 **iOS 虛擬定位模擬器** — 在 Windows 與 macOS 上控制 iPhone 的 GPS,支援瞬移、導航、路線循環、多點停留、隨機漫步、搖桿操控,經 USB 或 WiFi 連線。**全程不修改 iPhone 系統或使用者資料,斷開後裝置自動恢復真實 GPS。**
 
-<p align="right">
-  <a href="README.md"><img alt="繁體中文" src="https://img.shields.io/badge/繁體中文-active-2d3748?style=flat-square"></a>
-  <a href="README.en.md"><img alt="English" src="https://img.shields.io/badge/English-gray?style=flat-square"></a>
-</p>
-
 <p align="center">
   <img src="frontend/build/icon.png" width="160" alt="GPSController">
 </p>
@@ -23,12 +18,8 @@
   </a>
 </p>
 
-<p align="center">
-  <img src="docs/demo-v2.gif" width="720" alt="GPSController demo">
-</p>
-
-> ⚠️ **Pokémon GO / 寶可夢 / Monster Hunter Now 等定位遊戲使用者請注意**
-> 這類平台禁止虛擬定位,使用本工具可能導致帳號警告或封禁。**開發者不負任何帳號損失責任**,請自行評估風險後再用。
+> ⚠️ **定位類遊戲使用者請注意**
+> 這類平台多半禁止虛擬定位,使用本工具可能導致帳號警告或封禁。**開發者不負任何帳號損失責任**,請自行評估風險後再用。
 
 ---
 

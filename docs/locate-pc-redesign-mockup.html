@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>定位電腦 — UI 重新設計 Mockup</title>
+<style>
+  :root{
+    --surface-0:#0a0a0c; --surface-1:#131416; --surface-2:#1a1b20; --surface-3:#222328; --hover:#282a31;
+    --accent:#a78bfa; --accent-hover:#b9a3fc; --accent-strong:#c4b5fd; --accent-dim:rgba(167,139,250,.12);
+    --success:#4ecdc4; --success-text:#34d399;
+    --warn:#ffd93d; --warn-text:#ffc107; --warn-dim:rgba(255,217,61,.13);
+    --danger:#ff4757; --danger-text:#ff8585; --danger-dim:rgba(255,71,87,.13);
+    --t1:#e8eaf0; --t2:#8b8fa3; --t3:#7a7e94;
+    --border:rgba(255,255,255,.08); --border-subtle:rgba(255,255,255,.05); --border-strong:rgba(255,255,255,.12);
+    --glass:rgba(19,20,22,.94);
+    --r-xs:4px; --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:20px; --r-full:9999px;
+    --shadow-md:0 4px 16px rgba(0,0,0,.35); --shadow-xl:0 20px 60px rgba(12,18,40,.65);
+    --mono:'Geist Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans TC',sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:var(--sans); color:var(--t1);
+    background:
+      radial-gradient(120% 120% at 80% -10%, rgba(167,139,250,.07), transparent 50%),
+      radial-gradient(120% 120% at 0% 110%, rgba(78,205,196,.05), transparent 50%),
+      var(--surface-0);
+    min-height:100vh; padding:40px 24px 80px; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px; margin:0 auto}
+  h1{font-size:24px; font-weight:650; letter-spacing:-.02em; margin:0 0 6px}
+  .lede{color:var(--t2); font-size:14px; line-height:1.6; margin:0 0 28px; max-width:680px}
+  .lede code{font-family:var(--mono); font-size:12px; background:var(--surface-2); padding:1px 6px; border-radius:var(--r-xs); color:var(--accent-strong)}
+
+  .grid{display:grid; grid-template-columns:1fr 360px; gap:24px; align-items:start}
+  @media(max-width:880px){.grid{grid-template-columns:1fr}}
+
+  .card{background:var(--surface-1); border:1px solid var(--border); border-radius:var(--r-lg); padding:20px}
+  .card h2{font-size:13px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; color:var(--t3); margin:0 0 4px}
+  .card .sub{font-size:12px; color:var(--t3); margin:0 0 18px; line-height:1.5}
+
+  /* ── mock app stage ─────────────────────────── */
+  .stage{
+    position:relative; height:430px; border-radius:var(--r-md); overflow:hidden;
+    border:1px solid var(--border-subtle);
+    background:
+      linear-gradient(135deg, rgba(167,139,250,.04), transparent 60%),
+      repeating-linear-gradient(0deg, #15161a 0 39px, #1b1d22 39px 40px),
+      repeating-linear-gradient(90deg, #15161a 0 39px, #1b1d22 39px 40px),
+      #101115;
+  }
+  .stage::after{content:'mock map canvas'; position:absolute; right:12px; bottom:10px; font-size:10px; color:var(--t3); letter-spacing:.08em; font-family:var(--mono); opacity:.6}
+
+  /* top bar trigger */
+  .topbar{position:absolute; top:14px; right:14px; display:flex; gap:8px; z-index:5}
+  .pill-btn{
+    width:44px; height:44px; display:grid; place-items:center; cursor:pointer;
+    background:var(--glass); border:1px solid var(--border); border-radius:var(--r-full);
+    color:var(--t1); box-shadow:var(--shadow-md); transition:all .14s cubic-bezier(.16,1,.3,1);
+  }
+  .pill-btn:hover{background:var(--hover); border-color:var(--border-strong)}
+  .pill-btn.active{border-color:var(--accent); color:var(--accent-strong); box-shadow:0 0 24px rgba(167,139,250,.28)}
+  .pill-btn svg{width:18px; height:18px}
+
+  /* ── the new popover ────────────────────────── */
+  .pop{
+    position:absolute; top:70px; right:14px; width:268px; z-index:6;
+    background:var(--glass); border:1px solid var(--border); border-radius:var(--r-lg);
+    box-shadow:var(--shadow-xl), inset 0 1px 0 rgba(255,255,255,.06);
+    overflow:hidden; opacity:0; transform:translateY(-6px) scale(.98); pointer-events:none;
+    transition:opacity .2s cubic-bezier(.16,1,.3,1), transform .2s cubic-bezier(.16,1,.3,1);
+  }
+  .pop.open{opacity:1; transform:none; pointer-events:auto}
+  .pop::before{content:''; position:absolute; left:14px; right:14px; top:0; height:1px;
+    background:linear-gradient(90deg,transparent,rgba(167,139,250,.45),transparent)}
+
+  .pop-head{display:flex; align-items:center; gap:8px; padding:13px 14px 10px}
+  .eyebrow{display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:600;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--t3)}
+  .eyebrow svg{width:13px; height:13px}
+  .pop-body{padding:0 14px 14px}
+
+  /* status row: data + inline refresh */
+  .statline{
+    display:flex; align-items:center; gap:8px; padding:8px 10px; margin-bottom:10px;
+    background:rgba(255,255,255,.035); border:1px solid var(--border-subtle); border-radius:var(--r-sm);
+  }
+  .statline .acc{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:13px; color:var(--t1)}
+  .statline .age{font-size:11px; color:var(--t3); margin-left:2px}
+  .refresh-btn{
+    margin-left:auto; width:26px; height:26px; border-radius:var(--r-sm); display:grid; place-items:center;
+    background:transparent; border:1px solid transparent; color:var(--t2); cursor:pointer; transition:all .14s;
+  }
+  .refresh-btn:hover{color:var(--accent-strong); background:rgba(167,139,250,.1); border-color:rgba(167,139,250,.2)}
+  .refresh-btn svg{width:15px; height:15px}
+
+  /* warning strip */
+  .warn{
+    display:flex; gap:7px; align-items:flex-start; padding:7px 10px; margin-bottom:10px;
+    background:var(--warn-dim); border:1px solid rgba(255,217,61,.25); border-radius:var(--r-sm);
+    font-size:11px; line-height:1.4; color:var(--warn-text);
+  }
+  .warn svg{width:13px; height:13px; flex-shrink:0; margin-top:1px}
+
+  /* error strip */
+  .errbox{display:flex; gap:7px; align-items:flex-start; padding:8px 10px; margin-bottom:10px;
+    background:var(--danger-dim); border:1px solid rgba(255,71,87,.25); border-radius:var(--r-sm);
+    font-size:12px; line-height:1.4; color:var(--danger-text)}
+  .errbox svg{width:14px; height:14px; flex-shrink:0; margin-top:1px}
+
+  /* loading row */
+  .loadrow{display:flex; align-items:center; gap:9px; padding:14px 4px; color:var(--t2); font-size:13px}
+
+  /* buttons */
+  .btn{width:100%; display:flex; align-items:center; justify-content:center; gap:7px;
+    font-size:13px; font-weight:550; font-family:var(--sans); cursor:pointer;
+    border-radius:var(--r-sm); transition:all .14s cubic-bezier(.16,1,.3,1)}
+  .btn svg{width:15px; height:15px}
+  .btn-primary{height:38px; background:var(--accent); color:#1a1430; border:none; font-weight:600}
+  .btn-primary:hover{background:var(--accent-hover)}
+  .btn-ghost{height:34px; background:transparent; color:var(--t2); border:1px solid var(--border);
+    margin-top:7px}
+  .btn-ghost:hover{background:var(--hover); color:var(--t1); border-color:var(--border-strong)}
+
+  .intro{font-size:11.5px; color:var(--t3); line-height:1.5; margin:2px 0 12px}
+
+  /* state-driven visibility */
+  .pop [data-when]{display:none}
+  .pop[data-state="idle"]      [data-when~="idle"],
+  .pop[data-state="loading"]   [data-when~="loading"],
+  .pop[data-state="ready"]      [data-when~="ready"],
+  .pop[data-state="ready-warn"] [data-when~="ready"],
+  .pop[data-state="ready-warn"] [data-when~="warn"],
+  .pop[data-state="refreshing"] [data-when~="ready"],
+  .pop[data-state="error"]      [data-when~="error"]{display:flex}
+  .pop[data-state="idle"]      [data-when~="idle-block"]{display:block}
+  .pop[data-state="ready"]     .actions,
+  .pop[data-state="ready-warn"] .actions,
+  .pop[data-state="refreshing"] .actions{display:block}
+  .pop[data-state="refreshing"] .actions .btn{opacity:.45; pointer-events:none}
+  .pop[data-state="refreshing"] .acc{color:var(--t3)}
+
+  .spin{animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ── state switcher ─────────────────────────── */
+  .switcher{display:flex; flex-wrap:wrap; gap:6px; margin-top:16px}
+  .seg{font-size:12px; padding:6px 11px; border-radius:var(--r-full); cursor:pointer;
+    background:var(--surface-2); border:1px solid var(--border); color:var(--t2); transition:all .14s}
+  .seg:hover{border-color:var(--border-strong); color:var(--t1)}
+  .seg.on{background:var(--accent-dim); border-color:rgba(167,139,250,.4); color:var(--accent-strong)}
+
+  /* ── before (current) panel ─────────────────── */
+  .kebab{background:var(--glass); border:1px solid var(--border); border-radius:var(--r-md);
+    box-shadow:var(--shadow-md); padding:6px; width:230px}
+  .ksection{font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--t3);
+    padding:8px 10px 4px; font-weight:600}
+  .krow{display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:var(--r-sm);
+    font-size:13px; color:var(--t1)}
+  .krow svg{width:15px; height:15px; color:var(--t2)}
+  .krow.note{position:relative}
+  .tag{display:inline-block; font-size:10px; font-weight:600; padding:2px 7px; border-radius:var(--r-full);
+    background:var(--danger-dim); color:var(--danger-text); border:1px solid rgba(255,71,87,.25)}
+  .annot{font-size:11.5px; color:var(--t2); line-height:1.5; margin:14px 0 0; padding-left:18px; position:relative}
+  .annot::before{content:'!'; position:absolute; left:0; top:0; width:14px; height:14px; border-radius:50%;
+    background:var(--danger-dim); color:var(--danger-text); font-size:10px; font-weight:700;
+    display:grid; place-items:center; border:1px solid rgba(255,71,87,.3)}
+
+  /* annotations for new design */
+  .changes{margin-top:18px; display:flex; flex-direction:column; gap:10px}
+  .change{display:flex; gap:10px; font-size:12.5px; line-height:1.5; color:var(--t2)}
+  .change b{color:var(--t1); font-weight:600}
+  .num{flex-shrink:0; width:20px; height:20px; border-radius:50%; background:var(--accent-dim);
+    color:var(--accent-strong); border:1px solid rgba(167,139,250,.3); font-size:11px; font-weight:700;
+    display:grid; place-items:center}
+
+  /* toast */
+  .toast{position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--glass); border:1px solid var(--border-strong); color:var(--t1);
+    padding:10px 16px; border-radius:var(--r-full); font-size:13px; box-shadow:var(--shadow-xl);
+    opacity:0; pointer-events:none; transition:all .25s cubic-bezier(.16,1,.3,1); z-index:50;
+    display:flex; align-items:center; gap:8px}
+  .toast svg{width:15px; height:15px; color:var(--success-text)}
+  .toast.show{opacity:1; transform:translateX(-50%)}
+
+  .footnote{margin-top:28px; font-size:12px; color:var(--t3); line-height:1.6; border-top:1px solid var(--border-subtle); padding-top:16px}
+  .footnote code{font-family:var(--mono); font-size:11px; color:var(--accent-strong)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>「定位電腦」popover — 重新設計 Mockup</h1>
+  <p class="lede">
+    把現在藏在 <code>KebabMenu</code> 裡的清單,換成一個動作導向的 popover。
+    refresh(重新定位)收進資料旁的小 icon、主要動作上提成按鈕、精度差時才浮出警告。
+    下方可切換各互動狀態,⟳ 與按鈕都可以實際點。
+  </p>
+
+  <div class="grid">
+    <!-- ── AFTER ───────────────────────────── -->
+    <div class="card">
+      <h2>After — 提案設計</h2>
+      <p class="sub">點右上角準星按鈕展開;用下方膠囊切換狀態。</p>
+
+      <div class="stage">
+        <div class="topbar">
+          <button class="pill-btn active" id="trigger" title="定位電腦" aria-label="定位電腦">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="pop open" id="pop" data-state="ready">
+          <!-- header -->
+          <div class="pop-head">
+            <span class="eyebrow">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+              電腦位置
+            </span>
+          </div>
+
+          <div class="pop-body">
+            <!-- idle: first open -->
+            <div data-when="idle-block">
+              <p class="intro">用瀏覽器定位抓取<strong style="color:var(--t2)">這台電腦</strong>目前的位置,可只移動地圖或一併傳送 iPhone。</p>
+              <button class="btn btn-primary" data-when="idle" onclick="go('loading'); setTimeout(()=>go('ready'),1300)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+                抓取電腦位置
+              </button>
+            </div>
+
+            <!-- loading -->
+            <div class="loadrow" data-when="loading">
+              <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.5"/></svg>
+              正在定位電腦…
+            </div>
+
+            <!-- error -->
+            <div class="errbox" data-when="error">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+              <div>需要定位權限,請在瀏覽器允許後重試。</div>
+            </div>
+            <button class="btn btn-ghost" data-when="error" style="margin-top:0" onclick="go('loading'); setTimeout(()=>go('ready-warn'),1300)">重試</button>
+
+            <!-- ready / ready-warn / refreshing share status + actions -->
+            <div class="statline" data-when="ready">
+              <span class="acc" id="accVal">±90&nbsp;m</span>
+              <span class="age" id="accAge">· 剛剛</span>
+              <button class="refresh-btn" id="refreshBtn" title="重新定位" aria-label="重新定位" onclick="doRefresh()">
+                <svg id="refreshIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>
+              </button>
+            </div>
+
+            <div class="warn" data-when="warn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+              桌機靠 WiFi 定位,誤差可能達數百公尺 — 傳送前請確認。
+            </div>
+
+            <div class="actions" data-when="ready">
+              <button class="btn btn-primary" onclick="toast('已傳送 iPhone 到電腦位置')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 19-9-9 19-2-8-8-2z"/></svg>
+                傳送 iPhone 到這裡
+              </button>
+              <button class="btn btn-ghost" onclick="toast('地圖已移動,iPhone 未變動')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.7-6-10a6 6 0 0 1 12 0c0 4.3-6 10-6 10z"/><circle cx="12" cy="11" r="2"/></svg>
+                只移動地圖
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="switcher" id="switcher">
+        <span class="seg" data-s="idle">首次開啟</span>
+        <span class="seg" data-s="loading">定位中</span>
+        <span class="seg on" data-s="ready">已定位(精準)</span>
+        <span class="seg" data-s="ready-warn">已定位(誤差大)</span>
+        <span class="seg" data-s="error">權限錯誤</span>
+      </div>
+
+      <div class="changes">
+        <div class="change"><span class="num">1</span><div><b>refresh 貼著它刷新的資料</b> — ⟳ 收進精度那行的右側,按下去 icon 轉圈、那行變「更新中…」,給出真實回饋。</div></div>
+        <div class="change"><span class="num">2</span><div><b>動作上提成按鈕</b> — 「傳送到這裡」實心主按鈕、「只移動地圖」次要鈕,一眼看懂能做什麼。</div></div>
+        <div class="change"><span class="num">3</span><div><b>精度差才警告</b> — accuracy &gt; 500m 時浮出黃色提示,避免無聲傳送到錯位置。</div></div>
+      </div>
+    </div>
+
+    <!-- ── BEFORE ──────────────────────────── -->
+    <div class="card">
+      <h2>Before — 現況</h2>
+      <p class="sub">共用 KebabMenu,動作與 refresh 全部平級排成一列。</p>
+      <div class="kebab">
+        <div class="ksection">定位電腦</div>
+        <div class="krow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.7-6-10a6 6 0 0 1 12 0c0 4.3-6 10-6 10z"/><circle cx="12" cy="11" r="2"/></svg>只飛過去</div>
+        <div class="krow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 19-9-9 19-2-8-8-2z"/></svg>飛過去並傳送</div>
+        <div class="ksection">±120 m · 5 秒前</div>
+        <div class="krow note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>重新定位 <span class="tag" style="margin-left:auto">?</span></div>
+      </div>
+
+      <p class="annot">「重新定位」跟它要刷新的「±120m」分成兩列,看不出關聯。</p>
+      <p class="annot">按下去地圖與 iPhone 都沒動,只有 pin 閃一下 → 像沒反應。</p>
+      <p class="annot">真正的動作(飛/傳送)被當成跟 refresh 平級的清單項,沒有主次。</p>
+      <p class="annot">桌機定位常誤差數百公尺,但只被動寫個數字、沒有警告。</p>
+    </div>
+  </div>
+
+  <p class="footnote">
+    對應原始碼:<code>frontend/src/components/shell/LocatePcButton.tsx</code> ·
+    <code>frontend/src/hooks/usePcLocation.ts</code> ·
+    i18n key <code>locate.*</code>。此為靜態 mockup,未接後端 / 真實 geolocation。
+  </p>
+</div>
+
+<div class="toast" id="toast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span id="toastMsg"></span></div>
+
+<script>
+  const pop = document.getElementById('pop');
+  const segs = [...document.querySelectorAll('.seg')];
+  function go(s){
+    pop.dataset.state = s;
+    segs.forEach(x => x.classList.toggle('on', x.dataset.s === s));
+  }
+  segs.forEach(x => x.addEventListener('click', () => go(x.dataset.s)));
+
+  const trigger = document.getElementById('trigger');
+  trigger.addEventListener('click', () => {
+    const open = pop.classList.toggle('open');
+    trigger.classList.toggle('active', open);
+  });
+
+  function doRefresh(){
+    pop.dataset.state = 'refreshing';
+    document.getElementById('refreshIcon').classList.add('spin');
+    document.getElementById('accVal').textContent = '更新中…';
+    document.getElementById('accAge').textContent = '';
+    setTimeout(() => {
+      document.getElementById('refreshIcon').classList.remove('spin');
+      document.getElementById('accVal').innerHTML = '±45&nbsp;m';
+      document.getElementById('accAge').textContent = '· 剛剛';
+      go('ready');
+    }, 1300);
+  }
+
+  let toastTimer;
+  function toast(msg){
+    const t = document.getElementById('toast');
+    document.getElementById('toastMsg').textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+</script>
+</body>
+</html>
