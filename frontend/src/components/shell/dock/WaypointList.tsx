@@ -25,8 +25,8 @@ export default function WaypointList({
   if (points.length === 0 && !onAdd) return null
 
   return (
-    <div className="flex flex-col bg-white/[0.03] border border-[var(--color-border)] rounded-xl overflow-hidden">
-      <div className="overflow-y-auto flex-1 min-h-0 max-h-[240px] scrollbar-thin">
+    <div className="flex flex-col h-full min-h-0 bg-white/[0.03] border border-[var(--color-border)] rounded-xl overflow-hidden">
+      <div className="overflow-y-auto flex-1 min-h-0 scrollbar-thin">
         {points.map((pt, idx) => {
           const isStart = idx === 0
           const nextPt = idx < points.length - 1 ? points[idx + 1] : null

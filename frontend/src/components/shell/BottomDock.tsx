@@ -60,8 +60,10 @@ export default function BottomDock() {
         'anim-fade-slide-up-centered',
       ].join(' ')}
     >
-      {/* Panel body — padding matches design: 14px 16px, gap 12px; fixed height for consistency */}
-      <div className="flex flex-col gap-3" style={{ padding: '14px 16px', minHeight: '320px' }}>
+      {/* Panel body — padding matches design: 14px 16px, gap 12px. Fixed
+          height so the panel never jumps between modes; the main row flexes
+          to fill and the waypoint list scrolls internally. */}
+      <div className="flex flex-col gap-3" style={{ padding: '14px 16px', height: '360px' }}>
         {/* Header: icon + title + subtitle */}
         <div className="flex items-center gap-3">
           <div
@@ -84,10 +86,12 @@ export default function BottomDock() {
           </div>
         </div>
 
-        {/* Main row: always 2-column (left content + right controls) */}
-        <div className="grid gap-3 items-start" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        {/* Main row: always 2-column (left content + right controls).
+            flex-1 + min-h-0 lets it absorb the fixed panel height so the
+            left column can scroll internally instead of growing the panel. */}
+        <div className="grid gap-3 items-start flex-1 min-h-0" style={{ gridTemplateColumns: '1fr 1fr', gridTemplateRows: 'minmax(0, 1fr)' }}>
           {/* Left column */}
-          <div className="flex flex-col gap-2 min-w-0">
+          <div className="flex flex-col gap-2 min-w-0 min-h-0 h-full">
             <LeftColumn
               mode={sim.mode}
               chainPoints={ctx.chainPoints}
