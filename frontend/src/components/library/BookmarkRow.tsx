@@ -120,7 +120,7 @@ function BookmarkRowImpl({
             padding: '1px 5px',
             background: 'rgba(255,255,255,0.05)',
             borderRadius: '3px',
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: 'Geist, ui-sans-serif, system-ui, -apple-system, sans-serif',
             fontSize: '9.5px',
             color: 'var(--color-text-2)',
             fontWeight: 500,

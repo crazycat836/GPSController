@@ -28,6 +28,8 @@ interface BaseProps {
 interface CreateProps extends BaseProps {
   mode: 'create'
   initial?: never
+  /** Pre-fill coordinates when creating from a map right-click. */
+  initialCoordinates?: { lat: number; lng: number }
 }
 
 interface EditProps extends BaseProps {
@@ -68,6 +70,7 @@ export default function BookmarkEditDialog(props: Props) {
   const t = useT()
   const { open, onClose, onSubmit, places, tags, currentPosition, mode } = props
   const initial = (mode === 'edit' ? props.initial : undefined)
+  const initialCoordinates = (mode === 'create' ? props.initialCoordinates : undefined)
 
   const firstPlace = places[0]?.id ?? 'default'
 
@@ -103,14 +106,21 @@ export default function BookmarkEditDialog(props: Props) {
         prevUseCurrentRef.current = false
       } else {
         setName('')
-        const canUseCurrent = !!currentPosition
-        setUseCurrent(canUseCurrent)
-        setLatStr(canUseCurrent ? formatCoord(currentPosition!.lat) : '')
-        setLngStr(canUseCurrent ? formatCoord(currentPosition!.lng) : '')
+        if (initialCoordinates) {
+          setUseCurrent(false)
+          setLatStr(formatCoord(initialCoordinates.lat))
+          setLngStr(formatCoord(initialCoordinates.lng))
+          prevUseCurrentRef.current = false
+        } else {
+          const canUseCurrent = !!currentPosition
+          setUseCurrent(canUseCurrent)
+          setLatStr(canUseCurrent ? formatCoord(currentPosition!.lat) : '')
+          setLngStr(canUseCurrent ? formatCoord(currentPosition!.lng) : '')
+          prevUseCurrentRef.current = canUseCurrent
+        }
         setPlaceId(firstPlace)
         setTagIds([])
         setNote('')
-        prevUseCurrentRef.current = canUseCurrent
       }
       const f = setTimeout(() => nameRef.current?.focus(), 60)
       return () => clearTimeout(f)

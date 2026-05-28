@@ -20,8 +20,6 @@ export type { SaveRouteResult }
 interface AddBmDialog {
   lat: number
   lng: number
-  name: string
-  place: string
 }
 
 interface BookmarkContextValue {
@@ -54,7 +52,6 @@ interface BookmarkContextValue {
   addBmDialog: AddBmDialog | null
   setAddBmDialog: React.Dispatch<React.SetStateAction<AddBmDialog | null>>
   handleAddBookmark: (lat: number, lng: number) => void
-  submitAddBookmark: () => Promise<void>
 
   // Bookmark import/export
   handleBookmarkImport: (file: File) => Promise<void>
@@ -112,32 +109,8 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const handleAddBookmark = useCallback((lat: number, lng: number) => {
-    setAddBmDialog({
-      lat,
-      lng,
-      name: '',
-      place: bm.places[0]?.name || t('bm.default'),
-    })
-  }, [bm.places, t])
-
-  const submitAddBookmark = useCallback(async () => {
-    if (!addBmDialog || !addBmDialog.name.trim()) return
-    const place = bm.places.find((p) => p.name === addBmDialog.place)
-    const payload = {
-      name: addBmDialog.name.trim(),
-      lat: addBmDialog.lat,
-      lng: addBmDialog.lng,
-      place_id: place?.id || 'default',
-      tags: [],
-    }
-    setAddBmDialog(null)
-    try {
-      await bm.createBookmark(payload)
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : ''
-      showToast(t('toast.save_failed', { msg: message }))
-    }
-  }, [addBmDialog, bm, showToast, t])
+    setAddBmDialog({ lat, lng })
+  }, [])
 
   const handleBookmarkImport = useCallback(async (file: File) => {
     try {
@@ -506,7 +479,6 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     addBmDialog,
     setAddBmDialog,
     handleAddBookmark,
-    submitAddBookmark,
 
     handleBookmarkImport,
     handleBookmarkExport,

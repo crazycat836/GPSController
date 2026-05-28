@@ -27,7 +27,7 @@ import UpdateChecker from './components/UpdateChecker'
 import TopBar from './components/shell/TopBar'
 import Brand from './components/shell/Brand'
 import SearchBar from './components/shell/SearchBar'
-import BottomModeBar from './components/shell/BottomModeBar'
+import BottomModeBar, { isRouteSubMode } from './components/shell/BottomModeBar'
 import BottomDock from './components/shell/BottomDock'
 import MiniStatusBar from './components/shell/MiniStatusBar'
 import TopBarActions from './components/shell/TopBarActions'
@@ -50,7 +50,7 @@ import JoystickPanel from './components/panels/JoystickPanel'
 // Modals/Drawers
 import DevicesPopover from './components/device/DevicesPopover'
 import LibraryDrawer from './components/modals/LibraryDrawer'
-import Modal from './components/Modal'
+import BookmarkEditDialog, { type BookmarkEditValues } from './components/library/BookmarkEditDialog'
 
 // Root component — just providers.
 //
@@ -141,6 +141,13 @@ function AppShell() {
   const bm = useBookmarkContext()
   const health = useConnectionHealth()
   const { sim, joystick, handlePause, handleResume } = simCtx
+
+  // Track the last-used Route sub-mode so switching back to "Route"
+  // resumes the same sub-tab (Loop / Multi-Stop / Random).
+  const [lastRouteSubMode, setLastRouteSubMode] = useState(SimMode.Loop)
+  useEffect(() => {
+    if (isRouteSubMode(sim.mode)) setLastRouteSubMode(sim.mode)
+  }, [sim.mode])
 
   const mapWaypoints = useMemo(
     () => sim.waypoints.map((w: LatLng, i: number) => ({ ...w, index: i })),
@@ -244,9 +251,9 @@ function AppShell() {
         if (libraryOpen) { setLibraryOpen(false); return }
         return
       }
-      if (!isInput && e.key >= '1' && e.key <= '6') {
-        const modes = [SimMode.Teleport, SimMode.Navigate, SimMode.Loop, SimMode.MultiStop, SimMode.RandomWalk, SimMode.Joystick]
-        sim.setMode(modes[parseInt(e.key) - 1])
+      if (!isInput && e.key >= '1' && e.key <= '4') {
+        const modeForKey: SimMode[] = [SimMode.Teleport, SimMode.Navigate, lastRouteSubMode, SimMode.Joystick]
+        sim.setMode(modeForKey[parseInt(e.key) - 1])
         return
       }
       if (!isInput && e.key === ' ' && sim.status.running) {
@@ -257,7 +264,7 @@ function AppShell() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [libraryOpen, sim, handlePause, handleResume])
+  }, [libraryOpen, sim, handlePause, handleResume, lastRouteSubMode])
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
@@ -333,56 +340,32 @@ function AppShell() {
           pcPosition={pcMarkerCoord}
         />
 
-        {/* Add bookmark dialog */}
-        {bm.addBmDialog && (
-          <Modal
-            open
-            onClose={() => bm.setAddBmDialog(null)}
-            title={t('bm.add')}
-            size="sm"
-            dataFc="modal.bookmark-add"
-            actions={
-              <>
-                <button
-                  className="action-btn primary"
-                  style={{ flex: 1 }}
-                  disabled={!bm.addBmDialog.name.trim()}
-                  onClick={bm.submitAddBookmark}
-                >{t('generic.add')}</button>
-                <button className="action-btn" onClick={() => bm.setAddBmDialog(null)}>{t('generic.cancel')}</button>
-              </>
+        {/* Add bookmark dialog (full form with place, tags, note) */}
+        <BookmarkEditDialog
+          open={!!bm.addBmDialog}
+          mode="create"
+          initialCoordinates={bm.addBmDialog ?? undefined}
+          currentPosition={simCurrentPos}
+          places={bm.places}
+          tags={bm.tags}
+          onClose={() => bm.setAddBmDialog(null)}
+          onSubmit={async (values: BookmarkEditValues) => {
+            bm.setAddBmDialog(null)
+            try {
+              await bm.createBookmark({
+                name: values.name,
+                lat: values.lat,
+                lng: values.lng,
+                place_id: values.placeId,
+                tags: values.tagIds,
+                note: values.note,
+              })
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : ''
+              toast.showToast(t('toast.save_failed', { msg: message }))
             }
-          >
-            <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 8 }}>
-              {bm.addBmDialog.lat.toFixed(5)}, {bm.addBmDialog.lng.toFixed(5)}
-            </div>
-            <input
-              type="text"
-              className="search-input"
-              placeholder={t('bm.name_placeholder')}
-              autoFocus
-              value={bm.addBmDialog.name}
-              onChange={(e) => bm.setAddBmDialog({ ...bm.addBmDialog!, name: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.nativeEvent.isComposing) bm.submitAddBookmark()
-              }}
-              style={{ width: '100%', marginBottom: 8 }}
-            />
-            <select
-              value={bm.addBmDialog.place}
-              onChange={(e) => bm.setAddBmDialog({ ...bm.addBmDialog!, place: e.target.value })}
-              style={{
-                width: '100%', marginBottom: 10, padding: '6px 8px',
-                background: 'var(--color-surface-2)', color: 'var(--color-text-1)', border: '1px solid var(--color-border)',
-                borderRadius: 4, fontSize: 12,
-              }}
-            >
-              {bm.places.map((p) => (
-                <option key={p.id} value={p.name}>{p.name}</option>
-              ))}
-            </select>
-          </Modal>
-        )}
+          }}
+        />
 
         {sim.error && (
           <ErrorBanner message={sim.error} onDismiss={sim.clearError} />
@@ -440,7 +423,7 @@ function AppShell() {
 
       <BottomDock />
 
-      <BottomModeBar activeMode={sim.mode} onModeChange={sim.setMode} />
+      <BottomModeBar activeMode={sim.mode} onModeChange={sim.setMode} lastRouteSubMode={lastRouteSubMode} />
       <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} layerKey={layerKey} onLayerChange={handleLayerChange} />
       <DevicesPopover
         anchor={devicesPopoverAnchor}

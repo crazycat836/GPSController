@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react'
-import { Copy, Check, Smartphone, Usb, Wifi, MapPinOff } from 'lucide-react'
+import { Copy, Check, Usb, Wifi, MapPinOff } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
@@ -12,12 +12,6 @@ import { DEVICE_COLORS, DEVICE_LETTERS } from '../../lib/constants'
 import type { DeviceInfo } from '../../hooks/useDevice'
 import { copyToClipboard } from '../../lib/clipboard'
 
-// Status pair — top-left stack matching redesign/Home:
-//   1. Device pill(s)       glass-pill-medium, 0.82 alpha
-//   2. Live-position card   feature card with LAT/LNG rows + SIM badge
-//   3. Location + weather   glass-chip with flag + country + temp
-// Dual-device mode hides the live-pos card and stacks two device pills,
-// each carrying its own inline coordinate.
 export default function MiniStatusBar() {
   const t = useT()
   const { lang } = useI18n()
@@ -28,66 +22,24 @@ export default function MiniStatusBar() {
   const { countryCode, country } = useReverseGeocode(currentPos, lang, { paused: isRunning })
   const weather = useWeather(currentPos, { paused: isRunning })
 
-  // The dot indicator should reflect "is the iPhone currently showing a
-  // virtual location" — true after any teleport / navigate / loop / etc.
-  // push, not only while a continuous mode is actively moving. `isRunning`
-  // alone covers continuous modes (Loop / MultiStop / RandomWalk /
-  // Navigate / Joystick), so a stationary teleport would leave the dot
-  // grey even though the phone is showing a fake coord. backendPositionSynced
-  // is the right signal: set true on any successful push, set false only
-  // when the user explicitly hits Restore (real GPS restored).
   const isSimulating = sim.backendPositionSynced
 
   const isDual = device.connectedDevices.length >= 2
-  const isConnected = device.connectedDevices.length > 0
-  // Device state we render is only as fresh as the WS stream. When the
-  // transport is down, we still show the last-known pill (so the user
-  // isn't yanked out of context on a flap) — but dimmed and annotated
-  // so they don't act on it.
   const isStale = health.device === 'stale'
 
   return (
     <div
       data-fc="status.mini-bar"
-      // `fixed` + `top: 76px; left: 16px` per redesign/Home spec;
-      // max-width keeps the live-pos card from stretching arbitrarily
-      // wide on large viewports.
       className="fixed top-[76px] left-4 z-[var(--z-ui)] flex flex-col items-start gap-2 max-w-[288px] w-[288px]"
       aria-label={t('shell.status_aria')}
     >
-      {/* Device pill(s) — placeholder when none connected */}
-      {!isConnected ? (
-        <div
-          className="glass-pill-medium inline-flex items-center gap-2.5 h-10 px-4 text-[12px] font-medium"
-          title={t('status.disconnected')}
-        >
-          <Smartphone className="w-4 h-4 text-[var(--color-text-3)] shrink-0" />
-          <span className="text-[var(--color-text-2)]">{t('device.no_device')}</span>
-        </div>
-      ) : isDual ? (
+      {isDual ? (
         <DualDevicePills devices={device.connectedDevices.slice(0, 2)} stale={isStale} />
       ) : (
-        <DevicePill
-          dev={device.connectedDevices[0]}
-          letter={DEVICE_LETTERS[0]}
-          color={DEVICE_COLORS[0]}
+        <LivePosCard
+          currentPos={currentPos}
+          isSimulating={isSimulating}
           stale={isStale}
-          degraded={!!sim.runtimes[device.connectedDevices[0]?.udid ?? '']?.tunnelDegraded}
-        />
-      )}
-
-      {/* Live-position card — suppressed in dual-device mode because
-          each pill already carries its own coord. Marked stale when
-          the WS transport is down: the displayed lat/lng is no fresher
-          than the device pill's "stale" annotation, so dimming both
-          keeps the user's mental model consistent. */}
-      {!isDual && <LivePosCard currentPos={currentPos} isSimulating={isSimulating} stale={isStale} />}
-
-      {/* Location + weather chip — slim, secondary info. Hidden entirely
-          when we have no position and no country data to show. */}
-      {!isDual && (currentPos || countryCode || weather) && (
-        <LocationWeatherChip
-          hasPos={currentPos != null}
           countryCode={countryCode}
           country={country}
           weather={weather}
@@ -198,18 +150,21 @@ function DualDevicePills({ devices, stale }: { devices: DeviceInfo[]; stale?: bo
   )
 }
 
-// ─── Live-position card ───────────────────────────────────────
+// ─── Unified Live-position card (coords + location footer) ───
 
 interface LivePosCardProps {
   currentPos: { lat: number; lng: number } | null
-  /** Whether the iPhone is currently showing a virtual location — true
-   *  after any teleport / navigate / loop / etc. push, false only after
-   *  the user hits Restore. Drives the green dot indicator. */
   isSimulating: boolean
   stale?: boolean
+  countryCode?: string | null
+  country?: string | null
+  weather?: ReturnType<typeof useWeather>
 }
 
-function LivePosCard({ currentPos, isSimulating, stale }: LivePosCardProps) {
+function LivePosCard({
+  currentPos, isSimulating, stale,
+  countryCode, country, weather,
+}: LivePosCardProps) {
   const t = useT()
   const [copied, setCopied] = useState(false)
 
@@ -224,8 +179,6 @@ function LivePosCard({ currentPos, isSimulating, stale }: LivePosCardProps) {
   }, [currentPos])
 
   const hasPos = currentPos != null
-  // CSS contract: `data-sim="running"` lights the dot green + pulses;
-  // `"idle"` greys it out. See styles/components/glass.css:79, 118.
   const simState = isSimulating ? 'running' : 'idle'
 
   return (
@@ -239,6 +192,7 @@ function LivePosCard({ currentPos, isSimulating, stale }: LivePosCardProps) {
       title={stale ? t('conn.stale_tooltip') : undefined}
       aria-label={t('status.virtual_position')}
     >
+      {/* Eyebrow + coords */}
       <div className="lp-head">
         <span className="lp-eyebrow">
           <span className="dot" aria-hidden="true" />
@@ -281,59 +235,38 @@ function LivePosCard({ currentPos, isSimulating, stale }: LivePosCardProps) {
           </div>
         </div>
       )}
-    </div>
-  )
-}
 
-// ─── Location + weather chip ──────────────────────────────────
-
-interface LocationWeatherChipProps {
-  hasPos: boolean
-  countryCode: string | null
-  country: string | null
-  weather: ReturnType<typeof useWeather>
-}
-
-function LocationWeatherChip({ hasPos, countryCode, country, weather }: LocationWeatherChipProps) {
-  const t = useT()
-
-  // "No location" fallback when we have a position but the geocoder hasn't
-  // returned a country yet (or has failed) — mirrors the design empty state.
-  if (!hasPos || (!countryCode && !weather)) {
-    return (
-      <div className="glass-chip w-full justify-start inline-flex items-center gap-2 h-8 px-3 text-[11px] italic">
-        <MapPinOff className="w-3 h-3 shrink-0" strokeWidth={1.5} />
-        <span>{t('status.no_location')}</span>
+      {/* Location + weather footer */}
+      <div className="lp-footer flex items-center gap-2 px-4 py-2.5 border-t border-[var(--color-border-subtle)] text-[11.5px] text-[var(--color-text-2)] relative z-[1]"
+        style={{ background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.15) 100%)' }}
+      >
+        {hasPos && countryCode ? (
+          <>
+            <img
+              src={`https://flagcdn.com/w40/${countryCode}.png`}
+              alt={countryCode.toUpperCase()}
+              width={16}
+              height={12}
+              className="rounded-[2px] shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_2px_4px_rgba(0,0,0,0.3)] shrink-0"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+            />
+            {country && (
+              <span className="text-[var(--color-text-1)] font-medium tracking-[-0.005em]">{country}</span>
+            )}
+            {weather && (
+              <>
+                <span className="w-[3px] h-[3px] rounded-full bg-[var(--color-text-3)] opacity-50 shrink-0" aria-hidden="true" />
+                <span className="ml-auto"><WeatherChip snapshot={weather} size={12} /></span>
+              </>
+            )}
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-[var(--color-text-3)] italic">
+            <MapPinOff className="w-3 h-3 shrink-0" strokeWidth={1.5} />
+            {t('status.no_location')}
+          </span>
+        )}
       </div>
-    )
-  }
-
-  return (
-    <div className="glass-chip w-full justify-start inline-flex items-center gap-2.5 h-8 px-3 text-[11px]">
-      {countryCode && (
-        <>
-          <img
-            src={`https://flagcdn.com/w40/${countryCode}.png`}
-            alt={countryCode.toUpperCase()}
-            width={16}
-            height={12}
-            className="rounded-[2px] shadow-[0_0_0_1px_rgba(255,255,255,0.08)] shrink-0"
-            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-          />
-          {country && (
-            <span className="text-[var(--color-text-1)] font-medium truncate max-w-[120px]">
-              {country}
-            </span>
-          )}
-        </>
-      )}
-      {countryCode && weather && (
-        <span
-          className="w-[3px] h-[3px] rounded-full bg-[var(--color-text-3)] shrink-0"
-          aria-hidden="true"
-        />
-      )}
-      {weather && <WeatherChip snapshot={weather} size={14} />}
     </div>
   )
 }
