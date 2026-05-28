@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useSimContext } from '../../../contexts/SimContext'
 import { useSimDerived } from '../../../contexts/SimDerivedContext'
-import { useSimSettings } from '../../../contexts/SimSettingsContext'
+import {
+  useSimSettings,
+  JOYSTICK_SENSITIVITY_MIN,
+  JOYSTICK_SENSITIVITY_MAX,
+} from '../../../contexts/SimSettingsContext'
 import { SimMode } from '../../../hooks/useSimulation'
 import { useT } from '../../../i18n'
 import { haversineM } from '../../../lib/geo'
@@ -259,6 +263,7 @@ function TeleportCard() {
   const distM = useNavDist()
   const cdSecs = cooldownForDistM(distM)
   const cdDisplay = distM > 0 ? formatCooldown(cdSecs) : '--'
+  const { autoJitter, setAutoJitter } = useSimSettings()
   return (
     <CardShell>
       <div className="grid grid-cols-2 relative">
@@ -271,14 +276,9 @@ function TeleportCard() {
         />
         <RowDivider />
       </div>
-      <div className="grid grid-cols-2">
-        <ControlCell label={t('dock.auto_jitter')}>
-          <ToggleSwitch checked={true} />
-        </ControlCell>
-        <ControlCell label={t('dock.bypass')} divider>
-          <ToggleSwitch checked={false} />
-        </ControlCell>
-      </div>
+      <ControlCell label={t('dock.auto_jitter')}>
+        <ToggleSwitch checked={autoJitter} onChange={setAutoJitter} />
+      </ControlCell>
     </CardShell>
   )
 }
@@ -300,15 +300,6 @@ function NavigateCard() {
           accent
           divider
         />
-        <RowDivider />
-      </div>
-      <div className="grid grid-cols-2">
-        <ControlCell label={t('dock.auto_stop')}>
-          <ToggleSwitch checked={true} />
-        </ControlCell>
-        <ControlCell label={t('dock.reroute')} divider>
-          <ToggleSwitch checked={true} />
-        </ControlCell>
       </div>
     </CardShell>
   )
@@ -470,6 +461,7 @@ function RandomWalkCard() {
 
 function JoystickCard() {
   const t = useT()
+  const { joystickSensitivity, setJoystickSensitivity } = useSimSettings()
   return (
     <CardShell>
       <div className="grid grid-cols-2 relative">
@@ -482,14 +474,13 @@ function JoystickCard() {
         />
         <RowDivider />
       </div>
-      <div className="grid grid-cols-2">
-        <ControlCell label={t('dock.sensitivity')}>
-          <Stepper value="3" />
-        </ControlCell>
-        <ControlCell label={t('dock.recenter')} divider>
-          <ToggleSwitch checked={true} />
-        </ControlCell>
-      </div>
+      <ControlCell label={t('dock.sensitivity')}>
+        <Stepper
+          value={String(joystickSensitivity)}
+          onDec={() => setJoystickSensitivity(Math.max(JOYSTICK_SENSITIVITY_MIN, joystickSensitivity - 1))}
+          onInc={() => setJoystickSensitivity(Math.min(JOYSTICK_SENSITIVITY_MAX, joystickSensitivity + 1))}
+        />
+      </ControlCell>
     </CardShell>
   )
 }

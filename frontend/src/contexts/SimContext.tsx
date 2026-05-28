@@ -153,10 +153,6 @@ export function SimProvider({ children }: SimProviderProps) {
     return tRef.current(SIM_ERROR_KEYS[code])
   }, [])
   const sim = useSimulation(subscribe, { translateError })
-  const joystick = useJoystick(
-    (type, data) => sendMessage(type, { ...data }),
-    sim.mode === SimMode.Joystick,
-  )
 
   // Settings live in `SimSettingsContext`. Handlers below pull values
   // from there; consumers that read settings directly should call
@@ -167,7 +163,17 @@ export function SimProvider({ children }: SimProviderProps) {
     setWpGenRadius,
     wpGenCount,
     setWpGenCount,
+    joystickSensitivity,
+    autoJitter,
   } = useSimSettings()
+
+  // Sensitivity stepper is 1-5 with 3 = baseline 1.0×; the wire value is
+  // level/3 so level 5 ≈ 1.67× and level 1 ≈ 0.33×.
+  const joystick = useJoystick(
+    (type, data) => sendMessage(type, { ...data }),
+    sim.mode === SimMode.Joystick,
+    joystickSensitivity / 3,
+  )
 
   // ── Start-from-cached-position confirmation ────────────────────────
   // After a server restart the UI rehydrates the last-known position
@@ -338,7 +344,7 @@ export function SimProvider({ children }: SimProviderProps) {
         udids,
         devices: device.connectedDevices,
         action: t('mode.teleport'),
-        single: () => sim.teleport(lat, lng),
+        single: () => sim.teleport(lat, lng, autoJitter),
         multi: (us) => {
           // Optimistic write — only on the multi path, where `teleport`
           // doesn't update currentPosition itself the way the single
@@ -353,7 +359,7 @@ export function SimProvider({ children }: SimProviderProps) {
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : t('err.teleport_failed'))
     }
-  }, [sim, device, t, showToast])
+  }, [sim, device, t, showToast, autoJitter])
 
   const handleNavigate = useCallback(async (latIn: number, lngIn: number) => {
     const lat = clampLat(latIn)

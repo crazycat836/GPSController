@@ -78,6 +78,12 @@ async def teleport(req: TeleportRequest):
 
     _app_state.update_last_position(req.lat, req.lng)
 
+    # Start/stop idle GPS jitter around the new point per the request flag.
+    try:
+        await engine.set_auto_jitter(req.auto_jitter)
+    except Exception:
+        logger.exception("Failed to apply auto-jitter for %s", req.udid)
+
     return {"status": "ok", "lat": req.lat, "lng": req.lng}
 
 

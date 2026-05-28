@@ -317,8 +317,8 @@ export const revealDeveloperMode = (udid: string) =>
 const ud = (udid?: string | null) => (udid ? { udid } : {})
 const qs = (udid?: string | null) => (udid ? `?udid=${encodeURIComponent(udid)}` : '')
 
-export const teleport = (lat: number, lng: number, udid?: string) =>
-  request<StatusResponse>('POST', '/api/location/teleport', { lat, lng, ...ud(udid) })
+export const teleport = (lat: number, lng: number, udid?: string, autoJitter?: boolean) =>
+  request<StatusResponse>('POST', '/api/location/teleport', { lat, lng, ...ud(udid), ...(autoJitter ? { auto_jitter: true } : {}) })
 export interface SpeedOpts { speed_kmh?: number | null; speed_min_kmh?: number | null; speed_max_kmh?: number | null }
 export interface PauseOpts { pause_enabled?: boolean; pause_min?: number; pause_max?: number }
 const sp = (o?: SpeedOpts) => ({

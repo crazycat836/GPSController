@@ -375,6 +375,7 @@ async def websocket_endpoint(ws: WebSocket):
                 inp = JoystickInput(
                     direction=data.get("direction", 0),
                     intensity=data.get("intensity", 0),
+                    sensitivity=data.get("sensitivity", 1.0),
                 )
                 if udid:
                     engine = app_state.get_engine(udid)

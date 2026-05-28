@@ -80,7 +80,7 @@ class JoystickHandler:
                 inp = self._current_input
 
                 if inp.intensity > 0 and engine.current_position is not None:
-                    speed_mps = self.speed_profile["speed_mps"] * inp.intensity
+                    speed_mps = self.speed_profile["speed_mps"] * inp.intensity * inp.sensitivity
                     distance = speed_mps * _TICK_INTERVAL  # meters this tick
                     jitter = self.speed_profile.get("jitter", 0.3)
 

@@ -199,6 +199,10 @@ class SimulationEngine:
         # Task management.
         self._active_task: asyncio.Task | None = None
         self._paused_from: SimulationState | None = None
+        # Auto-jitter: optional idle drift around a teleport anchor so a
+        # static virtual position looks like natural GPS noise.
+        self._jitter_task: asyncio.Task | None = None
+        self._jitter_anchor: Coordinate | None = None
 
         # Status tracking.
         self.distance_traveled: float = 0.0
@@ -254,6 +258,60 @@ class SimulationEngine:
         """Instantly move to a coordinate."""
         return await self._teleport_handler.teleport(lat, lng)
 
+    async def set_auto_jitter(self, enabled: bool) -> None:
+        """Start or stop idle GPS jitter around the current position.
+
+        When enabled, a background task pushes tiny random offsets
+        (±~4 m) around the position captured when jitter started, every
+        few seconds, so a stationary virtual location reads like a real
+        device's GPS noise. The loop self-terminates if the engine
+        leaves IDLE (a real simulation took over) or loses its position.
+        Calling with the same value while already running is a no-op.
+        """
+        if self._jitter_task is not None and not self._jitter_task.done():
+            if enabled:
+                # Re-anchor to the latest position but keep the loop.
+                self._jitter_anchor = self.current_position
+                return
+            self._jitter_task.cancel()
+            self._jitter_task = None
+            self._jitter_anchor = None
+            return
+        if not enabled or self.current_position is None:
+            return
+        self._jitter_anchor = self.current_position
+        self._jitter_task = asyncio.create_task(self._jitter_loop())
+
+    async def _jitter_loop(self) -> None:
+        import math
+        import random
+        try:
+            while (
+                self.state == SimulationState.IDLE
+                and self._jitter_anchor is not None
+            ):
+                await asyncio.sleep(random.uniform(2.0, 4.0))
+                anchor = self._jitter_anchor
+                if anchor is None or self.state != SimulationState.IDLE:
+                    break
+                # ±4 m converted to degrees; longitude scaled by latitude.
+                dlat = random.uniform(-4.0, 4.0) / 111_111.0
+                cos_lat = max(0.01, math.cos(math.radians(anchor.lat)))
+                dlng = random.uniform(-4.0, 4.0) / (111_111.0 * cos_lat)
+                try:
+                    await self._set_position(anchor.lat + dlat, anchor.lng + dlng)
+                    await self._emit("position_update", {
+                        "lat": anchor.lat + dlat,
+                        "lng": anchor.lng + dlng,
+                    })
+                except Exception:
+                    logger.debug("auto-jitter set_position failed", exc_info=True)
+                    break
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self._jitter_task = None
+
     async def gold_ditto_cycle(self, lat: float, lng: float) -> None:
         """Run one Gold Ditto (拉金盆) anchor-and-restore cycle.
 
@@ -273,6 +331,12 @@ class SimulationEngine:
         DeviceLostError is re-raised (after cleanup) so api.location._spawn()
         can translate it into a device_disconnected broadcast — otherwise
         the frontend never learns the tunnel died."""
+        # A real simulation supersedes idle auto-jitter — stop it so the
+        # two don't fight over position pushes.
+        if self._jitter_task is not None and not self._jitter_task.done():
+            self._jitter_task.cancel()
+            self._jitter_task = None
+            self._jitter_anchor = None
         self._active_task = asyncio.create_task(coro)
         device_lost: DeviceLostError | None = None
         try:
@@ -380,6 +444,9 @@ class SimulationEngine:
 
     async def joystick_start(self, mode: MovementMode) -> None:
         """Activate joystick mode."""
+        # Joystick keeps the engine out of IDLE — cancel idle auto-jitter
+        # explicitly so it doesn't push stray offsets under live control.
+        await self.set_auto_jitter(False)
         await self._joystick.start(mode)
 
     def joystick_move(self, joystick_input: JoystickInput) -> None:

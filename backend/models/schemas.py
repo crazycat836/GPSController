@@ -63,6 +63,9 @@ class TeleportRequest(BaseModel):
     lat: float = Field(ge=-90.0, le=90.0)
     lng: float = Field(ge=-180.0, le=180.0)
     udid: str | None = None
+    # When true, start idle GPS jitter around the teleported point so a
+    # stationary virtual position mimics natural GPS noise.
+    auto_jitter: bool = False
 
 
 # Input bounds shared across movement-mode requests. Upper bounds are
@@ -148,6 +151,10 @@ class JoystickStartRequest(BaseModel):
 class JoystickInput(BaseModel):
     direction: float = Field(ge=0, le=360)
     intensity: float = Field(ge=0, le=1)
+    # Speed multiplier from the UI sensitivity stepper (level/3, so
+    # level 3 = 1.0×). Clamped to a sane range so a bad client can't
+    # send the device flying.
+    sensitivity: float = Field(default=1.0, ge=0.1, le=2.0)
 
 
 # ── Simulation status ────────────────────────────────────

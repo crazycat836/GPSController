@@ -236,13 +236,13 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     })
   }, [])
 
-  const teleport = useCallback(async (lat: number, lng: number) => {
+  const teleport = useCallback(async (lat: number, lng: number, autoJitter?: boolean) => {
     // Mode is owned by the user's explicit tab choice; the backend
     // stops any active simulation atomically on teleport, so we don't
     // touch mode here — quick-fly actions (bookmark click, search,
     // TeleportPanel "Go") keep the current Loop / MultiStop / Navigate.
     setError(null)
-    const res = await api.teleport(lat, lng)
+    const res = await api.teleport(lat, lng, undefined, autoJitter)
     setCurrentPosition({ lat, lng })
     setBackendPositionSynced(true)
     setDestination(null)

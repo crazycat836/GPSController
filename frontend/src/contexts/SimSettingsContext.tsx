@@ -23,10 +23,20 @@ export interface SimSettingsContextValue {
   setWpGenRadius: (r: number) => void
   wpGenCount: number
   setWpGenCount: (c: number) => void
+  joystickSensitivity: number
+  setJoystickSensitivity: (n: number) => void
+  autoJitter: boolean
+  setAutoJitter: (v: boolean) => void
   cooldown: number
   cooldownEnabled: boolean
   handleToggleCooldown: (enabled: boolean) => void
 }
+
+// Joystick sensitivity stepper bounds. Level 3 is the 1.0× baseline
+// (mapped to the speed multiplier as level/3 on the wire).
+export const JOYSTICK_SENSITIVITY_MIN = 1
+export const JOYSTICK_SENSITIVITY_MAX = 5
+export const JOYSTICK_SENSITIVITY_DEFAULT = 3
 
 const SimSettingsContext = createContext<SimSettingsContextValue | null>(null)
 
@@ -42,6 +52,8 @@ export function SimSettingsProvider({ children }: SimSettingsProviderProps) {
   const [randomWalkRadius, setRandomWalkRadius] = useState(DEFAULT_RANDOM_WALK_RADIUS)
   const [wpGenRadius, setWpGenRadius] = useState(DEFAULT_WP_GEN_RADIUS)
   const [wpGenCount, setWpGenCount] = useState(DEFAULT_WP_GEN_COUNT)
+  const [joystickSensitivity, setJoystickSensitivity] = useState(JOYSTICK_SENSITIVITY_DEFAULT)
+  const [autoJitter, setAutoJitter] = useState(false)
   const [cooldown, setCooldown] = useState(0)
   const [cooldownEnabled, setCooldownEnabled] = useState(false)
 
@@ -68,6 +80,10 @@ export function SimSettingsProvider({ children }: SimSettingsProviderProps) {
     setWpGenRadius,
     wpGenCount,
     setWpGenCount,
+    joystickSensitivity,
+    setJoystickSensitivity,
+    autoJitter,
+    setAutoJitter,
     cooldown,
     cooldownEnabled,
     handleToggleCooldown,
@@ -75,6 +91,8 @@ export function SimSettingsProvider({ children }: SimSettingsProviderProps) {
     randomWalkRadius,
     wpGenRadius,
     wpGenCount,
+    joystickSensitivity,
+    autoJitter,
     cooldown,
     cooldownEnabled,
     handleToggleCooldown,
