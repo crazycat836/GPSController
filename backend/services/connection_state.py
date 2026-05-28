@@ -321,10 +321,19 @@ async def _ws_observer(event: StateTransition) -> None:
     if to_state == DeviceState.DISCONNECTED:
         # Anything → DISCONNECTED. Routed through dedup so two emit
         # sites that notice the same loss within ~2s don't double-toast.
+        #
+        # ``cause`` is duplicated alongside ``reason`` because the
+        # renderer's toast picker (App.tsx) keys off ``payload.cause``
+        # — a missing ``cause`` previously fell back to the
+        # ``unknown`` toast even when a perfectly good DeviceLostCause
+        # was available. Surfacing the same value under both keys keeps
+        # the dedup key shape ``(udids, cause)`` working AND restores
+        # the cause-specific toast routing.
         await emit_device_disconnected({
             "udid": udid,
             "udids": [udid],
             "reason": event.cause,
+            "cause": event.cause,
         })
         return
 

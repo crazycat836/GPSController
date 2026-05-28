@@ -258,7 +258,19 @@ class DvtLocationService(LocationService):
             # Schedule lives in config.DVT_RECONNECT_DELAYS so the rationale
             # (cumulative ≈15s, tight-then-stretched) sits next to the rest
             # of the project's tunables instead of being buried mid-method.
+            #
+            # Exit early on two consecutive ``TimeoutError``s. A timeout
+            # on ``DvtProvider.__aenter__()`` means the TCP layer beneath
+            # RSD is unresponsive — the classic symptom of a stale tunnel
+            # that pymobiledevice3 silently dropped. Retrying the inner
+            # DVT handshake against a dead tunnel just burns the remaining
+            # ~13s of sleep before the outer ``exec_with_retry`` hard-reset
+            # fires anyway. A ``ConnectionTerminatedError`` (channel-only
+            # drop, e.g. brief screen-lock) resets the timeout streak so
+            # the legitimate "wobble" case still gets all 5 attempts.
             last_exc: Exception | None = None
+            consecutive_timeouts = 0
+            bail_early = False
             for attempt, delay in enumerate(DVT_RECONNECT_DELAYS, start=1):
                 try:
                     new_dvt = DvtProvider(self._lockdown)
@@ -267,23 +279,42 @@ class DvtLocationService(LocationService):
                     logger.info("DVT provider reconnected on attempt %d", attempt)
                     await _emit_recovered()
                     return
+                except TimeoutError as exc:
+                    last_exc = exc
+                    consecutive_timeouts += 1
+                    logger.warning(
+                        "DVT reconnect attempt %d/%d timed out (%s); retrying in %.1fs",
+                        attempt, len(DVT_RECONNECT_DELAYS), type(exc).__name__, delay,
+                    )
+                    if consecutive_timeouts >= 2:
+                        logger.warning(
+                            "DVT reconnect: %d consecutive timeouts — bailing to hard reset",
+                            consecutive_timeouts,
+                        )
+                        bail_early = True
+                        break
+                    await asyncio.sleep(delay)
                 except Exception as exc:
                     last_exc = exc
+                    consecutive_timeouts = 0
                     logger.warning(
                         "DVT reconnect attempt %d/%d failed (%s); retrying in %.1fs",
                         attempt, len(DVT_RECONNECT_DELAYS), type(exc).__name__, delay,
                     )
                     await asyncio.sleep(delay)
-            # Final try without delay
-            try:
-                new_dvt = DvtProvider(self._lockdown)
-                await new_dvt.__aenter__()
-                self._dvt = new_dvt
-                logger.info("DVT provider reconnected on final attempt")
-                await _emit_recovered()
-                return
-            except Exception as exc:
-                last_exc = exc
+            # Final try without delay — skipped on consecutive-timeout
+            # bailout, since that signal is strong enough to skip
+            # straight to the outer hard-reset.
+            if not bail_early:
+                try:
+                    new_dvt = DvtProvider(self._lockdown)
+                    await new_dvt.__aenter__()
+                    self._dvt = new_dvt
+                    logger.info("DVT provider reconnected on final attempt")
+                    await _emit_recovered()
+                    return
+                except Exception as exc:
+                    last_exc = exc
             assert last_exc is not None  # delays loop ran at least once
             _raise_device_lost("DVT reconnect failed", last_exc)
 

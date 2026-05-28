@@ -25,7 +25,7 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -229,3 +229,535 @@ def test_two_devices_one_connected_one_degraded():
     assert udids == {"udid-A", "udid-B"}
     degraded_udids = [f["data"]["udid"] for f in _by_type(frames, "tunnel_degraded")]
     assert degraded_udids == ["udid-B"]
+
+
+# ─── On-connect DVT health probe ──────────────────────────────────────
+#
+# These tests pin the "validate on demand" safety net that fires after
+# the cached device_snapshot is sent. The probe is async + debounced so
+# the WS handshake itself isn't slowed; a dead DVT channel surfaces via
+# ``mark_degraded`` within a couple of hundred ms instead of waiting for
+# the user to click teleport (the May 15 incident: user noticed the
+# stale tunnel 50s after the renderer reload).
+
+
+def _install_dm_with_conn(udid: str, *, ensure_should_raise: Exception | None):
+    """Wire a fake DeviceManager + connection record onto ctx.app_state.
+
+    Returns the AsyncMock backing ``_ensure_instrument`` so tests can
+    assert it was called exactly once per debounce window.
+    """
+    from context import ctx
+
+    ensure_mock = AsyncMock()
+    if ensure_should_raise is not None:
+        ensure_mock.side_effect = ensure_should_raise
+
+    location_service = MagicMock()
+    location_service._ensure_instrument = ensure_mock
+
+    conn = MagicMock()
+    conn.location_service = location_service
+
+    dm = MagicMock()
+    dm.get_connection = MagicMock(return_value=conn)
+
+    ctx.app_state.device_manager = dm
+    return ensure_mock
+
+
+def _reset_debounce_dict():
+    """Reset the websocket module's debounce dict so repeated tests
+    against the same UDID don't poison each other."""
+    from api import websocket
+    websocket._last_probe_at.clear()
+
+
+async def _wait_for_probe_tasks() -> None:
+    """Drain the websocket module's probe task set so a test can
+    deterministically assert on the side effects (mark_degraded etc.)
+    instead of racing with asyncio.run cleanup."""
+    from api import websocket
+    while websocket._probe_tasks:
+        await asyncio.gather(*list(websocket._probe_tasks), return_exceptions=True)
+
+
+def test_probe_skipped_when_no_device_manager():
+    """When ``ctx.app_state.device_manager`` is missing (test stub),
+    no probe task should be created — original behavior of the
+    other tests in this file must stay deterministic.
+    """
+    from api import websocket
+    from api.websocket import _send_initial_state
+    from services.connection_state import store, DeviceState
+
+    _reset_debounce_dict()
+
+    async def _run() -> None:
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "USB"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+
+    asyncio.run(_run())
+    # No DM means no debounce slot recorded — confirms the early-return.
+    assert "udid-A" not in websocket._last_probe_at
+
+
+def test_probe_spawned_for_connected_device():
+    """With a DM in place and a CONNECTED udid in the store, the
+    initial-state path should kick off ``_ensure_instrument()`` against
+    the device's location_service."""
+    from api.websocket import _send_initial_state
+    from services.connection_state import store, DeviceState
+
+    _reset_debounce_dict()
+
+    async def _run() -> None:
+        ensure_mock = _install_dm_with_conn(
+            "udid-A", ensure_should_raise=None,
+        )
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "USB"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+        await _wait_for_probe_tasks()
+        ensure_mock.assert_awaited_once()
+
+    asyncio.run(_run())
+
+
+def test_probe_failure_marks_device_degraded():
+    """A probe that raises a known channel-dead exception should
+    transition the device to DEGRADED via the unified store so the
+    existing DvtLocationService._reconnect ladder fires for the
+    next teleport call."""
+    from pymobiledevice3.exceptions import ConnectionTerminatedError
+
+    from api.websocket import _send_initial_state
+    from services.connection_state import store, DeviceState
+
+    _reset_debounce_dict()
+
+    async def _run() -> DeviceState:
+        _install_dm_with_conn(
+            "udid-A",
+            ensure_should_raise=ConnectionTerminatedError("channel dead"),
+        )
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "USB"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+        await _wait_for_probe_tasks()
+        return store.get("udid-A")
+
+    final_state = asyncio.run(_run())
+    assert final_state == DeviceState.DEGRADED, (
+        f"expected DEGRADED after probe failure, got {final_state}"
+    )
+
+
+def test_probe_debounce_within_window():
+    """Two consecutive _send_initial_state calls for the same UDID
+    inside the debounce window must result in only one
+    ``_ensure_instrument`` invocation. Models the renderer reload
+    burst (connect → disconnect → connect within ~30ms) that
+    otherwise double-probes."""
+    from api.websocket import _send_initial_state
+    from services.connection_state import store, DeviceState
+
+    _reset_debounce_dict()
+
+    async def _run():
+        ensure_mock = _install_dm_with_conn(
+            "udid-A", ensure_should_raise=None,
+        )
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "USB"},
+        )
+
+        # First connect — should probe.
+        await _send_initial_state(_make_fake_ws())
+        await _wait_for_probe_tasks()
+        assert ensure_mock.await_count == 1
+
+        # Second connect "immediately" (renderer reload) — must NOT probe again.
+        await _send_initial_state(_make_fake_ws())
+        await _wait_for_probe_tasks()
+        assert ensure_mock.await_count == 1, (
+            "debounce failed — _ensure_instrument was called twice in "
+            "the same window"
+        )
+
+    asyncio.run(_run())
+
+
+def test_probe_handles_unknown_exception_without_degrading():
+    """An unexpected exception from _ensure_instrument (NOT in the
+    known channel-dead set) must be swallowed without downgrading
+    the device — false-positives would flap the UI."""
+    from api.websocket import _send_initial_state
+    from services.connection_state import store, DeviceState
+
+    _reset_debounce_dict()
+
+    async def _run() -> DeviceState:
+        _install_dm_with_conn(
+            "udid-A",
+            ensure_should_raise=ValueError("unexpected"),
+        )
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "USB"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+        await _wait_for_probe_tasks()
+        return store.get("udid-A")
+
+    final_state = asyncio.run(_run())
+    assert final_state == DeviceState.CONNECTED, (
+        f"unknown probe exception must not downgrade, got {final_state}"
+    )
+
+
+def test_probe_skipped_for_legacy_location_service():
+    """LegacyLocationService (iOS < 17) does not expose
+    ``_ensure_instrument``; the probe must treat that as "can't safely
+    check, assume alive" rather than raise.
+    """
+    from api.websocket import _send_initial_state
+    from context import ctx
+    from services.connection_state import store, DeviceState
+
+    _reset_debounce_dict()
+
+    async def _run() -> DeviceState:
+        # Build a connection whose location_service has NO
+        # _ensure_instrument attribute (legacy iOS path).
+        legacy_loc = MagicMock(spec=[])  # explicit empty spec → no auto-attrs
+        conn = MagicMock()
+        conn.location_service = legacy_loc
+
+        dm = MagicMock()
+        dm.get_connection = MagicMock(return_value=conn)
+        ctx.app_state.device_manager = dm
+
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "16.4", "connection_type": "USB"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+        await _wait_for_probe_tasks()
+        return store.get("udid-A")
+
+    final_state = asyncio.run(_run())
+    assert final_state == DeviceState.CONNECTED
+
+
+# ─── Transport-level liveness probe (closes the watchdog gap) ─────────
+#
+# The DVT instrument check above is a no-op when ``_location_sim`` is
+# already cached (user already teleported in this session). When the
+# phone is freshly disconnected — e.g. iPhone left WiFi 8s ago, renderer
+# reloaded, WS just reconnected — the snapshot would still paint a
+# "connected" pill because:
+#   * The DVT probe finds the cached LocationSimulation and returns true.
+#   * usbmux_presence_watchdog needs ~3s, tunnel_liveness_loop needs ~15s.
+#
+# The transport-level probe forces a synchronous TCP / usbmux round-trip
+# and routes any provably-dead device through ``disconnect_device`` so
+# the SSoT + WS observer fire together. Tests below pin the contract.
+
+
+def _install_dm_with_type(udid: str, conn_type: str):
+    """Wire a fake DM whose ``get_connection_type`` returns *conn_type*.
+
+    Sets up a benign DVT mock (``_ensure_instrument`` succeeds) so the
+    only state transitions observed in transport tests originate from
+    the transport probe, not the DVT fallback. Also seeds
+    ``app_state.terminate_engine`` and ``dm.disconnect`` as AsyncMocks
+    since the disconnect path calls both.
+    """
+    from context import ctx
+
+    location_service = MagicMock()
+    location_service._ensure_instrument = AsyncMock(return_value=MagicMock())
+
+    conn = MagicMock()
+    conn.location_service = location_service
+    conn.connection_type = conn_type
+
+    dm = MagicMock()
+    dm.get_connection = MagicMock(return_value=conn)
+    dm.get_connection_type = MagicMock(return_value=conn_type)
+    dm.disconnect = AsyncMock()
+
+    ctx.app_state.device_manager = dm
+    ctx.app_state.terminate_engine = AsyncMock()
+    return dm
+
+
+def test_dead_wifi_tunnel_marks_device_disconnected(monkeypatch):
+    """Network device + tunnel torn down → DISCONNECTED.
+
+    Models the case where the WiFi tunnel went away (Mac woke from
+    sleep, user disabled WiFi, etc.) but ``connection_state.store``
+    still has the device CONNECTED because the liveness loop's 15s
+    threshold hasn't fired yet.
+    """
+    from api.websocket import _send_initial_state
+    from services.connection_state import store, DeviceState
+    from services import wifi_tunnel_service
+
+    _reset_debounce_dict()
+
+    monkeypatch.setattr(wifi_tunnel_service.tunnel, "task", None, raising=False)
+    monkeypatch.setattr(wifi_tunnel_service.tunnel, "info", None, raising=False)
+
+    async def _run() -> DeviceState:
+        _install_dm_with_type("udid-A", "Network")
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "Network"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+        await _wait_for_probe_tasks()
+        return store.get("udid-A")
+
+    final_state = asyncio.run(_run())
+    assert final_state == DeviceState.DISCONNECTED, (
+        f"expected DISCONNECTED when WiFi tunnel is down, got {final_state}"
+    )
+
+
+def test_dead_wifi_transport_marks_device_disconnected(monkeypatch):
+    """Network device + tunnel running but transport_alive()=False → DISCONNECTED.
+
+    The pymobiledevice3 read tasks silently exited (iPhone left the WiFi
+    network), but the outer tunnel task is still parked on the stop
+    event. The on-connect probe must catch this without waiting for the
+    liveness loop's 3-miss threshold.
+    """
+    from api.websocket import _send_initial_state
+    from services.connection_state import store, DeviceState
+    from services import wifi_tunnel_service
+
+    _reset_debounce_dict()
+
+    class _LiveTask:
+        def done(self):
+            return False
+    monkeypatch.setattr(wifi_tunnel_service.tunnel, "task", _LiveTask(), raising=False)
+    monkeypatch.setattr(wifi_tunnel_service.tunnel, "info", {
+        "rsd_address": "fd00::1", "rsd_port": 12345,
+    }, raising=False)
+    monkeypatch.setattr(
+        wifi_tunnel_service.tunnel, "transport_alive",
+        lambda: False, raising=False,
+    )
+
+    async def _run() -> DeviceState:
+        _install_dm_with_type("udid-A", "Network")
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "Network"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+        await _wait_for_probe_tasks()
+        return store.get("udid-A")
+
+    final_state = asyncio.run(_run())
+    assert final_state == DeviceState.DISCONNECTED
+
+
+def test_alive_wifi_transport_keeps_device_connected(monkeypatch):
+    """Network device + tunnel running + transport_alive()=True → no transition.
+
+    Negative case: ensures the probe doesn't false-positive into a
+    disconnect when everything looks fine.
+    """
+    from api.websocket import _send_initial_state
+    from services.connection_state import store, DeviceState
+    from services import wifi_tunnel_service
+
+    _reset_debounce_dict()
+
+    class _LiveTask:
+        def done(self):
+            return False
+    monkeypatch.setattr(wifi_tunnel_service.tunnel, "task", _LiveTask(), raising=False)
+    monkeypatch.setattr(wifi_tunnel_service.tunnel, "info", {
+        "rsd_address": "fd00::1", "rsd_port": 12345,
+    }, raising=False)
+    monkeypatch.setattr(
+        wifi_tunnel_service.tunnel, "transport_alive",
+        lambda: True, raising=False,
+    )
+
+    async def _run() -> DeviceState:
+        _install_dm_with_type("udid-A", "Network")
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "Network"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+        await _wait_for_probe_tasks()
+        return store.get("udid-A")
+
+    final_state = asyncio.run(_run())
+    assert final_state == DeviceState.CONNECTED
+
+
+def test_usb_device_missing_from_usbmux_marks_disconnected(monkeypatch):
+    """USB device + not present in ``list_devices()`` → DISCONNECTED.
+
+    Closes the ~3s gap before the usbmux watchdog detects an unplug.
+    The user can reload the renderer faster than that.
+    """
+    from api.websocket import _send_initial_state
+    from services.connection_state import store, DeviceState
+
+    _reset_debounce_dict()
+
+    async def _empty_list():
+        return []
+    import pymobiledevice3.usbmux as _usbmux_mod
+    monkeypatch.setattr(_usbmux_mod, "list_devices", _empty_list, raising=True)
+
+    async def _run() -> DeviceState:
+        _install_dm_with_type("udid-A", "USB")
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "USB"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+        await _wait_for_probe_tasks()
+        return store.get("udid-A")
+
+    final_state = asyncio.run(_run())
+    assert final_state == DeviceState.DISCONNECTED
+
+
+def test_usb_device_still_in_usbmux_stays_connected(monkeypatch):
+    """USB device present in ``list_devices()`` → stays CONNECTED.
+
+    Negative case for the USB transport probe — must not flap when the
+    device is still attached.
+    """
+    from api.websocket import _send_initial_state
+    from services.connection_state import store, DeviceState
+
+    _reset_debounce_dict()
+
+    class _FakeDev:
+        def __init__(self, serial):
+            self.serial = serial
+            self.connection_type = "USB"
+    async def _present_list():
+        return [_FakeDev("udid-A")]
+    import pymobiledevice3.usbmux as _usbmux_mod
+    monkeypatch.setattr(_usbmux_mod, "list_devices", _present_list, raising=True)
+
+    async def _run() -> DeviceState:
+        _install_dm_with_type("udid-A", "USB")
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "USB"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+        await _wait_for_probe_tasks()
+        return store.get("udid-A")
+
+    final_state = asyncio.run(_run())
+    assert final_state == DeviceState.CONNECTED
+
+
+def test_list_devices_failure_does_not_false_positive(monkeypatch):
+    """list_devices() raising → stays CONNECTED.
+
+    The probe must default to "alive" when it cannot reach usbmuxd —
+    otherwise a transient usbmux blip would falsely disconnect every
+    USB device on every WS reconnect.
+    """
+    from api.websocket import _send_initial_state
+    from services.connection_state import store, DeviceState
+
+    _reset_debounce_dict()
+
+    async def _boom():
+        raise ConnectionRefusedError("usbmuxd not reachable")
+    import pymobiledevice3.usbmux as _usbmux_mod
+    monkeypatch.setattr(_usbmux_mod, "list_devices", _boom, raising=True)
+
+    async def _run() -> DeviceState:
+        _install_dm_with_type("udid-A", "USB")
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "USB"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+        await _wait_for_probe_tasks()
+        return store.get("udid-A")
+
+    final_state = asyncio.run(_run())
+    assert final_state == DeviceState.CONNECTED
+
+
+def test_transport_probe_failure_terminates_engine_before_disconnect(monkeypatch):
+    """Engine teardown happens *before* the SSoT disconnect.
+
+    Mirrors the watchdog + cleanup_wifi_connections discipline so a
+    running Navigate / RandomWalk loop doesn't keep emitting events
+    against a dead transport between the two steps.
+    """
+    from api.websocket import _send_initial_state
+    from context import ctx
+    from services.connection_state import store, DeviceState
+    from services import wifi_tunnel_service
+
+    _reset_debounce_dict()
+
+    monkeypatch.setattr(wifi_tunnel_service.tunnel, "info", None, raising=False)
+    monkeypatch.setattr(wifi_tunnel_service.tunnel, "task", None, raising=False)
+
+    call_order: list[str] = []
+
+    async def _track_terminate(udid):
+        call_order.append(f"terminate:{udid}")
+
+    async def _run() -> list[str]:
+        dm = _install_dm_with_type("udid-A", "Network")
+        ctx.app_state.terminate_engine = _track_terminate  # type: ignore[assignment]
+
+        async def _track_disconnect(udid):
+            call_order.append(f"dm.disconnect:{udid}")
+        dm.disconnect.side_effect = _track_disconnect
+
+        await store.transition(
+            "udid-A", DeviceState.CONNECTED, cause="user",
+            metadata={"name": "A", "ios_version": "26.5", "connection_type": "Network"},
+        )
+        ws = _make_fake_ws()
+        await _send_initial_state(ws)
+        await _wait_for_probe_tasks()
+        return call_order
+
+    order = asyncio.run(_run())
+    assert order == ["terminate:udid-A", "dm.disconnect:udid-A"], (
+        f"engine teardown must precede transport teardown, got {order}"
+    )

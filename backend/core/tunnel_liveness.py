@@ -69,6 +69,17 @@ async def tunnel_liveness_loop(stop: asyncio.Event) -> None:
                 gen = tunnel.generation
                 rsd_address = tunnel.info.get("rsd_address")
                 rsd_port = tunnel.info.get("rsd_port")
+                # Deep transport check while we hold the lock — peeks at
+                # pymobiledevice3's internal read tasks. Catches the case
+                # where ``ConnectionResetError`` was silently swallowed by
+                # the library and the OS tun interface is still up (TCP
+                # probes to RSD then deceptively succeed). See
+                # TunnelRunner.transport_alive for the rationale.
+                transport_ok = (
+                    tunnel.transport_alive()
+                    if hasattr(tunnel, "transport_alive")
+                    else True
+                )
 
             if not rsd_address or not rsd_port:
                 miss_count = 0
@@ -82,23 +93,37 @@ async def tunnel_liveness_loop(stop: asyncio.Event) -> None:
                 miss_count = 0
                 continue
 
-            alive = await _tcp_probe(rsd_address, rsd_port, timeout=PROBE_TIMEOUT_S)
-            if alive:
-                if miss_count > 0:
-                    logger.info(
-                        "Tunnel probe recovered after %d miss(es) rsd=%s:%d",
-                        miss_count, rsd_address, rsd_port,
-                    )
-                miss_count = 0
-                continue
+            if not transport_ok:
+                # Definitive signal: a read task has exited. No need to
+                # keep accumulating misses against a silent transport —
+                # jump straight to threshold so the generation-guarded
+                # cleanup path below fires this iteration. Logging is
+                # already done inside transport_alive() at warning level
+                # with the specific task name.
+                logger.error(
+                    "Tunnel transport reports dead — escalating to cleanup "
+                    "without waiting for TCP miss threshold (rsd=%s:%d)",
+                    rsd_address, rsd_port,
+                )
+                miss_count = MISS_THRESHOLD
+            else:
+                alive = await _tcp_probe(rsd_address, rsd_port, timeout=PROBE_TIMEOUT_S)
+                if alive:
+                    if miss_count > 0:
+                        logger.info(
+                            "Tunnel probe recovered after %d miss(es) rsd=%s:%d",
+                            miss_count, rsd_address, rsd_port,
+                        )
+                    miss_count = 0
+                    continue
 
-            miss_count += 1
-            logger.warning(
-                "Tunnel probe failed (%d/%d) rsd=%s:%d",
-                miss_count, MISS_THRESHOLD, rsd_address, rsd_port,
-            )
-            if miss_count < MISS_THRESHOLD:
-                continue
+                miss_count += 1
+                logger.warning(
+                    "Tunnel probe failed (%d/%d) rsd=%s:%d",
+                    miss_count, MISS_THRESHOLD, rsd_address, rsd_port,
+                )
+                if miss_count < MISS_THRESHOLD:
+                    continue
 
             # Threshold reached — re-acquire the lock and verify the
             # generation we probed is still current. A user-driven

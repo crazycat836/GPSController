@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>GPSController – 連線狀態更新流程</title>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#1f2937',
+      primaryTextColor: '#f9fafb',
+      primaryBorderColor: '#4b5563',
+      lineColor: '#6b7280',
+      secondaryColor: '#374151',
+      tertiaryColor: '#0f172a',
+      background: '#0b1220',
+      mainBkg: '#1f2937',
+      nodeBorder: '#4b5563',
+      clusterBkg: '#111827',
+      clusterBorder: '#374151',
+      titleColor: '#f9fafb',
+      edgeLabelBackground: '#0b1220',
+      noteBkgColor: '#1e293b',
+      noteTextColor: '#e2e8f0',
+      noteBorderColor: '#475569',
+      actorBkg: '#1f2937',
+      actorBorder: '#4b5563',
+      actorTextColor: '#f9fafb',
+      actorLineColor: '#6b7280',
+      signalColor: '#cbd5e1',
+      signalTextColor: '#cbd5e1',
+      labelBoxBkgColor: '#1f2937',
+      labelBoxBorderColor: '#4b5563',
+      labelTextColor: '#f9fafb',
+      loopTextColor: '#f9fafb',
+      activationBkgColor: '#374151',
+      activationBorderColor: '#6b7280',
+      sequenceNumberColor: '#0b1220'
+    },
+    flowchart: { htmlLabels: true, curve: 'basis', padding: 16 },
+    sequence: { actorMargin: 60, boxMargin: 10, messageMargin: 36, mirrorActors: false }
+  });
+</script>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #111827;
+    --panel-2: #0f172a;
+    --panel-border: #1f2937;
+    --text: #e5e7eb;
+    --text-dim: #94a3b8;
+    --accent: #60a5fa;
+    --accent-2: #34d399;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --code-bg: #0f172a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", Roboto, sans-serif;
+    line-height: 1.65;
+  }
+  header {
+    padding: 56px 24px 36px;
+    background: linear-gradient(180deg, #111827 0%, var(--bg) 100%);
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  h1 { font-size: 32px; margin: 0 0 10px; letter-spacing: -0.5px; }
+  h1 small { display: block; font-size: 14px; color: var(--text-dim); font-weight: 400; margin-top: 8px; letter-spacing: 0; }
+  h2 { font-size: 24px; margin: 56px 0 14px; color: #f9fafb; border-left: 3px solid var(--accent); padding-left: 14px; }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  h4 { font-size: 15px; margin: 18px 0 6px; color: var(--accent-2); font-weight: 600; }
+  p { color: var(--text); }
+  .lead { color: var(--text-dim); font-size: 15px; max-width: 880px; }
+  section { padding: 8px 0 24px; }
+
+  .tldr {
+    background: linear-gradient(135deg, rgba(96,165,250,0.08), rgba(52,211,153,0.05));
+    border: 1px solid rgba(96,165,250,0.25);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 16px 0 8px;
+  }
+  .tldr h3 {
+    margin: 0 0 8px;
+    color: var(--accent);
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+  }
+  .tldr p { margin: 6px 0; font-size: 15px; }
+  .tldr ul { margin: 8px 0; padding-left: 20px; }
+  .tldr li { margin: 4px 0; }
+
+  .diagram {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 16px 0 24px;
+    overflow-x: auto;
+  }
+  .diagram .mermaid { display: flex; justify-content: center; min-width: 100%; }
+
+  .scenario-card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 4px 24px 20px;
+    margin: 20px 0;
+  }
+  .scenario-card .scenario-meta {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 0 6px;
+    border-bottom: 1px dashed var(--panel-border);
+    margin-bottom: 4px;
+  }
+  .scenario-card .scenario-meta h3 { margin: 0; flex: 1; }
+  .scenario-card .real-talk {
+    background: rgba(96,165,250,0.06);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .scenario-card .real-talk strong { color: var(--accent-2); }
+  .scenario-card .outcome {
+    background: var(--panel-2);
+    border-left: 3px solid var(--accent-2);
+    padding: 10px 14px;
+    margin: 12px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 14px;
+  }
+  .scenario-card .outcome strong { color: var(--accent-2); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  th, td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--panel-border); vertical-align: top; }
+  th { background: var(--panel-2); color: var(--accent); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+
+  code {
+    font-family: "SF Mono", Monaco, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    background: var(--code-bg);
+    color: #fbbf24;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .tag {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+  }
+  .tag-user    { background: rgba(96,165,250,0.18); color: #93c5fd; }
+  .tag-auto    { background: rgba(52,211,153,0.18); color: #6ee7b7; }
+  .tag-monitor { background: rgba(251,191,36,0.18); color: #fcd34d; }
+  .tag-recover { background: rgba(248,113,113,0.18); color: #fca5a5; }
+
+  .callout {
+    background: rgba(251,191,36,0.08);
+    border-left: 3px solid var(--warn);
+    padding: 14px 18px;
+    border-radius: 6px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .callout strong { color: var(--warn); }
+  .callout-info {
+    background: rgba(96,165,250,0.08);
+    border-left: 3px solid var(--accent);
+    padding: 14px 18px;
+    border-radius: 6px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .callout-info strong { color: var(--accent); }
+
+  .glossary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .glossary dt {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 4px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .glossary dt::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent-2);
+  }
+  .glossary dd {
+    margin: 0; padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    font-size: 13.5px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .glossary dd strong { color: var(--text); }
+
+  .reading-path {
+    counter-reset: step;
+    list-style: none; padding: 0; margin: 16px 0;
+  }
+  .reading-path li {
+    counter-increment: step;
+    padding: 14px 18px 14px 60px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    position: relative;
+    font-size: 14px;
+  }
+  .reading-path li::before {
+    content: counter(step);
+    position: absolute;
+    left: 18px; top: 50%;
+    transform: translateY(-50%);
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #0b1220;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .reading-path li strong { color: var(--accent-2); display: block; margin-bottom: 4px; }
+
+  nav.toc {
+    position: sticky; top: 0;
+    background: rgba(11,18,32,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--panel-border);
+    padding: 10px 24px;
+    z-index: 50;
+    font-size: 13px;
+  }
+  nav.toc a { color: var(--text-dim); margin-right: 16px; text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); }
+
+  footer { color: var(--text-dim); font-size: 13px; padding: 32px 24px 48px; text-align: center; border-top: 1px solid var(--panel-border); margin-top: 48px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <h1>
+      GPSController — 連線狀態流程圖
+      <small>給第一次看這個專案的人 · 2026-05-19</small>
+    </h1>
+    <p class="lead">
+      本文件先解釋 GPSController 是什麼、為什麼需要追蹤「連線狀態」，
+      再介紹後端如何維護它、各種情境下會發生什麼事，最後給想看程式碼的人一條建議路徑。
+    </p>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="container">
+    <a href="#about">這專案是？</a>
+    <a href="#glossary">詞彙速查</a>
+    <a href="#user-journey">使用者視角</a>
+    <a href="#state-machine">三種狀態</a>
+    <a href="#architecture">後端架構</a>
+    <a href="#scenarios">七個情境</a>
+    <a href="#concurrency">背景任務</a>
+    <a href="#reading">讀程式碼</a>
+    <a href="#gap">已知斷點</a>
+  </div>
+</nav>
+
+<div class="container">
+
+<!-- ============== ABOUT ============== -->
+<section id="about">
+  <h2>1. 這個專案在做什麼？</h2>
+
+  <div class="tldr">
+    <h3>TL;DR</h3>
+    <p><strong>GPSController</strong> 是一個 macOS 桌面應用 (Electron + FastAPI)，可以連到 iPhone 並「假裝」它的 GPS 位置 —— 開發者可以在不動到實體裝置的情況下，測試 App 在不同地點的行為。</p>
+    <ul>
+      <li>iPhone 可以透過 <strong>USB</strong> 或 <strong>Wi-Fi tunnel</strong> 與電腦連線</li>
+      <li>後端會透過 Apple 內部 protocol (DVT) 注入 GPS 座標</li>
+      <li>前端 (Electron) 需要即時知道：「裝置現在連上了嗎？訊號還在嗎？」 ← <strong>這就是「連線狀態」</strong></li>
+    </ul>
+  </div>
+
+  <p>
+    為什麼「連線狀態」這麼重要？因為 iPhone 透過 Wi-Fi 連線時很容易斷 ——
+    螢幕鎖了、網路抖動、使用者走到別的房間，都會讓背後的 DVT channel 掉線。
+    使用者不會接受 App 沒反應，所以後端必須：
+  </p>
+  <ul>
+    <li>能在 1 秒內感知到「USB 線拔了」</li>
+    <li>能在 5 秒內感知到「Wi-Fi 不通了」</li>
+    <li>遇到暫時性掉線時，能自動嘗試重連（而不是直接告訴使用者「裝置已斷線」）</li>
+    <li>把這些變化即時推送到前端 UI</li>
+  </ul>
+</section>
+
+<!-- ============== GLOSSARY ============== -->
+<section id="glossary">
+  <h2>2. 詞彙速查（會在後面反覆出現）</h2>
+  <dl class="glossary">
+    <div>
+      <dt>UDID</dt>
+      <dd>iPhone 的唯一識別碼。一個 40 字元字串。後端用 UDID 區分多台裝置。</dd>
+    </div>
+    <div>
+      <dt>usbmux</dt>
+      <dd>Apple 的 USB 多工服務，<strong>列出所有透過 USB 連上的 iPhone</strong>。後端每秒 poll 它一次來偵測插拔。</dd>
+    </div>
+    <div>
+      <dt>Wi-Fi tunnel</dt>
+      <dd>透過區網建立的 iPhone ↔ Mac 連線，比 USB 不穩定，但行動性高。</dd>
+    </div>
+    <div>
+      <dt>RSD (Remote Service Discovery)</dt>
+      <dd>iOS 17+ 之後 Apple 用的服務發現協定，Wi-Fi tunnel 跑在 RSD 之上。</dd>
+    </div>
+    <div>
+      <dt>DVT (Developer Disk Image)</dt>
+      <dd>Apple 內部的開發者通道。GPSController 透過 DVT 注入 GPS 座標。一旦這個 channel 掉了，就無法注入位置。</dd>
+    </div>
+    <div>
+      <dt>SSoT (Single Source of Truth)</dt>
+      <dd><strong>單一狀態來源</strong>。本專案的 SSoT 就是 <code>connection_state.py</code>，所有想知道「裝置現在到底是不是連著」的程式，都得問它。</dd>
+    </div>
+    <div>
+      <dt>WebSocket (WS)</dt>
+      <dd>前端與後端之間的長連線，用來即時推送狀態變化（連上、斷線、不穩定）。</dd>
+    </div>
+    <div>
+      <dt>Watchdog / Liveness loop</dt>
+      <dd>背景一直跑的監控任務。USB watchdog 每秒查一次裝置列表；liveness loop 每 5 秒 ping 一次 Wi-Fi tunnel。</dd>
+    </div>
+  </dl>
+</section>
+
+<!-- ============== USER JOURNEY ============== -->
+<section id="user-journey">
+  <h2>3. 使用者視角：打開 App 到開始用，會發生什麼？</h2>
+  <p>先不管實作，從使用者的角度看，整個流程就是這張圖：</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    classDef step fill:#1e293b,stroke:#60a5fa,color:#e2e8f0
+    classDef happy fill:#064e3b,stroke:#34d399,color:#a7f3d0
+    classDef trouble fill:#78350f,stroke:#fbbf24,color:#fde68a
+    classDef bad fill:#7f1d1d,stroke:#f87171,color:#fecaca
+
+    A["① 打開 App"]:::step
+    B["② App 顯示<br/>已連上的 iPhone 列表"]:::step
+    C{"連線方式？"}:::step
+    D["③a USB:<br/>插上即自動連線"]:::happy
+    E["③b Wi-Fi:<br/>按「啟動 tunnel」"]:::happy
+    F["④ 裝置變綠<br/>顯示「Connected」"]:::happy
+    G["⑤ 設定假位置<br/>iPhone 立刻變到該地點"]:::happy
+    H{"使用中<br/>連線出問題？"}:::step
+    I["⚠️ 短暫不穩<br/>UI 顯示「Reconnecting…」"]:::trouble
+    J["✅ 自動恢復"]:::happy
+    K["❌ 真的斷了<br/>UI 顯示「Disconnected」"]:::bad
+
+    A --> B --> C
+    C --> D --> F
+    C --> E --> F
+    F --> G --> H
+    H -->|沒事| G
+    H -->|抖一下| I
+    I -->|重連成功| J --> G
+    I -->|重連失敗| K
+</pre>
+  </div>
+
+  <div class="callout-info">
+    <strong>關鍵觀察：</strong> 步驟 ⑤ 之後的「使用中」階段，連線狀態其實會在
+    <code>Connected</code> ↔ <code>Reconnecting</code> ↔ <code>Disconnected</code> 之間切換。
+    後端用三種狀態 + 一台狀態機來精準表達這件事，下一節說明。
+  </div>
+</section>
+
+<!-- ============== STATE MACHINE ============== -->
+<section id="state-machine">
+  <h2>4. 後端怎麼描述「連線狀態」？三種狀態</h2>
+
+  <table>
+    <thead><tr><th>狀態</th><th>白話意思</th><th>UI 顯示</th><th>能下 GPS 指令嗎？</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>DISCONNECTED</code></td>
+        <td>沒連 / 連線已失敗</td>
+        <td>灰色「未連線」</td>
+        <td>❌ 不行</td>
+      </tr>
+      <tr>
+        <td><code>CONNECTED</code></td>
+        <td>連線正常</td>
+        <td>綠色「已連線」</td>
+        <td>✅ 可以</td>
+      </tr>
+      <tr>
+        <td><code>DEGRADED</code></td>
+        <td>連線抖了一下，正在嘗試恢復</td>
+        <td>黃色「重新連線中…」</td>
+        <td>⚠️ 暫時不行（會 retry）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h4>為什麼需要 DEGRADED 這個中間狀態？</h4>
+  <p>
+    iPhone 透過 Wi-Fi 連線時，DVT channel 偶爾會掉（例如 iPhone 螢幕鎖了 2 秒）。
+    如果我們一掉就標記成 <code>DISCONNECTED</code>，使用者就會看到「斷線」的紅色錯誤訊息 ——
+    可是 1 秒後它可能又恢復了，這樣 UX 會閃爍得很難看。
+  </p>
+  <p>
+    所以加一個 <code>DEGRADED</code>：表示「我們知道有問題，正在自動重連，請稍等」。
+    重連成功 → 回到 <code>CONNECTED</code>；重連失敗 → 才真正進入 <code>DISCONNECTED</code>。
+  </p>
+
+  <div class="diagram">
+<pre class="mermaid">
+stateDiagram-v2
+    direction LR
+    [*] --> DISCONNECTED: 初始狀態
+
+    DISCONNECTED --> CONNECTED: 連線建立
+    note right of CONNECTED
+        WS 發送: device_connected
+    end note
+
+    CONNECTED --> DEGRADED: DVT channel 掉線<br/>(暫時)
+    note right of DEGRADED
+        WS 發送: tunnel_degraded
+        UI 顯示「Reconnecting…」
+    end note
+
+    DEGRADED --> CONNECTED: 重連成功
+    note left of CONNECTED
+        WS 發送: tunnel_recovered
+    end note
+
+    DEGRADED --> DISCONNECTED: 重連耗盡<br/>(真的斷了)
+    CONNECTED --> DISCONNECTED: 使用者主動斷線<br/>/ USB 拔除 / Wi-Fi 失效
+    note left of DISCONNECTED
+        WS 發送: device_disconnected
+    end note
+</pre>
+  </div>
+
+  <p>右上的 "WS 發送" 提示，就是後端把狀態變化推到前端的 4 種訊息。</p>
+</section>
+
+<!-- ============== ARCHITECTURE ============== -->
+<section id="architecture">
+  <h2>5. 後端架構總覽：誰負責改狀態？誰負責讀？</h2>
+
+  <p>
+    架構上，「狀態」放在一個叫 <code>ConnectionStateStore</code> 的物件裡（位於 <code>backend/services/connection_state.py</code>）。
+    這個物件是 <strong>單一狀態來源</strong> ——
+    左邊有 8 個地方會寫入它，右邊有 3 個地方會讀。
+  </p>
+
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    classDef user fill:#1e3a8a,stroke:#60a5fa,color:#dbeafe
+    classDef auto fill:#064e3b,stroke:#34d399,color:#a7f3d0
+    classDef monitor fill:#78350f,stroke:#fbbf24,color:#fde68a
+    classDef recover fill:#7f1d1d,stroke:#f87171,color:#fecaca
+    classDef ssot fill:#312e81,stroke:#a78bfa,color:#ddd6fe,font-weight:bold
+    classDef consumer fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+
+    subgraph WRITERS["📝 會改變狀態的程式（State Writers）"]
+        direction TB
+        P1["USB 監控<br/>device_watchdog.py<br/>每秒 poll usbmux"]:::auto
+        P2["手動連 / 斷線 API<br/>api/device.py<br/>POST/DELETE /connect"]:::user
+        P3["啟動 Wi-Fi tunnel<br/>api/tunnel/lifecycle.py"]:::user
+        P4["Wi-Fi 健康監視<br/>tunnel_liveness.py<br/>每 5 秒 TCP probe"]:::monitor
+        P5["Wi-Fi 拆連協調器<br/>wifi_tunnel_service.py"]:::recover
+        P6["DVT 自動重連<br/>location_service.py"]:::recover
+        P7["API 強制重連<br/>api/location/_helpers.py"]:::recover
+        P8["App 啟動時自動連<br/>main.py:149"]:::auto
+    end
+
+    SSOT[("ConnectionStateStore<br/>(SSoT)<br/><b>backend/services/connection_state.py</b>")]:::ssot
+
+    OBS["WS Observer<br/>把狀態變化轉成 WS 訊息"]:::ssot
+
+    subgraph READERS["👀 會讀狀態的程式（State Readers）"]
+        direction TB
+        C1["WebSocket endpoint<br/>api/websocket.py<br/>連入時送 snapshot"]:::consumer
+        C2["REST: GET /api/device/list<br/>(usbmux + snapshot 合併)"]:::consumer
+        C3["WS Broadcaster<br/>推給所有前端"]:::consumer
+    end
+
+    P1 --> SSOT
+    P2 --> SSOT
+    P3 -. "⚠️ 未走 SSoT<br/>(見 §9)" .-> SSOT
+    P4 --> P5 --> SSOT
+    P6 --> SSOT
+    P7 --> SSOT
+    P8 --> SSOT
+
+    SSOT --> OBS
+    OBS --> C3
+    SSOT -. "snapshot()" .-> C1
+    SSOT -. "snapshot()" .-> C2
+</pre>
+  </div>
+
+  <h4>顏色說明</h4>
+  <p style="font-size: 14px;">
+    <span class="tag tag-user">USER</span> 使用者主動觸發 ・
+    <span class="tag tag-auto">AUTO</span> 系統自動偵測 ・
+    <span class="tag tag-monitor">MONITOR</span> 背景持續監控 ・
+    <span class="tag tag-recover">RECOVER</span> 錯誤復原流程
+  </p>
+
+  <h4>為什麼要設計成 SSoT？</h4>
+  <p>
+    重構前，「裝置現在是不是連著」這個資訊散落在 4 個地方：<code>DeviceManager</code> 的內部字典、
+    <code>TunnelRunner</code> 的旗標、各個 location service 的快取、前端的 WS state。
+    結果就是常常彼此不一致 —— UI 顯示已連線，但實際下 GPS 指令會失敗。
+  </p>
+  <p>
+    把狀態統一到 <code>ConnectionStateStore</code> 之後，所有變化都要透過它的 API
+    (<code>connect_device</code>, <code>disconnect_device</code>, <code>mark_degraded</code>, <code>mark_recovered</code>)，
+    順帶觸發 WS 廣播。前端永遠跟得上後端，再也不會脫節。
+  </p>
+</section>
+
+<!-- ============== SCENARIOS ============== -->
+<section id="scenarios">
+  <h2>6. 七個情境深入看</h2>
+  <p>從這裡開始進入細節。每個情境都用同樣的結構：<strong>情境描述 → 流程圖 → 結果摘要</strong>。</p>
+
+  <!-- SCENARIO 1 -->
+  <div class="scenario-card">
+    <div class="scenario-meta">
+      <h3>情境 1：使用者把 iPhone 用 USB 線插上電腦</h3>
+      <span class="tag tag-auto">AUTO</span>
+    </div>
+    <div class="real-talk">
+      <strong>會發生什麼：</strong> 後端有個每秒跑一次的 USB 監控 (<code>device_watchdog</code>)，
+      它會問 macOS 的 usbmux「現在插了哪些 iPhone？」。
+      只要看到一個新 UDID，就自動建立連線 + 推送 WS 訊息。
+    </div>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant USB as iPhone (USB)
+    participant W as device_watchdog<br/>(每秒一次)
+    participant CS as ConnectionStateStore
+    participant WS as WebSocket
+    participant UI as 前端 UI
+
+    Note over USB: 使用者插上 USB 線
+    W->>USB: 查詢 usbmux: 「有哪些裝置？」
+    USB-->>W: [new_udid]
+    Note over W: 偵測到新 UDID
+    W->>CS: connect_device(new_udid, cause="auto_usb")
+    Note over CS: 狀態: DISCONNECTED → CONNECTED
+    CS->>WS: broadcast("device_connected", {udid, name, ios_version})
+    WS->>UI: 推送
+    Note over UI: 列表新增綠色裝置
+</pre>
+    </div>
+    <div class="outcome"><strong>結果：</strong> 使用者插線後約 1 秒，UI 自動出現新裝置。</div>
+  </div>
+
+  <!-- SCENARIO 2 -->
+  <div class="scenario-card">
+    <div class="scenario-meta">
+      <h3>情境 2：使用者拔掉 USB 線</h3>
+      <span class="tag tag-auto">AUTO</span>
+    </div>
+    <div class="real-talk">
+      <strong>會發生什麼：</strong> 同樣是 USB 監控發現「咦這台 UDID 不在 usbmux 列表了」。
+      為了避免 usbmux 偶爾抽風漏報，<strong>必須連續 3 次都看不到才算真的拔了</strong>（約 3 秒緩衝）。
+    </div>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant USB as iPhone (USB)
+    participant W as device_watchdog
+    participant CS as ConnectionStateStore
+    participant DD as 去重器<br/>(2 秒內同 udid 只發一次)
+    participant WS as WebSocket
+    participant UI as 前端 UI
+
+    Note over USB: 使用者拔線
+    loop 每秒
+        W->>USB: 查詢 usbmux
+        Note over W: miss_count[udid] += 1
+    end
+    Note over W: 連續 3 次未見 (≈3 秒)
+    W->>W: 停止該裝置的 GPS 引擎
+    W->>CS: disconnect_device(udid, cause="usb_removed")
+    Note over CS: 狀態: CONNECTED → DISCONNECTED
+    CS->>DD: emit "device_disconnected"
+    DD->>WS: broadcast("device_disconnected", {cause:"usb_removed"})
+    WS->>UI: 推送
+    Note over UI: 裝置標為灰色
+</pre>
+    </div>
+    <div class="outcome"><strong>結果：</strong> 約 3 秒延遲，避免 false-positive 但保證真拔線一定會被偵測。</div>
+  </div>
+
+  <!-- SCENARIO 3 -->
+  <div class="scenario-card">
+    <div class="scenario-meta">
+      <h3>情境 3：使用中 DVT channel 突然掉線（最常見的抖動）</h3>
+      <span class="tag tag-recover">RECOVER</span>
+    </div>
+    <div class="real-talk">
+      <strong>會發生什麼：</strong> 使用者正在用 GPSController 設定假位置，
+      但 iPhone 螢幕鎖了 / Wi-Fi 抖了 2 秒，導致 DVT channel 斷掉。
+      這時 location service 會自動重連，期間狀態為 <code>DEGRADED</code>（UI 顯示「Reconnecting…」）。
+    </div>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant API as REST /location/set
+    participant LS as DvtLocationService
+    participant CS as ConnectionStateStore
+    participant WS as WebSocket
+    participant UI as 前端 UI
+
+    API->>LS: set(lat, lon)
+    LS--xLS: ConnectionTerminatedError<br/>(DVT 斷了)
+
+    LS->>CS: mark_degraded(udid, cause="dvt_channel_dropped")
+    Note over CS: 狀態: CONNECTED → DEGRADED
+    CS->>WS: broadcast("tunnel_degraded")
+    WS->>UI: 推送
+    Note over UI: 裝置變黃,顯示 "Reconnecting…"
+
+    loop 重試 (最多 5+1 次, 約 15 秒)
+        LS->>LS: 重新建立 DVT instrument
+        alt 成功
+            LS->>CS: mark_recovered(udid)
+            Note over CS: 狀態: DEGRADED → CONNECTED
+            CS->>WS: broadcast("tunnel_recovered")
+            WS->>UI: 推送
+            Note over UI: 變回綠色,流程繼續
+        else 兩次 timeout 或耗盡
+            LS-->>API: raise DeviceLostError
+            API->>CS: disconnect_device(udid)
+            CS->>WS: broadcast("device_disconnected")
+            WS->>UI: 推送
+            Note over UI: 真的斷了,變灰色
+        end
+    end
+</pre>
+    </div>
+    <div class="outcome">
+      <strong>結果：</strong> 大多數短暫抖動（&lt; 15 秒）使用者完全感覺不到中斷，只看到短暫的「Reconnecting…」黃色提示就恢復。
+    </div>
+  </div>
+
+  <!-- SCENARIO 4 -->
+  <div class="scenario-card">
+    <div class="scenario-meta">
+      <h3>情境 4：Wi-Fi tunnel 整條死掉（iPhone 走出 Wi-Fi 範圍）</h3>
+      <span class="tag tag-monitor">MONITOR</span>
+    </div>
+    <div class="real-talk">
+      <strong>會發生什麼：</strong> 不像 DVT 掉線是「上層 API 報錯」，Wi-Fi 整條死掉時可能完全沒有錯誤，只是 TCP 不通了。
+      所以有個 <code>tunnel_liveness_loop</code> 每 5 秒做兩件事：
+      (1) 檢查 tunnel 任務本體還活著嗎，
+      (2) TCP probe 看 RSD 連接埠通不通。
+      <br/><br/>
+      <strong>Generation guard 的小細節：</strong> 如果使用者在 probe 失敗的中途
+      手動停掉再重啟 tunnel（generation 編號會 +1），原本要 cleanup 的動作會被取消，避免誤殺新 tunnel。
+    </div>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant L as tunnel_liveness_loop<br/>(每 5 秒)
+    participant T as TunnelRunner
+    participant SVC as wifi_tunnel_service
+    participant CS as ConnectionStateStore
+    participant WS as WebSocket
+    participant UI as 前端 UI
+
+    loop every 5s
+        L->>T: 取得 generation + transport 狀態
+        alt transport task 已死
+            Note over L: 立刻判定失敗 (跳過 TCP probe)
+        else
+            L->>L: TCP probe RSD port
+            alt 通
+                Note over L: miss_count = 0 (重置)
+            else 不通
+                Note over L: miss_count += 1
+            end
+        end
+    end
+
+    Note over L: miss_count 達到 3 (約 15 秒)
+    L->>T: 再次檢查 generation
+    alt generation 變了 (使用者重啟過)
+        Note over L: 取消 cleanup,避免誤殺
+    else generation 沒變
+        L->>SVC: cleanup_wifi_connections()
+        loop 對每個 Wi-Fi 裝置
+            SVC->>SVC: 關閉 GPS 引擎
+            SVC->>CS: disconnect_device(udid, cause="wifi_dropped")
+            CS->>WS: broadcast("device_disconnected")
+            WS->>UI: 推送
+        end
+        L->>T: tunnel.stop()
+    end
+</pre>
+    </div>
+    <div class="outcome"><strong>結果：</strong> Wi-Fi 真的死了之後最多 15 秒會被偵測 + 完整 cleanup，但短暫抖動不會誤殺。</div>
+  </div>
+
+  <!-- SCENARIO 5 -->
+  <div class="scenario-card">
+    <div class="scenario-meta">
+      <h3>情境 5：使用者重整 App（renderer reload）</h3>
+      <span class="tag tag-auto">AUTO</span>
+    </div>
+    <div class="real-talk">
+      <strong>會發生什麼：</strong> Electron 重整時 WebSocket 會斷開重連。新的 WS 連線一進來，後端立刻送一份 <strong>snapshot</strong>
+      （所有目前的裝置 + 狀態），確保 UI 不會看到空畫面。
+      此外還會背景做一次 DVT 健康探測 ——
+      避免「Snapshot 顯示連線正常，但其實 DVT 早就掛了」的脫節情況。
+    </div>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant UI as 前端<br/>(reload)
+    participant WS as WebSocket endpoint
+    participant CS as ConnectionStateStore
+    participant LS as DvtLocationService
+
+    UI->>WS: 重新建立 WebSocket 連線
+    WS->>CS: store.snapshot() <br/>(不打 usbmux)
+    CS-->>WS: 所有裝置目前狀態
+    WS-->>UI: device_snapshot {devices: [...]}
+
+    loop 對每個 DEGRADED 裝置
+        WS-->>UI: tunnel_degraded {reason: "snapshot"}
+    end
+
+    Note over WS: 1 秒 debounce 後啟動背景探測
+    par 對每個 CONNECTED 裝置背景探測
+        WS->>LS: _probe_dvt_health_one(udid)<br/>2 秒 timeout
+        alt 探測失敗
+            WS->>CS: mark_degraded(udid)
+            Note over CS: 進入 DEGRADED → 觸發情境 3 的重連
+        end
+    end
+</pre>
+    </div>
+    <div class="outcome">
+      <strong>結果：</strong> 即使 App 重整，前端依然能立刻看到所有裝置；萬一連線早就壞了，1-2 秒後也會被探測出來並進入重連。
+    </div>
+  </div>
+
+  <!-- SCENARIO 6 -->
+  <div class="scenario-card">
+    <div class="scenario-meta">
+      <h3>情境 6：API 內部偵測到狀態異常，強制重連</h3>
+      <span class="tag tag-recover">RECOVER</span>
+    </div>
+    <div class="real-talk">
+      <strong>會發生什麼：</strong> 某些 API 路徑（例如 <code>exec_with_retry</code>）
+      在執行命令前，若發現底層狀態異常（找不到 engine、收到 DeviceLostError），
+      會做一個「先斷再連」的 hard reset，把整條鏈路打掉重練。
+      cause 標記為 <code>hard_reset</code>，前端會看到一個快速的斷-連週期。
+    </div>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant API as REST handler
+    participant H as _helpers
+    participant CS as ConnectionStateStore
+    participant WS as WebSocket
+
+    API->>H: get_engine() / exec_with_retry()
+    Note over H: 偵測異常: engine 不見 / DeviceLostError
+
+    H->>CS: disconnect_device(udid, cause="hard_reset")
+    CS->>WS: broadcast("device_disconnected")
+    H->>CS: connect_device(udid, cause="hard_reset")
+    CS->>WS: broadcast("device_connected")
+    H->>H: 重建 GPS 引擎
+</pre>
+    </div>
+    <div class="outcome"><strong>結果：</strong> 自我修復成功時使用者只看到一閃而過的狀態切換；失敗則裝置變灰色。</div>
+  </div>
+
+  <!-- SCENARIO 7 -->
+  <div class="scenario-card">
+    <div class="scenario-meta">
+      <h3>情境 7：使用者按 UI 上的按鈕主動操作</h3>
+      <span class="tag tag-user">USER</span>
+    </div>
+    <div class="real-talk">
+      <strong>會發生什麼：</strong> 最直觀的情境。三個按鈕對應三個 REST endpoint，全部都走 SSoT，cause 標記為 <code>user</code> 或 <code>forget</code>，前端立刻看到變化。
+    </div>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant UI as 前端 UI
+    participant API as api/device.py
+    participant CS as ConnectionStateStore
+    participant WS as WebSocket
+
+    rect rgba(96,165,250,0.08)
+        Note over UI: 點「Connect」
+        UI->>API: POST /api/device/{udid}/connect
+        API->>CS: connect_device(udid, cause="user")
+        CS->>WS: broadcast("device_connected")
+    end
+
+    rect rgba(248,113,113,0.08)
+        Note over UI: 點「Disconnect」
+        UI->>API: DELETE /api/device/{udid}/connect
+        API->>CS: disconnect_device(udid, cause="user")
+        CS->>WS: broadcast("device_disconnected", cause:"user")
+    end
+
+    rect rgba(251,191,36,0.08)
+        Note over UI: 點「Forget pair」 (取消配對)
+        UI->>API: DELETE /api/device/{udid}/pair
+        API->>CS: disconnect_device(udid, cause="forget")
+        CS->>WS: broadcast("device_disconnected", cause:"forget")
+    end
+</pre>
+    </div>
+    <div class="outcome"><strong>結果：</strong> 完全可預測的同步流程。cause 欄位讓前端可以做不同的 UX 處理（例如「忘記配對」要顯示確認對話框）。</div>
+  </div>
+</section>
+
+<!-- ============== CONCURRENCY ============== -->
+<section id="concurrency">
+  <h2>7. 背景任務有哪些？為什麼需要它們？</h2>
+  <p>後端啟動時會跑起幾條背景 loop，分工如下：</p>
+
+  <table>
+    <thead><tr><th>背景任務</th><th>節奏</th><th>為什麼需要它？</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>usbmux_presence_watchdog</code></td>
+        <td>每 1 秒</td>
+        <td>USB 沒有 push event，必須 poll。決定情境 1 + 2 的反應速度。</td>
+      </tr>
+      <tr>
+        <td><code>tunnel_liveness_loop</code></td>
+        <td>每 5 秒</td>
+        <td>Wi-Fi tunnel 可能「靜悄悄地死掉」(無 exception)。TCP probe 是唯一可靠的偵測方式。</td>
+      </tr>
+      <tr>
+        <td><code>TunnelRunner._run</code></td>
+        <td>長駐</td>
+        <td>Wi-Fi tunnel 本體的傳輸 coroutine，死了的話 liveness loop 會發現。</td>
+      </tr>
+      <tr>
+        <td><code>_tunnel_watchdog</code></td>
+        <td>one-shot</td>
+        <td>每次啟動 tunnel 時 spawn 一個，專門 await tunnel task；task 崩潰時負責 cleanup。</td>
+      </tr>
+      <tr>
+        <td><code>_probe_connected_devices</code></td>
+        <td>每次新 WS 連線</td>
+        <td>情境 5 用，防止 reload 後狀態脫節。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout-info">
+    <strong>併發安全的設計小細節：</strong> 所有這些 loop 都跑在 <strong>同一條 FastAPI/uvicorn asyncio event loop</strong> 上，
+    這代表它們不會真的「同時」修改 <code>ConnectionStateStore</code> ——
+    asyncio 的合作式調度保證了序列化。所以 <code>ConnectionStateStore</code> 內部 <strong>不需要顯式 Lock</strong>
+    (見 <code>connection_state.py:103</code> 的註解)。
+  </div>
+</section>
+
+<!-- ============== READING PATH ============== -->
+<section id="reading">
+  <h2>8. 想實際讀程式碼？建議路徑</h2>
+  <p>如果你想動手改這部分，依下面的順序看可以建立最快的心智模型：</p>
+
+  <ol class="reading-path">
+    <li>
+      <strong>backend/services/connection_state.py</strong>
+      整個專案的「字典 + 狀態機」核心。從 <code>DeviceState</code> enum、<code>StateTransition</code> dataclass、<code>ConnectionStateStore</code> 三個東西開始看。
+    </li>
+    <li>
+      <strong>backend/main.py</strong>（特別是 lifespan / startup 段）
+      看清楚啟動時哪些 observer 與背景任務被裝上去：<code>install_ws_observer()</code>、<code>usbmux_presence_watchdog</code>、<code>tunnel_liveness_loop</code>。
+    </li>
+    <li>
+      <strong>backend/services/device_watchdog.py</strong>
+      最簡單的 producer：插入 + 拔除。讀完你就掌握情境 1, 2 的全貌。
+    </li>
+    <li>
+      <strong>backend/api/websocket.py</strong>
+      切換到 consumer 視角。看 <code>_send_initial_state</code> 怎麼從 snapshot 組裝給前端，以及 DVT probe 怎麼補救脫節。
+    </li>
+    <li>
+      <strong>backend/core/tunnel_liveness.py + backend/services/wifi_tunnel_service.py</strong>
+      搭配著看。前者偵測，後者執行 cleanup。注意 <code>generation guard</code> 那段。
+    </li>
+    <li>
+      <strong>backend/services/location_service.py</strong>（<code>_reconnect</code> 方法）
+      DEGRADED 狀態的整套生死。包含 <code>DVT_RECONNECT_DELAYS</code> 重試 schedule。
+    </li>
+    <li>
+      <strong>backend/tests/</strong> 的 5 個對應測試檔
+      <code>test_connection_state.py</code>、<code>test_tunnel_liveness.py</code>、<code>test_websocket_initial_state.py</code>、
+      <code>test_location_service_reconnect.py</code>、<code>test_wifi_tunnel_service.py</code>。它們是最好的「期望行為文件」。
+    </li>
+  </ol>
+</section>
+
+<!-- ============== GAP ============== -->
+<section id="gap">
+  <h2>9. 已知斷點：Wi-Fi tunnel 起連未走 SSoT</h2>
+  <div class="callout">
+    <p><strong>問題在哪：</strong> <code>POST /wifi/tunnel/start-and-connect</code>（位於 <code>backend/api/tunnel/lifecycle.py:289</code>）
+    直接呼叫 <code>dm.connect_wifi_tunnel(rsd_address, rsd_port)</code>，沒有走 <code>connection_state.connect_device()</code>。</p>
+
+    <p><strong>為什麼這是個問題：</strong></p>
+    <ul>
+      <li>store 沒收到 <code>DISCONNECTED → CONNECTED</code> 的 transition</li>
+      <li>WS Observer 因此不會發出 <code>device_connected</code> 廣播</li>
+      <li>前端只能靠 <code>GET /api/device/list</code> 的合併邏輯（device.py:46）才看得到這個 Wi-Fi 裝置</li>
+      <li>WS 通道在這個入口是「靜默的」—— 違反了 SSoT 應該統一所有 transition 的設計原則</li>
+    </ul>
+
+    <p><strong>如果你要修：</strong> 在 <code>lifecycle.py</code> 取得 <code>DeviceInfo</code> 之後，
+    呼叫 <code>store.transition(udid, CONNECTED, cause="wifi_tunnel_start", metadata={...})</code>。
+    這樣 WS 廣播就會自動觸發，前端可以拿掉 device list 合併的特殊邏輯。</p>
+  </div>
+</section>
+
+</div><!-- /container -->
+
+<footer>
+  Generated 2026-05-19 · GPSController · <code>docs/connection-state-flow.html</code><br/>
+  <small>本文件假設讀者第一次接觸此專案，所有專有名詞於 §2 已有解釋。</small>
+</footer>
+
+</body>
+</html>

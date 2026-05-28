@@ -26,10 +26,16 @@ from core import tunnel_liveness  # noqa: E402
 
 
 def _make_fake_tunnel(*, running: bool = True, generation: int = 1,
-                      info: dict | None = None):
+                      info: dict | None = None,
+                      transport_alive: bool = True):
     """Build a SimpleNamespace that quacks like ``TunnelRunner`` enough for
     the probe loop. Provides an asyncio.Lock so ``async with tunnel.lock``
-    works, and the same fields the loop reads from ``info``."""
+    works, and the same fields the loop reads from ``info``.
+
+    *transport_alive* controls the deep transport check the loop performs
+    in addition to the TCP probe — ``False`` simulates the
+    pymobiledevice3 "silent ConnectionResetError" case from May 15.
+    """
     return SimpleNamespace(
         lock=asyncio.Lock(),
         is_running=lambda: running,
@@ -39,6 +45,7 @@ def _make_fake_tunnel(*, running: bool = True, generation: int = 1,
         },
         generation=generation,
         stop=AsyncMock(),
+        transport_alive=lambda: transport_alive,
     )
 
 
@@ -165,6 +172,62 @@ def test_miss_count_resets_on_recovery(monkeypatch):
 
     cleanup.assert_not_awaited()
     tunnel.stop.assert_not_awaited()
+
+
+def test_dead_transport_escalates_to_cleanup_immediately(monkeypatch):
+    """When ``tunnel.transport_alive()`` returns False, the loop jumps
+    straight to cleanup on the first iteration without waiting for 3
+    TCP misses.
+
+    Models the May 15 incident: pymobiledevice3's tun_read_task swallowed
+    a ConnectionResetError and exited silently, but the TCP probe to the
+    RSD port continued to succeed for 6.5 hours. The deep transport check
+    catches this case where the TCP probe lies.
+
+    TCP probe is scripted to return True (alive) — the *only* trigger
+    must be ``transport_alive=False``. If the loop still gates on TCP
+    misses, this test would not see cleanup fire.
+    """
+    tunnel = _make_fake_tunnel(transport_alive=False)
+    cleanup, call_idx = _patch_loop_deps(
+        monkeypatch, tunnel=tunnel, network_udids=["udid-A"],
+        probe_results=[True],  # TCP probe lies — would never trigger cleanup
+    )
+
+    asyncio.run(_run_for(0.1))  # 1-2 iterations is enough
+
+    assert cleanup.await_count >= 1, (
+        "expected immediate cleanup on transport_alive=False; "
+        "loop is still waiting on TCP misses"
+    )
+    cleanup.assert_awaited_with(reason="tunnel_lost_liveness")
+    assert tunnel.stop.await_count >= 1
+    # We should not have called TCP probe at all (the deep check
+    # short-circuited the iteration before TCP).
+    assert call_idx["n"] == 0, (
+        f"TCP probe ran {call_idx['n']} times — deep check should "
+        f"short-circuit it on transport_alive=False"
+    )
+
+
+def test_alive_transport_still_uses_tcp_threshold(monkeypatch):
+    """When transport_alive=True, behaviour is identical to before —
+    the loop still requires 3 consecutive TCP misses before tearing
+    down. Regression guard against my "always escalate" mistake.
+    """
+    tunnel = _make_fake_tunnel(transport_alive=True)
+    cleanup, call_idx = _patch_loop_deps(
+        monkeypatch, tunnel=tunnel, network_udids=["udid-A"],
+        probe_results=[True],  # all probes succeed → no cleanup
+    )
+
+    asyncio.run(_run_for(0.2))
+
+    cleanup.assert_not_awaited()
+    tunnel.stop.assert_not_awaited()
+    # We DID exercise the TCP probe path — confirms we didn't accidentally
+    # short-circuit it when transport_alive is True.
+    assert call_idx["n"] >= 1
 
 
 def test_generation_change_aborts_cleanup(monkeypatch):

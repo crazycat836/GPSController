@@ -29,9 +29,65 @@ class TunnelRunner:
         self._stop: asyncio.Event = asyncio.Event()
         self._ready: asyncio.Event = asyncio.Event()
         self._error: BaseException | None = None
+        # Direct reference to pymobiledevice3's RemotePairingTcpTunnel
+        # (the ``client`` field of the value yielded by
+        # ``service.start_tcp_tunnel()``). Used by ``transport_alive()``
+        # to inspect the library's internal read tasks —
+        # pymobiledevice3 silently swallows ConnectionResetError in its
+        # ``tun_read_task`` (tunnel_service.py:189-190) and
+        # ``sock_read_task`` (tunnel_service.py:319-323), leaving the
+        # outer ``async with`` still waiting on ``self._stop``. Without
+        # peeking at the inner tasks we can't tell a healthy tunnel
+        # apart from one whose data path silently died hours ago.
+        self._client: object | None = None
 
     def is_running(self) -> bool:
         return self.task is not None and not self.task.done()
+
+    def transport_alive(self) -> bool:
+        """Best-effort check that pymobiledevice3's internal transport
+        tasks are still running.
+
+        Returns ``False`` only when we can definitively see an exited
+        read task. Defaults to ``True`` on any introspection failure
+        (no client captured yet, missing attribute after library
+        upgrade, etc.) so a pymobiledevice3 version bump doesn't
+        false-positive into tunnel teardown.
+
+        Specifically inspects ``_tun_read_task`` (Mac→iPhone direction,
+        :class:`RemotePairingTunnel.tun_read_task`) and
+        ``_sock_read_task`` (iPhone→Mac,
+        :class:`RemotePairingTcpTunnel.sock_read_task`). Either task
+        exiting means data can no longer flow even though ``self.task``
+        and the OS tun interface are still up.
+        """
+        client = self._client
+        if client is None:
+            # No tunnel established yet (or already torn down).
+            # ``is_running()`` already guards "not started" upstream;
+            # don't double-fail this case.
+            return True
+        try:
+            tun_task = getattr(client, "_tun_read_task", None)
+            sock_task = getattr(client, "_sock_read_task", None)
+        except Exception:
+            return True
+        for label, task in (("tun_read", tun_task), ("sock_read", sock_task)):
+            if task is None:
+                continue
+            try:
+                if task.done():
+                    logger.warning(
+                        "Tunnel transport %s_task has exited — pymobiledevice3 "
+                        "swallowed the underlying disconnect",
+                        label,
+                    )
+                    return False
+            except Exception:
+                # Any introspection error means we can't confirm dead;
+                # fall through to "alive" rather than false-positive.
+                continue
+        return True
 
     async def _run(self, udid: str, ip: str, port: int) -> None:
         from pymobiledevice3.remote.tunnel_service import (
@@ -45,6 +101,7 @@ class TunnelRunner:
             logger.info("RemotePairing connected (identifier=%s)", service.remote_identifier)
 
             async with service.start_tcp_tunnel() as tunnel:
+                self._client = getattr(tunnel, "client", None)
                 self.info = {
                     "rsd_address": tunnel.address,
                     "rsd_port": tunnel.port,
@@ -64,6 +121,7 @@ class TunnelRunner:
             raise
         finally:
             self.info = None
+            self._client = None
 
     async def start(self, udid: str, ip: str, port: int, timeout: float = 20.0) -> dict:
         """Start the tunnel and wait until RSD info is ready.

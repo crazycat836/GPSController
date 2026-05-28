@@ -253,7 +253,13 @@ def test_ws_observer_fires_tunnel_recovered_on_recovery():
 
 def test_ws_observer_fires_device_disconnected_via_dedup():
     """Anything → DISCONNECTED routes through emit_device_disconnected
-    so a near-simultaneous watchdog + liveness drop doesn't double-toast."""
+    so a near-simultaneous watchdog + liveness drop doesn't double-toast.
+
+    The payload carries both ``reason`` AND ``cause`` (same value). The
+    renderer's toast picker keys off ``payload.cause`` while the dedup
+    map keys off ``cause``; surfacing it under both keys keeps every
+    consumer happy without forcing them to fall back to ``unknown``.
+    """
     from services import connection_state
     from services.connection_state import store, DeviceState
 
@@ -269,6 +275,7 @@ def test_ws_observer_fires_device_disconnected_via_dedup():
                 "udid": "u1",
                 "udids": ["u1"],
                 "reason": "usb_removed",
+                "cause": "usb_removed",
             })
 
     asyncio.run(_run())
