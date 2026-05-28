@@ -84,8 +84,21 @@ async def usbmux_presence_watchdog(app_state) -> None:
 
             if lost_now:
                 logger.warning("usbmux watchdog: device(s) gone → %s", lost_now)
+                from services.wifi_tunnel_service import reconnect_usb_over_wifi
                 for udid in lost_now:
                     miss_counts.pop(udid, None)
+                    # USB→WiFi fallback: if a live WiFi tunnel is up, move
+                    # the device onto it instead of fully disconnecting.
+                    # No-op (returns False) when no tunnel is running, so
+                    # the plain re-plug path below stays the default.
+                    try:
+                        if await reconnect_usb_over_wifi(udid):
+                            logger.info(
+                                "usbmux watchdog: %s fell back to WiFi tunnel", udid,
+                            )
+                            continue
+                    except Exception:
+                        logger.exception("watchdog: WiFi fallback raised for %s", udid)
                     # Stop & dispose the engine *before* tearing down the
                     # transport. Otherwise the background simulation task
                     # keeps emitting position_update / navigation_complete

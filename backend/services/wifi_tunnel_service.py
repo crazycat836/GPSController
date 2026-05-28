@@ -25,9 +25,8 @@ import logging
 
 from context import ctx
 from core.wifi_tunnel import TunnelRunner
+from services import connection_state
 from services.location_service import DeviceLostCause
-from services.disconnect_dedup import emit_device_disconnected
-from services.ws_broadcaster import broadcast
 
 logger = logging.getLogger("wifi_tunnel")
 
@@ -64,13 +63,16 @@ async def _tcp_probe(ip: str, port: int, timeout: float = 0.4) -> bool:
 async def cleanup_wifi_connections(reason: str = "wifi_tunnel_stopped") -> list[str]:
     """Disconnect any Network devices + drop the simulation engine.
 
-    Broadcasts ``device_disconnected`` so the frontend banners/disables
-    context menu items immediately instead of waiting for the next failed
-    action. Returns the UDIDs that were disconnected.
+    Routes every disconnect through :mod:`services.connection_state`
+    (the SSoT installed in commit ``3dc3bb4``) so the state machine and
+    the WS observer's ``device_disconnected`` broadcast stay in sync.
+    Returns the UDIDs that were disconnected.
 
-    *reason* is forwarded as the ``reason`` field in the broadcast so
-    consumers (frontend toasts, future analytics) can distinguish a
-    user/admin stop from a liveness-probe-detected death.
+    *reason* is logged server-side for diagnostics
+    (``tunnel_lost_liveness`` vs ``wifi_tunnel_stopped`` vs user-driven
+    stop). The wire-format ``cause`` is always
+    :data:`DeviceLostCause.WIFI_DROPPED` regardless of *reason* — the
+    device-level effect is the same no matter who triggered teardown.
     """
     app_state = ctx.app_state
     dm = app_state.device_manager
@@ -85,24 +87,96 @@ async def cleanup_wifi_connections(reason: str = "wifi_tunnel_stopped") -> list[
                 await app_state.terminate_engine(udid)
             except Exception:
                 logger.exception("Failed to terminate engine for %s", udid)
+        cause = DeviceLostCause.WIFI_DROPPED.value
         for udid in udids:
+            logger.info(
+                "Disconnecting WiFi device %s (reason=%s, cause=%s)",
+                udid, reason, cause,
+            )
             try:
-                await dm.disconnect(udid)
-                logger.info("Disconnected WiFi device %s (reason=%s)", udid, reason)
-            except (OSError, RuntimeError):
-                logger.exception("Failed to disconnect %s", udid)
-        if udids:
-            try:
-                # cleanup is always a tunnel/network condition — whether
-                # triggered by user stop, watchdog, or liveness probe, the
-                # device-level effect is the same: WiFi-side path is gone.
-                await emit_device_disconnected({
-                    "udids": udids,
-                    "reason": reason,
-                    "cause": DeviceLostCause.WIFI_DROPPED.value,
-                })
+                # ``connection_state.disconnect_device`` swallows transport
+                # errors internally (dm.disconnect raising during a
+                # device-lost cleanup is the expected case — every close
+                # step against a dead socket is supposed to fail). It
+                # then fires the transition, which the installed
+                # ``_ws_observer`` translates into a deduped
+                # ``device_disconnected`` broadcast carrying both
+                # ``reason`` and ``cause``.
+                await connection_state.disconnect_device(dm, udid, cause=cause)
             except Exception:
-                logger.exception("WiFi cleanup: broadcast failed")
+                logger.exception("Failed to disconnect %s via connection_state", udid)
     except Exception:
         logger.exception("WiFi cleanup step failed")
     return udids
+
+
+async def reconnect_usb_over_wifi(udid: str) -> bool:
+    """Reconnect a just-dropped USB device over an already-running WiFi
+    tunnel, if one is alive. Returns True when the device is back online
+    over Network transport; False when no usable tunnel exists or the
+    reconnect failed (caller should fall through to a full disconnect).
+
+    Only fires when a tunnel is already up — it does NOT establish a new
+    tunnel (that needs the device's WiFi IP + a pairing handshake, which
+    a freshly-unplugged device may not support). The common case (USB
+    device with no tunnel running) returns False immediately, preserving
+    the existing "re-plug or restart tunnel" behaviour.
+    """
+    if not tunnel.is_running() or tunnel.info is None:
+        return False
+    if hasattr(tunnel, "transport_alive") and not tunnel.transport_alive():
+        return False
+    info = tunnel.info
+    rsd_address = info.get("rsd_address")
+    rsd_port = info.get("rsd_port")
+    if not rsd_address or not rsd_port:
+        return False
+
+    app_state = ctx.app_state
+    dm = app_state.device_manager
+    try:
+        # Tear down the dead USB engine + transport before re-handshaking
+        # over WiFi — mirrors the ordering in cleanup_wifi_connections.
+        try:
+            await app_state.terminate_engine(udid)
+        except Exception:
+            logger.exception("USB→WiFi fallback: terminate_engine failed for %s", udid)
+        try:
+            await dm.disconnect(udid)
+        except Exception:
+            logger.debug("USB→WiFi fallback: USB disconnect for %s raised (socket already dead)", udid, exc_info=True)
+
+        new_info = await dm.connect_wifi_tunnel(rsd_address, rsd_port)
+        # The tunnel resolves its own UDID from the RSD peer. If it points
+        # at a different device, undo and bail so we don't silently swap
+        # which phone the user is driving.
+        if new_info.udid != udid:
+            logger.warning(
+                "USB→WiFi fallback: tunnel device %s != dropped %s; aborting",
+                new_info.udid, udid,
+            )
+            try:
+                await dm.disconnect(new_info.udid)
+            except Exception:
+                logger.debug("USB→WiFi fallback: cleanup disconnect failed", exc_info=True)
+            return False
+        await app_state.create_engine_for_device(udid)
+    except Exception:
+        logger.exception("USB→WiFi fallback failed for %s", udid)
+        return False
+
+    # Re-announce as CONNECTED over Network. The USB transport is truly
+    # gone, so transition through DISCONNECTED first — a straight
+    # CONNECTED→CONNECTED is a no-op (transition() returns False) and the
+    # renderer would never repaint the pill from USB to WiFi.
+    metadata = await connection_state._collect_metadata(dm, udid)
+    await connection_state.store.transition(
+        udid, connection_state.DeviceState.DISCONNECTED,
+        cause="usb_removed_pre_wifi_fallback",
+    )
+    await connection_state.store.transition(
+        udid, connection_state.DeviceState.CONNECTED,
+        cause="usb_to_wifi_fallback", metadata=metadata,
+    )
+    logger.info("USB→WiFi fallback succeeded for %s (now Network)", udid)
+    return True
