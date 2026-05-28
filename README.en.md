@@ -65,6 +65,7 @@ Left-click the map to add points contextually for the active mode. Loop / Multi-
 
 - **USB** — plug in and auto-connect; screen can be locked freely; hotplug detection with automatic reconnect.
 - **Wi-Fi Tunnel** — auto-detects via mDNS, falls back to local /24 subnet scan; saved IP / port is auto-filled next launch.
+- **USB → Wi-Fi handoff** — when the USB cable is unplugged, the device automatically switches to a running Wi-Fi Tunnel (if any) and keeps going — no manual reconnect.
 - **Dual-Device Group Mode** — two iPhones in lockstep; every action fans out in parallel; device chips show per-device state.
 
 ### Speed Control
@@ -75,7 +76,8 @@ Left-click the map to add points contextually for the active mode. Loop / Multi-
 
 ### Routing & Map
 
-- **ETA preview** — planned distance and estimated time before you start.
+- **ETA preview** — estimated time before you start, computed live from distance × speed × lap count.
+- **Cooldown preview** — estimated teleport cooldown shown before you teleport, based on distance to destination (matches the distance-tier table).
 - **Destination reverse-geocoding** — address label via Nominatim with debouncing and cache.
 - **Bookmarks** — custom names, categories, JSON import / export (merge, never overwrite), bulk paste (supports `(lat, lng)`, full-width brackets, `@lat,lng,15z` Google Maps format), right-click copy.
 - **Route library** — save full multi-point routes (WaypointChain), GPX import / export, category-filtered browsing.
@@ -158,7 +160,7 @@ On iOS 16+, the Developer Mode toggle is hidden until the device has had at leas
 
 | iOS Version | Status | Notes |
 | --- | --- | --- |
-| **iOS 26.x** | ✅ Developer-tested | Primary test environment (iPhone 16 Pro Max / iOS 26.4.1) |
+| **iOS 26.x** | ✅ Developer-tested | Primary test environment (iPhone 16 Pro Max / iOS 26.5) |
 | **iOS 17–25** | ✅ Community-reported | Generally works |
 | **iOS 16.x** | ✅ Community-maintained | Uses LegacyLocationService (older API) |
 | **iOS ≤ 15** | ❌ Unsupported | pymobiledevice3 DDI / newer tunnel semantics don't apply |
@@ -244,6 +246,6 @@ Using GPSController with location-based games or apps (e.g., Pokémon GO) may vi
 
 Wi-Fi Tunnel mode requires administrator privileges to create a TUN virtual network interface. The application may conflict with VPN software or third-party firewalls; users should evaluate the risk themselves. Map tiles and routing data (CartoDB, OSRM, Nominatim) are provided for reference only and may not reflect real-world conditions. The application **does not modify any user data on the iOS device, nor does it touch operating-system files** — it only modifies its own transient network interfaces and config files in `~/.gpscontroller/`.
 
-GPSController is an independently-maintained open source hobby project, not a commercial product. Stable operation is guaranteed only in the developer's own test environment (iPhone 16 Pro Max / iOS 26.4.1 + Windows 11 Pro). The project does not guarantee continued maintenance and accepts no liability for consequences arising from its use.
+GPSController is an independently-maintained open source hobby project, not a commercial product. Stable operation is guaranteed only in the developer's own test environment (iPhone 16 Pro Max / iOS 26.5 + Windows 11 Pro). The project does not guarantee continued maintenance and accepts no liability for consequences arising from its use.
 
 **By downloading, installing, or running this software, you acknowledge that you have read and agreed to the terms above.**
