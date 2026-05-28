@@ -5,7 +5,7 @@ import { useSimSettings } from '../../../contexts/SimSettingsContext'
 import { SimMode } from '../../../hooks/useSimulation'
 import { useT } from '../../../i18n'
 import { haversineM } from '../../../lib/geo'
-import { RADIUS_PRESETS, SPEED_MAP, type SpeedPresetMode } from '../../../lib/constants'
+import { RADIUS_PRESETS, SPEED_MAP, cooldownForDistM, type SpeedPresetMode } from '../../../lib/constants'
 
 // ── Shared visual primitives ──────────────────────────────────────────
 
@@ -244,16 +244,28 @@ function useNavDist(): number {
 
 // ── Teleport card ─────────────────────────────────────────────────────
 
+function formatCooldown(secs: number): string {
+  if (secs <= 0) return '0 s'
+  if (secs < 60) return `${secs} s`
+  const m = Math.floor(secs / 60)
+  if (m < 60) return `${m} min`
+  const h = Math.floor(m / 60)
+  const rm = m % 60
+  return rm === 0 ? `${h} h` : `${h} h ${rm} m`
+}
+
 function TeleportCard() {
   const t = useT()
   const distM = useNavDist()
+  const cdSecs = cooldownForDistM(distM)
+  const cdDisplay = distM > 0 ? formatCooldown(cdSecs) : '--'
   return (
     <CardShell>
       <div className="grid grid-cols-2 relative">
         <StatCell label={t('dock.distance')} value={formatDist(distM)} />
         <StatCell
           label={t('dock.cooldown')}
-          value="--"
+          value={cdDisplay}
           accent
           divider
         />

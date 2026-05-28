@@ -96,6 +96,19 @@ export function isSpeedPresetActive(
   )
 }
 
+const COOLDOWN_TABLE: readonly [number, number][] = [
+  [1, 0], [5, 30], [10, 120], [25, 300], [100, 900],
+  [250, 1500], [500, 2700], [750, 3600], [1000, 5400], [Infinity, 7200],
+]
+
+export function cooldownForDistM(distM: number): number {
+  const km = distM / 1000
+  for (const [maxKm, secs] of COOLDOWN_TABLE) {
+    if (km <= maxKm) return secs
+  }
+  return 7200
+}
+
 /**
  * Bounds for the "all random" waypoint generator. Both the radius (metres)
  * and the count are inclusive on both ends — `handleGenerateAllRandom`
