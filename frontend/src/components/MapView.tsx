@@ -30,6 +30,9 @@ interface MapViewProps {
   onAddBookmark: (lat: number, lng: number) => void;
   onAddWaypoint?: (lat: number, lng: number) => void;
   showWaypointOption?: boolean;
+  /** Save the currently plotted route (its waypoints) from the right-click menu. */
+  onSaveRoute?: () => void;
+  showSaveRouteOption?: boolean;
   deviceConnected?: boolean;
   onShowToast?: (msg: string) => void;
   layerKey?: string;
@@ -58,6 +61,8 @@ function MapView({
   onAddBookmark,
   onAddWaypoint,
   showWaypointOption,
+  onSaveRoute,
+  showSaveRouteOption,
   deviceConnected = true,
   onShowToast,
   layerKey = 'osm',
@@ -223,6 +228,8 @@ function MapView({
         onAddBookmark={onAddBookmark}
         onAddWaypoint={onAddWaypoint}
         showWaypointOption={showWaypointOption}
+        onSaveRoute={onSaveRoute}
+        showSaveRouteOption={showSaveRouteOption}
         deviceConnected={deviceConnected}
         onShowToast={onShowToast}
       />

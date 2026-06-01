@@ -51,6 +51,7 @@ import JoystickPanel from './components/panels/JoystickPanel'
 import DevicesPopover from './components/device/DevicesPopover'
 import LibraryDrawer from './components/modals/LibraryDrawer'
 import BookmarkEditDialog, { type BookmarkEditValues } from './components/library/BookmarkEditDialog'
+import SaveRouteDialog from './components/library/SaveRouteDialog'
 
 // Root component — just providers.
 //
@@ -194,6 +195,7 @@ function AppShell() {
   const [devicesPopoverAnchor, setDevicesPopoverAnchor] = useState<DOMRect | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [saveRouteOpen, setSaveRouteOpen] = useState(false)
 
   // Leaflet instance is owned by MapView; we hold a ref here so features
   // like "Locate PC" can pan the camera without teleporting.
@@ -332,6 +334,8 @@ function AppShell() {
           onAddBookmark={bm.handleAddBookmark}
           onAddWaypoint={simCtx.handleAddWaypoint}
           showWaypointOption={sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop || sim.mode === SimMode.Navigate}
+          onSaveRoute={() => setSaveRouteOpen(true)}
+          showSaveRouteOption={sim.waypoints.length > 0}
           deviceConnected={device.connectedDevice !== null}
           onShowToast={toast.showToast}
           layerKey={layerKey}
@@ -430,6 +434,7 @@ function AppShell() {
         onClose={() => setDevicesPopoverAnchor(null)}
       />
       <LibraryDrawer open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+      <SaveRouteDialog open={saveRouteOpen} onClose={() => setSaveRouteOpen(false)} />
     </div>
   )
 }

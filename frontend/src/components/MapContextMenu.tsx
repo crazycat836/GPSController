@@ -28,6 +28,10 @@ interface MapContextMenuProps {
   onAddBookmark: (lat: number, lng: number) => void;
   onAddWaypoint?: (lat: number, lng: number) => void;
   showWaypointOption?: boolean;
+  /** Save the route currently plotted in the sim (its waypoints). */
+  onSaveRoute?: () => void;
+  /** Show the "Save route" item — true only when there's a route to save. */
+  showSaveRouteOption?: boolean;
   deviceConnected: boolean;
   onShowToast?: (msg: string) => void;
 }
@@ -47,6 +51,8 @@ function MapContextMenu({
   onAddBookmark,
   onAddWaypoint,
   showWaypointOption,
+  onSaveRoute,
+  showSaveRouteOption,
   deviceConnected,
   onShowToast,
 }: MapContextMenuProps) {
@@ -297,28 +303,47 @@ function MapContextMenu({
         {t('map.add_bookmark')}
       </div>
 
-      {/* 6. Add waypoint (only when in a route mode). */}
+      {/* 6. Route actions — add waypoint (route modes) + save the current
+            route. Grouped under one separator; the separator only renders
+            when at least one of the two is available. */}
+      {((showWaypointOption && onAddWaypoint) || (showSaveRouteOption && onSaveRoute)) && (
+        <div style={{ height: 1, background: 'var(--color-border-strong)', margin: '4px 0' }} />
+      )}
       {showWaypointOption && onAddWaypoint && (
-        <>
-          <div style={{ height: 1, background: 'var(--color-border-strong)', margin: '4px 0' }} />
-          <div
-            className="context-menu-item"
-            style={contextMenuItemStyle}
-            onClick={() => {
-              onAddWaypoint(state.lat, state.lng);
-              onClose();
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
-              <circle cx="12" cy="12" r="3" />
-              <line x1="12" y1="5" x2="12" y2="1" />
-              <line x1="12" y1="23" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="1" y2="12" />
-              <line x1="23" y1="12" x2="19" y2="12" />
-            </svg>
-            {t('map.add_waypoint')}
-          </div>
-        </>
+        <div
+          className="context-menu-item"
+          style={contextMenuItemStyle}
+          onClick={() => {
+            onAddWaypoint(state.lat, state.lng);
+            onClose();
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
+            <circle cx="12" cy="12" r="3" />
+            <line x1="12" y1="5" x2="12" y2="1" />
+            <line x1="12" y1="23" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="1" y2="12" />
+            <line x1="23" y1="12" x2="19" y2="12" />
+          </svg>
+          {t('map.add_waypoint')}
+        </div>
+      )}
+      {showSaveRouteOption && onSaveRoute && (
+        <div
+          className="context-menu-item"
+          style={contextMenuItemStyle}
+          onClick={() => {
+            onSaveRoute();
+            onClose();
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 8 }}>
+            <circle cx="6" cy="19" r="3" />
+            <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" />
+            <circle cx="18" cy="5" r="3" />
+          </svg>
+          {t('route.quick_save')}
+        </div>
       )}
     </div>
   );
