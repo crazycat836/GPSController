@@ -595,6 +595,8 @@ export const STRINGS = {
 
   // ── Shell (aria labels, buttons without visible text) ──
   'shell.dock_aria': { zh: '模擬控制列', en: 'Simulation dock' },
+  'shell.dock_collapse': { zh: '收合面板', en: 'Collapse panel' },
+  'shell.dock_expand': { zh: '展開面板', en: 'Expand panel' },
   'shell.modes_aria': { zh: '模擬模式切換', en: 'Simulation modes' },
   'shell.status_aria': { zh: '連線狀態', en: 'Status' },
   'shell.bookmark_save': { zh: '加入收藏', en: 'Save as bookmark' },

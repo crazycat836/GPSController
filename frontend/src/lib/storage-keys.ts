@@ -12,6 +12,9 @@ export const STORAGE_KEYS = {
   updateLastCheck: 'gpscontroller.update_check.last_check',
   avatarSelection: 'gpscontroller.avatar_selection',
   avatarCustom: 'gpscontroller.avatar_custom',
+  // Whether the bottom simulation dock is collapsed to its header only.
+  // Persisted so the panel stays out of the way of the map across reloads.
+  dockCollapsed: 'gpscontroller.dock_collapsed',
   // Gold Ditto (拉金盆) anchor — user's real-world coordinate. JSON-
   // serialised ``{lat, lng}`` so absent / malformed entries decode to
   // null cleanly and the UI re-prompts.

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Repeat, Route, Shuffle, Crosshair, Navigation, Gamepad2, SquareCheckBig, X, Check } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Repeat, Route, Shuffle, Crosshair, Navigation, Gamepad2, SquareCheckBig, X, Check, ChevronDown } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ChainPoint } from '../WaypointChain'
 import { useSimContext } from '../../contexts/SimContext'
@@ -8,6 +8,8 @@ import { useSimSettings } from '../../contexts/SimSettingsContext'
 import { SimMode } from '../../hooks/useSimulation'
 import { useT } from '../../i18n'
 import { RADIUS_PRESETS } from '../../lib/constants'
+import { STORAGE_KEYS } from '../../lib/storage-keys'
+import GlassIconButton from '../ui/GlassIconButton'
 import DockRouteCard from './dock/DockRouteCard'
 import WaypointList from './dock/WaypointList'
 import JoyPreview from './dock/JoyPreview'
@@ -25,14 +27,39 @@ const MODE_ICON: Record<string, LucideIcon> = {
   [SimMode.Joystick]:   Gamepad2,
 }
 
+// Fixed height of the dock's collapsible body. Keeping it constant (rather
+// than flexing) means the panel never jumps height between modes, and lets
+// the collapse animate cleanly between two known px values.
+const DOCK_BODY_HEIGHT = 280
+const DOCK_BODY_GAP = 12
+const DOCK_COLLAPSE_MS = 240
+
+// Read the persisted collapse preference; default to expanded.
+function readDockCollapsed(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.dockCollapsed) === '1'
+  } catch {
+    return false
+  }
+}
+
 export default function BottomDock() {
   const t = useT()
   const simCtx = useSimContext()
   const { sim, handleRemoveWaypoint, handleGenerateRandomWaypoints } = simCtx
   const { currentPos, destPos } = useSimDerived()
   const [showRandomConfig, setShowRandomConfig] = useState(false)
+  const [collapsed, setCollapsed] = useState(readDockCollapsed)
 
   useEffect(() => { setShowRandomConfig(false) }, [sim.mode])
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev
+      try { localStorage.setItem(STORAGE_KEYS.dockCollapsed, next ? '1' : '0') } catch {}
+      return next
+    })
+  }, [])
 
   const ctx = useMemo(
     () => buildDockContext(sim.mode, sim, currentPos, destPos, t),
@@ -53,18 +80,18 @@ export default function BottomDock() {
       aria-label={t('shell.dock_aria')}
       className={[
         'glass-panel-strong',
-        'fixed bottom-[72px] left-1/2 z-[var(--z-ui)]',
+        'fixed bottom-[84px] left-1/2 z-[var(--z-ui)]',
         'w-[min(920px,calc(100vw-48px))]',
         'flex flex-col',
         'overflow-hidden',
         'anim-fade-slide-up-centered',
       ].join(' ')}
     >
-      {/* Panel body — padding matches design: 14px 16px, gap 12px. Fixed
-          height so the panel never jumps between modes; the main row flexes
-          to fill and the waypoint list scrolls internally. */}
-      <div className="flex flex-col gap-3" style={{ padding: '14px 16px', height: '360px' }}>
-        {/* Header: icon + title + subtitle */}
+      {/* Panel body — padding matches design: 14px 16px. The header always
+          shows; the main row below it collapses to free the map on small
+          screens. */}
+      <div className="flex flex-col" style={{ padding: '14px 16px' }}>
+        {/* Header: icon + title + subtitle + collapse toggle */}
         <div className="flex items-center gap-3">
           <div
             className="w-10 h-10 rounded-[10px] grid place-items-center shrink-0 border"
@@ -84,37 +111,66 @@ export default function BottomDock() {
               {ctx.subtitle}
             </div>
           </div>
+          <GlassIconButton
+            className="shrink-0"
+            label={collapsed ? t('shell.dock_expand') : t('shell.dock_collapse')}
+            onClick={toggleCollapsed}
+            icon={
+              <ChevronDown
+                className={[
+                  'w-[18px] h-[18px] transition-transform duration-200',
+                  collapsed ? 'rotate-180' : '',
+                ].join(' ')}
+              />
+            }
+          />
         </div>
 
-        {/* Main row: always 2-column (left content + right controls).
-            flex-1 + min-h-0 lets it absorb the fixed panel height so the
-            left column can scroll internally instead of growing the panel. */}
-        <div className="grid gap-3 items-start flex-1 min-h-0" style={{ gridTemplateColumns: '1fr 1fr', gridTemplateRows: 'minmax(0, 1fr)' }}>
-          {/* Left column */}
-          <div className="flex flex-col gap-2 min-w-0 min-h-0 h-full">
-            <LeftColumn
-              mode={sim.mode}
-              chainPoints={ctx.chainPoints}
-              loop={ctx.loop}
-              onRemoveWaypoint={handleRemoveWaypoint}
-              onGenerateRandom={() => setShowRandomConfig(true)}
-            />
-          </div>
-
-          {/* Right column: random config OR stats card + speed + action */}
-          <div className="flex flex-col gap-2">
-            {showRandomConfig ? (
-              <RandomConfigPanel
-                onCancel={() => setShowRandomConfig(false)}
-                onGenerate={handleRandomGenerate}
+        {/* Collapsible main row — height animates between a fixed px and 0
+            so the panel never jumps between modes and folds away cleanly.
+            `inert` keeps the hidden controls out of the tab order. */}
+        <div
+          className="overflow-hidden"
+          inert={collapsed}
+          style={{
+            height: collapsed ? 0 : DOCK_BODY_HEIGHT,
+            marginTop: collapsed ? 0 : DOCK_BODY_GAP,
+            transition: `height ${DOCK_COLLAPSE_MS}ms var(--ease-out-expo), margin-top ${DOCK_COLLAPSE_MS}ms var(--ease-out-expo)`,
+          }}
+        >
+          {/* Always 2-column (left content + right controls). The fixed
+              height + min-h-0 row lets the left column scroll internally
+              instead of growing the panel. */}
+          <div
+            className="grid gap-3 items-start"
+            style={{ height: DOCK_BODY_HEIGHT, gridTemplateColumns: '1fr 1fr', gridTemplateRows: 'minmax(0, 1fr)' }}
+          >
+            {/* Left column */}
+            <div className="flex flex-col gap-2 min-w-0 min-h-0 h-full">
+              <LeftColumn
+                mode={sim.mode}
+                chainPoints={ctx.chainPoints}
+                loop={ctx.loop}
+                onRemoveWaypoint={handleRemoveWaypoint}
+                onGenerateRandom={() => setShowRandomConfig(true)}
               />
-            ) : (
-              <>
-                <ModeStatsCard />
-                {!speedToggleDisabled && <SpeedToggle />}
-                <ActionGroup fullWidth />
-              </>
-            )}
+            </div>
+
+            {/* Right column: random config OR stats card + speed + action */}
+            <div className="flex flex-col gap-2">
+              {showRandomConfig ? (
+                <RandomConfigPanel
+                  onCancel={() => setShowRandomConfig(false)}
+                  onGenerate={handleRandomGenerate}
+                />
+              ) : (
+                <>
+                  <ModeStatsCard />
+                  {!speedToggleDisabled && <SpeedToggle />}
+                  <ActionGroup fullWidth />
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
