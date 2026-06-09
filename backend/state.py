@@ -57,6 +57,12 @@ class AppState:
         # User-chosen initial map center (persisted between launches). When
         # None, the frontend falls back to a hardcoded default.
         self._initial_map_position: dict | None = None
+        # WiFi-tunnel keep-alive: when True, a background loop periodically
+        # re-asserts each idle engine's current virtual location so the DVT
+        # channel doesn't idle out when the iPhone screen dims. Opt-in
+        # (default off) — it keeps the connection warm at the cost of a
+        # little extra traffic. Persisted so the choice survives relaunch.
+        self._wifi_keepalive: bool = False
         # Throttle disk writes for high-frequency position_update events
         # (~10 Hz during navigation). Interval lives in config so the
         # rationale sits next to other tunables.
@@ -68,6 +74,20 @@ class AppState:
         # clicks Connect, (b) the frontend boots and calls the reset
         # endpoint, or (c) the backend restarts (set is in-memory only).
         self._no_auto_reconnect: set[str] = set()
+        # In-flight dual-device auto-sync tasks. Stored so the event loop
+        # keeps a strong reference — a bare ``create_task`` can be GC'd
+        # mid-run (documented asyncio footgun) — and so each can be
+        # cancelled when its target engine is terminated or the app shuts
+        # down, instead of outliving the device it mirrors.
+        self._sync_tasks: set[asyncio.Task] = set()
+        # Serialises mutation of ``simulation_engines`` / ``_primary_udid``.
+        # These are touched from many concurrent contexts (lifespan auto-
+        # connect, USB watchdog, REST connect/disconnect, WS probe, tunnel
+        # teardown); without this a concurrent create+terminate for the same
+        # udid can orphan an engine whose movement task keeps pushing to a
+        # dead device. Bound lazily to the running loop on first acquire
+        # (Python 3.10+), so constructing at import time is safe.
+        self._engine_lock: asyncio.Lock = asyncio.Lock()
         self._load_settings()
 
     def _load_settings(self):
@@ -84,6 +104,7 @@ class AppState:
                 imp = data.get("initial_map_position")
                 if isinstance(imp, dict) and "lat" in imp and "lng" in imp:
                     self._initial_map_position = {"lat": float(imp["lat"]), "lng": float(imp["lng"])}
+                self._wifi_keepalive = bool(data.get("wifi_keepalive", False))
             except (json.JSONDecodeError, OSError, ValueError, KeyError):
                 logger.warning("Settings file malformed or unreadable; using defaults", exc_info=True)
 
@@ -92,6 +113,7 @@ class AppState:
             "last_position": self._last_position,
             "coord_format": self.coord_formatter.format.value,
             "initial_map_position": self._initial_map_position,
+            "wifi_keepalive": self._wifi_keepalive,
         }
         try:
             SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -117,6 +139,15 @@ class AppState:
     def set_initial_position(self, position: dict | None) -> None:
         """Set the persisted initial map center ({"lat","lng"} or None)."""
         self._initial_map_position = position
+
+    def get_wifi_keepalive(self) -> bool:
+        """Whether the WiFi-tunnel keep-alive loop is enabled."""
+        return self._wifi_keepalive
+
+    def set_wifi_keepalive(self, enabled: bool) -> None:
+        """Enable/disable the keep-alive loop and persist the choice."""
+        self._wifi_keepalive = bool(enabled)
+        self.save_settings()
 
     def get_initial_map_position(self) -> dict | None:
         """Return the user-pinned initial map center, or None if unset.
@@ -181,22 +212,50 @@ class AppState:
         emitting ``position_update`` / ``navigation_complete`` events
         against a dead device until it eventually errors out.
         """
-        engine = self.simulation_engines.get(udid)
-        if engine is None:
-            return
-        try:
-            await asyncio.wait_for(engine.stop(), timeout=timeout)
-        except asyncio.TimeoutError:
-            logger.warning(
-                "Engine stop for %s exceeded %.1fs — forcing cleanup",
-                udid, timeout,
-            )
-        except Exception:
-            logger.exception("Engine stop for %s raised; forcing cleanup", udid)
-        finally:
-            self.simulation_engines.pop(udid, None)
-            if self._primary_udid == udid:
-                self._primary_udid = next(iter(self.simulation_engines), None)
+        # Cancel any dual-sync task targeting this device first so it can't
+        # resurrect movement on the engine we're about to drop.
+        self._cancel_sync_task_for(udid)
+        async with self._engine_lock:
+            engine = self.simulation_engines.get(udid)
+            if engine is None:
+                return
+            try:
+                await asyncio.wait_for(engine.stop(), timeout=timeout)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Engine stop for %s exceeded %.1fs — forcing cleanup",
+                    udid, timeout,
+                )
+            except Exception:
+                logger.exception("Engine stop for %s raised; forcing cleanup", udid)
+            finally:
+                self.simulation_engines.pop(udid, None)
+                if self._primary_udid == udid:
+                    self._primary_udid = next(iter(self.simulation_engines), None)
+
+    def _cancel_sync_task_for(self, udid: str) -> None:
+        """Cancel the in-flight dual-sync task targeting *udid*, if any.
+        Tasks are named ``dual-sync-{udid}`` (see _sync_new_device_to_primary)."""
+        name = f"dual-sync-{udid}"
+        for task in list(self._sync_tasks):
+            if task.get_name() == name and not task.done():
+                task.cancel()
+
+    async def cancel_sync_tasks(self) -> None:
+        """Cancel + drain every in-flight dual-device auto-sync task.
+
+        Called from the lifespan shutdown so a mid-flight OSRM-backed sync
+        can't keep running after the engines it targets are gone.
+        """
+        tasks = [t for t in self._sync_tasks if not t.done()]
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+        self._sync_tasks.clear()
 
     async def create_engine_for_device(self, udid: str):
         """Create a SimulationEngine for the connected device.
@@ -224,13 +283,24 @@ class AppState:
             if event_type == "position_update" and "lat" in data:
                 self.update_last_position(data["lat"], data["lng"])
 
-        engine = SimulationEngine(loc_service, event_callback)
-        self.simulation_engines[udid] = engine
-        # Only claim the primary slot when it's free — preserves first-
-        # connected device on subsequent connections.
-        became_primary = self._primary_udid is None
-        if became_primary:
-            self._primary_udid = udid
+        async with self._engine_lock:
+            # Replace any existing engine for this udid *under the lock* so a
+            # concurrent terminate/create can't leave a movement task orphaned
+            # against a slot we're about to overwrite. Inlined stop() rather
+            # than self.terminate_engine() to avoid re-acquiring this lock.
+            existing = self.simulation_engines.get(udid)
+            if existing is not None:
+                try:
+                    await existing.stop()
+                except Exception:
+                    logger.exception("Replacing engine for %s: stop() raised", udid)
+            engine = SimulationEngine(loc_service, event_callback)
+            self.simulation_engines[udid] = engine
+            # Only claim the primary slot when it's free — preserves first-
+            # connected device on subsequent connections.
+            became_primary = self._primary_udid is None
+            if became_primary:
+                self._primary_udid = udid
 
         logger.info(
             "Simulation engine created for device %s (primary=%s)",
@@ -351,4 +421,7 @@ class AppState:
                     new_udid, snapshot.mode,
                 )
 
-        asyncio.create_task(_do_sync(), name=f"dual-sync-{new_udid}")
+        sync_task = asyncio.create_task(_do_sync(), name=f"dual-sync-{new_udid}")
+        # Keep a strong ref (weak-ref GC footgun) + auto-remove on completion.
+        self._sync_tasks.add(sync_task)
+        sync_task.add_done_callback(self._sync_tasks.discard)

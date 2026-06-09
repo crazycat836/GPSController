@@ -7,11 +7,11 @@ import { devWarn } from '../lib/dev-log'
 import { deviceListEqual } from './device/parsers'
 import type { DeviceInfo, WsSubscribe } from './device/parsers'
 import { useDeviceWs } from './device/useDeviceWs'
-import type { DeviceLastDisconnect } from './device/useDeviceWs'
+import type { DeviceLastDisconnect, DeviceLastError } from './device/useDeviceWs'
 import { useWifiTunnel } from './device/useWifiTunnel'
 
 export type { DeviceInfo, WifiScanResult, WsSubscribe, DeviceLostCause } from './device/parsers'
-export type { DeviceLastDisconnect } from './device/useDeviceWs'
+export type { DeviceLastDisconnect, DeviceLastError } from './device/useDeviceWs'
 
 // Coalesce burst scans (visibility-change + WS-reconnect debounce can
 // both fire within ~200ms). When `poll: true` AND another poll ran
@@ -36,6 +36,9 @@ export function useDevice(subscribe?: WsSubscribe) {
   // App.tsx. Independent of `lostUdids`; same trigger but carries the
   // root-cause label classified by the backend.
   const [lastDisconnect, setLastDisconnect] = useState<DeviceLastDisconnect | null>(null)
+  // Last backend-side device setup failure (e.g. USB-fallback engine
+  // creation). Drives a one-shot toast in App.tsx; mirrors lastDisconnect.
+  const [lastDeviceError, setLastDeviceError] = useState<DeviceLastError | null>(null)
 
   // Bumped every time a WS-driven state change is applied (connected /
   // disconnected / reconnected). Used by REST flows (scan/connect/
@@ -55,7 +58,7 @@ export function useDevice(subscribe?: WsSubscribe) {
   }, [])
 
   useDeviceWs(subscribe, {
-    setDevices, setConnectedDevice, setLostUdids, setLastDisconnect, bumpWsGen,
+    setDevices, setConnectedDevice, setLostUdids, setLastDisconnect, setLastDeviceError, bumpWsGen,
   })
 
   const wifi = useWifiTunnel({ setDevices, setConnectedDevice })
@@ -84,31 +87,12 @@ export function useDevice(subscribe?: WsSubscribe) {
       // no reason (a fresh `list` from `await listDevices()` is always
       // a distinct reference even when contents are identical).
       setDevices((prev) => deviceListEqual(prev, list) ? prev : list)
+      // Scanning is pure observation — it never auto-connects. Connection
+      // (and pairing) is user-initiated only, via the per-device Connect
+      // button. `connectedDevice` just tracks whichever device the backend
+      // already reports as connected.
       const active = list.find((d) => d.is_connected) ?? null
-      if (active) {
-        setConnectedDevice(active)
-      } else if (!isPoll && list.length === 1) {
-        // Auto-connect when exactly one device is found (manual scan only).
-        // Race protection: snapshot the WS event generation before the
-        // await; if a `device_connected` / `device_disconnected` event
-        // fires during the call, the WS subscriber has already updated
-        // state and is authoritative — skip our refresh apply so we
-        // don't clobber it.
-        const wsGen = wsEventGenRef.current
-        try {
-          await connectDevice(list[0].udid)
-          const refreshed = await listDevices()
-          const rList: DeviceInfo[] = Array.isArray(refreshed) ? refreshed : []
-          if (wsEventGenRef.current === wsGen) {
-            setDevices((prev) => deviceListEqual(prev, rList) ? prev : rList)
-            setConnectedDevice(rList.find((d) => d.udid === list[0].udid) ?? list[0])
-          }
-        } catch {
-          if (wsEventGenRef.current === wsGen) setConnectedDevice(null)
-        }
-      } else {
-        setConnectedDevice(null)
-      }
+      setConnectedDevice(active)
       return list
     } catch (err) {
       devWarn('Failed to scan devices:', err)
@@ -247,14 +231,14 @@ export function useDevice(subscribe?: WsSubscribe) {
       connectWifi, scanWifi, wifiScanning, wifiDevices,
       startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
       connectedDevices, primaryDevice,
-      lostUdids, lastDisconnect,
+      lostUdids, lastDisconnect, lastDeviceError,
     }),
     [
       devices, connectedDevice, scanning, scan, connect, disconnect, forget,
       connectWifi, scanWifi, wifiScanning, wifiDevices,
       startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
       connectedDevices, primaryDevice,
-      lostUdids, lastDisconnect,
+      lostUdids, lastDisconnect, lastDeviceError,
     ],
   )
 }

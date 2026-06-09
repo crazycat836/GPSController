@@ -100,7 +100,9 @@ class BookmarkManager:
                     "tags": new_tags,
                 })
             if migrated or backfilled:
-                self._save()
+                # __init__-time load runs before any event loop — write
+                # synchronously here; the async mutators use await self._save().
+                self._write_store()
         except Exception as exc:
             logger.warning("Bookmark payload failed schema validation: %s", exc)
 
@@ -138,10 +140,23 @@ class BookmarkManager:
             logger.info("Backfilled missing preset places/tags")
         return new_places, new_tags, added
 
-    def _save(self) -> None:
-        """Persist the current store to disk atomically."""
+    def _write_store(self) -> None:
+        """Serialise + atomically write the store. Blocking — always invoked
+        via ``asyncio.to_thread`` from the async mutators (or directly during
+        the synchronous __init__ load), so the fsync inside safe_write_json
+        never stalls the event loop."""
         payload = json.loads(self.store.model_dump_json())
         safe_write_json(Path(BOOKMARKS_FILE), payload)
+
+    async def _save(self) -> None:
+        """Offload the blocking store write to a worker thread.
+
+        Callers hold ``self._lock`` across this await, so no other coroutine
+        can mutate ``self.store`` while the worker thread serialises it — the
+        read stays torn-free despite running off the event loop. The win: the
+        ~10 Hz position-update broadcast no longer blocks on the disk fsync.
+        """
+        await asyncio.to_thread(self._write_store)
 
     # ------------------------------------------------------------------
     # Generic helpers (places / tags share the same shape)
@@ -215,7 +230,7 @@ class BookmarkManager:
                 created_at=_now_iso(),
             )
             self.store.places.append(place)
-            self._save()
+            await self._save()
             return place
 
     async def update_place(
@@ -228,7 +243,7 @@ class BookmarkManager:
             updated = self._update_item("places", place_id, name=name, color=color)
             if updated is None:
                 return None
-            self._save()
+            await self._save()
             return updated  # type: ignore[return-value]
 
     async def delete_place(self, place_id: str) -> bool:
@@ -246,7 +261,7 @@ class BookmarkManager:
             ]
 
             self.store.places = [p for p in self.store.places if p.id != place_id]
-            self._save()
+            await self._save()
             return True
 
     def list_places(self) -> list[BookmarkPlace]:
@@ -258,7 +273,7 @@ class BookmarkManager:
         async with self._lock:
             changed = self._reorder_items("places", ordered_ids)
             if changed:
-                self._save()
+                await self._save()
             return changed
 
     def _find_place(self, place_id: str) -> BookmarkPlace | None:
@@ -279,7 +294,7 @@ class BookmarkManager:
                 created_at=_now_iso(),
             )
             self.store.tags.append(tag)
-            self._save()
+            await self._save()
             return tag
 
     async def update_tag(
@@ -292,7 +307,7 @@ class BookmarkManager:
             updated = self._update_item("tags", tag_id, name=name, color=color)
             if updated is None:
                 return None
-            self._save()
+            await self._save()
             return updated  # type: ignore[return-value]
 
     async def delete_tag(self, tag_id: str) -> bool:
@@ -307,7 +322,7 @@ class BookmarkManager:
                 for bm in self.store.bookmarks
             ]
             self.store.tags = [t for t in self.store.tags if t.id != tag_id]
-            self._save()
+            await self._save()
             return True
 
     def list_tags(self) -> list[BookmarkTag]:
@@ -317,7 +332,7 @@ class BookmarkManager:
         async with self._lock:
             changed = self._reorder_items("tags", ordered_ids)
             if changed:
-                self._save()
+                await self._save()
             return changed
 
     def _find_tag(self, tag_id: str) -> BookmarkTag | None:
@@ -335,7 +350,7 @@ class BookmarkManager:
         async with self._lock:
             changed = self._reorder_items("bookmarks", ordered_ids)
             if changed:
-                self._save()
+                await self._save()
             return changed
 
     # ------------------------------------------------------------------
@@ -380,7 +395,7 @@ class BookmarkManager:
                 country=country,
             )
             self.store.bookmarks.append(bm)
-            self._save()
+            await self._save()
             return bm
 
     async def update_bookmark(self, bm_id: str, **kwargs: object) -> Bookmark | None:
@@ -413,7 +428,7 @@ class BookmarkManager:
                 self.store.bookmarks[idx] = new_bm
                 bm = new_bm
 
-            self._save()
+            await self._save()
             return bm
 
     async def touch_bookmark(self, bm_id: str) -> Bookmark | None:
@@ -444,7 +459,7 @@ class BookmarkManager:
             new_bm = bm.model_copy(update={"last_used_at": now.isoformat()})
             idx = self.store.bookmarks.index(bm)
             self.store.bookmarks[idx] = new_bm
-            self._save()
+            await self._save()
             return new_bm
 
     async def delete_bookmark(self, bm_id: str) -> bool:
@@ -452,7 +467,7 @@ class BookmarkManager:
             before = len(self.store.bookmarks)
             self.store.bookmarks = [b for b in self.store.bookmarks if b.id != bm_id]
             if len(self.store.bookmarks) < before:
-                self._save()
+                await self._save()
                 return True
             return False
 
@@ -465,7 +480,7 @@ class BookmarkManager:
             self.store.bookmarks = [b for b in self.store.bookmarks if b.id not in ids]
             removed = before - len(self.store.bookmarks)
             if removed:
-                self._save()
+                await self._save()
             return removed
 
     def list_bookmarks(self) -> list[Bookmark]:
@@ -493,7 +508,7 @@ class BookmarkManager:
 
             if moved:
                 self.store.bookmarks = new_bookmarks
-                self._save()
+                await self._save()
             return moved
 
     async def tag_bookmarks(
@@ -533,7 +548,7 @@ class BookmarkManager:
 
             if changed:
                 self.store.bookmarks = new_bookmarks
-                self._save()
+                await self._save()
             return changed
 
     def _find_bookmark(self, bm_id: str) -> Bookmark | None:
@@ -621,6 +636,6 @@ class BookmarkManager:
                 imported += 1
 
             if imported:
-                self._save()
+                await self._save()
             logger.info("Imported %d bookmarks", imported)
             return imported

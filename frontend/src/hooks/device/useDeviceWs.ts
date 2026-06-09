@@ -19,6 +19,7 @@ import { useEffect, useRef } from 'react'
 import {
   parseDeviceConnected,
   parseDeviceDisconnected,
+  parseDeviceError,
   parseDeviceSnapshot,
 } from './parsers'
 import type { DeviceInfo, DeviceLostCause, WsSubscribe } from './parsers'
@@ -32,11 +33,21 @@ export interface DeviceLastDisconnect {
   readonly ts: number
 }
 
+export interface DeviceLastError {
+  readonly udid: string | null
+  readonly stage: string
+  readonly error: string
+  // Wall-clock ms — same one-shot-toast trigger discipline as
+  // DeviceLastDisconnect.ts.
+  readonly ts: number
+}
+
 export interface DeviceWsSetters {
   setDevices: React.Dispatch<React.SetStateAction<DeviceInfo[]>>
   setConnectedDevice: React.Dispatch<React.SetStateAction<DeviceInfo | null>>
   setLostUdids: React.Dispatch<React.SetStateAction<Set<string>>>
   setLastDisconnect: React.Dispatch<React.SetStateAction<DeviceLastDisconnect | null>>
+  setLastDeviceError: React.Dispatch<React.SetStateAction<DeviceLastError | null>>
   bumpWsGen: () => void
 }
 
@@ -218,6 +229,22 @@ export function useDeviceWs(
               if (next.delete(udid)) changed = true
             }
             return changed ? next : ls
+          })
+        }
+      } else if (msg.type === 'device_error') {
+        // Backend-side engine/transport setup failure (e.g. the USB-fallback
+        // engine-creation path in api/tunnel/lifecycle.py). Surface it as a
+        // one-shot signal App.tsx turns into a toast — mirrors
+        // setLastDisconnect. Without a handler this event is fanned out to
+        // every subscriber and silently ignored, so the user gets no
+        // feedback that the device never came up.
+        const payload = parseDeviceError(msg.data)
+        if (payload) {
+          s.setLastDeviceError({
+            udid: payload.udid ?? null,
+            stage: payload.stage ?? 'unknown',
+            error: payload.error ?? '',
+            ts: Date.now(),
           })
         }
       }

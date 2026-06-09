@@ -1,8 +1,16 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Search, MapPin } from 'lucide-react'
 import { searchAddress } from '../../services/api'
-import { useT } from '../../i18n'
+import { useT, useI18n, type Lang } from '../../i18n'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
+
+// Mirror the reverse-geocode hook's language chain so result names come back
+// in the UI language. Traditional-Chinese lists `zh-Hant`/`zh-TW` ahead of
+// bare `zh` so providers don't fall back to Simplified labels. Typed against
+// the `Lang` union (not bare `string`) so a non-locale value can't slip in.
+function searchLang(lang: Lang): string {
+  return lang === 'zh' ? 'zh-Hant,zh-TW,zh,en' : 'en'
+}
 
 const COORD_RE = /^(-?\d+(?:\.\d+)?)[\s,]+(-?\d+(?:\.\d+)?)$/
 
@@ -20,9 +28,15 @@ interface SearchBarProps {
 
 export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProps) {
   const t = useT()
+  const { lang } = useI18n()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
+  // Distinct from "no results": true only when searchAddress actually
+  // rejects (transport / backend-app failure). The geocoder-unavailable
+  // case resolves to [] per the backend contract, so an empty array is NOT
+  // an error — collapsing the two would report outages as "no results".
+  const [error, setError] = useState(false)
   const [open, setOpen] = useState(false)
   const [focused, setFocused] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -44,11 +58,13 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
   const doSearch = useCallback(async (q: string) => {
     if (q.trim().length < 2 || COORD_RE.test(q.trim())) {
       setResults([])
+      setError(false)
       return
     }
     setLoading(true)
+    setError(false)
     try {
-      const raw = await searchAddress(q)
+      const raw = await searchAddress(q, searchLang(lang))
       setResults((Array.isArray(raw) ? raw : []).map((r) => ({
         name: r.display_name,
         lat: r.lat,
@@ -56,11 +72,15 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
       })))
       setOpen(true)
     } catch {
+      // Real failure (transport / backend down / malformed envelope) — show
+      // an error rather than the misleading "no results" empty state.
       setResults([])
+      setError(true)
+      setOpen(true)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [lang])
 
   const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value)
@@ -103,7 +123,7 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
   // Cleanup debounce
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
 
-  const showDropdown = open || (focused && (validCoord != null || loading))
+  const showDropdown = open || (focused && (validCoord != null || loading || error))
 
   return (
     <div ref={containerRef} data-fc="topbar.search" className="relative">
@@ -184,8 +204,15 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
             </button>
           ))}
 
+          {/* Search failed — transport / backend error, distinct from empty results */}
+          {!loading && error && (
+            <div className="px-4 py-3 text-[13px] text-[var(--color-text-3)] text-center">
+              {t('search.error')}
+            </div>
+          )}
+
           {/* No results */}
-          {!loading && results.length === 0 && !validCoord && query.trim().length >= 2 && (
+          {!loading && !error && results.length === 0 && !validCoord && query.trim().length >= 2 && (
             <div className="px-4 py-3 text-[13px] text-[var(--color-text-3)] text-center">
               {t('search.no_results')}
             </div>

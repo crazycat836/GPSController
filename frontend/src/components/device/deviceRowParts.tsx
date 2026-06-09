@@ -81,10 +81,15 @@ interface DeviceInfoColumnProps {
 export function DeviceInfoColumn({ device, meta }: DeviceInfoColumnProps) {
   const t = useT()
   const { unsupported, isNetwork } = meta
+  // A plugged-in but not-yet-paired device: discover_devices surfaces it
+  // with an empty name/version (autopair=False, so it never pairs just to
+  // list). Show a clear "not paired" placeholder so the user knows to tap
+  // Connect rather than seeing a blank "USB · iOS " row.
+  const unpaired = !device.is_connected && !device.ios_version
   return (
     <div className="min-w-0">
       <div className="text-[13px] font-medium text-[var(--color-text-1)] tracking-[-0.005em] truncate">
-        {device.name}
+        {device.name || (unpaired ? t('device.unpaired_name') : '')}
       </div>
       <div className="mt-0.5 font-mono text-[10.5px] text-[var(--color-text-3)] inline-flex items-center gap-1.5 min-w-0">
         {!unsupported && (
@@ -95,7 +100,9 @@ export function DeviceInfoColumn({ device, meta }: DeviceInfoColumnProps) {
         <span className="truncate">
           {unsupported
             ? t('device.ios_unsupported_label', { version: device.ios_version })
-            : `${isNetwork ? 'Wi-Fi' : 'USB'} · iOS ${device.ios_version}`}
+            : unpaired
+              ? t('device.unpaired_label')
+              : `${isNetwork ? 'Wi-Fi' : 'USB'} · iOS ${device.ios_version}`}
         </span>
       </div>
     </div>

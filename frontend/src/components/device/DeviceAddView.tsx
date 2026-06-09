@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Loader2, PlugZap, Search, Usb, Wifi } from 'lucide-react'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
@@ -63,6 +63,15 @@ export default function DeviceAddView({ onConnected }: DeviceAddViewProps) {
     setDiscoverResults([])
   }, [])
 
+  // The Wi-Fi tunnel reuses the host↔device pairing record that USB
+  // establishes, so surface which device is currently on USB — that's the
+  // one whose pairing the tunnel will piggyback on. Empty when no USB
+  // device is connected (first-time setup still needs a USB trust).
+  const usbDevices = useMemo(
+    () => device.devices.filter((d) => d.connection_type === 'USB' && d.is_connected),
+    [device.devices],
+  )
+
   const handleTunnelConnect = useCallback(async () => {
     if (!tunnelIp.trim()) return
     setTunnelConnecting(true)
@@ -111,6 +120,28 @@ export default function DeviceAddView({ onConnected }: DeviceAddViewProps) {
         <p className="text-[11px] text-[var(--color-text-3)] leading-[1.5]">
           {t('device.add_via_wifi_hint')}
         </p>
+
+        {/* Which device the tunnel will pair through (its USB pairing record). */}
+        {usbDevices.length > 0 ? (
+          <div className="flex flex-col gap-1 p-2 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-dim)]">
+            <span className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold text-[var(--color-accent-strong)]">
+              <Usb width={12} height={12} />
+              {t('wifi.usb_paired_device')}
+            </span>
+            {usbDevices.map((d) => (
+              <div key={d.udid} className="flex items-center gap-2 text-[11px]">
+                <span className="text-[var(--color-text-1)] truncate">{d.name}</span>
+                <span className="font-mono text-[10px] text-[var(--color-text-3)] truncate">
+                  {d.udid.slice(0, 8)}…
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[10.5px] text-[var(--color-text-3)] leading-[1.5] p-2 rounded-lg border border-[var(--color-border-subtle)] bg-white/[0.02]">
+            {t('wifi.usb_paired_none')}
+          </p>
+        )}
 
         <button
           type="button"

@@ -181,8 +181,9 @@ function AppShell() {
     return ms > 0 ? plannedDistanceM / ms : 0
   }, [plannedDistanceM, sim.customSpeedKmh, sim.speedMinKmh, sim.speedMaxKmh, sim.moveMode])
 
-  // In Teleport mode, right-click / search sets a pending destination
-  // instead of teleporting immediately. Other modes keep instant teleport.
+  // Search box: in Teleport mode it stages a pending destination (the
+  // panel then shows a Go button) instead of teleporting immediately.
+  // Other modes keep instant teleport.
   const handleTeleportOrStage = useCallback((lat: number, lng: number) => {
     if (sim.mode === SimMode.Teleport) {
       simCtx.handleSetTeleportDest(lat, lng)
@@ -190,6 +191,13 @@ function AppShell() {
       simCtx.handleTeleport(lat, lng)
     }
   }, [sim.mode, simCtx])
+
+  // Map right-click "Teleport here" always teleports immediately, in every
+  // mode (including Teleport) — the context-menu action is an explicit
+  // "go there now" gesture, so it never stages a pending pin.
+  const handleTeleportNow = useCallback((lat: number, lng: number) => {
+    simCtx.handleTeleport(lat, lng)
+  }, [simCtx])
 
   // UI state
   const [devicesPopoverAnchor, setDevicesPopoverAnchor] = useState<DOMRect | null>(null)
@@ -240,6 +248,18 @@ function AppShell() {
     const key = DEVICE_LOST_TOAST_KEYS[ld.cause] ?? 'toast.device_lost'
     toast.showToast(t(key), 4000)
   }, [device.lastDisconnect, toast, t])
+
+  // Fires one toast per backend-side device setup failure (device_error WS
+  // event). Without this the failure is silently dropped — the user keeps
+  // trying to drive a device whose engine never came up.
+  const prevLastDeviceErrorTs = useRef(0)
+  useEffect(() => {
+    const le = device.lastDeviceError
+    if (!le) return
+    if (le.ts <= prevLastDeviceErrorTs.current) return
+    prevLastDeviceErrorTs.current = le.ts
+    toast.showToast(t('toast.device_error'), 4000)
+  }, [device.lastDeviceError, toast, t])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -329,7 +349,7 @@ function AppShell() {
             null
           }
           onMapClick={simCtx.handleMapClick}
-          onTeleport={handleTeleportOrStage}
+          onTeleport={handleTeleportNow}
           onNavigate={simCtx.handleNavigate}
           onAddBookmark={bm.handleAddBookmark}
           onAddWaypoint={simCtx.handleAddWaypoint}

@@ -64,6 +64,116 @@ def test_duplicate_transition_returns_false():
     assert asyncio.run(_run()) is False
 
 
+def test_transition_rebroadcasts_on_connection_type_change():
+    """A USB→Network connection_type flip on a device that STAYS connected
+    must re-notify subscribers so the renderer repaints the pill.
+
+    This is the WiFi-tunnel-start-while-plugged-in case: the device was
+    auto-connected over USB, then the tunnel moves it to Network without
+    ever passing through DISCONNECTED. A plain same-state transition used
+    to swallow this, leaving the SSoT (and the /api/device/list merge)
+    stuck on stale ``USB`` metadata."""
+    from services.connection_state import store, DeviceState, StateTransition
+
+    seen: list[StateTransition] = []
+
+    async def _capture(event: StateTransition) -> None:
+        seen.append(event)
+
+    async def _run() -> bool:
+        store.subscribe(_capture)
+        await store.transition(
+            "u1", DeviceState.CONNECTED, cause="auto_usb",
+            metadata={"name": "P", "ios_version": "26.5", "connection_type": "USB"},
+        )
+        return await store.transition(
+            "u1", DeviceState.CONNECTED, cause="wifi_tunnel",
+            metadata={"name": "P", "ios_version": "26.5", "connection_type": "Network"},
+        )
+
+    changed = asyncio.run(_run())
+    assert changed is True
+    assert len(seen) == 2
+    assert seen[1].from_state == DeviceState.CONNECTED
+    assert seen[1].to_state == DeviceState.CONNECTED
+    assert seen[1].metadata["connection_type"] == "Network"
+    assert store.metadata_for("u1")["connection_type"] == "Network"
+
+
+def test_transition_noop_on_identical_metadata():
+    """Re-asserting CONNECTED with byte-identical metadata stays a no-op —
+    protects the usbmux-watchdog poll loop from broadcasting every tick."""
+    from services.connection_state import store, DeviceState
+
+    async def _run() -> tuple[bool, bool]:
+        md = {"name": "P", "ios_version": "26.5", "connection_type": "Network"}
+        first = await store.transition("u1", DeviceState.CONNECTED, cause="x", metadata=md)
+        second = await store.transition("u1", DeviceState.CONNECTED, cause="x", metadata=dict(md))
+        return first, second
+
+    first, second = asyncio.run(_run())
+    assert first is True
+    assert second is False
+
+
+def test_ws_observer_fires_device_connected_on_transport_switch():
+    """USB→Network flip emits a fresh ``device_connected`` carrying the new
+    connection_type, so the frontend upserts the pill to WiFi (no toast)."""
+    from services import connection_state
+    from services.connection_state import store, DeviceState
+
+    async def _run() -> None:
+        connection_state.install_ws_observer()
+        await store.transition(
+            "u1", DeviceState.CONNECTED, cause="auto_usb",
+            metadata={"name": "P", "ios_version": "26.5", "connection_type": "USB"},
+        )
+        with patch("services.connection_state.broadcast", new=AsyncMock()) as mock_bcast:
+            await store.transition(
+                "u1", DeviceState.CONNECTED, cause="wifi_tunnel",
+                metadata={"name": "P", "ios_version": "26.5", "connection_type": "Network"},
+            )
+            mock_bcast.assert_awaited_once_with("device_connected", {
+                "udid": "u1",
+                "name": "P",
+                "ios_version": "26.5",
+                "connection_type": "Network",
+            })
+
+    asyncio.run(_run())
+
+
+def test_announce_connected_sets_network_metadata_and_broadcasts():
+    """announce_connected records an already-established (WiFi-tunnel)
+    connection in the SSoT and broadcasts device_connected — without
+    calling dm.connect (the transport is already up)."""
+    from services import connection_state
+    from services.connection_state import store, DeviceState
+
+    async def _run() -> None:
+        connection_state.install_ws_observer()
+        # Device is already CONNECTED over USB (auto-connect).
+        await store.transition(
+            "u1", DeviceState.CONNECTED, cause="auto_usb",
+            metadata={"name": "iPhone", "ios_version": "26.5", "connection_type": "USB"},
+        )
+        with patch("services.connection_state.broadcast", new=AsyncMock()) as mock_bcast:
+            await connection_state.announce_connected(
+                "u1", name="iPhone", ios_version="26.5",
+                connection_type="Network", cause="wifi_tunnel",
+            )
+            mock_bcast.assert_awaited_once_with("device_connected", {
+                "udid": "u1",
+                "name": "iPhone",
+                "ios_version": "26.5",
+                "connection_type": "Network",
+            })
+        assert store.get("u1") == DeviceState.CONNECTED
+        assert store.metadata_for("u1")["connection_type"] == "Network"
+
+    asyncio.run(_run())
+
+
 def test_metadata_preserved_across_degraded_round_trip():
     """CONNECTED → DEGRADED → CONNECTED keeps the original name/version."""
     from services import connection_state

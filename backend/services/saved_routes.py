@@ -186,8 +186,12 @@ class SavedRoutesStore:
         payload = json.loads(store.model_dump_json())
         safe_write_json(self._routes_file, payload)
 
-    def _persist(self) -> None:
-        self._persist_now(self._store)
+    async def _persist(self) -> None:
+        """Offload the blocking write to a worker thread. Callers hold
+        ``self._lock`` across the await, so the store can't be mutated
+        mid-serialise — no torn read despite running off the event loop.
+        The synchronous load path uses :meth:`_persist_now` directly."""
+        await asyncio.to_thread(self._persist_now, self._store)
 
     @staticmethod
     def _ensure_presets(store: RouteStore) -> tuple[RouteStore, bool]:
@@ -257,12 +261,12 @@ class SavedRoutesStore:
                 if on_conflict == "reject":
                     return existing, "conflict"
                 if on_conflict == "overwrite":
-                    return self._overwrite_locked(existing, route), "overwritten"
+                    return await self._overwrite_locked(existing, route), "overwritten"
                 # on_conflict == "new" — fall through to fresh insert
-            saved = self._insert_locked(route)
+            saved = await self._insert_locked(route)
             return saved, "created"
 
-    def _insert_locked(self, route: SavedRoute) -> SavedRoute:
+    async def _insert_locked(self, route: SavedRoute) -> SavedRoute:
         """Append a fresh row. Must be called under ``self._lock``."""
         now = _now_iso()
         max_order = max((r.sort_order for r in self._store.routes), default=-1)
@@ -274,10 +278,10 @@ class SavedRoutesStore:
             "category_id": self._resolve_category_id(route.category_id),
         })
         self._store.routes.append(new_route)
-        self._persist()
+        await self._persist()
         return new_route
 
-    def _overwrite_locked(self, existing: SavedRoute, incoming: SavedRoute) -> SavedRoute:
+    async def _overwrite_locked(self, existing: SavedRoute, incoming: SavedRoute) -> SavedRoute:
         """Replace mutable fields on *existing* with *incoming*; keep id,
         created_at, sort_order. Must be called under ``self._lock``."""
         updated = existing.model_copy(update={
@@ -289,7 +293,7 @@ class SavedRoutesStore:
         })
         idx = self._store.routes.index(existing)
         self._store.routes[idx] = updated
-        self._persist()
+        await self._persist()
         return updated
 
     def _resolve_category_id(self, category_id: str) -> str:
@@ -314,7 +318,7 @@ class SavedRoutesStore:
             self._store.routes = [r for r in self._store.routes if r.id != route_id]
             if len(self._store.routes) == before:
                 return False
-            self._persist()
+            await self._persist()
             return True
 
     async def batch_delete(self, route_ids: list[str]) -> int:
@@ -327,7 +331,7 @@ class SavedRoutesStore:
             self._store.routes = [r for r in self._store.routes if r.id not in targets]
             deleted = before - len(self._store.routes)
             if deleted:
-                self._persist()
+                await self._persist()
             return deleted
 
     async def move(self, route_ids: list[str], target_category_id: str) -> int:
@@ -352,7 +356,7 @@ class SavedRoutesStore:
                 moved += 1
             if moved:
                 self._store.routes = new_routes
-                self._persist()
+                await self._persist()
             return moved
 
     async def rename(
@@ -393,7 +397,7 @@ class SavedRoutesStore:
                 "updated_at": _now_iso(),
             })
             self._store.routes[idx] = new_route
-            self._persist()
+            await self._persist()
             return "renamed", new_route
 
     async def import_all(self, routes: list[SavedRoute]) -> int:
@@ -411,7 +415,7 @@ class SavedRoutesStore:
                     "sort_order": max_order + offset,
                     "category_id": self._resolve_category_id(r.category_id),
                 }))
-            self._persist()
+            await self._persist()
             return len(routes)
 
     # ------------------------------------------------------------------
@@ -429,7 +433,7 @@ class SavedRoutesStore:
                 created_at=_now_iso(),
             )
             self._store.categories.append(category)
-            self._persist()
+            await self._persist()
             return category
 
     async def update_category(
@@ -450,7 +454,7 @@ class SavedRoutesStore:
                 return self._store.categories[idx]
             updated = self._store.categories[idx].model_copy(update=applied)
             self._store.categories[idx] = updated
-            self._persist()
+            await self._persist()
             return updated
 
     async def reorder_categories(self, ordered_ids: list[str]) -> int:
@@ -471,7 +475,7 @@ class SavedRoutesStore:
                 changed += 1
             if changed:
                 self._store.categories = new_cats
-                self._persist()
+                await self._persist()
             return changed
 
     async def reorder_routes(self, ordered_ids: list[str]) -> int:
@@ -491,7 +495,7 @@ class SavedRoutesStore:
                 changed += 1
             if changed:
                 self._store.routes = new_routes
-                self._persist()
+                await self._persist()
             return changed
 
     async def delete_category(self, category_id: str) -> bool:
@@ -515,5 +519,5 @@ class SavedRoutesStore:
             self._store.categories = [
                 c for c in self._store.categories if c.id != category_id
             ]
-            self._persist()
+            await self._persist()
             return True

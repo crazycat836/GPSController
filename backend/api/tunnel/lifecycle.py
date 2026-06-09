@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field, field_validator
 
 from api._deps import get_device_manager
@@ -20,6 +20,7 @@ from api.tunnel._helpers import (
 )
 from config import MAX_DEVICES, REMOTE_PAIRING_PORT
 from context import ctx
+from services import connection_state
 from services.wifi_tunnel_service import cleanup_wifi_connections, tunnel
 
 logger = logging.getLogger(__name__)
@@ -143,10 +144,7 @@ async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
         try:
             info = await tunnel.start(resolved_udid, req.ip, req.port, timeout=20.0)
         except asyncio.TimeoutError:
-            raise HTTPException(
-                status_code=500,
-                detail={"code": ErrorCode.TUNNEL_TIMEOUT.value, "message": "Tunnel startup timed out (20 s)"},
-            )
+            raise http_err(500, ErrorCode.TUNNEL_TIMEOUT, "Tunnel startup timed out (20 s)")
         except Exception:
             logger.exception(
                 "Tunnel spawn failed",
@@ -287,6 +285,15 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
         raise max_devices_error()
     try:
         info = await dm.connect_wifi_tunnel(rsd_address, rsd_port)
+        # Sync the SSoT so the device flips USB→Network. connect_wifi_tunnel
+        # only touches DeviceManager's registry; without this the
+        # connection_state store keeps the stale USB metadata from the
+        # earlier USB auto-connect, and /api/device/list replays it as a
+        # USB pill once the cable is unplugged.
+        await connection_state.announce_connected(
+            info.udid, name=info.name, ios_version=info.ios_version,
+            connection_type="Network", cause="wifi_tunnel",
+        )
         await app_state.create_engine_for_device(info.udid)
         return {
             "status": "connected",

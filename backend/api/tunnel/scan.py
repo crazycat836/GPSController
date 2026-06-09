@@ -43,8 +43,18 @@ async def wifi_tunnel_discover():
         from pymobiledevice3.bonjour import browse_remotepairing
         instances = await browse_remotepairing(timeout=3.0)
         for inst in instances:
-            ipv4s = [a for a in (inst.addresses or []) if ":" not in a]
-            addrs = ipv4s if ipv4s else list(inst.addresses or [])
+            # pymobiledevice3's ServiceInstance.addresses is a
+            # ``list[Address]`` (dataclass with ``.ip`` / ``.iface`` /
+            # ``.full_ip``), NOT a list of strings. Treating each element
+            # as a string — e.g. ``":" not in a`` — raised "argument of
+            # type 'Address' is not iterable" and silently killed every
+            # mDNS discovery, forcing the slow /24 TCP-scan fallback every
+            # time. Pull ``.ip`` out explicitly; prefer IPv4 (plain string
+            # the SSRF validator + tunnel start accept) and fall back to
+            # ``.full_ip`` (carries the %iface scope for link-local v6).
+            addr_objs = inst.addresses or []
+            ipv4s = [a.ip for a in addr_objs if ":" not in a.ip]
+            addrs = ipv4s if ipv4s else [a.full_ip for a in addr_objs]
             for addr in addrs:
                 results.append({
                     "ip": addr,
@@ -53,11 +63,13 @@ async def wifi_tunnel_discover():
                     "name": inst.instance or inst.host,
                     "method": "mdns",
                 })
-    except Exception as e:
-        _tunnel_logger.warning("mDNS browse failed: %s", e)
+    except Exception:
+        _tunnel_logger.warning("mDNS browse failed", exc_info=True)
 
     if not results:
-        _tunnel_logger.info("mDNS empty; falling back to /24 TCP scan on port 49152")
+        _tunnel_logger.info(
+            "mDNS empty; falling back to /24 TCP scan on port %d", REMOTE_PAIRING_PORT
+        )
         try:
             hits = await scan_subnet_for_port(REMOTE_PAIRING_PORT)
             names = await asyncio.gather(*(resolve_hostname(ip) for ip in hits))
@@ -69,8 +81,8 @@ async def wifi_tunnel_discover():
                     "name": resolved or ip,
                     "method": "tcp_scan",
                 })
-        except Exception as e:
-            _tunnel_logger.warning("TCP scan failed: %s", e)
+        except Exception:
+            _tunnel_logger.warning("TCP scan failed", exc_info=True)
 
     seen = set()
     unique = []

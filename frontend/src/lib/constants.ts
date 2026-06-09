@@ -129,6 +129,20 @@ export const RETRY_BACKOFF_STEP_MS = 300
 export const RETRY_BACKOFF_MAX_MS = 2000
 
 /**
+ * Hard ceiling for a single fetch attempt in `services/api.ts`. Converts a
+ * backend that accepts the TCP socket but never answers (deadlocked engine,
+ * half-open WiFi tunnel) from an *infinite* hang into a bounded failure.
+ *
+ * Deliberately longer than the backend's own worst-case internal timeout
+ * (the ~120 s cold personalized-DDI mount on first connect), so a
+ * legitimately-slow request is never aborted client-side — only a truly
+ * wedged backend trips it. A timed-out attempt is NOT retried: the request
+ * may be a non-idempotent POST (teleport/connect/save) the backend already
+ * received and is merely slow to acknowledge.
+ */
+export const REQUEST_TIMEOUT_MS = 130_000
+
+/**
  * Minimum on-screen time for the "Clearing virtual location…" toast in
  * `SimContext.handleRestore`. Restore can complete in <100ms on a healthy
  * USB link; the user wouldn't see the toast at all otherwise.

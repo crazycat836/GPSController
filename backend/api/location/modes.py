@@ -52,13 +52,10 @@ async def teleport(req: TeleportRequest):
     # Enforce cooldown server-side: if enabled and currently active,
     # refuse the teleport so API clients cannot bypass the UI guard.
     if not dual_mode and cooldown.enabled and cooldown.is_active and cooldown.remaining > 0:
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "code": ErrorCode.COOLDOWN_ACTIVE.value,
-                "message": f"Cooldown active; wait {int(cooldown.remaining)} more seconds",
-                "remaining_seconds": cooldown.remaining,
-            },
+        raise http_err(
+            429, ErrorCode.COOLDOWN_ACTIVE,
+            f"Cooldown active; wait {int(cooldown.remaining)} more seconds",
+            remaining_seconds=cooldown.remaining,
         )
 
     old_pos = engine.current_position
@@ -91,10 +88,7 @@ async def teleport(req: TeleportRequest):
 async def navigate(req: NavigateRequest):
     engine = await get_engine(req.udid)
     if engine.current_position is None:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": ErrorCode.NO_POSITION.value, "message": "No current position; teleport to a coordinate first"},
-        )
+        raise http_err(400, ErrorCode.NO_POSITION, "No current position; teleport to a coordinate first")
     spawn(engine.navigate(
         Coordinate(lat=req.lat, lng=req.lng), req.mode,
         speed_kmh=req.speed_kmh,

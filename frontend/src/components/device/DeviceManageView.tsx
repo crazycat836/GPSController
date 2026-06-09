@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Power, RotateCcw, Shield, Trash2 } from 'lucide-react'
+import { Loader2, PlugZap, Power, RotateCcw, Shield, Trash2 } from 'lucide-react'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
@@ -8,7 +8,7 @@ import { ICON_SIZE } from '../../lib/icons'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import { DeviceAvatar, DeviceInfoColumn, getDeviceMeta } from './deviceRowParts'
 
-type RowAction = 'reveal' | 'disconnect'
+type RowAction = 'reveal' | 'connect' | 'disconnect'
 type RepairState = 'idle' | 'running' | 'success' | 'failed'
 
 export interface DeviceManageViewProps {
@@ -54,6 +54,22 @@ export default function DeviceManageView({ onModalOpenChange }: DeviceManageView
       setInFlight(null)
     }
   }, [showToast, t])
+
+  const handleConnect = useCallback(async (udid: string) => {
+    // Explicit, user-initiated connect. This is the ONLY place a USB
+    // device gets paired/connected — plugging in no longer does it
+    // automatically. The backend connect route pairs (autopair=True, so
+    // the Trust prompt appears on the device) and builds the engine.
+    setInFlight({ udid, action: 'connect' })
+    try {
+      await device.connect(udid)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showToast(msg)
+    } finally {
+      setInFlight(null)
+    }
+  }, [device, showToast])
 
   const handleDisconnect = useCallback(async (udid: string) => {
     setInFlight({ udid, action: 'disconnect' })
@@ -137,6 +153,7 @@ export default function DeviceManageView({ onModalOpenChange }: DeviceManageView
             const canRevealDevMode = !!d.can_reveal_developer_mode
             const revealing = inFlight?.udid === d.udid && inFlight.action === 'reveal'
             const disconnecting = inFlight?.udid === d.udid && inFlight.action === 'disconnect'
+            const connecting = inFlight?.udid === d.udid && inFlight.action === 'connect'
             const isOnline = d.is_connected
             return (
               <div
@@ -160,6 +177,23 @@ export default function DeviceManageView({ onModalOpenChange }: DeviceManageView
                       {revealing
                         ? <Loader2 width={13} height={13} className="animate-spin" />
                         : <Shield width={13} height={13} />}
+                    </button>
+                  )}
+                  {/* Connect — manual, only when offline + not unsupported.
+                      This is the explicit pairing/connection action; nothing
+                      connects automatically on USB plug-in anymore. */}
+                  {!isOnline && !unsupported && (
+                    <button
+                      type="button"
+                      onClick={() => void handleConnect(d.udid)}
+                      disabled={connecting}
+                      title={t('device.connect_tooltip')}
+                      aria-label={t('device.connect_tooltip')}
+                      className="w-7 h-7 grid place-items-center rounded-md text-[var(--color-accent-strong)] hover:text-[var(--color-text-1)] hover:bg-white/[0.06] disabled:opacity-50 disabled:cursor-wait transition-colors"
+                    >
+                      {connecting
+                        ? <Loader2 width={13} height={13} className="animate-spin" />
+                        : <PlugZap width={13} height={13} />}
                     </button>
                   )}
                   {/* Disconnect — only when online + not unsupported */}

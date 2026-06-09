@@ -18,15 +18,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
-import plistlib
 import socket
 import time
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
 
-from pymobiledevice3.exceptions import DeviceNotFoundError
+from pymobiledevice3.exceptions import DeviceNotFoundError, PairingError
 from pymobiledevice3.lockdown import create_using_usbmux, create_using_tcp
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
 from pymobiledevice3.remote.tunnel_service import CoreDeviceTunnelProxy
@@ -38,21 +35,16 @@ from core.ddi_mount import (
     create_legacy_location_service,
 )
 from core.device_connect import connect_via_legacy, connect_via_tunnel
+from core.device_utils import (  # noqa: F401  (re-exported for existing importers)
+    UnsupportedIosVersionError,
+    delete_usbmux_pair_record,
+    parse_ios_version,
+    _guess_local_subnet,
+    _load_pair_record,
+)
 from models.schemas import DeviceInfo
 from services.location_service import LocationService
 
-
-class UnsupportedIosVersionError(RuntimeError):
-    """Raised when a connecting device's iOS version is below the minimum
-    supported by GPSController (currently 16.0). Surfaces a structured error to
-    the API layer so the frontend can show an actionable message rather
-    than a stack trace."""
-
-    MIN_VERSION = "16.0"
-
-    def __init__(self, version: str) -> None:
-        self.version = version
-        super().__init__(f"iOS {version} is not supported (requires {self.MIN_VERSION}+)")
 
 logger = logging.getLogger(__name__)
 
@@ -61,14 +53,9 @@ logger = logging.getLogger(__name__)
 # scan to identify which IPs on the LAN are likely iPhones/iPads.
 _LOCKDOWND_PORT = 62078
 
-
-def parse_ios_version(version_string: str) -> tuple[int, ...]:
-    """Convert an iOS version string like '17.4.1' into a comparable tuple."""
-    try:
-        return tuple(int(p) for p in version_string.split("."))
-    except (ValueError, AttributeError):
-        logger.warning("Unable to parse iOS version '%s', assuming 0.0", version_string)
-        return (0, 0)
+# UnsupportedIosVersionError, parse_ios_version, delete_usbmux_pair_record,
+# _load_pair_record and _guess_local_subnet now live in core.device_utils and
+# are re-exported via the import at the top of this module.
 
 
 @dataclass
@@ -238,7 +225,13 @@ class DeviceManager:
         for udid in order:
             bag = bags[udid]
             try:
-                lockdown = await create_using_usbmux(serial=udid)
+                # autopair=False: listing devices must NEVER trigger a
+                # pairing handshake. With autopair=True, every /api/device/list
+                # poll re-paired plugged-in devices — popping the "Trust This
+                # Computer" prompt on plug-in and (for a locked/unpaired
+                # device) flooding the log with PasswordRequiredError. Pairing
+                # now happens only on an explicit user Connect (see connect()).
+                lockdown = await create_using_usbmux(serial=udid, autopair=False)
                 all_values = lockdown.all_values
 
                 # Active-connection wins over usbmux's reported type, since
@@ -301,8 +294,27 @@ class DeviceManager:
                     "  device %s '%s' iOS %s via %s (connected=%s)",
                     info.udid, info.name, info.ios_version, conn_type, info.is_connected,
                 )
+            except PairingError:
+                # Present in usbmux but not paired (or paired-but-locked so
+                # the cached record can't be validated). We deliberately do
+                # NOT auto-pair, so surface it as an offline, not-yet-paired
+                # entry — the renderer shows it with a Connect button and the
+                # user pairs it explicitly. INFO (no traceback): this is the
+                # expected state for any attached-but-untrusted device, and
+                # would otherwise flood the log on every poll.
+                logger.info(
+                    "Device %s present but not paired; listing as offline "
+                    "(connect explicitly to pair)", udid,
+                )
+                devices.append(DeviceInfo(
+                    udid=udid,
+                    name="",
+                    ios_version="",
+                    connection_type=bag["raw_conn_type"],
+                    is_connected=udid in self._connections,
+                ))
             except Exception:
-                logger.exception("Failed to query device %s", udid)
+                logger.warning("Failed to query device %s", udid, exc_info=True)
 
         return devices
 
@@ -360,6 +372,17 @@ class DeviceManager:
                 udid, connection_type,
             )
             raise
+        except PairingError:
+            # Manual connect of a device that's locked or whose user
+            # declined Trust. Concise (no traceback) — the API layer turns
+            # this into a clear "unlock + tap Trust, then retry" message and
+            # a stack frame from pymobiledevice3 internals adds nothing.
+            logger.warning(
+                "Pairing required for %s via %s — unlock the device and tap "
+                "\"Trust This Computer\", then connect again",
+                udid, connection_type,
+            )
+            raise
         except Exception:
             logger.exception("Cannot create lockdown client for %s via %s", udid, connection_type)
             raise
@@ -380,8 +403,23 @@ class DeviceManager:
             conn = connect_via_legacy(udid, lockdown, ios_version_str)
         conn.connection_type = connection_type
 
+        # Re-check membership under the lock. The initial dup-gate at the top
+        # of connect() released the lock for the whole tunnel build, so a
+        # second concurrent connect(udid) — e.g. startup auto-connect racing
+        # the usbmux watchdog — can reach here too. First to store wins; the
+        # loser tears down its just-built tunnel so it doesn't leak the TUN
+        # iface + sockets (the record was never registered, so disconnect()
+        # could never reach them).
         async with self._lock:
-            self._connections[udid] = conn
+            duplicate = udid in self._connections
+            if not duplicate:
+                self._connections[udid] = conn
+        if duplicate:
+            logger.warning(
+                "Device %s connected concurrently; discarding the duplicate tunnel", udid,
+            )
+            await self._close_connection(udid, conn)
+            return
         self._invalidate_discover_cache()
 
         logger.info("Connected to %s (iOS %s) via %s", udid, ios_version_str, connection_type)
@@ -396,17 +434,9 @@ class DeviceManager:
     async def disconnect(self, udid: str) -> None:
         """Tear down the connection and clean up resources for *udid*.
 
-        The five close steps below log WARN with a single-line summary
-        instead of logger.exception, because this cleanup path runs both
-        for user-initiated disconnects (where failures are genuinely
-        unexpected) *and* for device-lost cleanup after a dead tunnel
-        (where EOF/ConnectionReset/TimeoutError on every close is the
-        expected outcome — the OS sockets are already gone). Dumping
-        five full tracebacks per device-lost event produced ~150 lines
-        of noise that masked real errors; the single-line summary
-        preserves "which step and which exception class" for diagnostics
-        without the ceremony. If a future maintainer needs full stacks,
-        raise the logger to DEBUG."""
+        Pops the record under the lock, then delegates the ordered close
+        steps to :meth:`_close_connection` (shared with the concurrent-
+        connect-race teardown path in :meth:`connect`)."""
         async with self._lock:
             conn = self._connections.pop(udid, None)
 
@@ -414,7 +444,28 @@ class DeviceManager:
             logger.warning("Disconnect requested for unknown device %s", udid)
             return
         self._invalidate_discover_cache()
+        await self._close_connection(udid, conn)
+        logger.info("Disconnected device %s", udid)
 
+    async def _close_connection(self, udid: str, conn: "_ActiveConnection") -> None:
+        """Run the ordered close steps for a single connection record.
+
+        Operates purely on *conn* and never touches ``self._connections``,
+        so it is reused both by :meth:`disconnect` (after popping the
+        record) and by :meth:`connect` to tear down a duplicate tunnel that
+        lost the concurrent-connect race.
+
+        Each step logs WARN with a single-line summary instead of
+        ``logger.exception`` because this path runs both for user-initiated
+        disconnects (where failures are genuinely unexpected) *and* for
+        device-lost cleanup after a dead tunnel (where
+        EOF/ConnectionReset/TimeoutError on every close is the expected
+        outcome — the OS sockets are already gone). Dumping five full
+        tracebacks per device-lost event produced ~150 lines of noise that
+        masked real errors; the single-line summary preserves "which step
+        and which exception class" for diagnostics. If a future maintainer
+        needs full stacks, raise the logger to DEBUG.
+        """
         # Clear any active location simulation first. ``quick=True`` so a
         # dead DVT channel doesn't drag us through a 15s reconnect ladder
         # we're about to invalidate anyway by tearing down the tunnel
@@ -463,8 +514,6 @@ class DeviceManager:
                 await conn.tunnel_proxy.close()
             except Exception as exc:
                 logger.warning("Error closing tunnel proxy for %s: %s", udid, exc)
-
-        logger.info("Disconnected device %s", udid)
 
     # ------------------------------------------------------------------
     # Location service
@@ -694,6 +743,22 @@ class DeviceManager:
             if getattr(conn, "connection_type", "") == connection_type
         ]
 
+    async def snapshot_usb_udids(self) -> set[str]:
+        """Return the set of currently-connected USB UDIDs, snapshotted
+        under ``self._lock``.
+
+        Lets the usbmux watchdog get a consistent view without reaching
+        into the private ``_lock`` / ``_connections`` — a concurrent
+        connect()/disconnect() mutating the dict mid-iteration would
+        otherwise raise ``dictionary changed size during iteration`` or
+        hand back a half-updated snapshot.
+        """
+        async with self._lock:
+            return {
+                udid for udid, conn in self._connections.items()
+                if getattr(conn, "connection_type", "USB") == "USB"
+            }
+
     def get_connection_type(self, udid: str) -> str:
         """Return ``'USB'`` or ``'Network'`` for a connected device."""
         conn = self._connections.get(udid)
@@ -705,56 +770,3 @@ class DeviceManager:
         for udid in udids:
             await self.disconnect(udid)
         logger.info("All devices disconnected")
-
-
-def _load_pair_record(udid: str | None = None) -> dict | None:
-    """Load a USB pair record from Apple's system Lockdown store.
-
-    On Windows, pair records live in ``%ALLUSERSPROFILE%\\Apple\\Lockdown``.
-    If *udid* is given, loads that specific record; otherwise loads the
-    first ``.plist`` found (most setups have only one device).
-    """
-    lockdown_dir = Path(os.environ.get("ALLUSERSPROFILE", "C:/ProgramData")) / "Apple" / "Lockdown"
-    if not lockdown_dir.exists():
-        logger.debug("Apple Lockdown directory not found: %s", lockdown_dir)
-        return None
-
-    target: Path | None = None
-    if udid:
-        candidate = lockdown_dir / f"{udid}.plist"
-        if candidate.exists():
-            target = candidate
-    else:
-        # Pick the first device plist (skip SystemConfiguration.plist)
-        for f in lockdown_dir.glob("*.plist"):
-            if f.stem != "SystemConfiguration":
-                target = f
-                break
-
-    if target is None:
-        logger.debug("No pair record found in %s", lockdown_dir)
-        return None
-
-    try:
-        with open(target, "rb") as fh:
-            record = plistlib.load(fh)
-        logger.debug("Loaded pair record from %s", target)
-        return record
-    except Exception:
-        logger.exception("Failed to load pair record from %s", target)
-        return None
-
-
-def _guess_local_subnet() -> str | None:
-    """Best-effort guess of the local LAN subnet (e.g. '192.168.1.0/24').
-
-    Returns the base IP like '192.168.1.0' or ``None`` if unable to determine.
-    """
-    from utils.net import get_primary_local_ip
-    local_ip = get_primary_local_ip()
-    if not local_ip:
-        return None
-    try:
-        return f"{local_ip.rsplit('.', 1)[0]}.0"
-    except IndexError:
-        return None

@@ -137,24 +137,13 @@ async def lifespan(application: FastAPI):
         except OSError:
             logger.exception("Failed to write token file; renderer will not be able to auth")
 
-    logger.info("GPSController starting — scanning for devices…")
-    try:
-        devices = await app_state.device_manager.discover_devices()
-        if devices:
-            target = devices[0]
-            logger.info("Found device %s (%s), auto-connecting…", target.name, target.udid)
-            # `connect_device` runs ``dm.connect`` and then transitions
-            # state → CONNECTED; the installed WS observer broadcasts
-            # ``device_connected`` for us, so no manual broadcast here.
-            await connection_state.connect_device(
-                app_state.device_manager, target.udid, cause="startup",
-            )
-            await app_state.create_engine_for_device(target.udid)
-            logger.info("Auto-connected to %s", target.udid)
-        else:
-            logger.info("No iOS devices found on startup")
-    except Exception:
-        logger.exception("Auto-connect on startup failed (device may need manual connect)")
+    # No startup auto-connect. Launching must never auto-pair or
+    # auto-connect a plugged-in device — that popped the "Trust This
+    # Computer" prompt on every launch and silently re-paired devices the
+    # user had just removed. Devices are enumerated on demand via
+    # /api/device/list (which never pairs) and the user connects one
+    # explicitly from the UI.
+    logger.info("GPSController started — connect a device from the UI when ready")
 
     from services.device_watchdog import usbmux_presence_watchdog
     watchdog_task = asyncio.create_task(usbmux_presence_watchdog(app_state))
@@ -168,6 +157,13 @@ async def lifespan(application: FastAPI):
     liveness_stop = asyncio.Event()
     liveness_task = asyncio.create_task(tunnel_liveness_loop(liveness_stop))
 
+    # WiFi keep-alive — opt-in (Settings toggle). When enabled, periodically
+    # re-asserts idle engines' virtual locations so the DVT channel stays warm
+    # and the tunnel survives the iPhone screen dimming. No-ops while disabled.
+    from core.wifi_keepalive import wifi_keepalive_loop
+    keepalive_stop = asyncio.Event()
+    keepalive_task = asyncio.create_task(wifi_keepalive_loop(keepalive_stop))
+
     yield
 
     # ── Shutdown ──
@@ -176,18 +172,54 @@ async def lifespan(application: FastAPI):
     liveness_stop.set()
     try:
         await asyncio.wait_for(liveness_task, timeout=2.0)
-    except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+    except asyncio.TimeoutError:
+        # Cooperative exit didn't finish in the grace window — force it.
         liveness_task.cancel()
         try:
             await liveness_task
         except (asyncio.CancelledError, Exception):
             pass
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        # A genuine bug in the liveness loop teardown — don't let it vanish.
+        logger.exception("shutdown: liveness loop raised during teardown")
+
+    keepalive_stop.set()
+    try:
+        await asyncio.wait_for(keepalive_task, timeout=2.0)
+    except asyncio.TimeoutError:
+        keepalive_task.cancel()
+        try:
+            await keepalive_task
+        except (asyncio.CancelledError, Exception):
+            pass
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        logger.exception("shutdown: keep-alive loop raised during teardown")
 
     watchdog_task.cancel()
     try:
         await watchdog_task
-    except (asyncio.CancelledError, Exception):
+    except asyncio.CancelledError:
         pass
+    except Exception:
+        logger.exception("shutdown: watchdog task raised during teardown")
+
+    # Tear down the WiFi tunnel (if running) and its watchdog. The liveness /
+    # usbmux loops above don't own these — without this an active RemotePairing
+    # tunnel context is abandoned on shutdown, leaking the OS tun interface and
+    # logging "Task was destroyed but it is pending". Order mirrors the
+    # /wifi/tunnel/stop route: cancel the watchdog BEFORE stopping the tunnel
+    # so it can't race the teardown. Both calls are idempotent.
+    try:
+        from api.tunnel._helpers import cancel_watchdog
+        from services.wifi_tunnel_service import tunnel as wifi_tunnel
+        cancel_watchdog()
+        await wifi_tunnel.stop()
+    except Exception:
+        logger.exception("shutdown: WiFi tunnel teardown failed")
 
     app_state.save_settings()
     # Stop all simulation engines before we drop transport. Otherwise
@@ -198,13 +230,21 @@ async def lifespan(application: FastAPI):
             await app_state.terminate_engine(udid)
         except Exception:
             logger.exception("shutdown: terminate_engine failed for %s", udid)
+    # Cancel any still-in-flight dual-device auto-sync tasks so they can't
+    # outlive the engines they target (terminate_engine already cancels the
+    # task for each udid it stops; this drains any leftover).
+    await app_state.cancel_sync_tasks()
     await app_state.device_manager.disconnect_all()
 
     # Release the shared HTTP clients last so any in-flight request from
     # the engine teardown above completes before the pool is torn down.
     try:
         from services.geocoding import close_client as close_geocoding_client
+        from services.geocoding_google import close_client as close_google_client
+        from services.geocoding_photon import close_client as close_photon_client
         await close_geocoding_client()
+        await close_photon_client()
+        await close_google_client()
     except Exception:
         logger.exception("shutdown: close_geocoding_client failed")
     try:
@@ -212,6 +252,11 @@ async def lifespan(application: FastAPI):
         await close_route_client()
     except Exception:
         logger.exception("shutdown: close_route_client failed")
+    try:
+        from services.route_optimizer import close_client as close_optimizer_client
+        await close_optimizer_client()
+    except Exception:
+        logger.exception("shutdown: close_optimizer_client failed")
 
     logger.info("GPSController shut down")
 
@@ -301,9 +346,12 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     # Only the headers the renderer actually sends. The bearer token rides
-    # in X-GPS-Token; JSON bodies need Content-Type. A wildcard would let
-    # any same-origin browser tab probe arbitrary headers through CORS.
-    allow_headers=["X-GPS-Token", "Content-Type"],
+    # in X-GPS-Token; JSON bodies need Content-Type; X-Google-Key carries the
+    # user's optional Google Places key for /api/geocode/search. A wildcard
+    # would let any same-origin browser tab probe arbitrary headers, so we
+    # list each explicitly. Without X-Google-Key here the keyed search fails
+    # the cross-origin preflight in Vite dev (renderer:5173 → backend:8777).
+    allow_headers=["X-GPS-Token", "Content-Type", "X-Google-Key"],
 )
 
 # Register routers

@@ -77,9 +77,14 @@ async def _get_or_rebuild_engine(app_state, target_udid: str):
     logger.info("simulation_engine missing; attempt 1 (rebuild) for %s", target_udid)
     try:
         await app_state.create_engine_for_device(target_udid)
-        if app_state.simulation_engine is not None:
+        # Pin to the engine for *this* udid, not the legacy primary accessor.
+        # In dual-device mode the primary may be a different device, so
+        # returning app_state.simulation_engine here could hand back the
+        # wrong phone's engine and inject GPS into the wrong device.
+        rebuilt = app_state.get_engine(target_udid) or app_state.simulation_engine
+        if rebuilt is not None:
             logger.info("Engine rebuild succeeded on attempt 1")
-            return app_state.simulation_engine
+            return rebuilt
     except Exception:
         logger.exception("Engine rebuild (attempt 1) failed for %s", target_udid)
     return None
@@ -103,9 +108,13 @@ async def _force_reconnect(app_state, dm, target_udid: str):
         await connection_state.disconnect_device(dm, target_udid, cause="hard_reset")
         await connection_state.connect_device(dm, target_udid, cause="hard_reset")
         await app_state.create_engine_for_device(target_udid)
-        if app_state.simulation_engine is not None:
+        # Pin to target_udid's engine — the legacy primary accessor would
+        # return the wrong device's engine in dual-device mode (see
+        # _get_or_rebuild_engine + exec_with_retry for the same fix).
+        rebuilt = app_state.get_engine(target_udid) or app_state.simulation_engine
+        if rebuilt is not None:
             logger.info("Engine rebuild succeeded on attempt 2")
-            return app_state.simulation_engine
+            return rebuilt
     except Exception:
         logger.exception("Engine rebuild (attempt 2, hard reset) failed for %s", target_udid)
     return None
@@ -178,13 +187,10 @@ async def handle_device_lost(exc: DeviceLostError) -> HTTPException:
         except Exception:
             logger.exception("device_lost cleanup: terminate_engine failed for %s", udid)
 
-    return HTTPException(
-        status_code=503,
-        detail={
-            "code": ErrorCode.DEVICE_LOST.value,
-            "cause": cause.value,
-            "message": _DEVICE_LOST_MESSAGE.get(cause, _DEVICE_LOST_MESSAGE[DeviceLostCause.UNKNOWN]),
-        },
+    return http_err(
+        503, ErrorCode.DEVICE_LOST,
+        _DEVICE_LOST_MESSAGE.get(cause, _DEVICE_LOST_MESSAGE[DeviceLostCause.UNKNOWN]),
+        cause=cause.value,
     )
 
 

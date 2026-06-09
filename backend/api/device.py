@@ -6,14 +6,19 @@ import os
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from api._deps import get_device_manager
 from api._errors import ErrorCode, http_err, ios_unsupported_error, max_devices_error
+from api.tunnel._helpers import purge_stale_remote_pair_record
 from services import connection_state
 from config import MAX_DEVICES
 from context import ctx
-from core.device_manager import UnsupportedIosVersionError, parse_ios_version
+from core.device_manager import (
+    UnsupportedIosVersionError,
+    delete_usbmux_pair_record,
+    parse_ios_version,
+)
 from models.schemas import DeviceInfo
 
 router = APIRouter(prefix="/api/device", tags=["device"])
@@ -134,47 +139,33 @@ def _pair_record_candidates(udid: str) -> list[Path]:
     ]
 
 
-@router.delete("/{udid}/pair")
-async def forget_device(udid: str):
-    """Forget a paired device — disconnects it (if connected), tells the
-    device to drop our pair record, and removes the local cached record.
+def _lockdown_with_unpair(conn) -> object | None:
+    """Return the lockdown client that can issue a device-side ``unpair()``.
 
-    After this, the iPhone will show "Trust This Computer" again the next
-    time it's plugged in via USB.
+    For iOS 17+, ``conn.lockdown`` is a ``RemoteServiceDiscoveryService``
+    (RSD) — it has NO ``unpair()`` — while the real USB ``LockdownClient``
+    is kept in ``conn.usbmux_lockdown``. The earlier code called
+    ``conn.lockdown.unpair()`` and raised ``AttributeError`` for every
+    iOS 17+ device, so the device was never actually untrusted. Prefer the
+    LockdownClient; fall back to ``conn.lockdown`` for the iOS 16 legacy
+    path where it *is* the LockdownClient.
     """
-    app_state = ctx.app_state
-    dm = get_device_manager()
+    for client in (getattr(conn, "usbmux_lockdown", None), getattr(conn, "lockdown", None)):
+        if client is not None and hasattr(client, "unpair"):
+            return client
+    return None
 
-    conn = dm.get_connection(udid)
-    if conn is not None:
-        async def _unpair() -> None:
-            # lockdown.unpair() may be sync or async depending on
-            # connection type — normalise both to a coroutine.
-            result = conn.lockdown.unpair()
-            if asyncio.iscoroutine(result):
-                await result
 
-        # Run the device-side unpair in parallel with the local
-        # engine teardown — they touch different resources and the
-        # unpair RPC is the long pole.
-        unpair_task = asyncio.create_task(_unpair())
-        await app_state.terminate_engine(udid)
-        try:
-            await unpair_task
-        except Exception:
-            logger.warning(
-                "lockdown.unpair() failed for %s; will still remove local record",
-                udid, exc_info=True,
-            )
-        # Routed through connection_state so the WS observer broadcasts
-        # ``device_disconnected`` with cause="forget" exactly once.
-        await connection_state.disconnect_device(dm, udid, cause="forget")
+def _remove_pair_record_files(udid: str) -> tuple[list[str], list[dict[str, str]]]:
+    """Best-effort delete of the local lockdown pair-record files.
 
-    # One syscall per candidate — atomic, no TOCTOU. FileNotFoundError
-    # means the path already absent (fine); other OSErrors are tracked so
-    # the response can flag partial-success (e.g. /var/db/lockdown needs
-    # root on macOS — without sudo the unlink raises and the iPhone keeps
-    # trusting us even though the route used to claim "forgotten").
+    One syscall per candidate — atomic, no TOCTOU. FileNotFoundError means
+    the path is already absent (fine); other OSErrors are tracked. On macOS
+    ``/var/db/lockdown`` is OS-protected and ``unlink`` raises
+    ``PermissionError`` even as root — that's why this is best-effort and
+    the authoritative "forget" is the device-side ``unpair()`` in the
+    caller, not these files.
+    """
     removed: list[str] = []
     failed: list[dict[str, str]] = []
     for p in _pair_record_candidates(udid):
@@ -184,39 +175,121 @@ async def forget_device(udid: str):
             pass
         except OSError as exc:
             logger.warning("Could not remove pair record %s", p, exc_info=True)
-            failed.append({"path": str(p), "error": exc.strerror or str(exc)})
+            failed.append({"path": str(p), "error": getattr(exc, "strerror", None) or str(exc)})
         else:
             removed.append(str(p))
+    return removed, failed
 
-    # The forgotten UDID can't auto-reconnect anyway (the pair record is
-    # gone), but if the user later re-pairs the same device they'd want
-    # auto-connect to work again — drop the stale blocklist entry.
+
+@router.delete("/{udid}/pair")
+async def forget_device(udid: str):
+    """Forget a paired device — disconnects it (if connected), tells the
+    device to drop our pair record, and removes the local cached record.
+
+    After this, the iPhone/iPad shows "Trust This Computer" again the next
+    time it connects. The device-side ``unpair()`` (issued through
+    lockdownd over USB) is the authoritative action; the local file removal
+    is best-effort because macOS protects ``/var/db/lockdown``.
+    """
+    app_state = ctx.app_state
+    dm = get_device_manager()
+
+    device_unpaired = False
+    conn = dm.get_connection(udid)
+    if conn is not None:
+        unpair_client = _lockdown_with_unpair(conn)
+
+        async def _unpair() -> None:
+            # unpair() may be sync or async depending on the client —
+            # normalise both to a coroutine.
+            result = unpair_client.unpair()
+            if asyncio.iscoroutine(result):
+                await result
+
+        if unpair_client is not None:
+            # Run the device-side unpair in parallel with the local engine
+            # teardown — they touch different resources and the unpair RPC
+            # is the long pole.
+            unpair_task = asyncio.create_task(_unpair())
+            await app_state.terminate_engine(udid)
+            try:
+                await unpair_task
+                device_unpaired = True
+            except Exception:
+                logger.warning(
+                    "unpair() failed for %s; will still remove local records",
+                    udid, exc_info=True,
+                )
+        else:
+            # No LockdownClient available (e.g. a pure WiFi-tunnel device
+            # never connected over USB) — we can't issue a device-side
+            # unpair. Fall through to local cleanup and surface the gap.
+            await app_state.terminate_engine(udid)
+            logger.warning(
+                "No USB lockdown client for %s; cannot issue a device-side "
+                "unpair — connect it over USB to fully untrust this computer",
+                udid,
+            )
+        # Routed through connection_state so the WS observer broadcasts
+        # ``device_disconnected`` with cause="forget" exactly once.
+        await connection_state.disconnect_device(dm, udid, cause="forget")
+
+    # Authoritative host-side unpair: ask usbmuxd to drop its stored pair
+    # record. This is what makes forget work in the cases the device-side
+    # unpair can't — device on WiFi, unplugged, or locked (a locked device
+    # makes lockdownd's unpair raise PasswordRequiredError) — and it
+    # deletes the macOS-protected /var/db/lockdown record that os.unlink
+    # below can't touch even as root. Done before the file sweep so that
+    # sweep becomes a clean no-op once usbmuxd has removed the record.
+    host_record_deleted = await delete_usbmux_pair_record(udid)
+
+    # iOS 17+ RemotePairing record (~/.pymobiledevice3) — best-effort so a
+    # later WiFi-tunnel re-pair starts from a clean slate.
+    purge_stale_remote_pair_record(udid)
+
+    # Best-effort direct file removal for records usbmuxd doesn't manage
+    # (Windows/Linux, user-level macOS records).
+    removed, failed = _remove_pair_record_files(udid)
+
+    # The forgotten UDID can't auto-reconnect anyway, but if the user later
+    # re-pairs the same device they'd want auto-connect to work again — drop
+    # the stale blocklist entry.
     app_state.unblock_auto_reconnect(udid)
 
     # device_disconnected broadcast already happened in disconnect_device
     # above — no need to fire it again here.
 
-    # Only treat the request as a hard failure when *every* candidate that
-    # existed errored out. If at least one record was actually removed we
-    # surface a 200 partial-success envelope so the UI can warn the user
-    # about the leftover paths instead of silently lying about the state.
-    if failed and not removed:
+    # The forget genuinely succeeded if ANY authoritative step landed: the
+    # device-side unpair, the usbmuxd record delete, or a local file removal.
+    # Only hard-fail when every path failed AND there was something to clean.
+    forgotten = device_unpaired or host_record_deleted or bool(removed)
+    if not forgotten and failed:
         logger.error(
-            "Forget device %s failed: could not remove any pair record (%d attempted)",
-            udid, len(failed),
+            "Forget device %s failed: device-side unpair, usbmuxd "
+            "DeletePairRecord, and local file removal all failed "
+            "(%d file(s) attempted)", udid, len(failed),
         )
         raise http_err(
             500,
             ErrorCode.FORGET_FAILED,
-            "Could not remove any trust record; admin privileges may be required — restart the backend with sudo and retry",
+            "Could not forget the device. Connect it via USB and unlock it, "
+            "then retry.",
         )
 
-    status = "partial" if failed else "forgotten"
+    status = "forgotten" if (forgotten or not failed) else "partial"
     logger.info(
-        "Forgot device %s (status=%s, removed %d, failed %d pair-record file(s))",
-        udid, status, len(removed), len(failed),
+        "Forgot device %s (status=%s, device_unpaired=%s, usbmux_deleted=%s, "
+        "removed %d, failed %d file(s))",
+        udid, status, device_unpaired, host_record_deleted, len(removed), len(failed),
     )
-    return {"status": status, "udid": udid, "removed": removed, "failed": failed}
+    return {
+        "status": status,
+        "udid": udid,
+        "device_unpaired": device_unpaired,
+        "usbmux_record_deleted": host_record_deleted,
+        "removed": removed,
+        "failed": failed,
+    }
 
 
 @router.get("/{udid}/info", response_model=DeviceInfo | None)
@@ -250,25 +323,19 @@ async def amfi_reveal_developer_mode(udid: str):
     # service call would fail with a misleading error.
     ios_major = parse_ios_version(conn.ios_version or "0")[0]
     if ios_major < 16:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": ErrorCode.IOS_VERSION_UNSUPPORTED.value,
-                "message": "iOS 16 or newer is required to use Developer Mode",
-                "ios_version": conn.ios_version,
-            },
+        raise http_err(
+            400, ErrorCode.IOS_VERSION_UNSUPPORTED,
+            "iOS 16 or newer is required to use Developer Mode",
+            ios_version=conn.ios_version,
         )
 
     # WiFi tunnels don't route the AMFI lockdown service (it's a USB-only
     # advertised port). Reject up-front instead of letting the service
     # open fail deep inside pymobiledevice3.
     if (conn.connection_type or "").lower() != "usb":
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": ErrorCode.USB_REQUIRED.value,
-                "message": "AMFI requires a USB connection (WiFi tunnel does not forward this service)",
-            },
+        raise http_err(
+            400, ErrorCode.USB_REQUIRED,
+            "AMFI requires a USB connection (WiFi tunnel does not forward this service)",
         )
 
     try:

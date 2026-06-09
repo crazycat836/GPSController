@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 import httpx
 
 from config import NOMINATIM_BASE_URL, NOMINATIM_USER_AGENT
 from models.schemas import GeocodingResult
-from services.http_client import make_async_client_singleton
+from services import geocoding_google, geocoding_photon
+from services.http_client import (
+    GEOCODING_HTTP_TIMEOUT,
+    make_async_client_singleton,
+    make_min_interval_gate,
+)
 
 logger = logging.getLogger(__name__)
-
-_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 # Lifespan-scoped HTTP client. Reusing the connection pool across calls
 # avoids paying TCP+TLS handshake on every search / reverse during a
@@ -22,7 +24,7 @@ _TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 # request, so they're attached as defaults on the client itself — per-call
 # headers (Accept-Language for reverse) merge on top.
 _get_client, close_client = make_async_client_singleton(
-    _TIMEOUT,
+    GEOCODING_HTTP_TIMEOUT,
     headers={
         "User-Agent": NOMINATIM_USER_AGENT,
         "Accept": "application/json",
@@ -34,61 +36,94 @@ _get_client, close_client = make_async_client_singleton(
 # requires no more than 1 request per second. A frontend bug or local
 # attacker could otherwise hammer this proxy and trigger an IP ban that
 # affects every user behind the NAT. Serialize all outbound calls
-# through a single-slot gate with a ≥1s spacing.
+# through a single-slot gate with a ≥1s spacing (factory lives in
+# http_client so Nominatim + Photon share one implementation).
 _NOMINATIM_MIN_INTERVAL_S = 1.05  # tiny safety margin
-_rate_lock = asyncio.Lock()
-_last_request_at: float = 0.0
 
-
-async def _nominatim_rate_limit() -> None:
-    """Block until at least :data:`_NOMINATIM_MIN_INTERVAL_S` has passed
-    since the previous call. Serializes search + reverse together."""
-    global _last_request_at
-    async with _rate_lock:
-        loop = asyncio.get_event_loop()
-        now = loop.time()
-        wait = _NOMINATIM_MIN_INTERVAL_S - (now - _last_request_at)
-        if wait > 0:
-            await asyncio.sleep(wait)
-        _last_request_at = loop.time()
+# Single-slot spacing gate shared by search + reverse.
+_nominatim_rate_limit = make_min_interval_gate(_NOMINATIM_MIN_INTERVAL_S)
 
 
 class GeocodingService:
     """Async wrapper around the Nominatim geocoding API."""
 
-    def _headers(self) -> dict[str, str]:
-        return {
-            "User-Agent": NOMINATIM_USER_AGENT,
-            "Accept": "application/json",
-        }
-
     # ------------------------------------------------------------------
     # Forward geocoding
     # ------------------------------------------------------------------
 
-    async def search(self, query: str, limit: int = 5) -> list[GeocodingResult]:
+    async def search(
+        self,
+        query: str,
+        limit: int = 5,
+        lang: str | None = None,
+        google_key: str | None = None,
+        provider: str | None = None,
+    ) -> list[GeocodingResult]:
         """Forward geocode: address or place name -> coordinates.
+
+        Provider dispatch (``provider`` selects the backend explicitly):
+
+        - ``"google"`` -> Google Places Text Search (best POI / business /
+          fuzzy-name quality; the user's own key + billing). Falls back to
+          Photon when no usable ``google_key`` was supplied so the box still
+          returns results instead of silently failing.
+        - ``"nominatim"`` -> Nominatim forward search (same OSM dataset used
+          for reverse geocoding; strict 1 req/s).
+        - ``"photon"`` -> Photon (keyless, OSM-backed, typeahead-friendly).
+
+        When ``provider`` is ``None`` (older clients), the legacy heuristic
+        applies: Google if a key is present, else Photon.
+
+        Reverse geocoding always stays on Nominatim (see :meth:`reverse`).
 
         Parameters
         ----------
         query:
             Free-form search string (e.g. ``"Taipei 101"``).
         limit:
-            Maximum number of results (default 5, Nominatim max 40).
+            Maximum number of results.
+        lang:
+            UI language chain (e.g. ``"zh-Hant,zh-TW,zh,en"``) used to
+            localize result names where the provider supports it.
+        google_key:
+            User-supplied Google Places API key forwarded by the renderer.
+        provider:
+            ``"nominatim" | "photon" | "google"`` or ``None`` for the legacy
+            key-presence heuristic.
 
         Returns
         -------
         list[GeocodingResult]
 
-        Network / upstream failures (DNS miss, timeout, 5xx, rate limit) are
-        logged and surfaced as an empty list so the caller doesn't receive a
-        500 for transient issues.
+        Network / upstream failures are logged by each provider and surfaced
+        as an empty list, so the caller never receives a 500 for transient
+        issues or a misconfigured key.
         """
-        params = {
+        selected = (provider or ("google" if google_key else "photon")).lower()
+        if selected == "google":
+            if google_key:
+                return await geocoding_google.search(query, google_key, limit=limit, lang=lang)
+            # Google chosen but no usable key — degrade to Photon so the
+            # search box keeps working while the user adds their key.
+            return await geocoding_photon.search(query, limit=limit, lang=lang)
+        if selected == "nominatim":
+            return await self._nominatim_search(query, limit=limit, lang=lang)
+        return await geocoding_photon.search(query, limit=limit, lang=lang)
+
+    async def _nominatim_search(
+        self, query: str, limit: int = 5, lang: str | None = None
+    ) -> list[GeocodingResult]:
+        """Forward geocode via Nominatim ``/search``. Returns ``[]`` on any
+        upstream failure so the caller keeps the "empty == unavailable"
+        contract. Shares the module's 1 req/s rate-limit gate + client."""
+        params: dict[str, object] = {
             "q": query,
             "format": "json",
+            "addressdetails": 1,
             "limit": min(limit, 40),
         }
+        # UA + Accept are client defaults; only Accept-Language is per-call.
+        headers = {"Accept-Language": lang} if lang else None
 
         logger.debug("Nominatim search: %s", query)
 
@@ -98,7 +133,7 @@ class GeocodingService:
             resp = await client.get(
                 f"{NOMINATIM_BASE_URL}/search",
                 params=params,
-                headers=self._headers(),
+                headers=headers,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -112,9 +147,15 @@ class GeocodingService:
             logger.warning("Nominatim search failed (%s): %s", type(exc).__name__, exc)
             return []
 
+        if not isinstance(data, list):
+            return []
+
         results: list[GeocodingResult] = []
         for item in data:
+            if not isinstance(item, dict):
+                continue
             try:
+                addr = item.get("address") or {}
                 results.append(
                     GeocodingResult(
                         display_name=item.get("display_name", ""),
@@ -122,10 +163,13 @@ class GeocodingService:
                         lng=float(item["lon"]),
                         type=item.get("type", ""),
                         importance=float(item.get("importance", 0)),
+                        country_code=(addr.get("country_code") or "").lower(),
+                        country=addr.get("country") or "",
+                        place_name=_pick_place_name(item, addr),
                     )
                 )
             except (KeyError, ValueError) as exc:
-                logger.warning("Skipping malformed search result: %s", exc)
+                logger.warning("Skipping malformed Nominatim search result: %s", exc)
 
         return results
 
@@ -149,9 +193,8 @@ class GeocodingService:
             "format": "json",
             "addressdetails": 1,
         }
-        headers = self._headers()
-        if lang:
-            headers["Accept-Language"] = lang
+        # UA + Accept are client defaults; only Accept-Language is per-call.
+        headers = {"Accept-Language": lang} if lang else None
 
         logger.debug("Nominatim reverse: %.6f, %.6f", lat, lng)
 

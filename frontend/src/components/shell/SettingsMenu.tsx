@@ -1,16 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react'
 import {
   RotateCcw, FileText, MapPin, Timer, Languages, Layers, Info,
-  Sun, ChevronRight, UserCircle2, Wand2,
+  Sun, ChevronRight, UserCircle2, Wand2, Search, Wifi,
 } from 'lucide-react'
+import { STORAGE_KEYS } from '../../lib/storage-keys'
+import { getWifiKeepalive, setWifiKeepalive } from '../../services/api'
+import { devWarn } from '../../lib/dev-log'
 import { useSimContext } from '../../contexts/SimContext'
 import { useSimSettings } from '../../contexts/SimSettingsContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useAvatarContext } from '../../contexts/AvatarContext'
+import { useToastContext } from '../../contexts/ToastContext'
 import { useI18n, useT, type Lang } from '../../i18n'
 import AvatarPicker from './AvatarPicker'
 import SetInitialPositionDialog from './SetInitialPositionDialog'
 import GoldDittoDialog from './GoldDittoDialog'
+import GooglePlacesKeyRow from './GooglePlacesKeyRow'
 import SectionHeader from '../ui/SectionHeader'
 import Toggle from '../ui/Toggle'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
@@ -31,6 +36,25 @@ const LAYER_OPTIONS = [
   { key: 'esri', label: 'ESRI' },
 ] as const
 
+// Address-search providers. Brand names render verbatim (no translation).
+// 'photon' is the default keyless backend; 'google' additionally needs the
+// API key from GooglePlacesKeyRow.
+const SEARCH_PROVIDERS = [
+  { key: 'nominatim', label: 'Nominatim' },
+  { key: 'photon', label: 'Photon' },
+  { key: 'google', label: 'Google' },
+] as const
+
+const DEFAULT_SEARCH_PROVIDER = 'photon'
+
+function readSearchProvider(): string {
+  try {
+    const v = localStorage.getItem(STORAGE_KEYS.searchProvider)
+    if (v === 'nominatim' || v === 'photon' || v === 'google') return v
+  } catch { /* ignore */ }
+  return DEFAULT_SEARCH_PROVIDER
+}
+
 interface SettingsMenuProps {
   open: boolean
   onClose: () => void
@@ -44,6 +68,7 @@ interface SettingsMenuProps {
 // + optional chevron to mirror the design's .set-row anatomy.
 export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }: SettingsMenuProps) {
   const t = useT()
+  const { showToast } = useToastContext()
   const { lang, setLang } = useI18n()
   const { sim, handleRestore, handleOpenLog } = useSimContext()
   const { cooldown, cooldownEnabled, handleToggleCooldown } = useSimSettings()
@@ -51,6 +76,37 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
 
   const [initialOpen, setInitialOpen] = useState(false)
   const [goldDittoOpen, setGoldDittoOpen] = useState(false)
+
+  // Address-search provider selection, persisted to localStorage and read
+  // by `services/api.ts::searchAddress`. The Google API-key row is only
+  // shown when Google is the active provider.
+  const [searchProvider, setSearchProvider] = useState<string>(readSearchProvider)
+  const persistSearchProvider = (p: string) => {
+    setSearchProvider(p)
+    try { localStorage.setItem(STORAGE_KEYS.searchProvider, p) } catch { /* ignore */ }
+  }
+
+  // WiFi keep-alive lives server-side (the background loop reads it), so the
+  // toggle reflects backend state. Load it when the popover opens; write
+  // through optimistically and roll back if the PUT fails.
+  const [wifiKeepalive, setWifiKeepaliveState] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    let aborted = false
+    getWifiKeepalive()
+      .then((r) => { if (!aborted) setWifiKeepaliveState(!!r.enabled) })
+      .catch((e) => devWarn('[settings] getWifiKeepalive failed', e))
+    return () => { aborted = true }
+  }, [open])
+  const handleToggleWifiKeepalive = (next: boolean) => {
+    setWifiKeepaliveState(next)
+    setWifiKeepalive(next).catch((e) => {
+      devWarn('[settings] setWifiKeepalive failed', e)
+      setWifiKeepaliveState(!next) // roll back on failure
+      // Surface the rollback so the toggle doesn't just silently snap back.
+      showToast(t('settings.wifi_keepalive_failed'))
+    })
+  }
 
   const popoverRef = useRef<HTMLDivElement>(null)
   const avatarRowRef = useRef<HTMLDivElement>(null)
@@ -86,6 +142,12 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
       // outside-click dismissal. Otherwise clicks inside the picker would
       // bubble up and collapse the settings menu behind it.
       if (target.closest('[data-avatar-picker]')) return
+      // Same problem for any KebabMenu dropdown (language / map-layer rows):
+      // it portals to document.body, so its items sit *outside* popoverRef.
+      // Without this exemption, the pointerdown that selects an option first
+      // closes (and unmounts) the settings popover, so the option's later
+      // `click` → onSelect never fires — the row looks unresponsive.
+      if (target.closest('[role="menu"]')) return
       if (popoverRef.current && !popoverRef.current.contains(target)) {
         onClose()
       }
@@ -161,6 +223,19 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
               }
             />
 
+            <SettingsRow
+              icon={<Wifi className="w-[14px] h-[14px]" />}
+              label={t('settings.wifi_keepalive')}
+              title={t('settings.wifi_keepalive_hint')}
+              trailing={
+                <Toggle
+                  checked={wifiKeepalive}
+                  onChange={handleToggleWifiKeepalive}
+                  ariaLabel={t('settings.wifi_keepalive_aria')}
+                />
+              }
+            />
+
             <ChoiceRow
               icon={<Languages className="w-[14px] h-[14px]" />}
               label={t('settings.language')}
@@ -183,6 +258,21 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
                 onSelect: () => onLayerChange(key),
               }))}
             />
+
+            <ChoiceRow
+              icon={<Search className="w-[14px] h-[14px]" />}
+              label={t('settings.search_provider')}
+              value={SEARCH_PROVIDERS.find((o) => o.key === searchProvider)?.label ?? searchProvider}
+              ariaLabel={t('settings.search_provider_aria')}
+              items={SEARCH_PROVIDERS.map(({ key, label }) => ({
+                id: key,
+                label,
+                onSelect: () => persistSearchProvider(key),
+              }))}
+            />
+
+            {/* Google key field only matters when Google is selected. */}
+            {searchProvider === 'google' && <GooglePlacesKeyRow />}
 
             <SettingsRow
               icon={<Sun className="w-[14px] h-[14px]" />}

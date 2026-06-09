@@ -19,6 +19,19 @@ export const STORAGE_KEYS = {
   // serialised ``{lat, lng}`` so absent / malformed entries decode to
   // null cleanly and the UI re-prompts.
   goldDittoAnchor: 'gpscontroller.gold_ditto.anchor',
+  // Optional user-supplied Google Places API key. When set, the search box
+  // routes through Google (better POI / business / fuzzy-name results);
+  // otherwise it falls back to the keyless Photon provider. Stored locally
+  // and forwarded only to the local backend, never to a third party.
+  googlePlacesKey: 'gpscontroller.google_places_key',
+  // Forward-geocoding provider the search box uses. One of
+  // 'nominatim' | 'photon' | 'google'. Persisted so the user's choice
+  // survives reloads; 'google' additionally requires `googlePlacesKey`.
+  searchProvider: 'gpscontroller.search_provider',
+  // Last-selected movement speed: JSON `{moveMode, customSpeedKmh,
+  // speedMinKmh, speedMaxKmh}`. Persisted so the speed the user picked
+  // is reused on the next launch instead of resetting to Walking.
+  speedPrefs: 'gpscontroller.speed_prefs',
 } as const
 
 // Legacy avatar keys (camelCase prefix + camelCase suffix) used before the

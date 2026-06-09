@@ -41,8 +41,16 @@ export function useCooldownSync(
     if (!subscribe) return
     return subscribe((msg) => {
       if (msg.type !== 'cooldown_update') return
-      const d = msg.data as Partial<CooldownStatusResponse>
-      const next = d.remaining_seconds ?? 0
+      // `unknown`-typed payload: cast to an index map so every field access
+      // is forced through the runtime guards below rather than being trusted
+      // via a structural cast.
+      const d = msg.data as Record<string, unknown>
+      // Guard the field rather than trusting the cast — a malformed frame
+      // (e.g. a string remaining_seconds) would otherwise corrupt the
+      // cooldown display. Matches the type-guard discipline in the sibling
+      // WS dispatchers (device/parsers.ts, sim/useSimWsDispatcher.ts).
+      const raw = d.remaining_seconds
+      const next = typeof raw === 'number' ? raw : 0
       setCooldown((prev) => Math.round(prev) === Math.round(next) ? prev : next)
       if (typeof d.enabled === 'boolean') {
         const nextEnabled = d.enabled

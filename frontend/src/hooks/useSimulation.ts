@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import * as api from '../services/api'
 import { PRE_SYNC_SETTLE_MS } from '../lib/constants'
+import { STORAGE_KEYS } from '../lib/storage-keys'
 import { devWarn } from '../lib/dev-log'
 import type { LatLng } from './sim/types'
 import {
@@ -40,6 +41,60 @@ export enum MoveMode {
   Walking = 'walking',
   Running = 'running',
   Driving = 'driving',
+}
+
+// ── Speed preference persistence ───────────────────────────────────────
+// The user's last-selected movement speed (mode + any manual override)
+// is persisted so a relaunch reuses it instead of resetting to Walking.
+// Pure module-level helpers keep the localStorage shape in one place and
+// avoid a circular import (MoveMode lives in this module).
+interface SpeedPrefs {
+  moveMode: MoveMode
+  customSpeedKmh: number | null
+  speedMinKmh: number | null
+  speedMaxKmh: number | null
+}
+
+// Explicit speed selection used to hot-swap a running route's speed without
+// reading hook state. Passing the values explicitly (rather than relying on
+// the `applySpeed` closure) avoids a stale-closure bug: a caller that does
+// `setMoveMode(x)` then `applySpeed()` in the same tick would otherwise send
+// the *previous* moveMode, because the state update hasn't re-rendered yet.
+export type SpeedSelection = SpeedPrefs
+
+const DEFAULT_SPEED_PREFS: SpeedPrefs = {
+  moveMode: MoveMode.Walking,
+  customSpeedKmh: null,
+  speedMinKmh: null,
+  speedMaxKmh: null,
+}
+
+function isMoveMode(v: unknown): v is MoveMode {
+  return v === MoveMode.Walking || v === MoveMode.Running || v === MoveMode.Driving
+}
+
+function numOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
+}
+
+function loadSpeedPrefs(): SpeedPrefs {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.speedPrefs)
+    if (!raw) return DEFAULT_SPEED_PREFS
+    const p = JSON.parse(raw) as Record<string, unknown>
+    return {
+      moveMode: isMoveMode(p.moveMode) ? p.moveMode : DEFAULT_SPEED_PREFS.moveMode,
+      customSpeedKmh: numOrNull(p.customSpeedKmh),
+      speedMinKmh: numOrNull(p.speedMinKmh),
+      speedMaxKmh: numOrNull(p.speedMaxKmh),
+    }
+  } catch {
+    return DEFAULT_SPEED_PREFS
+  }
+}
+
+function saveSpeedPrefs(p: SpeedPrefs): void {
+  try { localStorage.setItem(STORAGE_KEYS.speedPrefs, JSON.stringify(p)) } catch { /* ignore */ }
 }
 
 /** SimMode → i18n label key mapping. */
@@ -112,7 +167,13 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   // joystickStart to roll back if the backend rejects the request.
   const modeRef = useRef(mode)
   useEffect(() => { modeRef.current = mode }, [mode])
-  const [moveMode, setMoveMode] = useState<MoveMode>(MoveMode.Walking)
+  // Speed prefs lazy-load from localStorage so the last-selected speed is
+  // reused on relaunch. A single one-shot read seeds all four fields below.
+  // `useRef(loadSpeedPrefs())` would re-invoke the localStorage read on every
+  // render (the arg is evaluated each time, even though useRef keeps the
+  // first); a lazy state initialiser runs it exactly once.
+  const [initialSpeedPrefs] = useState<SpeedPrefs>(loadSpeedPrefs)
+  const [moveMode, setMoveMode] = useState<MoveMode>(initialSpeedPrefs.moveMode)
   const [status, setStatus] = useState<SimulationStatus>({
     running: false,
     paused: false,
@@ -132,9 +193,15 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const [eta, setEta] = useState<number | null>(null)
   const [waypoints, setWaypoints] = useState<LatLng[]>([])
   const [routePath, setRoutePath] = useState<LatLng[]>([])
-  const [customSpeedKmh, setCustomSpeedKmh] = useState<number | null>(null)
-  const [speedMinKmh, setSpeedMinKmh] = useState<number | null>(null)
-  const [speedMaxKmh, setSpeedMaxKmh] = useState<number | null>(null)
+  const [customSpeedKmh, setCustomSpeedKmh] = useState<number | null>(initialSpeedPrefs.customSpeedKmh)
+  const [speedMinKmh, setSpeedMinKmh] = useState<number | null>(initialSpeedPrefs.speedMinKmh)
+  const [speedMaxKmh, setSpeedMaxKmh] = useState<number | null>(initialSpeedPrefs.speedMaxKmh)
+  // Persist the speed selection whenever any of the four fields changes so
+  // the next launch reuses it. Cheap JSON write; no throttle needed since
+  // these change only on explicit user input, not on the 10 Hz nav stream.
+  useEffect(() => {
+    saveSpeedPrefs({ moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh })
+  }, [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh])
   // Global "straight-line path" toggle. When on, all nav modes bypass OSRM
   // and move along densified straight segments between waypoints.
   const [straightLine, setStraightLine] = useStraightLineToggle()
@@ -421,16 +488,20 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     return res
   }, [])
 
-  const applySpeed = useCallback(async () => {
+  const applySpeed = useCallback(async (sel?: SpeedSelection) => {
     setError(null)
-    const res = await api.applySpeed(moveMode, {
-      speed_kmh: customSpeedKmh,
-      speed_min_kmh: speedMinKmh,
-      speed_max_kmh: speedMaxKmh,
+    // An explicit selection wins over hook state so a caller can switch speed
+    // and apply it in the same tick (the dock SpeedToggle) without hitting the
+    // stale closure. Falls back to current state for the panel's Apply button.
+    const s = sel ?? { moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh }
+    const res = await api.applySpeed(s.moveMode, {
+      speed_kmh: s.customSpeedKmh,
+      speed_min_kmh: s.speedMinKmh,
+      speed_max_kmh: s.speedMaxKmh,
     })
     // Status bar should now reflect the just-applied values, not the
     // ones the route originally started with.
-    setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+    setEffectiveSpeed({ mode: s.moveMode, kmh: s.customSpeedKmh, min: s.speedMinKmh, max: s.speedMaxKmh })
     return res
   }, [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh])
 
@@ -445,13 +516,17 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   //      delivered a live position.
   //
   // `aborted` guards every setState call so a late resolution after the
-  // component unmounts is a no-op. The `initialFetched` ref keeps the
-  // body one-shot in dev StrictMode where effects mount → unmount →
-  // mount.
-  const initialFetched = useRef(false)
+  // component unmounts is a no-op.
+  //
+  // Do NOT add a `useRef` "already fetched" guard here. Under dev StrictMode
+  // (mount → unmount → mount) such a guard makes the FIRST mount claim the
+  // one-shot, then its cleanup sets `aborted = true`, so when its fetch
+  // resolves the setState is skipped — and the SECOND mount, seeing the guard
+  // already set, never re-fetches. Net result: the persisted last position is
+  // fetched but silently dropped, so the pin never appears on launch. Letting
+  // the effect re-run per mount costs one extra read-only GET in dev (none in
+  // prod) and the aborted first run is a harmless no-op.
   useEffect(() => {
-    if (initialFetched.current) return
-    initialFetched.current = true
     let aborted = false
 
     const run = async () => {
@@ -565,9 +640,10 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     const seed = udids.length >= 2 ? Date.now() : null
     return fanout(udids, 'randomwalk', (u) => api.randomWalk(center, r, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseRandomWalk.enabled, pause_min: pauseRandomWalk.min, pause_max: pauseRandomWalk.max }, u, seed, straightLine))
   }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseRandomWalk, straightLine])
-  const applySpeedAll = useCallback((udids: string[]) =>
-    fanout(udids, 'apply-speed', (u) => api.applySpeed(moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, u)),
-    [fanout, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh])
+  const applySpeedAll = useCallback((udids: string[], sel?: SpeedSelection) => {
+    const s = sel ?? { moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh }
+    return fanout(udids, 'apply-speed', (u) => api.applySpeed(s.moveMode, { speed_kmh: s.customSpeedKmh, speed_min_kmh: s.speedMinKmh, speed_max_kmh: s.speedMaxKmh }, u))
+  }, [fanout, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh])
   const pauseAll = useCallback((udids: string[]) => fanout(udids, 'pause', (u) => api.pauseSim(u)), [fanout])
   const resumeAll = useCallback((udids: string[]) => fanout(udids, 'resume', (u) => api.resumeSim(u)), [fanout])
   const stopAll = useCallback((udids: string[]) => fanout(udids, 'stop', (u) => api.stopSim(u)), [fanout])

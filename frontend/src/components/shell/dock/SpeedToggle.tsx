@@ -1,6 +1,7 @@
 import { Footprints, Rabbit, Car } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useSimContext } from '../../../contexts/SimContext'
+import { useSimDerived } from '../../../contexts/SimDerivedContext'
 import { MoveMode } from '../../../hooks/useSimulation'
 import { useT, type StringKey } from '../../../i18n'
 import {
@@ -33,13 +34,26 @@ const SPEED_PRESETS: readonly SpeedPreset[] = BASE_SPEED_PRESETS.map((p) => ({
 
 export default function SpeedToggle() {
   const t = useT()
-  const { sim } = useSimContext()
+  const { sim, handleApplySpeed } = useSimContext()
+  const { isRunning } = useSimDerived()
 
   const onPreset = (mode: MoveMode) => {
     sim.setMoveMode(mode)
     sim.setCustomSpeedKmh(null)
     sim.setSpeedMinKmh(null)
     sim.setSpeedMaxKmh(null)
+    // While a route is running, the dock toggle is a *live* speed switch:
+    // hot-swap the new preset onto the engine immediately. Pass the values
+    // explicitly — reading them back off `sim` here would see the pre-update
+    // state (the setMoveMode above hasn't re-rendered yet).
+    if (isRunning) {
+      void handleApplySpeed({
+        moveMode: mode,
+        customSpeedKmh: null,
+        speedMinKmh: null,
+        speedMaxKmh: null,
+      })
+    }
   }
 
   return (

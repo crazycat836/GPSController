@@ -17,6 +17,13 @@ from typing import Awaitable, Callable
 import httpx
 
 
+# Shared outbound timeout for the geocoding providers (Nominatim / Photon /
+# Google): 10s overall, 5s to connect. Declared once here so all three
+# provider modules reference the same value instead of each re-constructing an
+# identical ``httpx.Timeout``.
+GEOCODING_HTTP_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+
+
 def make_async_client_singleton(
     timeout: httpx.Timeout | float,
     *,
@@ -69,3 +76,38 @@ def make_async_client_singleton(
                 client = None
 
     return get_client, close_client
+
+
+def make_min_interval_gate(
+    min_interval_s: float,
+) -> Callable[[], Awaitable[None]]:
+    """Build a single-slot rate gate that spaces calls ≥ ``min_interval_s`` apart.
+
+    Returns one coroutine factory; awaiting it blocks until at least
+    ``min_interval_s`` has elapsed since the previous awaiter returned. The
+    last-call timestamp + lock are private to the returned closure, so each
+    factory call yields an independent gate — the same implement-once-reuse
+    pattern as :func:`make_async_client_singleton`, replacing the
+    copy-pasted module-global ``_last_request_at`` floats that the geocoding
+    providers each carried.
+
+    Used to honour upstream fair-use policies (Nominatim ≤1 req/s; Photon's
+    public host asks callers to be fair) so a runaway local caller can't
+    trigger an IP ban that hurts every user behind the NAT.
+    """
+    lock = asyncio.Lock()
+    last_at = 0.0
+
+    async def gate() -> None:
+        nonlocal last_at
+        async with lock:
+            # get_running_loop() (not the deprecated get_event_loop()) is
+            # correct here — gate() only runs inside a coroutine.
+            loop = asyncio.get_running_loop()
+            now = loop.time()
+            wait = min_interval_s - (now - last_at)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            last_at = loop.time()
+
+    return gate

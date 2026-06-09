@@ -148,7 +148,22 @@ class ConnectionStateStore:
         """
         old = self._state.get(udid, DeviceState.DISCONNECTED)
         if old == new_state:
-            return False
+            # Same state is normally a no-op. The one exception is a
+            # metadata change worth re-broadcasting — specifically a
+            # connection_type flip (USB → Network) on a device that stays
+            # CONNECTED while a WiFi tunnel takes over. Without this, the
+            # SSoT (and the /api/device/list merge that replays it) stays
+            # pinned to the stale "USB" payload and the renderer keeps
+            # showing a USB pill for a device that's actually on WiFi.
+            #
+            # A re-disconnect, or an absent/byte-identical metadata payload,
+            # remains a true no-op — this keeps the usbmux watchdog's
+            # per-second re-assert from spamming subscribers.
+            if new_state == DeviceState.DISCONNECTED or metadata is None:
+                return False
+            if dict(metadata) == self._metadata.get(udid):
+                return False
+            # else: metadata changed — fall through to update + notify.
 
         self._state[udid] = new_state
         if new_state == DeviceState.DISCONNECTED:
@@ -231,6 +246,36 @@ async def connect_device(dm, udid: str, *, cause: str) -> None:
         DeviceState.CONNECTED,
         cause=cause,
         metadata=metadata,
+    )
+
+
+async def announce_connected(
+    udid: str,
+    *,
+    name: str,
+    ios_version: str,
+    connection_type: str,
+    cause: str,
+) -> None:
+    """Record an already-established connection in the SSoT + broadcast it.
+
+    Unlike :func:`connect_device`, the transport is already up — the WiFi
+    tunnel path calls ``dm.connect_wifi_tunnel`` itself — so this only
+    drives the state store. It still emits ``device_connected`` even when
+    the device was already CONNECTED over a *different* transport
+    (USB → Network): :meth:`ConnectionStateStore.transition` re-notifies
+    on a connection_type change, so the renderer repaints the pill and the
+    ``/api/device/list`` merge stops replaying stale USB metadata.
+    """
+    await store.transition(
+        udid,
+        DeviceState.CONNECTED,
+        cause=cause,
+        metadata={
+            "name": name,
+            "ios_version": ios_version,
+            "connection_type": connection_type,
+        },
     )
 
 

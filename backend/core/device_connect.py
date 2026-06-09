@@ -13,6 +13,7 @@ DeviceManager has finished loading.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -38,10 +39,20 @@ async def connect_via_tunnel(
 
     logger.debug("Establishing TCP tunnel for %s (iOS %s)", udid, ios_version)
 
+    # Track each resource as it's acquired so a failure partway through
+    # (commonly a flaky iOS 17+ rsd.connect()) can tear down only what was
+    # actually opened. Without this, every failed attempt leaks the TUN
+    # interface + sockets — the connection record is built only on success,
+    # so the caller has no handle and disconnect() can never reach them.
+    proxy = None
+    tunnel_ctx = None
+    tunnel_entered = False
+    rsd = None
     try:
         proxy = await CoreDeviceTunnelProxy.create(lockdown)
         tunnel_ctx = proxy.start_tcp_tunnel()
         tunnel_result = await tunnel_ctx.__aenter__()
+        tunnel_entered = True
 
         logger.info("Tunnel established for %s: %s:%s",
                     udid, tunnel_result.address, tunnel_result.port)
@@ -65,10 +76,40 @@ async def connect_via_tunnel(
             "Ensure you are running as administrator.",
             udid, ios_version,
         )
+        await _close_partial_tunnel(
+            udid, rsd, tunnel_ctx if tunnel_entered else None, proxy,
+        )
         raise RuntimeError(
             f"Could not establish device tunnel (iOS {ios_version}). "
             f"Please run GPSController as Administrator."
         )
+
+
+async def _close_partial_tunnel(udid: str, rsd, tunnel_ctx, proxy) -> None:
+    """Best-effort teardown of a half-built tunnel after a failed connect.
+
+    Closes in reverse-open order (RSD → tunnel context → proxy), mirroring
+    ``DeviceManager.disconnect()``. Each closer is independent so one
+    raising doesn't skip the rest; errors are logged at DEBUG since on this
+    path every close is expected to be racy.
+    """
+    if rsd is not None:
+        try:
+            await rsd.close()
+        except Exception:
+            logger.debug("partial-tunnel cleanup: rsd.close() raised for %s", udid, exc_info=True)
+    if tunnel_ctx is not None:
+        try:
+            await tunnel_ctx.__aexit__(None, None, None)
+        except Exception:
+            logger.debug("partial-tunnel cleanup: tunnel_ctx.__aexit__ raised for %s", udid, exc_info=True)
+    if proxy is not None:
+        try:
+            result = proxy.close()
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception:
+            logger.debug("partial-tunnel cleanup: proxy.close() raised for %s", udid, exc_info=True)
 
 
 def connect_via_legacy(

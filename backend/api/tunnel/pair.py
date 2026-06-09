@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field, field_validator
 
 from api._deps import get_device_manager
@@ -18,6 +18,7 @@ from api.tunnel._helpers import (
 )
 from config import MAX_DEVICES
 from context import ctx
+from services import connection_state
 
 logger = logging.getLogger(__name__)
 _tunnel_logger = logging.getLogger("wifi_tunnel")
@@ -45,20 +46,15 @@ async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
         raise max_devices_error()
     try:
         info = await dm.connect_wifi_tunnel(req.rsd_address, req.rsd_port)
+        # Sync the SSoT (and broadcast device_connected via its observer)
+        # instead of broadcasting by hand — keeps the store authoritative so
+        # the /api/device/list merge reports Network, and re-emits even when
+        # the device was already CONNECTED over USB before the tunnel.
+        await connection_state.announce_connected(
+            info.udid, name=info.name, ios_version=info.ios_version,
+            connection_type="Network", cause="wifi_tunnel",
+        )
         await app_state.create_engine_for_device(info.udid)
-        try:
-            from services.ws_broadcaster import broadcast
-            await broadcast("device_connected", {
-                "udid": info.udid,
-                "name": info.name,
-                "ios_version": info.ios_version,
-                "connection_type": "Network",
-            })
-        except Exception as exc:
-            logger.debug(
-                "wifi_tunnel_connect: device_connected broadcast failed (%s)",
-                exc.__class__.__name__, exc_info=True,
-            )
         return {
             "status": "connected",
             "udid": info.udid,
@@ -97,13 +93,10 @@ async def wifi_repair():
         lockdown = await create_using_usbmux(serial=udid, autopair=True)
     except Exception:
         logger.exception("USB autopair failed during /wifi/repair", extra={"udid": udid})
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "code": ErrorCode.TRUST_FAILED.value,
-                "message": "USB trust failed — tap \"Trust\" on the iPhone unlock screen and retry",
-                "udid": udid,
-            },
+        raise http_err(
+            500, ErrorCode.TRUST_FAILED,
+            "USB trust failed — tap \"Trust\" on the iPhone unlock screen and retry",
+            udid=udid,
         )
 
     ios_version = lockdown.all_values.get("ProductVersion", "0.0")

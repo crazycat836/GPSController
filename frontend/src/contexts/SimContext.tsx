@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSimulation, SimMode, MoveMode } from '../hooks/useSimulation'
+import { useSimulation, SimMode, MoveMode, type SpeedSelection } from '../hooks/useSimulation'
 import type { FanoutOutcome, SimErrorCode } from '../hooks/useSimulation'
 import { useJoystick } from '../hooks/useJoystick'
 import * as api from '../services/api'
@@ -30,6 +30,7 @@ const SIM_ERROR_KEYS: Record<SimErrorCode, StringKey> = {
 
 // Re-export for consumers
 export { SimMode, MoveMode }
+export type { SpeedSelection }
 
 
 // Pure coordinate helpers — module-level so they're allocated once.
@@ -121,7 +122,7 @@ interface SimContextValue {
   handlePause: () => void
   handleResume: () => void
   handleRestore: () => void
-  handleApplySpeed: () => Promise<void>
+  handleApplySpeed: (sel?: SpeedSelection) => Promise<void>
   handleAddWaypoint: (lat: number, lng: number) => void
   handleClearWaypoints: () => void
   handleRemoveWaypoint: (index: number) => void
@@ -525,7 +526,7 @@ export function SimProvider({ children }: SimProviderProps) {
     })
   }, [sim, device, t, showToast])
 
-  const handleApplySpeed = useCallback(async () => {
+  const handleApplySpeed = useCallback(async (sel?: SpeedSelection) => {
     const udids = device.connectedDevices.map((d) => d.udid)
     try {
       await runWithFanout({
@@ -535,10 +536,10 @@ export function SimProvider({ children }: SimProviderProps) {
         // Single-device path needs an explicit success toast — the multi
         // path gets one through toastForFanout, single does not.
         single: async () => {
-          await sim.applySpeed()
+          await sim.applySpeed(sel)
           showToast(t('panel.apply_speed_success'))
         },
-        multi: (us) => sim.applySpeedAll(us),
+        multi: (us) => sim.applySpeedAll(us, sel),
         t,
         showToast,
       })

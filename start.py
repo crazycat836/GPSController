@@ -240,6 +240,17 @@ def start_frontend():
         kill_port(FRONTEND_PORT)
         time.sleep(1)
 
+    # Vite 8 still calls the deprecated `module.register()` for its
+    # TS-config loader, so Node 21+ prints a one-line DEP0205 warning on
+    # every dev-server start. Silence just that one code (not all warnings,
+    # and without patching node_modules) until Vite moves to
+    # `module.registerHooks()`. Append so any user-set NODE_OPTIONS survive.
+    env = dict(os.environ)
+    disable_flag = "--disable-warning=DEP0205"
+    node_opts = env.get("NODE_OPTIONS", "")
+    if disable_flag not in node_opts:
+        env["NODE_OPTIONS"] = f"{node_opts} {disable_flag}".strip()
+
     # 用 --port 強制指定 port，避免 Vite 跳到其他 port
     # Bind the Vite dev server to loopback only. Without an explicit value
     # `--host` defaults to 0.0.0.0 and exposes the unauthenticated dev UI
@@ -247,6 +258,7 @@ def start_frontend():
     p = subprocess.Popen(
         ["npx", "vite", "--host", "127.0.0.1", "--port", str(FRONTEND_PORT), "--strictPort"],
         cwd=FRONTEND,
+        env=env,
         shell=(os.name == "nt"),
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
     )
@@ -269,6 +281,18 @@ def cleanup():
     kill_port(BACKEND_PORT)
     kill_port(FRONTEND_PORT)
     print("  已停止。再見！")
+
+
+def _should_open_browser() -> bool:
+    """是否在啟動後自動開瀏覽器。
+
+    預設關閉，避免每次啟動都跳出新分頁。要開啟時擇一：
+      • 執行時加上 `--open` 或 `-o`
+      • 設環境變數 `GPSCONTROLLER_OPEN_BROWSER=1`
+    """
+    if "--open" in sys.argv or "-o" in sys.argv:
+        return True
+    return os.environ.get("GPSCONTROLLER_OPEN_BROWSER", "") == "1"
 
 
 def check_admin():
@@ -336,10 +360,14 @@ def main():
         return
     print()
 
-    # 等待 Vite 完成首次編譯後再開瀏覽器
+    # 等待 Vite 完成首次編譯
     time.sleep(2)
     url = f"http://localhost:{FRONTEND_PORT}"
-    webbrowser.open(url)
+
+    # 預設不自動開瀏覽器。要自動開啟時：加上 --open / -o 旗標，
+    # 或設環境變數 GPSCONTROLLER_OPEN_BROWSER=1。
+    if _should_open_browser():
+        webbrowser.open(url)
 
     print(box_border("╔", "═", "╗", BOX_WIDTH))
     print(box_line("          GPSController 已就緒！", BOX_WIDTH))

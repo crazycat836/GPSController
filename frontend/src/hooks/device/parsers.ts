@@ -118,6 +118,22 @@ export function parseDeviceDisconnected(data: unknown): DeviceDisconnectedPayloa
   }
 }
 
+export interface DeviceErrorPayload {
+  udid?: string
+  stage?: string
+  error?: string
+}
+
+export function parseDeviceError(data: unknown): DeviceErrorPayload | null {
+  const obj = asObject(data)
+  if (!obj) return null
+  return {
+    udid: asString(obj.udid),
+    stage: asString(obj.stage),
+    error: asString(obj.error),
+  }
+}
+
 export function parseDeviceSnapshot(data: unknown): DeviceSnapshotPayload | null {
   const obj = asObject(data)
   if (!obj) return null

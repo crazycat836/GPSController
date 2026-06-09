@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
@@ -24,6 +26,12 @@ async def get_coord_format():
 async def set_coord_format(req: CoordFormatRequest):
     fmt = get_coord_formatter()
     fmt.format = req.format
+    # Persist immediately — without this the new format lives only in memory
+    # and is lost on a non-graceful restart (it survived only when some other
+    # setting happened to flush settings.json afterward). Mirrors
+    # set_initial_position, which already persists on write. Offload the
+    # blocking file write so the event loop isn't stalled by disk I/O.
+    await asyncio.to_thread(ctx.app_state.save_settings)
     return {"format": fmt.format.value}
 
 
@@ -51,8 +59,28 @@ async def set_initial_position(req: _InitialPosRequest):
             raise http_err(400, ErrorCode.INVALID_COORD, "lat must be in [-90, 90], lng in [-180, 180]")
         new_pos = {"lat": float(req.lat), "lng": float(req.lng)}
     app_state.set_initial_position(new_pos)
-    app_state.save_settings()
+    await asyncio.to_thread(app_state.save_settings)
     return {"position": new_pos}
+
+
+class _WifiKeepaliveRequest(BaseModel):
+    enabled: bool
+
+
+@router.get("/settings/wifi-keepalive", tags=["settings"])
+async def get_wifi_keepalive():
+    """Whether the WiFi-tunnel keep-alive loop is enabled (opt-in)."""
+    return {"enabled": ctx.app_state.get_wifi_keepalive()}
+
+
+@router.put("/settings/wifi-keepalive", tags=["settings"])
+async def set_wifi_keepalive(req: _WifiKeepaliveRequest):
+    """Enable/disable keep-alive. When on, idle virtual locations are
+    re-asserted periodically so the tunnel survives the iPhone screen
+    dimming. Persisted immediately so the choice survives a restart."""
+    # set_wifi_keepalive persists synchronously; run it off the event loop.
+    await asyncio.to_thread(ctx.app_state.set_wifi_keepalive, req.enabled)
+    return {"enabled": ctx.app_state.get_wifi_keepalive()}
 
 
 @router.get("/last-device-position", tags=["settings"])

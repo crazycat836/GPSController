@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useBookmarks, type Bookmark, type BookmarkPlace, type BookmarkTag } from '../hooks/useBookmarks'
 import * as api from '../services/api'
 import type { SavedRoute, RouteCategory, RouteConflictPolicy } from '../services/api'
@@ -454,7 +454,11 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     [bm, showToast, t],
   )
 
-  const value: BookmarkContextValue = {
+  // Memoize so the 8 consumers don't re-render on every provider re-render.
+  // Keys on the individual members (not `bm` itself, which useBookmarks
+  // rebuilds each render); each member is a useCallback / stable state value,
+  // so the value identity only changes when something real does.
+  const value: BookmarkContextValue = useMemo(() => ({
     bookmarks: bm.bookmarks,
     places: bm.places,
     tags: bm.tags,
@@ -504,7 +508,23 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
 
     handleRoutesImportAll,
     handleRoutesExportAll,
-  }
+  }), [
+    bm.bookmarks, bm.places, bm.tags,
+    bm.createBookmark, bm.updateBookmark, bm.touchBookmark, bm.deleteBookmark,
+    bm.deleteBookmarksBatch, bm.moveBookmarks, bm.tagBookmarks,
+    bm.createPlace, bm.updatePlace, bm.deletePlace, bm.reorderPlaces,
+    bm.createTag, bm.updateTag, bm.deleteTag, bm.reorderTags, bm.refresh,
+    createBookmarksBulk,
+    addBmDialog, setAddBmDialog, handleAddBookmark,
+    handleBookmarkImport, handleBookmarkExport,
+    savedRoutes, handleRouteLoad, handleRouteSave, handleRouteRename,
+    handleRouteDelete, handleRoutesBatchDelete, handleRoutesMoveToCategory,
+    handleRoutesReorder, handleBookmarksReorder,
+    routeCategories, handleRouteCategoryCreate, handleRouteCategoryUpdate,
+    handleRouteCategoryDelete, handleRouteCategoriesReorder,
+    handleGpxImport, handleGpxExport,
+    handleRoutesImportAll, handleRoutesExportAll,
+  ])
 
   return (
     <BookmarkContext.Provider value={value}>

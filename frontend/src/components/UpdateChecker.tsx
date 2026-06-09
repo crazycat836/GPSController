@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import pkg from '../../package.json';
 import { useT } from '../i18n';
 import { STORAGE_KEYS } from '../lib/storage-keys';
+import { openExternalOrDefault } from '../lib/open-external';
 
 const CURRENT = pkg.version;
 const REPO = 'crazycat836/GPSController';
@@ -46,13 +47,6 @@ function writeLastCheck(latest: string | null): void {
   } catch { /* storage disabled */ }
 }
 
-// Electron preload exposes an `openExternal` bridge so clicks on GitHub
-// links open in the system browser rather than the webview. Web builds
-// don't define it; fall back to the native `<a target="_blank">` nav.
-interface ElectronBridge {
-  gpsController?: { openExternal?: (url: string) => void }
-}
-
 function parseVer(s: string): number[] {
   return s.replace(/^v/i, '').split('.').map((p) => parseInt(p, 10) || 0);
 }
@@ -68,14 +62,6 @@ function isNewer(a: string, b: string): boolean {
     if (xi !== yi) return xi > yi;
   }
   return false;
-}
-
-function openExternalOrDefault(url: string, e: React.MouseEvent) {
-  const bridge = (window as unknown as ElectronBridge).gpsController;
-  if (bridge?.openExternal) {
-    e.preventDefault();
-    bridge.openExternal(url);
-  }
 }
 
 /**

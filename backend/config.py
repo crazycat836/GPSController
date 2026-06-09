@@ -32,6 +32,18 @@ OSRM_BASE_URL = os.environ.get("OSRM_BASE_URL", "https://router.project-osrm.org
 NOMINATIM_BASE_URL = os.environ.get(
     "NOMINATIM_BASE_URL", "https://nominatim.openstreetmap.org"
 )
+
+# Photon (https://photon.komoot.io) — the default forward-search provider.
+# Keyless, OSM-backed, and tuned for typeahead/typo tolerance, so it beats
+# Nominatim for the search box. Overridable for self-hosted instances.
+PHOTON_BASE_URL = os.environ.get("PHOTON_BASE_URL", "https://photon.komoot.io")
+
+# Google Places (New) Text Search — opt-in, used only when the renderer
+# forwards a user-supplied API key on the request. The key never lives in
+# this config; it travels renderer -> local backend -> Google and back.
+GOOGLE_PLACES_BASE_URL = os.environ.get(
+    "GOOGLE_PLACES_BASE_URL", "https://places.googleapis.com/v1"
+)
 # Nominatim's usage policy requires a UA that identifies the application
 # *and* provides a way to reach the operator (contact email or website).
 # Plain "ProductName/Version" UAs have been blocklisted in the past once

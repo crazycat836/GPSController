@@ -3,6 +3,7 @@ import {
   API_BASE,
   DEFAULT_PAUSE,
   DEFAULT_TUNNEL_PORT,
+  REQUEST_TIMEOUT_MS,
   RETRY_BACKOFF_INITIAL_MS,
   RETRY_BACKOFF_MAX_MS,
   RETRY_BACKOFF_STEP_MS,
@@ -94,18 +95,32 @@ const API = API_BASE
 
 // Connection-refused means backend isn't up yet, retry with backoff.
 // Other HTTP errors (4xx/5xx) are real errors and propagate immediately.
+//
+// Each attempt is bounded by REQUEST_TIMEOUT_MS via an AbortController so a
+// backend that accepts the socket but never answers can't hang the call
+// forever. A timeout is treated differently from connection-refused: it is
+// NOT retried, because the request may be a non-idempotent POST the backend
+// already received — replaying it could double-apply a teleport/connect/save.
 async function fetchWithRetry(url: string, opts: RequestInit, maxAttempts = 15): Promise<Response> {
   let lastErr: unknown
   for (let i = 0; i < maxAttempts; i++) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     try {
-      return await fetch(url, opts)
+      return await fetch(url, { ...opts, signal: controller.signal })
     } catch (e) {
       lastErr = e
+      // Our own timeout fired: surface it immediately rather than retrying.
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        throw new Error('Request timed out')
+      }
       const delay = Math.min(
         RETRY_BACKOFF_INITIAL_MS + i * RETRY_BACKOFF_STEP_MS,
         RETRY_BACKOFF_MAX_MS,
       )
       await new Promise((r) => setTimeout(r, delay))
+    } finally {
+      clearTimeout(timer)
     }
   }
   throw lastErr ?? new Error('fetch failed')
@@ -246,9 +261,15 @@ async function authedFetch(
   return attempt()
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
   const res = await authedFetch(`${API}${path}`, (headers) => {
     headers['Content-Type'] = 'application/json'
+    if (extraHeaders) Object.assign(headers, extraHeaders)
     const opts: RequestInit = { method, headers }
     if (body !== undefined) opts.body = JSON.stringify(body)
     return opts
@@ -281,11 +302,21 @@ export const forgetDevice = (udid: string) =>
   request<{
     status: string
     udid: string
+    // True when the device-side unpair (lockdownd Unpair over USB) went
+    // through. Best-effort — only possible when the device is connected
+    // and unlocked.
+    device_unpaired?: boolean
+    // True when usbmuxd deleted its stored host pair record
+    // (DeletePairRecord). This is the authoritative "forget" and works
+    // even when the device is on WiFi, unplugged, or locked — so a
+    // "forgotten" status with this true is a full success regardless of
+    // device_unpaired or the local-file result below.
+    usbmux_record_deleted?: boolean
     removed: string[]
     // Populated when at least one pair-record path could not be unlinked
-    // (e.g. /var/db/lockdown needs root on macOS). When present and non-
-    // empty the backend returns status: "partial" — the UI can warn the
-    // user that the iPhone still trusts this host until the file goes.
+    // (e.g. /var/db/lockdown is OS-protected on macOS). Non-fatal when
+    // device_unpaired is true; otherwise the backend returns status
+    // "partial" and the UI can warn that the host is still trusted.
     failed?: { path: string; error: string }[]
   }>('DELETE', `/api/device/${udid}/pair`)
 export const clearAutoReconnectBlocks = () =>
@@ -405,7 +436,27 @@ export interface ReverseGeocodeResult {
   place_name?: string
 }
 
-export const searchAddress = (q: string) => request<AddressSearchResult[]>('GET', `/api/geocode/search?q=${encodeURIComponent(q)}`)
+/**
+ * Forward geocode (search box). The provider is chosen by the user in
+ * Settings ('nominatim' | 'photon' | 'google'), defaulting to Photon. When
+ * 'google' is selected the saved API key is read from localStorage and sent
+ * as a header to the *local* backend only — it never reaches a third party
+ * from here. (A missing key makes the backend degrade Google to Photon.)
+ */
+export const searchAddress = (q: string, lang?: string) => {
+  let googleKey = ''
+  let provider = ''
+  try { googleKey = localStorage.getItem(STORAGE_KEYS.googlePlacesKey)?.trim() || '' } catch { /* ignore */ }
+  try { provider = localStorage.getItem(STORAGE_KEYS.searchProvider)?.trim() || '' } catch { /* ignore */ }
+  const params = new URLSearchParams({ q })
+  if (lang) params.set('lang', lang)
+  if (provider) params.set('provider', provider)
+  // Only forward the Google key when Google is the active provider, so the
+  // backend's legacy "key present == use Google" heuristic doesn't override
+  // an explicit Photon / Nominatim choice for users who keep a key saved.
+  const headers = provider === 'google' && googleKey ? { 'X-Google-Key': googleKey } : undefined
+  return request<AddressSearchResult[]>('GET', `/api/geocode/search?${params.toString()}`, undefined, headers)
+}
 export const reverseGeocode = (lat: number, lng: number, lang?: string) =>
   request<ReverseGeocodeResult | null>(
     'GET',
@@ -488,6 +539,14 @@ export const getInitialPosition = () =>
   request<{ position: { lat: number; lng: number } | null }>('GET', '/api/location/settings/initial-position')
 export const setInitialPosition = (lat: number | null, lng: number | null) =>
   request<{ position: { lat: number; lng: number } | null }>('PUT', '/api/location/settings/initial-position', { lat, lng })
+
+// WiFi-tunnel keep-alive (opt-in). When enabled, the backend periodically
+// re-asserts idle virtual locations so the tunnel survives the iPhone screen
+// dimming. Persisted server-side in settings.json.
+export const getWifiKeepalive = () =>
+  request<{ enabled: boolean }>('GET', '/api/location/settings/wifi-keepalive')
+export const setWifiKeepalive = (enabled: boolean) =>
+  request<{ enabled: boolean }>('PUT', '/api/location/settings/wifi-keepalive', { enabled })
 
 // Last device position before the previous shutdown — used to pre-render
 // the current-position pin on startup without pushing anything to the iPhone.

@@ -21,8 +21,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TypedDict
 
-from fastapi import HTTPException
-
 from api._errors import ErrorCode, http_err
 
 _tunnel_logger = logging.getLogger("wifi_tunnel")
@@ -186,14 +184,9 @@ async def perform_remote_pair_handshake(
             friendly = "USB pairing invalid; unplug and re-plug USB, then tap Trust."
         else:
             friendly = "RemotePairing handshake failed; check the backend log for details."
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "code": ErrorCode.REMOTE_PAIR_FAILED.value,
-                "message": friendly,
-                "udid": udid,
-                "ios_version": ios_version,
-            },
+        raise http_err(
+            500, ErrorCode.REMOTE_PAIR_FAILED, friendly,
+            udid=udid, ios_version=ios_version,
         )
 
 
@@ -248,12 +241,9 @@ async def select_usb_device() -> str:
 
     usb_dev = next((d for d in raw_devices if getattr(d, "connection_type", "USB") == "USB"), None)
     if usb_dev is None:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": ErrorCode.REPAIR_NEEDS_USB.value,
-                "message": "Please connect the iPhone via USB first. Re-pairing needs USB to trigger the \"Trust This Computer\" prompt.",
-            },
+        raise http_err(
+            400, ErrorCode.REPAIR_NEEDS_USB,
+            "Please connect the iPhone via USB first. Re-pairing needs USB to trigger the \"Trust This Computer\" prompt.",
         )
     return usb_dev.serial
 
