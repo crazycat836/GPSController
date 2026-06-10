@@ -325,6 +325,79 @@ async def mark_recovered(udid: str) -> None:
         )
 
 
+# ─── Connect rollback ────────────────────────────────────────────────
+#
+# The connect endpoints transition the store to CONNECTED (and broadcast
+# ``device_connected``) *before* the simulation engine exists. These
+# helpers guarantee an engine-creation failure never leaves the store
+# advertising a connected device with no engine behind it. Modeled on
+# the WiFi-tunnel USB-fallback rollback, which got this right first.
+
+async def rollback_failed_connect(
+    dm,
+    app_state,
+    udid: str,
+    *,
+    cause: str,
+    stage: str,
+    error: str,
+) -> None:
+    """Undo a half-completed connect for *udid*: terminate any partially
+    built engine, disconnect the transport (transitioning the store back
+    to DISCONNECTED, which broadcasts ``device_disconnected``), then
+    broadcast ``device_error`` so the renderer can surface the failure.
+
+    Each step runs independently — a failure in one never skips the
+    others, matching the teardown discipline of the tunnel helpers.
+
+    ``stage`` and ``error`` feed the ``device_error`` payload; ``cause``
+    is the diagnostic string for the DISCONNECTED transition.
+    """
+    try:
+        await app_state.terminate_engine(udid)
+    except Exception:
+        logger.exception("connect rollback: terminate_engine failed for %s", udid)
+    try:
+        await disconnect_device(dm, udid, cause=cause)
+    except Exception:
+        logger.exception("connect rollback: disconnect failed for %s", udid)
+    try:
+        await broadcast("device_error", {
+            "udid": udid,
+            "stage": stage,
+            "error": error,
+        })
+    except Exception:
+        logger.exception("connect rollback: device_error broadcast failed for %s", udid)
+
+
+async def create_engine_with_rollback(
+    dm,
+    app_state,
+    udid: str,
+    *,
+    cause: str,
+    stage: str,
+    error: str,
+) -> None:
+    """Build the simulation engine for an already-CONNECTED *udid*.
+
+    On failure, runs :func:`rollback_failed_connect` and re-raises the
+    original exception unchanged so every route's existing except-clause
+    (and its :class:`ErrorCode` mapping) keeps firing exactly as before.
+    """
+    try:
+        await app_state.create_engine_for_device(udid)
+    except Exception:
+        logger.exception(
+            "Engine creation failed for %s; rolling back connect", udid,
+        )
+        await rollback_failed_connect(
+            dm, app_state, udid, cause=cause, stage=stage, error=error,
+        )
+        raise
+
+
 # ─── WS observer ─────────────────────────────────────────────────────
 #
 # Single translator from state transitions → existing WS event contract.

@@ -358,6 +358,8 @@ export const STRINGS = {
   'err.amfi_unavailable': { zh: 'AMFI 服務無法使用', en: 'AMFI service unavailable' },
   'err.amfi_reveal_failed': { zh: '顯示開發者模式失敗', en: 'Failed to reveal Developer Mode' },
   'err.open_log_failed': { zh: '開啟日誌檔案失敗', en: 'Failed to open log file' },
+  // Catch-all for uncaught backend exceptions (Exception handler in main.py)
+  'err.internal_error': { zh: '伺服器發生內部錯誤,請重試', en: 'Internal server error, please retry' },
 
   // ── Start-from-cached confirm dialog ────────
   // Shown when the user triggers a movement action (navigate / multi-stop /
@@ -471,6 +473,7 @@ export const STRINGS = {
   'toast.no_position_random': { zh: '尚未取得目前位置,無法產生隨機路徑點', en: 'No current position, cannot generate random waypoints' },
   'toast.no_destination': { zh: '請先在地圖上點擊設定目的地', en: 'Click the map to set a destination first' },
   'toast.no_waypoints': { zh: '尚未設定路徑點,請在地圖上點擊新增或使用隨機產生', en: 'No waypoints set, click the map to add, or use random generate' },
+  'toast.start_failed': { zh: '啟動失敗', en: 'Failed to start' },
   'toast.pause_countdown': { zh: '到點暫停中 · 剩餘 {n}s', en: 'Paused at waypoint · {n}s left' },
 
   // ── Bookmarks ────────────────────────────────

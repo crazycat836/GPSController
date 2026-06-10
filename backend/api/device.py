@@ -86,9 +86,16 @@ async def connect_device(udid: str):
         # `connect_device` runs ``dm.connect`` and broadcasts
         # ``device_connected`` via the installed WS observer. The engine
         # rebuild stays here since it's not part of the transport state
-        # machine.
+        # machine — but it goes through the rollback wrapper so an engine
+        # failure never leaves the store advertising a connected device
+        # with no engine behind it.
         await connection_state.connect_device(dm, udid, cause="user")
-        await app_state.create_engine_for_device(udid)
+        await connection_state.create_engine_with_rollback(
+            dm, app_state, udid,
+            cause="engine_create_failed",
+            stage="connect",
+            error="Simulation engine creation failed",
+        )
         return {"status": "connected", "udid": udid}
     except UnsupportedIosVersionError as e:
         raise ios_unsupported_error(e.version)

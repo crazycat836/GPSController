@@ -7,6 +7,7 @@ import secrets
 import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pydantic import ValidationError
 
 import auth
 from context import ctx
@@ -372,11 +373,21 @@ async def websocket_endpoint(ws: WebSocket):
                 app_state = ctx.app_state
                 # Route per-udid if provided; otherwise fan out to all engines.
                 udid = msg.get("udid") or data.get("udid")
-                inp = JoystickInput(
-                    direction=data.get("direction", 0),
-                    intensity=data.get("intensity", 0),
-                    sensitivity=data.get("sensitivity", 1.0),
-                )
+                # JoystickInput enforces strict bounds (direction 0–360,
+                # intensity 0–1, sensitivity 0.1–2.0). A malformed frame
+                # must be dropped — letting the ValidationError escape to
+                # the outer `except Exception` would kill the receive
+                # loop and starve the client of all events until it
+                # reconnects.
+                try:
+                    inp = JoystickInput(
+                        direction=data.get("direction", 0),
+                        intensity=data.get("intensity", 0),
+                        sensitivity=data.get("sensitivity", 1.0),
+                    )
+                except (ValidationError, TypeError):
+                    logger.debug("Dropping malformed joystick_input frame: %s", text)
+                    continue
                 if udid:
                     engine = app_state.get_engine(udid)
                     if engine:

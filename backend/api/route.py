@@ -7,6 +7,7 @@ import urllib.parse
 import uuid
 from datetime import datetime, timezone
 
+import gpxpy.gpx
 from fastapi import APIRouter, UploadFile, File
 
 from api._errors import ErrorCode, http_err
@@ -237,7 +238,14 @@ async def import_gpx(file: UploadFile = File(...)):
             continue
     if text is None:
         raise http_err(400, ErrorCode.GPX_DECODE_FAILED, "GPX file is not valid UTF-8, UTF-16, or latin-1")
-    coords = gpx_service.parse_gpx(text)
+    # gpxpy raises GPXXMLSyntaxException (subclass of GPXException) on
+    # malformed XML. Unguarded, that escapes as a plain-text 500 instead
+    # of the structured envelope every other decode failure here uses.
+    try:
+        coords = gpx_service.parse_gpx(text)
+    except gpxpy.gpx.GPXException as e:
+        logger.warning("GPX parse failed for %r: %s", file.filename, e)
+        raise http_err(400, ErrorCode.GPX_DECODE_FAILED, "GPX file could not be parsed as valid GPX XML")
     # Strip the .gpx extension from the filename so the rename input
     # doesn't show "myroute.gpx" — the format suffix is irrelevant to the
     # in-app route name.

@@ -417,91 +417,98 @@ export function SimProvider({ children }: SimProviderProps) {
       return
     }
     const udids = device.connectedDevices.map((d) => d.udid)
-    if (sim.mode === SimMode.Loop) {
-      await runWithFanout({
-        udids,
-        devices: device.connectedDevices,
-        action: t('mode.loop'),
-        single: () => sim.startLoop(route),
-        multi: (us) => sim.startLoopAll(us, route),
-        t,
-        showToast,
-      })
-    } else if (sim.mode === SimMode.MultiStop) {
-      await runWithFanout({
-        udids,
-        devices: device.connectedDevices,
-        action: t('mode.multi_stop'),
-        // Single-device multi-stop is gated on the cached-position
-        // confirm prompt; the multi path runs preSyncStart server-side.
-        single: async () => {
-          if (!(await confirmStartFromCached())) return
-          sim.multiStop(route, 0, false)
-        },
-        multi: (us) => sim.multiStopAll(us, route, 0, false),
-        t,
-        showToast,
-      })
+    try {
+      if (sim.mode === SimMode.Loop) {
+        await runWithFanout({
+          udids,
+          devices: device.connectedDevices,
+          action: t('mode.loop'),
+          single: () => sim.startLoop(route),
+          multi: (us) => sim.startLoopAll(us, route),
+          t,
+          showToast,
+        })
+      } else if (sim.mode === SimMode.MultiStop) {
+        await runWithFanout({
+          udids,
+          devices: device.connectedDevices,
+          action: t('mode.multi_stop'),
+          // Single-device multi-stop is gated on the cached-position
+          // confirm prompt; the multi path runs preSyncStart server-side.
+          single: async () => {
+            if (!(await confirmStartFromCached())) return
+            await sim.multiStop(route, 0, false)
+          },
+          multi: (us) => sim.multiStopAll(us, route, 0, false),
+          t,
+          showToast,
+        })
+      }
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : t('toast.start_failed'))
     }
   }, [sim, device, showToast, t, confirmStartFromCached])
 
   const handleStart = useCallback(async () => {
     const udids = device.connectedDevices.map((d) => d.udid)
-    if (sim.mode === SimMode.Joystick) {
-      await runWithFanout({
-        udids,
-        devices: device.connectedDevices,
-        action: t('mode.joystick'),
-        single: () => sim.joystickStart(),
-        multi: (us) => sim.joystickStartAll(us),
-        t,
-        showToast,
-      })
-    } else if (sim.mode === SimMode.RandomWalk) {
-      if (!sim.currentPosition) {
-        showToast(t('toast.no_position_random'))
-        return
+    try {
+      if (sim.mode === SimMode.Joystick) {
+        await runWithFanout({
+          udids,
+          devices: device.connectedDevices,
+          action: t('mode.joystick'),
+          single: () => sim.joystickStart(),
+          multi: (us) => sim.joystickStartAll(us),
+          t,
+          showToast,
+        })
+      } else if (sim.mode === SimMode.RandomWalk) {
+        if (!sim.currentPosition) {
+          showToast(t('toast.no_position_random'))
+          return
+        }
+        const startPos = sim.currentPosition
+        await runWithFanout({
+          udids,
+          devices: device.connectedDevices,
+          action: t('mode.random_walk'),
+          // Single-device path: gate on confirm, then re-read position
+          // (the confirm flow may have teleported to a confirmed cached
+          // coord, so `sim.currentPosition` may differ from `startPos`).
+          single: async () => {
+            if (!(await confirmStartFromCached())) return
+            const pos = sim.currentPosition
+            if (pos) await sim.randomWalk(pos, randomWalkRadius)
+          },
+          multi: (us) => sim.randomWalkAll(us, startPos, randomWalkRadius),
+          t,
+          showToast,
+        })
+      } else if (sim.mode === SimMode.Navigate) {
+        const dest = sim.destination
+        if (!dest) {
+          showToast(t('toast.no_destination'))
+          return
+        }
+        await runWithFanout({
+          udids,
+          devices: device.connectedDevices,
+          action: t('mode.navigate'),
+          single: async () => {
+            if (!(await confirmStartFromCached())) return
+            await sim.navigate(dest.lat, dest.lng)
+          },
+          multi: (us) => sim.navigateAll(us, dest.lat, dest.lng),
+          t,
+          showToast,
+        })
+      } else if (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) {
+        // `handleStartWaypointRoute` toasts its own failures; awaiting
+        // here keeps the start button disabled-state consistent.
+        await handleStartWaypointRoute()
       }
-      const startPos = sim.currentPosition
-      await runWithFanout({
-        udids,
-        devices: device.connectedDevices,
-        action: t('mode.random_walk'),
-        // Single-device path: gate on confirm, then re-read position
-        // (the confirm flow may have teleported to a confirmed cached
-        // coord, so `sim.currentPosition` may differ from `startPos`).
-        single: async () => {
-          if (!(await confirmStartFromCached())) return
-          const pos = sim.currentPosition
-          if (pos) sim.randomWalk(pos, randomWalkRadius)
-        },
-        multi: (us) => sim.randomWalkAll(us, startPos, randomWalkRadius),
-        t,
-        showToast,
-      })
-    } else if (sim.mode === SimMode.Navigate) {
-      const dest = sim.destination
-      if (!dest) {
-        showToast(t('toast.no_destination'))
-        return
-      }
-      await runWithFanout({
-        udids,
-        devices: device.connectedDevices,
-        action: t('mode.navigate'),
-        single: async () => {
-          if (!(await confirmStartFromCached())) return
-          await sim.navigate(dest.lat, dest.lng)
-        },
-        multi: (us) => sim.navigateAll(us, dest.lat, dest.lng),
-        t,
-        showToast,
-      })
-    } else if (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) {
-      // `handleStartWaypointRoute` performs an async fan-out + may await
-      // a confirm prompt. Await so any rejection propagates into this
-      // callback's caller (BottomDock catches it and toasts).
-      await handleStartWaypointRoute()
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : t('toast.start_failed'))
     }
   }, [sim, device, randomWalkRadius, handleStartWaypointRoute, showToast, t, confirmStartFromCached])
 

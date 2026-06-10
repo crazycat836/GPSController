@@ -278,7 +278,14 @@ async def connect_device_over_tunnel(rsd_address: str, rsd_port: int) -> dict:
         info.udid, name=info.name, ios_version=info.ios_version,
         connection_type="Network", cause="wifi_tunnel",
     )
-    await ctx.app_state.create_engine_for_device(info.udid)
+    # Engine failure rolls the store back to DISCONNECTED (+ device_error)
+    # and re-raises, so the callers' CONNECT_FAILED mapping is unchanged.
+    await connection_state.create_engine_with_rollback(
+        dm, ctx.app_state, info.udid,
+        cause="engine_create_failed",
+        stage="wifi_tunnel_connect",
+        error="Engine creation failed after tunnel connect",
+    )
     return {
         "status": "connected",
         "udid": info.udid,

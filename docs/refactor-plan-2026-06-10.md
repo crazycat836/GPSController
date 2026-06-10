@@ -64,30 +64,30 @@ Capture *current* behavior before touching anything. New test files only.
 
 ## Phase 2 — Verified functional bugs (fix with regression tests)
 
-- [ ] **2.1** API error contract: `throwEnvelopeError` (`frontend/src/services/api.ts:201-209`)
+- [x] **2.1** API error contract: `throwEnvelopeError` (`frontend/src/services/api.ts:201-209`)
       throws plain `Error` with no `code`/`detail`, so `BookmarkContext.tsx:238-242`'s 409
       conflict branch can never fire and RoutesPanel's overwrite dialog (192-204) is dead.
       → Add an `ApiError` class carrying `code` + envelope payload; check
       `err instanceof ApiError && err.code === 'route_name_conflict'`. Test the 409 path.
-- [ ] **2.2** Unawaited single-device actions: `SimContext.tsx:439` (`sim.multiStop`) and
+- [x] **2.2** Unawaited single-device actions: `SimContext.tsx:439` (`sim.multiStop`) and
       `:476` (`sim.randomWalk`) are not awaited → backend rejection becomes an unhandled
       promise rejection, no toast (navigate path awaits correctly). → `await` both.
-- [ ] **2.3** Unguarded GPX parse: `backend/api/route.py:240` — malformed XML raises
+- [x] **2.3** Unguarded GPX parse: `backend/api/route.py:240` — malformed XML raises
       `GPXXMLSyntaxException` → plain-text 500 bypassing the envelope. → wrap in
       try/except → `http_err(400, ErrorCode.GPX_DECODE_FAILED, ...)`.
-- [ ] **2.4** Malformed WS joystick frame kills the socket: `backend/api/websocket.py:375-379`
+- [x] **2.4** Malformed WS joystick frame kills the socket: `backend/api/websocket.py:375-379`
       constructs `JoystickInput` unguarded; pydantic `ValidationError` escapes to the outer
       handler and terminates the receive loop. → drop the frame
       (`except (ValidationError, TypeError): continue`).
-- [ ] **2.5** `fetchWithRetry` replays non-idempotent POSTs (`frontend/src/services/api.ts:104-127`):
+- [x] **2.5** `fetchWithRetry` replays non-idempotent POSTs (`frontend/src/services/api.ts:104-127`):
       mid-flight connection reset is retried up to 15× (double-save / double-import /
       replayed teleport). → retry only GET; keep backoff for boot-time connection-refused.
-- [ ] **2.6** Connect rollback inconsistency: `backend/api/device.py:90-97` and
+- [x] **2.6** Connect rollback inconsistency: `backend/api/device.py:90-97` and
       `backend/api/tunnel/_helpers.py:276-288` leave connection_state CONNECTED with no
       engine when engine creation fails; only `_attempt_usb_fallback`
       (`api/tunnel/lifecycle.py:203-227`) rolls back. → extract a shared
       connect-with-rollback helper used by all three paths.
-- [ ] **2.7** Catch-all exception handler (`backend/main.py:267`): register an
+- [x] **2.7** Catch-all exception handler (`backend/main.py:267`): register an
       `Exception` handler returning the `{success,data,error}` envelope with a new
       `internal_error` ErrorCode (+ i18n entry) so uncaught errors stop leaking
       Starlette plain-text 500s.

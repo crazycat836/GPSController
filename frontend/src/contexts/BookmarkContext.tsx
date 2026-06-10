@@ -231,12 +231,10 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
       return { kind, route: saved }
     } catch (err: unknown) {
       // The /api endpoint returns 409 + route_name_conflict when policy
-      // is "reject" and a duplicate exists. The error is surfaced as an
-      // Error whose `.cause` carries the raw envelope; the api.ts
-      // request helper attaches it. Detect by code first.
-      const code = (err as { code?: string })?.code
-        ?? ((err as { detail?: { code?: string } })?.detail?.code)
-      if (code === 'route_name_conflict') {
+      // is "reject" and a duplicate exists. api.ts surfaces that as an
+      // ApiError carrying the envelope's `code` plus the raw error
+      // payload on `.detail` (existing_id / existing_created_at).
+      if (err instanceof api.ApiError && err.code === 'route_name_conflict') {
         const { existingId, existingCreatedAt } = parseConflictExtras(err)
         return { kind: 'conflict', existingId, existingCreatedAt }
       }

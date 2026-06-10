@@ -71,3 +71,62 @@ def test_dict_coincidentally_containing_success_key_is_treated_as_envelope():
     misleading = {"success": "ok", "data": {"items": []}, "error": "no"}
     out = _render_dict(misleading)
     assert out == misleading
+
+
+# ── Catch-all exception handler ──────────────────────────
+#
+# Uncaught exceptions used to fall through to Starlette's plain-text
+# 500, bypassing the envelope entirely — the frontend then surfaced raw
+# statusText instead of an i18n-keyed error. These tests pin the
+# catch-all handler registered in main.py via
+# ``app.add_exception_handler(Exception, internal_exception_handler)``.
+
+def _make_crashing_app():
+    """Minimal app wired exactly like main.py's catch-all registration."""
+    from fastapi import FastAPI
+
+    from api._envelope import internal_exception_handler
+
+    app = FastAPI()
+    app.add_exception_handler(Exception, internal_exception_handler)
+
+    @app.get("/boom")
+    async def boom():
+        raise ValueError("secret internal detail")
+
+    return app
+
+
+def test_uncaught_exception_returns_internal_error_envelope():
+    from starlette.testclient import TestClient
+
+    client = TestClient(_make_crashing_app(), raise_server_exceptions=False)
+
+    resp = client.get("/boom")
+
+    assert resp.status_code == 500
+    assert resp.json() == {
+        "success": False,
+        "data": None,
+        "error": {"code": "internal_error", "message": "Internal server error"},
+    }
+
+
+def test_uncaught_exception_does_not_leak_internal_detail():
+    from starlette.testclient import TestClient
+
+    client = TestClient(_make_crashing_app(), raise_server_exceptions=False)
+
+    resp = client.get("/boom")
+
+    assert "secret internal detail" not in resp.text
+    assert "ValueError" not in resp.text
+
+
+def test_internal_error_is_a_registered_error_code():
+    """`internal_error` must live in the ErrorCode registry so the
+    gen_ws_types.py codegen mirrors it into BACKEND_ERROR_CODES and the
+    frontend i18n contract test covers `err.internal_error`."""
+    from api._errors import ErrorCode
+
+    assert ErrorCode.INTERNAL_ERROR.value == "internal_error"

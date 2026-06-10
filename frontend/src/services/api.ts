@@ -93,15 +93,22 @@ export interface AddressSearchResult {
 
 const API = API_BASE
 
-// Connection-refused means backend isn't up yet, retry with backoff.
-// Other HTTP errors (4xx/5xx) are real errors and propagate immediately.
+// Connection-refused means backend isn't up yet, retry with backoff —
+// but ONLY for GETs. Other HTTP errors (4xx/5xx) are real errors and
+// propagate immediately.
+//
+// Non-GET requests (POST/PUT/PATCH/DELETE) are never retried: a connection
+// reset after the body was sent leaves us unable to tell whether the backend
+// already applied the action, and replaying it could double-apply a
+// teleport/connect/save/import. They fail fast on the first error instead.
 //
 // Each attempt is bounded by REQUEST_TIMEOUT_MS via an AbortController so a
 // backend that accepts the socket but never answers can't hang the call
 // forever. A timeout is treated differently from connection-refused: it is
-// NOT retried, because the request may be a non-idempotent POST the backend
-// already received — replaying it could double-apply a teleport/connect/save.
+// NOT retried either, for the same non-idempotency reason.
 async function fetchWithRetry(url: string, opts: RequestInit, maxAttempts = 15): Promise<Response> {
+  // `fetch` defaults to GET when no method is given.
+  const isRetryable = (opts.method ?? 'GET').toUpperCase() === 'GET'
   let lastErr: unknown
   for (let i = 0; i < maxAttempts; i++) {
     const controller = new AbortController()
@@ -114,6 +121,9 @@ async function fetchWithRetry(url: string, opts: RequestInit, maxAttempts = 15):
       if (e instanceof DOMException && e.name === 'AbortError') {
         throw new Error('Request timed out')
       }
+      // Non-idempotent request: the backend may already have received the
+      // body, so replaying is unsafe. Surface the original error as-is.
+      if (!isRetryable) throw e
       const delay = Math.min(
         RETRY_BACKOFF_INITIAL_MS + i * RETRY_BACKOFF_STEP_MS,
         RETRY_BACKOFF_MAX_MS,
@@ -149,9 +159,41 @@ function currentLang(): 'zh' | 'en' {
 }
 
 /** Structured error returned in the response envelope. */
-interface ApiError {
+interface EnvelopeError {
   code?: string
   message?: string
+}
+
+/**
+ * Error thrown for non-ok responses that carried the standard envelope.
+ *
+ * Keeps the localized human-readable text on `.message` (so existing
+ * `err.message` toasts keep working) while preserving the machine-readable
+ * contract callers branch on:
+ *
+ * - `code` — the backend `ErrorCode` value (see backend/api/_errors.py),
+ *   e.g. `'route_name_conflict'` for the 409 route-save conflict.
+ * - `detail` — the raw envelope `error` payload as shipped on the wire,
+ *   including any extras the endpoint attached (`existing_id`,
+ *   `existing_created_at`, …) flattened in by `http_err(**extra)`.
+ *
+ * BookmarkContext's overwrite/save-as-new dialog depends on both.
+ */
+export class ApiError extends Error {
+  readonly code: string | undefined
+  /** Raw envelope `error` payload (`{code, message, ...extras}`). */
+  readonly detail: Record<string, unknown> | undefined
+
+  constructor(
+    message: string,
+    code: string | undefined,
+    detail: Record<string, unknown> | undefined,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+    this.detail = detail
+  }
 }
 
 /** Standard `{success, data, error, meta}` envelope per
@@ -161,7 +203,7 @@ interface ApiError {
 interface ApiEnvelope<T> {
   success: boolean
   data: T | null
-  error: ApiError | null
+  error: EnvelopeError | null
   meta?: { total?: number; page?: number; limit?: number } | null
 }
 
@@ -178,7 +220,7 @@ function isEnvelope(body: unknown): body is ApiEnvelope<unknown> {
 function formatError(error: unknown, fallback: string): string {
   if (typeof error === 'string') return error
   if (error && typeof error === 'object') {
-    const e = error as ApiError
+    const e = error as EnvelopeError
     if (e.code) {
       // Look up `err.<code>` in the central translation table — single
       // source of truth for both UI strings and backend-error messages.
@@ -194,14 +236,21 @@ function formatError(error: unknown, fallback: string): string {
 }
 
 /**
- * Throw a formatted Error from a non-ok response. Surfaces a structured
- * envelope error when present, else the bare HTTP status. Reads the body
+ * Throw a structured `ApiError` from a non-ok response. The localized
+ * message goes on `.message`; the envelope's machine-readable `code` and
+ * raw `error` payload ride along so callers can branch on them (e.g. the
+ * 409 route_name_conflict overwrite dialog). Falls back to a plain Error
+ * with the bare HTTP status when no envelope is present. Reads the body
  * once; always throws (hence `Promise<never>`).
  */
 async function throwEnvelopeError(res: Response): Promise<never> {
   const parsed: unknown = await res.json().catch(() => null)
   if (isEnvelope(parsed)) {
-    throw new Error(formatError(parsed.error, res.statusText))
+    const detail = (parsed.error && typeof parsed.error === 'object')
+      ? parsed.error as Record<string, unknown>
+      : undefined
+    const code = typeof detail?.code === 'string' ? detail.code : undefined
+    throw new ApiError(formatError(parsed.error, res.statusText), code, detail)
   }
   // Backend should always emit the envelope; this branch only fires if a
   // proxy / dev-server intercepts the response and returns its own body.

@@ -16,6 +16,7 @@ import auth
 from api._envelope import (
     EnvelopeJSONResponse,
     http_exception_handler,
+    internal_exception_handler,
     unauthorized_response,
     validation_exception_handler,
 )
@@ -264,8 +265,11 @@ app = FastAPI(
 
 # Convert HTTPException + 422 RequestValidationError into the same
 # error envelope shape so the frontend has a single failure shape to parse.
+# The catch-all Exception handler keeps that contract for uncaught errors
+# too (full traceback logged server-side; generic envelope on the wire).
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, internal_exception_handler)
 
 class _TokenAuthMiddleware(BaseHTTPMiddleware):
     """Gate every request by an `X-GPS-Token` header.

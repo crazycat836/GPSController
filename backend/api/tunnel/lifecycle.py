@@ -21,6 +21,7 @@ from api.tunnel._helpers import (
 )
 from config import MAX_DEVICES, REMOTE_PAIRING_PORT
 from context import ctx
+from services import connection_state
 from services.wifi_tunnel_service import cleanup_wifi_connections, tunnel
 
 logger = logging.getLogger(__name__)
@@ -176,30 +177,6 @@ async def wifi_tunnel_status():
     return {"running": True, **(tunnel.info or {})}
 
 
-async def _broadcast_usb_fallback_error(udid: str) -> None:
-    from services.ws_broadcaster import broadcast
-    await broadcast("device_error", {
-        "udid": udid,
-        "stage": "usb_fallback",
-        "error": "USB fallback engine creation failed",
-    })
-
-
-async def _rollback_usb_fallback(app_state, dm, udid: str) -> None:
-    """Undo a partially-completed USB fallback: terminate engine, disconnect,
-    notify the frontend. Each sub-step runs as an independent teardown step
-    so a failure in one does not skip the others."""
-    rollback_steps: list[TeardownStep] = [
-        TeardownStep("usb_fallback_terminate_engine",
-                     lambda: app_state.terminate_engine(udid)),
-        TeardownStep("usb_fallback_disconnect",
-                     lambda: dm.disconnect(udid)),
-        TeardownStep("usb_fallback_broadcast_error",
-                     lambda: _broadcast_usb_fallback_error(udid)),
-    ]
-    await run_teardown_steps(rollback_steps)
-
-
 async def _attempt_usb_fallback(app_state, dm) -> None:
     """If a non-Network device is still attached, reconnect it over USB and
     spin up a new simulation engine. On engine-creation failure, roll back
@@ -224,7 +201,16 @@ async def _attempt_usb_fallback(app_state, dm) -> None:
         _tunnel_logger.exception(
             "USB fallback: engine creation failed for %s; rolling back", udid,
         )
-        await _rollback_usb_fallback(app_state, dm, udid)
+        # Shared rollback: terminate engine, disconnect, broadcast
+        # device_error — each step independent. The store transition
+        # inside is a no-op here (this path connects via dm.connect
+        # directly, so the SSoT never went CONNECTED).
+        await connection_state.rollback_failed_connect(
+            dm, app_state, udid,
+            cause="usb_fallback_failed",
+            stage="usb_fallback",
+            error="USB fallback engine creation failed",
+        )
 
 
 @router.post("/wifi/tunnel/stop")

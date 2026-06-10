@@ -87,6 +87,10 @@ class ErrorCode(StrEnum):
     # System / diagnostics
     OPEN_LOG_FAILED = "open_log_failed"
 
+    # Catch-all — set by the Exception handler in api/_envelope.py when an
+    # uncaught error would otherwise bypass the envelope entirely
+    INTERNAL_ERROR = "internal_error"
+
 
 def http_err(
     status: int,

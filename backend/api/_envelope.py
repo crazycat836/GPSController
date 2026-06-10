@@ -28,6 +28,7 @@ payloads do not carry a JSON envelope).
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -35,6 +36,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from api._errors import ErrorCode
+
+logger = logging.getLogger("gpscontroller")
 
 
 def _is_already_enveloped(content: Any) -> bool:
@@ -110,6 +113,28 @@ async def validation_exception_handler(
         "errors": exc.errors(),
     })
     return JSONResponse(body, status_code=422)
+
+
+async def internal_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Catch-all for uncaught exceptions — keeps the envelope contract.
+
+    Without this, any unhandled error falls through to Starlette's
+    plain-text 500 and the frontend surfaces raw statusText instead of
+    an i18n-keyed message. The full traceback is logged server-side;
+    the wire only ever sees the generic ``internal_error`` envelope so
+    internal exception text never leaks to API clients.
+    """
+    logger.exception(
+        "Unhandled exception serving %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
+    body = _error_envelope({
+        "code": ErrorCode.INTERNAL_ERROR.value,
+        "message": "Internal server error",
+    })
+    return JSONResponse(body, status_code=500)
 
 
 def unauthorized_response() -> JSONResponse:
