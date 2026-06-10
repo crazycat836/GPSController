@@ -1,4 +1,6 @@
-"""Tests for api.device.forget_device — the "移除配對" / unpair flow.
+"""Tests for the "移除配對" / unpair flow — route in api.device, flow in
+core.device_forget. Stubs patch the core module; each test still calls
+the route end-to-end so the HTTP translation stays pinned too.
 
 Regression guard for the iPad forget failure: for iOS 17+ devices
 ``conn.lockdown`` is a RemoteServiceDiscoveryService (no ``unpair()``);
@@ -99,6 +101,7 @@ def test_forget_unpairs_via_usbmux_lockdown_and_succeeds_despite_protected_file(
     LockdownClient), and a PermissionError deleting /var/db/lockdown must
     NOT turn the whole forget into a 500."""
     from api import device
+    from core import device_forget
 
     lockdown = _LockdownClient()
     conn = _Conn(usbmux_lockdown=lockdown)
@@ -107,13 +110,13 @@ def test_forget_unpairs_via_usbmux_lockdown_and_succeeds_despite_protected_file(
 
     async def _run():
         with (
-            patch.object(device, "connection_state") as cs,
-            patch.object(device, "purge_stale_remote_pair_record"),
+            patch.object(device_forget, "connection_state") as cs,
+            patch.object(device_forget, "purge_stale_remote_pair_record"),
             # usbmuxd delete returns False so the success is proven to come
             # from the device-side unpair alone.
-            patch.object(device, "delete_usbmux_pair_record", new=AsyncMock(return_value=False)),
+            patch.object(device_forget, "delete_usbmux_pair_record", new=AsyncMock(return_value=False)),
             patch.object(
-                device, "_pair_record_candidates",
+                device_forget, "_pair_record_candidates",
                 return_value=[_ProtectedPath("/var/db/lockdown/u-ipad.plist")],
             ),
         ):
@@ -132,6 +135,7 @@ def test_forget_unpairs_via_usbmux_lockdown_and_succeeds_despite_protected_file(
 def test_forget_falls_back_to_lockdown_when_no_usbmux_lockdown():
     """iOS 16 legacy: conn.lockdown IS the LockdownClient (has unpair)."""
     from api import device
+    from core import device_forget
 
     # Legacy: lockdown itself can unpair, no separate usbmux_lockdown.
     legacy = _LockdownClient()
@@ -142,10 +146,10 @@ def test_forget_falls_back_to_lockdown_when_no_usbmux_lockdown():
 
     async def _run():
         with (
-            patch.object(device, "connection_state") as cs,
-            patch.object(device, "purge_stale_remote_pair_record"),
-            patch.object(device, "delete_usbmux_pair_record", new=AsyncMock(return_value=False)),
-            patch.object(device, "_pair_record_candidates", return_value=[]),
+            patch.object(device_forget, "connection_state") as cs,
+            patch.object(device_forget, "purge_stale_remote_pair_record"),
+            patch.object(device_forget, "delete_usbmux_pair_record", new=AsyncMock(return_value=False)),
+            patch.object(device_forget, "_pair_record_candidates", return_value=[]),
         ):
             cs.disconnect_device = AsyncMock()
             return await device.forget_device("u-legacy")
@@ -161,6 +165,7 @@ def test_forget_500s_when_no_unpair_and_no_record_removable():
     macOS-protected: nothing can be cleaned → genuine 500."""
     from fastapi import HTTPException
     from api import device
+    from core import device_forget
 
     conn = _Conn(usbmux_lockdown=None)  # conn.lockdown is RSD (no unpair)
     app_state = _AppState(_DM(conn))
@@ -168,13 +173,13 @@ def test_forget_500s_when_no_unpair_and_no_record_removable():
 
     async def _run():
         with (
-            patch.object(device, "connection_state") as cs,
-            patch.object(device, "purge_stale_remote_pair_record"),
+            patch.object(device_forget, "connection_state") as cs,
+            patch.object(device_forget, "purge_stale_remote_pair_record"),
             # Every authoritative path fails: no device-side unpair, usbmuxd
             # delete rejected, file unlink blocked → genuine 500.
-            patch.object(device, "delete_usbmux_pair_record", new=AsyncMock(return_value=False)),
+            patch.object(device_forget, "delete_usbmux_pair_record", new=AsyncMock(return_value=False)),
             patch.object(
-                device, "_pair_record_candidates",
+                device_forget, "_pair_record_candidates",
                 return_value=[_ProtectedPath("/var/db/lockdown/u-wifi.plist")],
             ),
         ):
@@ -192,17 +197,18 @@ def test_forget_succeeds_via_usbmuxd_when_device_disconnected_or_locked():
     unpair through and /var/db/lockdown is macOS-protected. usbmuxd
     DeletePairRecord must carry the forget to success without a 500."""
     from api import device
+    from core import device_forget
 
     app_state = _AppState(_DM(None))  # get_connection -> None (disconnected)
     _install(app_state)
 
     async def _run():
         with (
-            patch.object(device, "connection_state") as cs,
-            patch.object(device, "purge_stale_remote_pair_record"),
-            patch.object(device, "delete_usbmux_pair_record", new=AsyncMock(return_value=True)),
+            patch.object(device_forget, "connection_state") as cs,
+            patch.object(device_forget, "purge_stale_remote_pair_record"),
+            patch.object(device_forget, "delete_usbmux_pair_record", new=AsyncMock(return_value=True)),
             patch.object(
-                device, "_pair_record_candidates",
+                device_forget, "_pair_record_candidates",
                 return_value=[_ProtectedPath("/var/db/lockdown/u-locked.plist")],
             ),
         ):

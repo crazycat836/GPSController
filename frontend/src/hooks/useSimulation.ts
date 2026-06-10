@@ -1,8 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import * as api from '../services/api'
-import { PRE_SYNC_SETTLE_MS } from '../lib/constants'
-import { STORAGE_KEYS } from '../lib/storage-keys'
-import { devWarn } from '../lib/dev-log'
 import type { LatLng } from './sim/types'
 import {
   useSimRuntimes,
@@ -21,12 +18,17 @@ import {
   useStraightLineToggle,
   type PauseSetting,
 } from './sim/usePauseSettings'
+import { MoveMode, useSpeedPrefs, type SpeedPrefs } from './sim/useSpeedPrefs'
+import {
+  useSimGroupActions,
+  type FanoutOutcome,
+} from './sim/useSimGroupActions'
 
 // Re-export the public types so existing callers (DeviceChip, EtaBar,
 // SimContext, App.tsx, etc.) keep importing from `'../hooks/useSimulation'`
 // without churn.
-export type { LatLng, DeviceRuntime, RuntimesMap, WsSubscribe, SimErrorCode, SimulationStatus, PauseSetting }
-export { emptyRuntime }
+export type { LatLng, DeviceRuntime, RuntimesMap, WsSubscribe, SimErrorCode, SimulationStatus, PauseSetting, FanoutOutcome }
+export { emptyRuntime, MoveMode }
 
 export enum SimMode {
   Teleport = 'teleport',
@@ -37,65 +39,12 @@ export enum SimMode {
   RandomWalk = 'randomwalk',
 }
 
-export enum MoveMode {
-  Walking = 'walking',
-  Running = 'running',
-  Driving = 'driving',
-}
-
-// ── Speed preference persistence ───────────────────────────────────────
-// The user's last-selected movement speed (mode + any manual override)
-// is persisted so a relaunch reuses it instead of resetting to Walking.
-// Pure module-level helpers keep the localStorage shape in one place and
-// avoid a circular import (MoveMode lives in this module).
-interface SpeedPrefs {
-  moveMode: MoveMode
-  customSpeedKmh: number | null
-  speedMinKmh: number | null
-  speedMaxKmh: number | null
-}
-
 // Explicit speed selection used to hot-swap a running route's speed without
 // reading hook state. Passing the values explicitly (rather than relying on
 // the `applySpeed` closure) avoids a stale-closure bug: a caller that does
 // `setMoveMode(x)` then `applySpeed()` in the same tick would otherwise send
 // the *previous* moveMode, because the state update hasn't re-rendered yet.
 export type SpeedSelection = SpeedPrefs
-
-const DEFAULT_SPEED_PREFS: SpeedPrefs = {
-  moveMode: MoveMode.Walking,
-  customSpeedKmh: null,
-  speedMinKmh: null,
-  speedMaxKmh: null,
-}
-
-function isMoveMode(v: unknown): v is MoveMode {
-  return v === MoveMode.Walking || v === MoveMode.Running || v === MoveMode.Driving
-}
-
-function numOrNull(v: unknown): number | null {
-  return typeof v === 'number' && Number.isFinite(v) ? v : null
-}
-
-function loadSpeedPrefs(): SpeedPrefs {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.speedPrefs)
-    if (!raw) return DEFAULT_SPEED_PREFS
-    const p = JSON.parse(raw) as Record<string, unknown>
-    return {
-      moveMode: isMoveMode(p.moveMode) ? p.moveMode : DEFAULT_SPEED_PREFS.moveMode,
-      customSpeedKmh: numOrNull(p.customSpeedKmh),
-      speedMinKmh: numOrNull(p.speedMinKmh),
-      speedMaxKmh: numOrNull(p.speedMaxKmh),
-    }
-  } catch {
-    return DEFAULT_SPEED_PREFS
-  }
-}
-
-function saveSpeedPrefs(p: SpeedPrefs): void {
-  try { localStorage.setItem(STORAGE_KEYS.speedPrefs, JSON.stringify(p)) } catch { /* ignore */ }
-}
 
 /** Map backend state strings to SimMode. */
 function stateToMode(state: string): SimMode | null {
@@ -133,26 +82,6 @@ function isActiveState(state: string | undefined): boolean {
 // across renders when no runtime exists yet.
 const EMPTY_ROUTE_PATH: LatLng[] = []
 
-// ── Fan-out helper ─────────────────────────────────────────────────────
-export interface FanoutOutcome<T> {
-  ok: Array<{ udid: string; value: T }>
-  failed: Array<{ udid: string; reason: string }>
-}
-
-function summarizeResults<T>(
-  results: PromiseSettledResult<T>[],
-  udids: string[],
-): FanoutOutcome<T> {
-  const ok: FanoutOutcome<T>['ok'] = []
-  const failed: FanoutOutcome<T>['failed'] = []
-  results.forEach((r, i) => {
-    const udid = udids[i]
-    if (r.status === 'fulfilled') ok.push({ udid, value: r.value })
-    else failed.push({ udid, reason: r.reason?.message ?? String(r.reason) })
-  })
-  return { ok, failed }
-}
-
 export interface UseSimulationOptions {
   /**
    * Optional code → localised string translator. Owned by the consumer
@@ -181,13 +110,14 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   // joystickStart to roll back if the backend rejects the request.
   const modeRef = useRef(mode)
   useEffect(() => { modeRef.current = mode }, [mode])
-  // Speed prefs lazy-load from localStorage so the last-selected speed is
-  // reused on relaunch. A single one-shot read seeds all four fields below.
-  // `useRef(loadSpeedPrefs())` would re-invoke the localStorage read on every
-  // render (the arg is evaluated each time, even though useRef keeps the
-  // first); a lazy state initialiser runs it exactly once.
-  const [initialSpeedPrefs] = useState<SpeedPrefs>(loadSpeedPrefs)
-  const [moveMode, setMoveMode] = useState<MoveMode>(initialSpeedPrefs.moveMode)
+  // Speed prefs (moveMode + the custom/min/max overrides) live in their
+  // own hook: lazy localStorage load on mount, persisted on every change.
+  const {
+    moveMode, setMoveMode,
+    customSpeedKmh, setCustomSpeedKmh,
+    speedMinKmh, setSpeedMinKmh,
+    speedMaxKmh, setSpeedMaxKmh,
+  } = useSpeedPrefs()
   // Engine speed multiplier reported by the initial `getStatus()` fetch.
   // Feeds the derived `status.speed` field (no consumer reads it today,
   // but the public SimulationStatus shape keeps it).
@@ -205,15 +135,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   // state here; the WS dispatcher only ever CLEARS destination.
   const [destination, setDestination] = useState<LatLng | null>(null)
   const [waypoints, setWaypoints] = useState<LatLng[]>([])
-  const [customSpeedKmh, setCustomSpeedKmh] = useState<number | null>(initialSpeedPrefs.customSpeedKmh)
-  const [speedMinKmh, setSpeedMinKmh] = useState<number | null>(initialSpeedPrefs.speedMinKmh)
-  const [speedMaxKmh, setSpeedMaxKmh] = useState<number | null>(initialSpeedPrefs.speedMaxKmh)
-  // Persist the speed selection whenever any of the four fields changes so
-  // the next launch reuses it. Cheap JSON write; no throttle needed since
-  // these change only on explicit user input, not on the 10 Hz nav stream.
-  useEffect(() => {
-    saveSpeedPrefs({ moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh })
-  }, [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh])
   // Global "straight-line path" toggle. When on, all nav modes bypass OSRM
   // and move along densified straight segments between waypoints.
   const [straightLine, setStraightLine] = useStraightLineToggle()
@@ -641,99 +562,28 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   }, [patchPrimaryRuntime])
 
   // ── Group-mode fan-out helpers ──────────────────────────────────────
-  // Each takes an explicit list of udids so the caller (App.tsx) decides
-  // which devices to target. Returns a FanoutOutcome for toast summarisation.
-  const fanout = useCallback(async <T,>(
-    udids: string[],
-    fn: (udid: string) => Promise<T>,
-  ): Promise<FanoutOutcome<T>> => {
-    // Caller-gated: udids is always non-empty.
-    const results = await Promise.allSettled(udids.map((u) => fn(u)))
-    return summarizeResults(results, udids)
-  }, [])
-
-  // Group-mode sync helper: before any action that depends on a common start
-  // (navigate / loop / multistop / randomwalk / joystick), teleport every
-  // target device to the primary's current position so both phones begin from
-  // the same coordinate and follow identical paths.
-  //
-  // Pre-sync failures are non-fatal — the primary action proceeds — but we
-  // log them in dev so a half-synced fan-out doesn't disappear silently.
-  // (The previous try/catch wrapped Promise.allSettled, which never rejects,
-  // so failures were being swallowed by an unreachable handler.)
-  const preSyncStart = useCallback(async (udids: string[]) => {
-    if (udids.length < 2) return
-    const pos = currentPosition
-    if (!pos) return
-    const results = await Promise.allSettled(
-      udids.map((u) => api.teleport(pos.lat, pos.lng, u)),
-    )
-    results.forEach((r, i) => {
-      if (r.status === 'rejected') {
-        devWarn('[preSyncStart] teleport failed for', udids[i], r.reason)
-      }
-    })
-    // Tiny settle delay so devices finalise the teleport before the next
-    // command arrives.
-    await new Promise((r) => setTimeout(r, PRE_SYNC_SETTLE_MS))
-  }, [currentPosition])
-
-  const teleportAll = useCallback((udids: string[], lat: number, lng: number) =>
-    fanout(udids, (u) => api.teleport(lat, lng, u)), [fanout])
-  const navigateAll = useCallback(async (udids: string[], lat: number, lng: number) => {
-    await preSyncStart(udids)
-    return fanout(udids, (u) => api.navigate(lat, lng, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, u, straightLine))
-  }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, straightLine])
-  const startLoopAll = useCallback(async (udids: string[], wps: LatLng[]) => {
-    await preSyncStart(udids)
-    setLapProgress(loopLapCount != null ? { current: 0, total: loopLapCount } : null)
-    return fanout(udids, (u) => api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, u, straightLine, loopLapCount))
-  }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseLoop, straightLine, loopLapCount])
-  const multiStopAll = useCallback(async (udids: string[], wps: LatLng[], dur: number, loop: boolean) => {
-    await preSyncStart(udids)
-    setLapProgress(loop && loopLapCount != null ? { current: 0, total: loopLapCount } : null)
-    return fanout(udids, (u) => api.multiStop(wps, moveMode, dur, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, u, straightLine, loop ? loopLapCount : null))
-  }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, straightLine, loopLapCount])
-  const randomWalkAll = useCallback(async (udids: string[], center: LatLng, r: number) => {
-    await preSyncStart(udids)
-    // Shared seed → both engines produce identical destination sequences.
-    const seed = udids.length >= 2 ? Date.now() : null
-    return fanout(udids, (u) => api.randomWalk(center, r, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseRandomWalk.enabled, pause_min: pauseRandomWalk.min, pause_max: pauseRandomWalk.max }, u, seed, straightLine))
-  }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseRandomWalk, straightLine])
-  const applySpeedAll = useCallback((udids: string[], sel?: SpeedSelection) => {
-    const s = sel ?? { moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh }
-    return fanout(udids, (u) => api.applySpeed(s.moveMode, { speed_kmh: s.customSpeedKmh, speed_min_kmh: s.speedMinKmh, speed_max_kmh: s.speedMaxKmh }, u))
-  }, [fanout, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh])
-  const pauseAll = useCallback((udids: string[]) => fanout(udids, (u) => api.pauseSim(u)), [fanout])
-  const resumeAll = useCallback((udids: string[]) => fanout(udids, (u) => api.resumeSim(u)), [fanout])
-  const stopAll = useCallback((udids: string[]) => fanout(udids, (u) => api.stopSim(u)), [fanout])
-  const restoreAll = useCallback(async (udids: string[]) => {
-    const outcome = await fanout(udids, (u) => api.restoreSim(u))
-    // Clear per-device runtime state (markers, routes) so the map — and
-    // the single-device view derived from the primary runtime —
-    // immediately reflects the wipe without waiting for events.
-    setRuntimes((prev) => {
-      const next: RuntimesMap = { ...prev }
-      for (const u of udids) {
-        if (next[u]) {
-          next[u] = { ...next[u], currentPos: null, destination: null, routePath: [], progress: 0, eta: null, distanceRemaining: 0, distanceTraveled: 0, waypointIndex: null, state: 'idle' }
-        }
-      }
-      return next
-    })
-    setDestination(null)
-    setWaypoints([])
-    setWaypointProgress(null)
-    setLapProgress(null)
-    setEffectiveSpeed(null)
-    return outcome
-  }, [fanout])
-  const joystickStartAll = useCallback(async (udids: string[]) => {
-    await preSyncStart(udids)
-    return fanout(udids, (u) => api.joystickStart(moveMode, u))
-  }, [fanout, preSyncStart, moveMode])
-  const joystickStopAll = useCallback((udids: string[]) =>
-    fanout(udids, (u) => api.joystickStop(u)), [fanout])
+  // Extracted to useSimGroupActions. Each takes an explicit list of udids
+  // so the caller (App.tsx) decides which devices to target and returns a
+  // FanoutOutcome for toast summarisation. The deps bundle hands over the
+  // speed / pause / lap state the fan-outs read plus the setters restoreAll
+  // patches after the fan-out.
+  const {
+    teleportAll, navigateAll, startLoopAll, multiStopAll, randomWalkAll,
+    applySpeedAll, pauseAll, resumeAll, stopAll, restoreAll,
+    joystickStartAll, joystickStopAll,
+  } = useSimGroupActions({
+    currentPosition,
+    moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh,
+    straightLine,
+    pauseLoop, pauseMultiStop, pauseRandomWalk,
+    loopLapCount,
+    setLapProgress,
+    setRuntimes,
+    setDestination,
+    setWaypoints,
+    setWaypointProgress,
+    setEffectiveSpeed,
+  })
 
   return {
     runtimes,

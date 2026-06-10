@@ -165,7 +165,7 @@ All verified dead by project-wide grep including dynamic-key patterns.
       SimDerivedContext pattern. Stop exposing the raw `sim` object. Fixes the
       every-tick re-render of 14 consumers + removes the workaround refs
       (RoutesPanel.tsx:73-80) and App.tsx's keydown re-subscription (258-282).
-- [ ] **4A.3** Shrink `useSimulation` (762L): extract `useSpeedPrefs` and
+- [x] **4A.3** Shrink `useSimulation` (762L): extract `useSpeedPrefs` and
       `useSimGroupActions` into `hooks/sim/`.
 - [ ] **4A.4** Split `BookmarkContext`: extract `RouteLibraryContext` (savedRoutes,
       routeCategories, handleRoute*/handleGpx*, import/export) — the halves share no
@@ -187,7 +187,7 @@ All verified dead by project-wide grep including dynamic-key patterns.
       `services/device_health.py`; give LocationService a **public** probe API (the
       `getattr(loc, "_ensure_instrument", None)` pattern silently disables the probe on
       rename).
-- [ ] **4B.3** Move engine recovery (`_get_or_rebuild_engine`, `_force_reconnect`,
+- [x] **4B.3** Move engine recovery (`_get_or_rebuild_engine`, `_force_reconnect`,
       `exec_with_retry` — api/location/_helpers.py:60-148) into a service; move the
       forget_device flow (api/device.py:127-292) into core.
 - [x] **4B.4** `SimulationSnapshot.replay_on(engine)` to replace the hand-spelled 4-way

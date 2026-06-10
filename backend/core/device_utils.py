@@ -98,3 +98,29 @@ async def delete_usbmux_pair_record(udid: str) -> bool:
                 logger.debug("delete_usbmux_pair_record: mux.close() raised", exc_info=True)
 
 
+
+
+# Logged under the "wifi_tunnel" channel (not __name__) because this purge
+# is part of the RemotePairing handshake/teardown story and its records
+# historically lived alongside the tunnel logs.
+_tunnel_logger = logging.getLogger("wifi_tunnel")
+
+
+def purge_stale_remote_pair_record(udid: str) -> None:
+    """Best-effort delete of the cached RemotePairing record for *udid*.
+
+    Required so RemotePairingProtocol.connect() can't short-circuit through
+    a corrupt cached record and skip the actual _pair() handshake.
+    """
+    try:
+        from pymobiledevice3.common import get_home_folder
+        from pymobiledevice3.pair_records import (
+            PAIRING_RECORD_EXT,
+            get_remote_pairing_record_filename,
+        )
+        stale = get_home_folder() / f"{get_remote_pairing_record_filename(udid)}.{PAIRING_RECORD_EXT}"
+        if stale.exists():
+            stale.unlink()
+            _tunnel_logger.info("Re-pair: removed stale remote pair record %s", stale)
+    except Exception:
+        _tunnel_logger.debug("Re-pair: could not check/remove stale pair record", exc_info=True)
