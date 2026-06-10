@@ -32,6 +32,12 @@ from config import DVT_RECONNECT_DELAYS
 
 logger = logging.getLogger(__name__)
 
+# Upper bound for a single probe_channel_alive() round-trip. The happy
+# path completes in <100ms; a dead channel fails fast (connection
+# refused / EOF). The timeout only exists so a wedged DVT handshake
+# can't pin the probing task forever.
+_DVT_PROBE_TIMEOUT_S = 5.0
+
 
 class DeviceLostCause(StrEnum):
     """Why a DeviceLostError was raised. The frontend uses this to show a
@@ -146,6 +152,20 @@ class LocationService(ABC):
         without that attribute degrade gracefully.
         """
         return bool(getattr(self, "_active", False))
+
+    async def probe_channel_alive(self) -> bool:
+        """Best-effort liveness check of the service's command channel.
+
+        Returns ``False`` only when the channel is provably dead so
+        callers (e.g. :mod:`services.device_health`) can mark the device
+        DEGRADED. The base implementation covers services without a
+        cheap probe — legacy :class:`LegacyLocationService` (iOS < 17)
+        uses a transport whose failure modes the on-connect probe was
+        never designed to catch — and therefore always reports alive,
+        matching the previous "can't safely probe → assume healthy"
+        behavior.
+        """
+        return True
 
 
 class DvtLocationService(LocationService):
@@ -317,6 +337,41 @@ class DvtLocationService(LocationService):
                     last_exc = exc
             assert last_exc is not None  # delays loop ran at least once
             _raise_device_lost("DVT reconnect failed", last_exc)
+
+    async def probe_channel_alive(self) -> bool:
+        """Actively verify the DVT instrument channel is still usable.
+
+        Only DvtLocationService (iOS 17+) is vulnerable to the silent
+        idle-DVT-channel close this probe exists to catch. Runs
+        :meth:`_ensure_instrument` under :attr:`_reconnect_lock` so the
+        probe never races a concurrent :meth:`_reconnect`, bounded by
+        :data:`_DVT_PROBE_TIMEOUT_S` so a wedged handshake can't pin the
+        caller forever.
+
+        Returns ``False`` only when the channel is provably dead
+        (connection-terminated / socket-level errors / timeout). An
+        unknown exception is logged and reported as alive — spurious
+        failures here would flap the device pill for no reason.
+        """
+        try:
+            async def _guarded_ensure() -> None:
+                async with self._reconnect_lock:
+                    await self._ensure_instrument()
+            await asyncio.wait_for(_guarded_ensure(), timeout=_DVT_PROBE_TIMEOUT_S)
+            return True
+        except (ConnectionTerminatedError, OSError, EOFError, BrokenPipeError,
+                ConnectionResetError, TimeoutError, asyncio.TimeoutError) as exc:
+            logger.info(
+                "DVT channel probe for %s failed (%s); channel presumed dead",
+                self._udid, type(exc).__name__,
+            )
+            return False
+        except Exception:
+            # Unknown probe error — log but don't report the channel dead.
+            logger.debug(
+                "DVT channel probe for %s raised", self._udid, exc_info=True,
+            )
+            return True
 
     async def set(self, lat: float, lng: float) -> None:
         """Simulate the device location using the DVT instrument channel."""

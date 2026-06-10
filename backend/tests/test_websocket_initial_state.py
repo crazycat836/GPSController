@@ -241,6 +241,25 @@ def test_two_devices_one_connected_one_degraded():
 # stale tunnel 50s after the renderer reload).
 
 
+def _make_dvt_location_service(udid: str, *, ensure_should_raise: Exception | None):
+    """Build a real DvtLocationService whose ``_ensure_instrument`` is an
+    AsyncMock, so the public ``probe_channel_alive`` path (lock, timeout,
+    exception classification) is exercised for real.
+
+    Returns ``(service, ensure_mock)`` so tests can assert the instrument
+    handshake ran exactly once per debounce window.
+    """
+    from services.location_service import DvtLocationService
+
+    ensure_mock = AsyncMock()
+    if ensure_should_raise is not None:
+        ensure_mock.side_effect = ensure_should_raise
+
+    service = DvtLocationService(MagicMock(), udid=udid)
+    service._ensure_instrument = ensure_mock  # type: ignore[method-assign]
+    return service, ensure_mock
+
+
 def _install_dm_with_conn(udid: str, *, ensure_should_raise: Exception | None):
     """Wire a fake DeviceManager + connection record onto ctx.app_state.
 
@@ -249,12 +268,9 @@ def _install_dm_with_conn(udid: str, *, ensure_should_raise: Exception | None):
     """
     from context import ctx
 
-    ensure_mock = AsyncMock()
-    if ensure_should_raise is not None:
-        ensure_mock.side_effect = ensure_should_raise
-
-    location_service = MagicMock()
-    location_service._ensure_instrument = ensure_mock
+    location_service, ensure_mock = _make_dvt_location_service(
+        udid, ensure_should_raise=ensure_should_raise,
+    )
 
     conn = MagicMock()
     conn.location_service = location_service
@@ -267,19 +283,18 @@ def _install_dm_with_conn(udid: str, *, ensure_should_raise: Exception | None):
 
 
 def _reset_debounce_dict():
-    """Reset the websocket module's debounce dict so repeated tests
+    """Reset the device_health probe debounce so repeated tests
     against the same UDID don't poison each other."""
-    from api import websocket
-    websocket._last_probe_at.clear()
+    from services import device_health
+    device_health.reset_for_tests()
 
 
 async def _wait_for_probe_tasks() -> None:
-    """Drain the websocket module's probe task set so a test can
+    """Drain the device_health probe task set so a test can
     deterministically assert on the side effects (mark_degraded etc.)
     instead of racing with asyncio.run cleanup."""
-    from api import websocket
-    while websocket._probe_tasks:
-        await asyncio.gather(*list(websocket._probe_tasks), return_exceptions=True)
+    from services import device_health
+    await device_health.drain_probe_tasks_for_tests()
 
 
 def test_probe_skipped_when_no_device_manager():
@@ -287,8 +302,8 @@ def test_probe_skipped_when_no_device_manager():
     no probe task should be created — original behavior of the
     other tests in this file must stay deterministic.
     """
-    from api import websocket
     from api.websocket import _send_initial_state
+    from services import device_health
     from services.connection_state import store, DeviceState
 
     _reset_debounce_dict()
@@ -303,7 +318,7 @@ def test_probe_skipped_when_no_device_manager():
 
     asyncio.run(_run())
     # No DM means no debounce slot recorded — confirms the early-return.
-    assert "udid-A" not in websocket._last_probe_at
+    assert "udid-A" not in device_health._last_probe_at
 
 
 def test_probe_spawned_for_connected_device():
@@ -429,20 +444,21 @@ def test_probe_handles_unknown_exception_without_degrading():
 
 
 def test_probe_skipped_for_legacy_location_service():
-    """LegacyLocationService (iOS < 17) does not expose
-    ``_ensure_instrument``; the probe must treat that as "can't safely
-    check, assume alive" rather than raise.
+    """LegacyLocationService (iOS < 17) has no DVT channel to probe;
+    its ``probe_channel_alive`` (the base-class default) must report
+    "can't safely check, assume alive" rather than degrade the device.
     """
     from api.websocket import _send_initial_state
     from context import ctx
     from services.connection_state import store, DeviceState
+    from services.location_service import LegacyLocationService
 
     _reset_debounce_dict()
 
     async def _run() -> DeviceState:
-        # Build a connection whose location_service has NO
-        # _ensure_instrument attribute (legacy iOS path).
-        legacy_loc = MagicMock(spec=[])  # explicit empty spec → no auto-attrs
+        # Real legacy service (iOS < 17 path) — its probe_channel_alive
+        # is the LocationService base default that always reports alive.
+        legacy_loc = LegacyLocationService(MagicMock())
         conn = MagicMock()
         conn.location_service = legacy_loc
 
@@ -489,8 +505,9 @@ def _install_dm_with_type(udid: str, conn_type: str):
     """
     from context import ctx
 
-    location_service = MagicMock()
-    location_service._ensure_instrument = AsyncMock(return_value=MagicMock())
+    location_service, _ = _make_dvt_location_service(
+        udid, ensure_should_raise=None,
+    )
 
     conn = MagicMock()
     conn.location_service = location_service

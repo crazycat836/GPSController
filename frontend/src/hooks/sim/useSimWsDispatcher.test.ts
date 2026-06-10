@@ -1,21 +1,31 @@
 // @vitest-environment jsdom
 /**
- * CHARACTERIZATION tests for useSimWsDispatcher.
+ * CHARACTERIZATION tests for useSimWsDispatcher (single-write architecture).
  *
- * These pin the CURRENT dual-write behavior exactly: every WS frame is
- * routed into (1) the per-device `runtimes` map and (2) the legacy
- * single-device state. A later refactor will delete the legacy branch
- * against these tests, so both surfaces — including their asymmetries —
- * are asserted verbatim. Do not "fix" surprising expectations here;
- * they are the spec.
+ * Every WS frame is routed into ONE home: per-device state goes into the
+ * `runtimes` map (udid-tagged frames target that device's slot; untagged
+ * frames target the primary/local slot), and session-global state
+ * (overlays, DDI, error banner, sync flag) goes through dedicated
+ * setters. The legacy single-device surface no longer exists — it is
+ * DERIVED from the primary runtime in `useSimulation`, so asserting the
+ * primary runtime asserts what single-device consumers observe.
+ *
+ * Asymmetries translated from the pre-refactor dual-write tests are
+ * marked with "TRANSLATED ASYMMETRY" comments: where the legacy surface
+ * and the runtimes map used to disagree, the runtime now reproduces what
+ * the LEGACY surface showed (legacy was what the UI actually displayed).
+ *
+ * The harness mounts the REAL `useSimRuntimes` hook so slot promotion
+ * (local → first udid) is exercised, not mocked.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, act, cleanup } from '@testing-library/react'
+import { useMemo } from 'react'
 import type { SetStateAction } from 'react'
 import { useSimWsDispatcher } from './useSimWsDispatcher'
-import type { SimWsSetters, SimulationStatus, WsSubscribe } from './useSimWsDispatcher'
-import type { DeviceRuntime, RuntimesMap } from './useSimRuntimes'
-import { emptyRuntime } from './useSimRuntimes'
+import type { SimWsSetters, WsSubscribe } from './useSimWsDispatcher'
+import { useSimRuntimes, emptyRuntime, LOCAL_RUNTIME_KEY } from './useSimRuntimes'
+import type { DeviceRuntime, RuntimesMap, UseSimRuntimesValue } from './useSimRuntimes'
 import type { LatLng } from './types'
 import type { WsMessage } from '../useWebSocket'
 
@@ -29,17 +39,9 @@ afterEach(() => {
 const UDID_A = 'udid-A'
 const UDID_B = 'udid-B'
 
-interface HarnessState {
-  runtimes: RuntimesMap
-  currentPosition: LatLng | null
+interface GlobalState {
   backendPositionSynced: boolean
-  progress: number
-  eta: number | null
-  status: SimulationStatus
-  mode: string
   destination: LatLng | null
-  waypoints: LatLng[]
-  routePath: LatLng[]
   pauseEndAt: number | null
   waypointProgress: { current: number; next: number; total: number } | null
   lapProgress: { current: number; total: number | null } | null
@@ -48,18 +50,10 @@ interface HarnessState {
   error: string | null
 }
 
-function initialState(): HarnessState {
+function initialGlobals(): GlobalState {
   return {
-    runtimes: {},
-    currentPosition: null,
     backendPositionSynced: false,
-    progress: 0,
-    eta: null,
-    status: { running: false, paused: false, speed: 1 },
-    mode: 'navigation',
     destination: null,
-    waypoints: [],
-    routePath: [],
     pauseEndAt: null,
     waypointProgress: null,
     lapProgress: null,
@@ -74,9 +68,15 @@ function resolveAction<T>(action: SetStateAction<T>, prev: T): T {
 }
 
 interface Harness {
-  state: HarnessState
+  /** Session-global state mirror (the non-runtime setters' targets). */
+  globals: GlobalState
+  /** Live runtimes map from the REAL useSimRuntimes hook. */
+  readonly runtimes: RuntimesMap
+  /** Primary runtime — what the derived single-device view projects. */
+  readonly primary: DeviceRuntime | null
   setters: SimWsSetters
   send: (type: string, data: unknown) => void
+  seedRuntimes: (map: RuntimesMap) => void
   unmount: () => void
   subscribe: WsSubscribe
   unsubscribe: () => void
@@ -84,38 +84,32 @@ interface Harness {
   mocks: Record<string, { mock: { calls: unknown[][] } }>
 }
 
-function createHarness(seed?: Partial<HarnessState>): Harness {
-  const state: HarnessState = { ...initialState(), ...seed }
+function createHarness(seed?: { runtimes?: RuntimesMap; globals?: Partial<GlobalState> }): Harness {
+  const globals: GlobalState = { ...initialGlobals(), ...seed?.globals }
 
-  const track = <T,>(key: { [K in keyof HarnessState]: HarnessState[K] extends T ? K : never }[keyof HarnessState]) =>
+  const track = <T,>(key: { [K in keyof GlobalState]: GlobalState[K] extends T ? K : never }[keyof GlobalState]) =>
     vi.fn((action: SetStateAction<T>) => {
-      state[key] = resolveAction(action, state[key] as T) as HarnessState[typeof key]
+      globals[key] = resolveAction(action, globals[key] as T) as GlobalState[typeof key]
     })
 
-  // Faithful copy of useSimRuntimes.updateRuntime: merge patch over the
-  // existing entry, auto-seeding emptyRuntime on first write.
-  const updateRuntime = vi.fn((udid: string, patch: Partial<DeviceRuntime>) => {
-    const cur = state.runtimes[udid] ?? emptyRuntime(udid)
-    state.runtimes = { ...state.runtimes, [udid]: { ...cur, ...patch } }
-  })
+  // Spies delegate to the real useSimRuntimes functions (stable
+  // useCallback identities), captured via a ref filled on first render.
+  const rtRef: { current: UseSimRuntimesValue | null } = { current: null }
+  const setRuntimes = vi.fn((action: SetStateAction<RuntimesMap>) => rtRef.current!.setRuntimes(action))
+  const updateRuntime = vi.fn((udid: string, patch: Partial<DeviceRuntime>) => rtRef.current!.updateRuntime(udid, patch))
+  const patchPrimaryRuntime = vi.fn((patch: Partial<DeviceRuntime>) => rtRef.current!.patchPrimaryRuntime(patch))
 
   const setters: SimWsSetters = {
-    setRuntimes: track<RuntimesMap>('runtimes'),
+    setRuntimes,
     updateRuntime,
-    setCurrentPosition: track<LatLng | null>('currentPosition'),
+    patchPrimaryRuntime,
     setBackendPositionSynced: track<boolean>('backendPositionSynced'),
-    setProgress: track<number>('progress'),
-    setEta: track<number | null>('eta'),
-    setStatus: track<SimulationStatus>('status'),
-    setMode: vi.fn((next: string) => { state.mode = next }),
     setDestination: track<LatLng | null>('destination'),
-    setWaypoints: track<LatLng[]>('waypoints'),
-    setRoutePath: track<LatLng[]>('routePath'),
     setPauseEndAt: track<number | null>('pauseEndAt'),
-    setWaypointProgress: track<HarnessState['waypointProgress']>('waypointProgress'),
-    setLapProgress: track<HarnessState['lapProgress']>('lapProgress'),
+    setWaypointProgress: track<GlobalState['waypointProgress']>('waypointProgress'),
+    setLapProgress: track<GlobalState['lapProgress']>('lapProgress'),
     setDdiMounting: track<boolean>('ddiMounting'),
-    setDdiMissing: track<HarnessState['ddiMissing']>('ddiMissing'),
+    setDdiMissing: track<GlobalState['ddiMissing']>('ddiMissing'),
     setError: track<string | null>('error'),
     localizeError: vi.fn((code) => `localized:${code}`),
   }
@@ -127,16 +121,37 @@ function createHarness(seed?: Partial<HarnessState>): Harness {
     return unsubscribe
   })
 
-  const { unmount } = renderHook(() => useSimWsDispatcher(subscribe, setters))
+  const { result, unmount } = renderHook(() => {
+    const rt = useSimRuntimes()
+    rtRef.current = rt
+    // Stable setters bag (the dispatcher refs it anyway).
+    const bag = useMemo(() => setters, [])
+    useSimWsDispatcher(subscribe, bag)
+    return rt
+  })
 
   const send = (type: string, data: unknown) => {
     act(() => { handler?.({ type, data }) })
   }
 
+  const seedRuntimes = (map: RuntimesMap) => {
+    // Seed through the hook's own setter, bypassing the spy so the
+    // "which setters fired" assertions only count dispatcher writes.
+    act(() => { rtRef.current!.setRuntimes(map) })
+  }
+
+  if (seed?.runtimes) seedRuntimes(seed.runtimes)
+
   return {
-    state,
+    globals,
+    get runtimes() { return result.current.runtimes },
+    get primary() {
+      const keys = Object.keys(result.current.runtimes)
+      return keys.length ? result.current.runtimes[keys[0]] : null
+    },
     setters,
     send,
+    seedRuntimes,
     unmount,
     subscribe,
     unsubscribe,
@@ -154,7 +169,7 @@ function calledSetterNames(h: Harness): string[] {
 // ── (1) position_update: partial-payload merge ─────────────────────────
 
 describe('position_update', () => {
-  it('full payload writes both the runtime patch and every legacy setter', () => {
+  it('full payload writes the runtime patch and flips the sync flag', () => {
     const h = createHarness()
     h.send('position_update', {
       udid: UDID_A,
@@ -167,8 +182,7 @@ describe('position_update', () => {
       speed_mps: 10,
     })
 
-    // Runtime surface
-    expect(h.state.runtimes[UDID_A]).toEqual({
+    expect(h.runtimes[UDID_A]).toEqual({
       ...emptyRuntime(UDID_A),
       currentPos: { lat: 25.04, lng: 121.56 },
       progress: 0.5,
@@ -177,22 +191,13 @@ describe('position_update', () => {
       distanceTraveled: 200,
       currentSpeedKmh: 36, // speed_mps * 3.6
     })
-
-    // Legacy surface
-    expect(h.state.currentPosition).toEqual({ lat: 25.04, lng: 121.56 })
-    expect(h.state.backendPositionSynced).toBe(true)
-    expect(h.state.progress).toBe(0.5)
-    expect(h.state.eta).toBe(120)
-    expect(h.state.status).toEqual({
-      running: false,
-      paused: false,
-      speed: 1,
-      distance_remaining: 800,
-      distance_traveled: 200,
-    })
+    // The single-device view derives from this same entry.
+    expect(h.primary).toBe(h.runtimes[UDID_A])
+    // Session-global: a real device coordinate marks the engine synced.
+    expect(h.globals.backendPositionSynced).toBe(true)
   })
 
-  it('partial tick (lat/lng only) does NOT wipe cached eta/progress/distances on either surface', () => {
+  it('partial tick (lat/lng only) does NOT wipe cached eta/progress/distances', () => {
     const h = createHarness()
     h.send('position_update', {
       udid: UDID_A,
@@ -201,65 +206,97 @@ describe('position_update', () => {
     })
     h.send('position_update', { udid: UDID_A, lat: 3, lng: 4 })
 
-    // Runtime: position moved, everything else retained.
-    expect(h.state.runtimes[UDID_A].currentPos).toEqual({ lat: 3, lng: 4 })
-    expect(h.state.runtimes[UDID_A].progress).toBe(0.4)
-    expect(h.state.runtimes[UDID_A].eta).toBe(99)
-    expect(h.state.runtimes[UDID_A].distanceRemaining).toBe(500)
-    expect(h.state.runtimes[UDID_A].currentSpeedKmh).toBe(18)
-
-    // Legacy: setProgress / setEta / setStatus called once each (only by the first frame).
-    expect(h.setters.setProgress).toHaveBeenCalledTimes(1)
-    expect(h.setters.setEta).toHaveBeenCalledTimes(1)
-    expect(h.setters.setStatus).toHaveBeenCalledTimes(1)
-    expect(h.state.eta).toBe(99)
-    expect(h.state.currentPosition).toEqual({ lat: 3, lng: 4 })
+    expect(h.runtimes[UDID_A].currentPos).toEqual({ lat: 3, lng: 4 })
+    expect(h.runtimes[UDID_A].progress).toBe(0.4)
+    expect(h.runtimes[UDID_A].eta).toBe(99)
+    expect(h.runtimes[UDID_A].distanceRemaining).toBe(500)
+    expect(h.runtimes[UDID_A].currentSpeedKmh).toBe(18)
+    // One runtime write per frame — the second frame patches position only.
+    expect(h.setters.updateRuntime).toHaveBeenCalledTimes(2)
+    expect(h.setters.updateRuntime).toHaveBeenLastCalledWith(UDID_A, { currentPos: { lat: 3, lng: 4 } })
   })
 
-  it('eta_seconds takes precedence over eta on both surfaces', () => {
+  it('eta_seconds takes precedence over eta', () => {
     const h = createHarness()
     h.send('position_update', { udid: UDID_A, eta: 100, eta_seconds: 42 })
-    expect(h.state.runtimes[UDID_A].eta).toBe(42)
-    expect(h.state.eta).toBe(42)
+    expect(h.runtimes[UDID_A].eta).toBe(42)
   })
 
-  it('legacy eta falls back to `eta` when eta_seconds is absent', () => {
+  it('eta falls back to `eta` when eta_seconds is absent (udid-less → local slot)', () => {
     const h = createHarness()
     h.send('position_update', { eta: 77 })
-    expect(h.state.eta).toBe(77)
+    expect(h.runtimes[LOCAL_RUNTIME_KEY].eta).toBe(77)
+    expect(h.primary?.eta).toBe(77)
   })
 
   it('lat without lng is dropped — position only applies as a pair', () => {
     const h = createHarness()
     h.send('position_update', { udid: UDID_A, lat: 25.04, progress: 0.1 })
-    expect(h.state.runtimes[UDID_A].currentPos).toBeNull()
-    expect(h.setters.setCurrentPosition).not.toHaveBeenCalled()
+    expect(h.runtimes[UDID_A].currentPos).toBeNull()
     expect(h.setters.setBackendPositionSynced).not.toHaveBeenCalled()
-    expect(h.state.progress).toBe(0.1)
+    expect(h.runtimes[UDID_A].progress).toBe(0.1)
   })
 
-  it('payload with udid but no recognized fields skips updateRuntime entirely (empty patch)', () => {
+  it('payload with udid but no recognized fields skips the runtime write entirely (empty patch)', () => {
     const h = createHarness()
     h.send('position_update', { udid: UDID_A })
     expect(h.setters.updateRuntime).not.toHaveBeenCalled()
-    expect(h.state.runtimes).toEqual({})
+    expect(h.setters.patchPrimaryRuntime).not.toHaveBeenCalled()
+    expect(h.runtimes).toEqual({})
   })
 
-  it('payload without udid updates ONLY the legacy surface', () => {
+  it('payload without udid is routed to the local slot (translated from the legacy-only path)', () => {
+    // TRANSLATED: pre-refactor, udid-less frames updated only the legacy
+    // single-device surface. That surface is now the derived primary
+    // view, so the frame lands in the reserved local slot — which IS the
+    // primary while no device has been seen.
     const h = createHarness()
     h.send('position_update', { lat: 1, lng: 2, progress: 0.3 })
-    expect(h.state.runtimes).toEqual({})
     expect(h.setters.updateRuntime).not.toHaveBeenCalled()
-    expect(h.setters.setRuntimes).not.toHaveBeenCalled()
-    expect(h.state.currentPosition).toEqual({ lat: 1, lng: 2 })
-    expect(h.state.progress).toBe(0.3)
+    expect(h.setters.patchPrimaryRuntime).toHaveBeenCalledTimes(1)
+    expect(h.primary?.currentPos).toEqual({ lat: 1, lng: 2 })
+    expect(h.primary?.progress).toBe(0.3)
+    expect(h.globals.backendPositionSynced).toBe(true)
   })
 
-  it('non-object payload fires nothing on either surface', () => {
+  it('udid-less frames target the first REAL udid entry once one exists', () => {
+    const h = createHarness({ runtimes: { [UDID_A]: emptyRuntime(UDID_A) } })
+    h.send('position_update', { lat: 9, lng: 8 })
+    expect(h.runtimes[UDID_A].currentPos).toEqual({ lat: 9, lng: 8 })
+    expect(h.runtimes[LOCAL_RUNTIME_KEY]).toBeUndefined()
+  })
+
+  it('non-object payload fires nothing', () => {
     const h = createHarness()
     h.send('position_update', null)
     h.send('position_update', 'garbage')
     expect(calledSetterNames(h)).toEqual([])
+  })
+})
+
+// ── (1b) local-slot promotion ──────────────────────────────────────────
+
+describe('local slot promotion', () => {
+  it('first udid-tagged write promotes the accumulated local slot into the udid entry', () => {
+    const h = createHarness()
+    h.send('position_update', { lat: 1, lng: 2, progress: 0.3 }) // → local slot
+    h.send('position_update', { udid: UDID_A, progress: 0.4 })   // → promotes
+    expect(h.runtimes[LOCAL_RUNTIME_KEY]).toBeUndefined()
+    expect(h.runtimes[UDID_A]).toEqual({
+      ...emptyRuntime(UDID_A),
+      currentPos: { lat: 1, lng: 2 }, // carried over from the local slot
+      progress: 0.4,
+    })
+    expect(h.primary).toBe(h.runtimes[UDID_A])
+  })
+
+  it('device_connected promotes the local slot too (rehydrated pin survives connect)', () => {
+    const h = createHarness()
+    h.send('position_update', { lat: 5, lng: 6 })
+    h.send('device_connected', { udid: UDID_A })
+    expect(h.runtimes[LOCAL_RUNTIME_KEY]).toBeUndefined()
+    expect(h.runtimes[UDID_A].currentPos).toEqual({ lat: 5, lng: 6 })
+    expect(h.runtimes[UDID_A].tunnelDegraded).toBe(false)
   })
 })
 
@@ -268,10 +305,7 @@ describe('position_update', () => {
 describe('state_change', () => {
   const seedRunning = (): Harness => {
     const h = createHarness({
-      status: { running: true, paused: false, speed: 2, state: 'navigating' },
-      routePath: [{ lat: 1, lng: 2 }],
-      destination: { lat: 9, lng: 9 },
-      eta: 60,
+      globals: { destination: { lat: 9, lng: 9 } },
       runtimes: {
         [UDID_A]: {
           ...emptyRuntime(UDID_A),
@@ -286,42 +320,46 @@ describe('state_change', () => {
   }
 
   it.each(['idle', 'disconnected'])(
-    '%s clears legacy routePath/destination/eta + running/paused; runtime clears routePath ONLY',
+    '%s clears routePath/destination/eta in the runtime and the user destination marker',
     (st) => {
       const h = seedRunning()
       h.send('state_change', { udid: UDID_A, state: st })
 
-      // Legacy: full teardown.
-      expect(h.state.status).toEqual({ running: false, paused: false, speed: 2, state: st })
-      expect(h.state.routePath).toEqual([])
-      expect(h.state.destination).toBeNull()
-      expect(h.state.eta).toBeNull()
-
-      // Runtime: state + routePath reset, but destination/eta are RETAINED.
-      // Asymmetry with the legacy branch — pinned on purpose: the runtimes
-      // mechanism (~line 268) only spreads `{ routePath: [] }` into the patch.
-      expect(h.state.runtimes[UDID_A].state).toBe(st)
-      expect(h.state.runtimes[UDID_A].routePath).toEqual([])
-      expect(h.state.runtimes[UDID_A].destination).toEqual({ lat: 9, lng: 9 })
-      expect(h.state.runtimes[UDID_A].eta).toBe(60)
+      // TRANSLATED ASYMMETRY: the legacy single-device surface cleared
+      // routePath + destination + eta on idle, while the runtime used to
+      // clear routePath only. The runtime now feeds the UI directly, so
+      // it adopts the legacy clearing in full.
+      expect(h.runtimes[UDID_A].state).toBe(st)
+      expect(h.runtimes[UDID_A].routePath).toEqual([])
+      expect(h.runtimes[UDID_A].destination).toBeNull()
+      expect(h.runtimes[UDID_A].eta).toBeNull()
+      // User-input destination marker follows the same clear.
+      expect(h.globals.destination).toBeNull()
     },
   )
 
-  it('paused sets paused=true and state, but leaves running flag untouched', () => {
+  it('paused stores the raw state and keeps the routePath', () => {
     const h = seedRunning()
     h.send('state_change', { udid: UDID_A, state: 'paused' })
-    expect(h.state.status).toEqual({ running: true, paused: true, speed: 2, state: 'paused' })
-    // Runtime keeps its routePath on pause.
-    expect(h.state.runtimes[UDID_A].state).toBe('paused')
-    expect(h.state.runtimes[UDID_A].routePath).toEqual([{ lat: 1, lng: 2 }])
+    expect(h.runtimes[UDID_A].state).toBe('paused')
+    expect(h.runtimes[UDID_A].routePath).toEqual([{ lat: 1, lng: 2 }])
+    // eta/destination retained on pause.
+    expect(h.runtimes[UDID_A].eta).toBe(60)
+    expect(h.runtimes[UDID_A].destination).toEqual({ lat: 9, lng: 9 })
   })
 
-  it('any other state sets running=true, paused=false on legacy; runtime stores the raw state', () => {
+  it('any other state is stored raw without clearing anything', () => {
     const h = createHarness()
     h.send('state_change', { udid: UDID_A, state: 'navigating' })
-    expect(h.state.status).toEqual({ running: true, paused: false, speed: 1, state: 'navigating' })
-    expect(h.state.runtimes[UDID_A].state).toBe('navigating')
-    expect(h.state.routePath).toEqual([]) // untouched
+    expect(h.runtimes[UDID_A].state).toBe('navigating')
+    expect(h.runtimes[UDID_A].routePath).toEqual([])
+    expect(h.setters.setDestination).not.toHaveBeenCalled()
+  })
+
+  it('udid-less state_change targets the primary slot (translated from the legacy path)', () => {
+    const h = createHarness({ runtimes: { [UDID_A]: { ...emptyRuntime(UDID_A), state: 'navigating' } } })
+    h.send('state_change', { state: 'idle' })
+    expect(h.runtimes[UDID_A].state).toBe('idle')
   })
 
   it('missing state field fires nothing', () => {
@@ -338,11 +376,11 @@ describe('tunnel_degraded / tunnel_recovered / device_connected', () => {
     const h = createHarness({
       runtimes: { [UDID_A]: emptyRuntime(UDID_A), [UDID_B]: emptyRuntime(UDID_B) },
     })
-    const untouchedB = h.state.runtimes[UDID_B]
+    const untouchedB = h.runtimes[UDID_B]
     h.send('tunnel_degraded', { udid: UDID_A })
-    expect(h.state.runtimes[UDID_A].tunnelDegraded).toBe(true)
-    expect(h.state.runtimes[UDID_B].tunnelDegraded).toBe(false)
-    expect(h.state.runtimes[UDID_B]).toBe(untouchedB)
+    expect(h.runtimes[UDID_A].tunnelDegraded).toBe(true)
+    expect(h.runtimes[UDID_B].tunnelDegraded).toBe(false)
+    expect(h.runtimes[UDID_B]).toBe(untouchedB)
     expect(h.setters.updateRuntime).toHaveBeenCalledWith(UDID_A, { tunnelDegraded: true })
     expect(h.setters.setRuntimes).not.toHaveBeenCalled()
   })
@@ -352,8 +390,8 @@ describe('tunnel_degraded / tunnel_recovered / device_connected', () => {
       runtimes: { [UDID_A]: emptyRuntime(UDID_A), [UDID_B]: emptyRuntime(UDID_B) },
     })
     h.send('tunnel_degraded', {})
-    expect(h.state.runtimes[UDID_A].tunnelDegraded).toBe(true)
-    expect(h.state.runtimes[UDID_B].tunnelDegraded).toBe(true)
+    expect(h.runtimes[UDID_A].tunnelDegraded).toBe(true)
+    expect(h.runtimes[UDID_B].tunnelDegraded).toBe(true)
     expect(h.setters.updateRuntime).not.toHaveBeenCalled()
     expect(h.setters.setRuntimes).toHaveBeenCalledTimes(1)
   })
@@ -366,47 +404,47 @@ describe('tunnel_degraded / tunnel_recovered / device_connected', () => {
       },
     })
     h.send('tunnel_recovered', {})
-    expect(h.state.runtimes[UDID_A].tunnelDegraded).toBe(false)
-    expect(h.state.runtimes[UDID_B].tunnelDegraded).toBe(false)
+    expect(h.runtimes[UDID_A].tunnelDegraded).toBe(false)
+    expect(h.runtimes[UDID_B].tunnelDegraded).toBe(false)
 
     // Second recovered with nothing degraded: functional updater returns prev.
-    const before = h.state.runtimes
+    const before = h.runtimes
     h.send('tunnel_recovered', {})
-    expect(h.state.runtimes).toBe(before)
+    expect(h.runtimes).toBe(before)
   })
 
-  it('device_connected clears stale tunnelDegraded for that udid and nulls the legacy error', () => {
+  it('device_connected clears stale tunnelDegraded for that udid and nulls the global error', () => {
     const h = createHarness({
       runtimes: { [UDID_A]: { ...emptyRuntime(UDID_A), state: 'navigating', tunnelDegraded: true } },
-      error: 'localized:tunnel_lost',
+      globals: { error: 'localized:tunnel_lost' },
     })
     h.send('device_connected', { udid: UDID_A })
-    expect(h.state.runtimes[UDID_A].tunnelDegraded).toBe(false)
+    expect(h.runtimes[UDID_A].tunnelDegraded).toBe(false)
     // Other runtime fields survive the patch.
-    expect(h.state.runtimes[UDID_A].state).toBe('navigating')
-    expect(h.state.error).toBeNull()
+    expect(h.runtimes[UDID_A].state).toBe('navigating')
+    expect(h.globals.error).toBeNull()
   })
 
   it('device_connected for an unseen udid auto-seeds an empty runtime', () => {
     const h = createHarness()
     h.send('device_connected', { udid: UDID_B })
-    expect(h.state.runtimes[UDID_B]).toEqual({ ...emptyRuntime(UDID_B), tunnelDegraded: false })
+    expect(h.runtimes[UDID_B]).toEqual({ ...emptyRuntime(UDID_B), tunnelDegraded: false })
   })
 })
 
-// ── (4) *_complete: destination cleared ONLY on the legacy path ────────
+// ── (4) *_complete: run-end clearing ───────────────────────────────────
 
 describe('*_complete events', () => {
   it.each(['multi_stop_complete', 'navigation_complete', 'random_walk_complete'])(
-    '%s clears legacy run overlays + destination; runtime gets progress=1/idle but KEEPS destination',
+    '%s collapses the runtime to idle and clears destination/eta + global overlays',
     (type) => {
       const h = createHarness({
-        progress: 0.8,
-        eta: 30,
-        pauseEndAt: 12345,
-        waypointProgress: { current: 1, next: 2, total: 3 },
-        lapProgress: { current: 1, total: 5 },
-        destination: { lat: 9, lng: 9 },
+        globals: {
+          pauseEndAt: 12345,
+          waypointProgress: { current: 1, next: 2, total: 3 },
+          lapProgress: { current: 1, total: 5 },
+          destination: { lat: 9, lng: 9 },
+        },
         runtimes: {
           [UDID_A]: {
             ...emptyRuntime(UDID_A),
@@ -419,52 +457,61 @@ describe('*_complete events', () => {
       })
       h.send(type, { udid: UDID_A })
 
-      // Legacy: overlays collapsed AND destination cleared (~line 343).
-      expect(h.state.progress).toBe(1)
-      expect(h.state.eta).toBeNull()
-      expect(h.state.pauseEndAt).toBeNull()
-      expect(h.state.waypointProgress).toBeNull()
-      expect(h.state.lapProgress).toBeNull()
-      expect(h.state.destination).toBeNull()
+      // TRANSLATED ASYMMETRY: pre-refactor, *_complete cleared
+      // destination/eta only on the legacy single-device surface; the
+      // runtime kept them. The runtime is now the single source feeding
+      // the UI, so it adopts the legacy clearing.
+      expect(h.runtimes[UDID_A].progress).toBe(1)
+      expect(h.runtimes[UDID_A].state).toBe('idle')
+      expect(h.runtimes[UDID_A].destination).toBeNull()
+      expect(h.runtimes[UDID_A].eta).toBeNull()
 
-      // Runtime: progress=1 + state idle, but destination (and eta) survive.
-      // REAL ASYMMETRY, pinned deliberately: the runtimes branch (~line 297)
-      // patches only { progress: 1, state: 'idle' } — it never clears
-      // destination, so a refactor that unifies the branches must preserve
-      // (or consciously change + re-pin) this difference.
-      expect(h.state.runtimes[UDID_A].progress).toBe(1)
-      expect(h.state.runtimes[UDID_A].state).toBe('idle')
-      expect(h.state.runtimes[UDID_A].destination).toEqual({ lat: 9, lng: 9 })
-      expect(h.state.runtimes[UDID_A].eta).toBe(30)
+      // Session-global run overlays collapse.
+      expect(h.globals.pauseEndAt).toBeNull()
+      expect(h.globals.waypointProgress).toBeNull()
+      expect(h.globals.lapProgress).toBeNull()
+      expect(h.globals.destination).toBeNull()
     },
   )
 
-  it('legacy clearing fires even WITHOUT a udid (runtimes untouched)', () => {
-    const h = createHarness({ destination: { lat: 1, lng: 1 }, progress: 0.5 })
+  it('clearing fires even WITHOUT a udid — routed to the primary slot', () => {
+    // TRANSLATED: the legacy surface used to clear on udid-less frames
+    // while runtimes stayed untouched; the primary slot now takes both.
+    const h = createHarness({
+      globals: { destination: { lat: 1, lng: 1 } },
+      runtimes: { [UDID_A]: { ...emptyRuntime(UDID_A), progress: 0.5, destination: { lat: 1, lng: 1 } } },
+    })
     h.send('navigation_complete', {})
-    expect(h.state.destination).toBeNull()
-    expect(h.state.progress).toBe(1)
+    expect(h.globals.destination).toBeNull()
+    expect(h.runtimes[UDID_A].progress).toBe(1)
+    expect(h.runtimes[UDID_A].destination).toBeNull()
     expect(h.setters.updateRuntime).not.toHaveBeenCalled()
+    expect(h.setters.patchPrimaryRuntime).toHaveBeenCalledTimes(1)
   })
 })
 
 // ── Remaining event details ────────────────────────────────────────────
 
 describe('route_path coercion', () => {
-  it('coerces tuple and object points on both surfaces; missing fields default to 0', () => {
+  it('coerces tuple and object points; missing fields default to 0', () => {
     const h = createHarness()
     h.send('route_path', {
       udid: UDID_A,
       coords: [[1, 2], { lat: 3, lng: 4 }, { lat: 5 }, {}],
     })
-    const expected = [
+    expect(h.runtimes[UDID_A].routePath).toEqual([
       { lat: 1, lng: 2 },
       { lat: 3, lng: 4 },
       { lat: 5, lng: 0 },
       { lat: 0, lng: 0 },
-    ]
-    expect(h.state.runtimes[UDID_A].routePath).toEqual(expected)
-    expect(h.state.routePath).toEqual(expected)
+    ])
+  })
+
+  it('route_path without udid lands in the primary/local slot', () => {
+    const h = createHarness()
+    h.send('route_path', { coords: [[1, 2]] })
+    expect(h.primary?.routePath).toEqual([{ lat: 1, lng: 2 }])
+    expect(h.runtimes[LOCAL_RUNTIME_KEY]).toBeDefined()
   })
 
   it('route_path without coords fires nothing', () => {
@@ -478,23 +525,31 @@ describe('waypoint_progress / lap_complete defaults', () => {
   it('waypoint_progress: next defaults to current+1, total to 0; runtime stores waypointIndex', () => {
     const h = createHarness()
     h.send('waypoint_progress', { udid: UDID_A, current_index: 2 })
-    expect(h.state.waypointProgress).toEqual({ current: 2, next: 3, total: 0 })
-    expect(h.state.runtimes[UDID_A].waypointIndex).toBe(2)
+    expect(h.globals.waypointProgress).toEqual({ current: 2, next: 3, total: 0 })
+    expect(h.runtimes[UDID_A].waypointIndex).toBe(2)
   })
 
   it('waypoint_progress with explicit next/total uses them verbatim', () => {
     const h = createHarness()
     h.send('waypoint_progress', { udid: UDID_A, current_index: 1, next_index: 5, total: 7 })
-    expect(h.state.waypointProgress).toEqual({ current: 1, next: 5, total: 7 })
+    expect(h.globals.waypointProgress).toEqual({ current: 1, next: 5, total: 7 })
   })
 
-  it('lap_complete: total defaults to null; no runtime write (legacy-only event)', () => {
+  it('waypoint_progress without udid patches the primary slot waypointIndex', () => {
+    const h = createHarness({ runtimes: { [UDID_A]: emptyRuntime(UDID_A) } })
+    h.send('waypoint_progress', { current_index: 4 })
+    expect(h.runtimes[UDID_A].waypointIndex).toBe(4)
+    expect(h.globals.waypointProgress).toEqual({ current: 4, next: 5, total: 0 })
+  })
+
+  it('lap_complete: total defaults to null; no runtime write (session-global event)', () => {
     const h = createHarness()
     h.send('lap_complete', { lap: 3 })
-    expect(h.state.lapProgress).toEqual({ current: 3, total: null })
+    expect(h.globals.lapProgress).toEqual({ current: 3, total: null })
     h.send('lap_complete', { lap: 4, total: 10 })
-    expect(h.state.lapProgress).toEqual({ current: 4, total: 10 })
+    expect(h.globals.lapProgress).toEqual({ current: 4, total: 10 })
     expect(h.setters.updateRuntime).not.toHaveBeenCalled()
+    expect(h.setters.patchPrimaryRuntime).not.toHaveBeenCalled()
   })
 })
 
@@ -503,7 +558,7 @@ describe('pause_countdown / ddi / tunnel_lost / device_disconnected', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
     const h = createHarness()
     h.send('pause_countdown', { duration_seconds: 5 })
-    expect(h.state.pauseEndAt).toBe(1_000_000 + 5000)
+    expect(h.globals.pauseEndAt).toBe(1_000_000 + 5000)
     h.send('pause_countdown', { duration_seconds: 0 })
     h.send('pause_countdown', {})
     expect(h.setters.setPauseEndAt).toHaveBeenCalledTimes(1)
@@ -511,35 +566,45 @@ describe('pause_countdown / ddi / tunnel_lost / device_disconnected', () => {
 
   it('ddi_mount_missing defaults reason to "unknown" and stamps ts with Date.now', () => {
     vi.spyOn(Date, 'now').mockReturnValue(2_000_000)
-    const h = createHarness({ ddiMounting: true })
+    const h = createHarness({ globals: { ddiMounting: true } })
     h.send('ddi_mount_missing', {})
-    expect(h.state.ddiMounting).toBe(false)
-    expect(h.state.ddiMissing).toEqual({ reason: 'unknown', stage: undefined, ts: 2_000_000 })
+    expect(h.globals.ddiMounting).toBe(false)
+    expect(h.globals.ddiMissing).toEqual({ reason: 'unknown', stage: undefined, ts: 2_000_000 })
 
     h.send('ddi_mount_missing', { reason: 'no_image', stage: 'download' })
-    expect(h.state.ddiMissing).toEqual({ reason: 'no_image', stage: 'download', ts: 2_000_000 })
+    expect(h.globals.ddiMissing).toEqual({ reason: 'no_image', stage: 'download', ts: 2_000_000 })
   })
 
   it('tunnel_lost routes through localizeError into setError', () => {
     const h = createHarness()
     h.send('tunnel_lost', {})
     expect(h.setters.localizeError).toHaveBeenCalledWith('tunnel_lost')
-    expect(h.state.error).toBe('localized:tunnel_lost')
+    expect(h.globals.error).toBe('localized:tunnel_lost')
   })
 
-  it('device_disconnected: runtime → disconnected + tunnelDegraded reset; legacy → running/paused false', () => {
+  it('device_disconnected: runtime → disconnected + tunnelDegraded reset', () => {
+    // TRANSLATED ASYMMETRY: the legacy surface flipped running/paused to
+    // false while keeping its stale `state` string. The derived status
+    // now reads running/paused=false from the 'disconnected' state — the
+    // stale-string quirk is intentionally not reproduced (no consumer
+    // read it, and DeviceChip needs the real 'disconnected').
     const h = createHarness({
-      status: { running: true, paused: true, speed: 2, state: 'paused' },
       runtimes: { [UDID_A]: { ...emptyRuntime(UDID_A), state: 'navigating', tunnelDegraded: true } },
     })
     h.send('device_disconnected', { udid: UDID_A })
-    expect(h.state.runtimes[UDID_A]).toEqual({
+    expect(h.runtimes[UDID_A]).toEqual({
       ...emptyRuntime(UDID_A),
       state: 'disconnected',
       tunnelDegraded: false,
     })
-    // Legacy keeps `state` untouched — only the flags flip.
-    expect(h.state.status).toEqual({ running: false, paused: false, speed: 2, state: 'paused' })
+  })
+
+  it('device_disconnected without udid targets the primary slot (translated from the legacy status flip)', () => {
+    const h = createHarness({
+      runtimes: { [UDID_A]: { ...emptyRuntime(UDID_A), state: 'paused' } },
+    })
+    h.send('device_disconnected', {})
+    expect(h.runtimes[UDID_A].state).toBe('disconnected')
   })
 })
 
@@ -549,56 +614,60 @@ interface TableRow {
   name: string
   type: string
   data: unknown
-  seed?: Partial<HarnessState>
+  seed?: RuntimesMap
   fires: string[]
 }
 
-const seededRuntimes = (): Partial<HarnessState> => ({
-  runtimes: { [UDID_A]: emptyRuntime(UDID_A) },
-})
+const seededRuntimes = (): RuntimesMap => ({ [UDID_A]: emptyRuntime(UDID_A) })
 
 const TABLE: TableRow[] = [
   {
     name: 'position_update with udid + full payload',
     type: 'position_update',
     data: { udid: UDID_A, lat: 1, lng: 2, progress: 0.1, eta_seconds: 9, distance_remaining: 5 },
-    fires: ['setBackendPositionSynced', 'setCurrentPosition', 'setEta', 'setProgress', 'setStatus', 'updateRuntime'],
+    fires: ['setBackendPositionSynced', 'updateRuntime'],
   },
   {
-    name: 'position_update without udid (legacy only)',
+    name: 'position_update without udid (primary/local slot)',
     type: 'position_update',
     data: { lat: 1, lng: 2 },
-    fires: ['setBackendPositionSynced', 'setCurrentPosition'],
+    fires: ['patchPrimaryRuntime', 'setBackendPositionSynced'],
   },
   {
     name: 'route_path with udid',
     type: 'route_path',
     data: { udid: UDID_A, coords: [[1, 2]] },
-    fires: ['setRoutePath', 'updateRuntime'],
+    fires: ['updateRuntime'],
   },
   {
     name: 'route_path without udid',
     type: 'route_path',
     data: { coords: [[1, 2]] },
-    fires: ['setRoutePath'],
+    fires: ['patchPrimaryRuntime'],
   },
   {
     name: 'state_change running with udid',
     type: 'state_change',
     data: { udid: UDID_A, state: 'navigating' },
-    fires: ['setStatus', 'updateRuntime'],
+    fires: ['updateRuntime'],
   },
   {
     name: 'state_change idle with udid',
     type: 'state_change',
     data: { udid: UDID_A, state: 'idle' },
-    fires: ['setDestination', 'setEta', 'setRoutePath', 'setStatus', 'updateRuntime'],
+    fires: ['setDestination', 'updateRuntime'],
+  },
+  {
+    name: 'state_change idle without udid',
+    type: 'state_change',
+    data: { state: 'idle' },
+    fires: ['patchPrimaryRuntime', 'setDestination'],
   },
   {
     name: 'device_connected with udid',
     type: 'device_connected',
     data: { udid: UDID_A },
-    fires: ['setError', 'setRuntimes'],
+    fires: ['setError', 'updateRuntime'],
   },
   {
     name: 'device_connected WITHOUT udid is a no-op (udid-gated branch only)',
@@ -610,19 +679,25 @@ const TABLE: TableRow[] = [
     name: 'device_disconnected with udid',
     type: 'device_disconnected',
     data: { udid: UDID_A },
-    fires: ['setStatus', 'updateRuntime'],
+    fires: ['updateRuntime'],
   },
   {
-    name: 'device_disconnected without udid (legacy status only)',
+    name: 'device_disconnected without udid (primary slot)',
     type: 'device_disconnected',
     data: {},
-    fires: ['setStatus'],
+    fires: ['patchPrimaryRuntime'],
   },
   {
     name: 'navigation_complete with udid',
     type: 'navigation_complete',
     data: { udid: UDID_A },
-    fires: ['setDestination', 'setEta', 'setLapProgress', 'setPauseEndAt', 'setProgress', 'setWaypointProgress', 'updateRuntime'],
+    fires: ['setDestination', 'setLapProgress', 'setPauseEndAt', 'setWaypointProgress', 'updateRuntime'],
+  },
+  {
+    name: 'navigation_complete without udid',
+    type: 'navigation_complete',
+    data: {},
+    fires: ['patchPrimaryRuntime', 'setDestination', 'setLapProgress', 'setPauseEndAt', 'setWaypointProgress'],
   },
   {
     name: 'waypoint_progress with udid',
@@ -685,16 +760,9 @@ const TABLE: TableRow[] = [
 
 describe('event → setters table', () => {
   it.each(TABLE)('$name fires exactly: $fires', (row) => {
-    const h = createHarness(row.seed)
+    const h = createHarness(row.seed ? { runtimes: row.seed } : undefined)
     h.send(row.type, row.data)
     expect(calledSetterNames(h)).toEqual([...row.fires].sort())
-  })
-
-  it('setMode and setWaypoints are NEVER called by the dispatcher (dead setters in the bag)', () => {
-    const h = createHarness(seededRuntimes())
-    for (const row of TABLE) h.send(row.type, row.data)
-    expect(h.setters.setMode).not.toHaveBeenCalled()
-    expect(h.setters.setWaypoints).not.toHaveBeenCalled()
   })
 })
 

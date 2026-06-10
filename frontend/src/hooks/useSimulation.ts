@@ -109,6 +109,30 @@ function stateToMode(state: string): SimMode | null {
   }
 }
 
+/** Inverse of `stateToMode` — the engine state a mode runs in. Used for
+ *  optimistic runtime patches (resume) where the backend state string
+ *  isn't known yet. Teleport has no running state → null. */
+function modeToState(mode: SimMode): string | null {
+  switch (mode) {
+    case SimMode.Navigate: return 'navigating'
+    case SimMode.Loop: return 'looping'
+    case SimMode.MultiStop: return 'multi_stop'
+    case SimMode.RandomWalk: return 'random_walk'
+    case SimMode.Joystick: return 'joystick'
+    default: return null
+  }
+}
+
+/** States in which the engine is actively simulating. `paused` counts as
+ *  running — a paused run is still a run (the pause/resume pill stays). */
+function isActiveState(state: string | undefined): boolean {
+  return state != null && state !== 'idle' && state !== 'disconnected'
+}
+
+// Stable empty path so the derived `routePath` keeps referential identity
+// across renders when no runtime exists yet.
+const EMPTY_ROUTE_PATH: LatLng[] = []
+
 // ── Fan-out helper ─────────────────────────────────────────────────────
 export interface FanoutOutcome<T> {
   ok: Array<{ udid: string; value: T }>
@@ -164,12 +188,10 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   // first); a lazy state initialiser runs it exactly once.
   const [initialSpeedPrefs] = useState<SpeedPrefs>(loadSpeedPrefs)
   const [moveMode, setMoveMode] = useState<MoveMode>(initialSpeedPrefs.moveMode)
-  const [status, setStatus] = useState<SimulationStatus>({
-    running: false,
-    paused: false,
-    speed: 0,
-  })
-  const [currentPosition, setCurrentPosition] = useState<LatLng | null>(null)
+  // Engine speed multiplier reported by the initial `getStatus()` fetch.
+  // Feeds the derived `status.speed` field (no consumer reads it today,
+  // but the public SimulationStatus shape keeps it).
+  const [statusSpeed, setStatusSpeed] = useState(0)
   // True once the backend engine is known to hold the same position the UI is
   // showing — i.e. a teleport/navigate/etc. has succeeded this session, an
   // initial `getStatus()` returned a live position, or a WS position_update
@@ -178,11 +200,11 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   // preserve the phone's real GPS). The UI uses this flag to dim the cached
   // pin and to prompt before the first movement action.
   const [backendPositionSynced, setBackendPositionSynced] = useState(false)
+  // User-input state: the destination marker (map clicks, search results)
+  // and staged waypoints. These are NOT device state — they stay real
+  // state here; the WS dispatcher only ever CLEARS destination.
   const [destination, setDestination] = useState<LatLng | null>(null)
-  const [progress, setProgress] = useState(0)
-  const [eta, setEta] = useState<number | null>(null)
   const [waypoints, setWaypoints] = useState<LatLng[]>([])
-  const [routePath, setRoutePath] = useState<LatLng[]>([])
   const [customSpeedKmh, setCustomSpeedKmh] = useState<number | null>(initialSpeedPrefs.customSpeedKmh)
   const [speedMinKmh, setSpeedMinKmh] = useState<number | null>(initialSpeedPrefs.speedMinKmh)
   const [speedMaxKmh, setSpeedMaxKmh] = useState<number | null>(initialSpeedPrefs.speedMaxKmh)
@@ -226,9 +248,12 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     { mode: MoveMode; kmh: number | null; min: number | null; max: number | null } | null
   >(null)
 
-  // Per-device runtime map (group mode). Populated from WS events tagged
-  // with udid via the dispatcher hook below.
-  const { runtimes, setRuntimes, updateRuntime } = useSimRuntimes()
+  // Per-device runtime map — the single source of truth for device
+  // simulation state. Populated from WS events via the dispatcher hook
+  // below and patched optimistically by the action handlers here. The
+  // single-device fields this hook returns (currentPosition, status,
+  // progress, eta, routePath) are derived from the primary entry.
+  const { runtimes, setRuntimes, updateRuntime, patchPrimaryRuntime } = useSimRuntimes()
 
   // Tick the pause countdown at 1 Hz
   useEffect(() => {
@@ -246,26 +271,18 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     return () => clearInterval(id)
   }, [pauseEndAt])
 
-  // Wire incoming WS messages into the legacy single-device state and the
-  // per-device runtimes map. The dispatcher itself owns no state — it just
-  // routes events to the setters bundled below. The bundle is rebuilt
-  // each render but the dispatcher captures it via a ref so its subscribe
-  // effect doesn't tear down on every parent re-render.
-  //
-  // setMode: dispatcher passes a backend-side string (lowercase mode name)
-  // through; cast to SimMode here since the enum values match the strings.
+  // Wire incoming WS messages into the runtimes map (per-device state)
+  // and the session-global setters (overlays, DDI, error). The dispatcher
+  // itself owns no state — it just routes events to the setters bundled
+  // below. The bundle is rebuilt each render but the dispatcher captures
+  // it via a ref so its subscribe effect doesn't tear down on every
+  // parent re-render.
   useSimWsDispatcher(subscribe, {
     setRuntimes,
     updateRuntime,
-    setCurrentPosition,
+    patchPrimaryRuntime,
     setBackendPositionSynced,
-    setProgress,
-    setEta,
-    setStatus,
-    setMode: (next) => _setMode(next as SimMode),
     setDestination,
-    setWaypoints,
-    setRoutePath,
     setPauseEndAt,
     setWaypointProgress,
     setLapProgress,
@@ -274,6 +291,44 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     setError,
     localizeError,
   })
+
+  // Derived: primary runtime feeding the single-device view below.
+  // Memoised so consumers see a stable reference between renders when
+  // `runtimes` itself is unchanged — `Object.keys(runtimes)` allocates,
+  // and re-allocating it every render churns downstream `useMemo` deps.
+  const primaryRuntime: DeviceRuntime | null = useMemo(() => {
+    const keys = Object.keys(runtimes)
+    return keys.length ? runtimes[keys[0]] : null
+  }, [runtimes])
+  const anyRunning = Object.values(runtimes).some((r) => isActiveState(r.state))
+
+  // ── Single-device view (derived from the primary runtime) ──────────
+  // These keep the names and semantics the pre-refactor legacy state
+  // exposed, but there is no separate write path any more: WS frames and
+  // optimistic actions both patch `runtimes`, and the view falls out.
+  const currentPosition = primaryRuntime?.currentPos ?? null
+  const progress = primaryRuntime?.progress ?? 0
+  const eta = primaryRuntime?.eta ?? null
+  const routePath = primaryRuntime?.routePath ?? EMPTY_ROUTE_PATH
+  const status: SimulationStatus = useMemo(() => ({
+    running: isActiveState(primaryRuntime?.state),
+    paused: primaryRuntime?.state === 'paused',
+    speed: statusSpeed,
+    state: primaryRuntime?.state,
+    ...(primaryRuntime
+      ? {
+          distance_remaining: primaryRuntime.distanceRemaining,
+          distance_traveled: primaryRuntime.distanceTraveled,
+        }
+      : {}),
+  }), [primaryRuntime, statusSpeed])
+
+  // Imperative position setter kept for optimistic writers outside this
+  // hook (SimContext's multi-device teleport). Routes through the same
+  // runtimes write path as everything else.
+  const setCurrentPosition = useCallback((pos: LatLng | null) => {
+    patchPrimaryRuntime({ currentPos: pos })
+  }, [patchPrimaryRuntime])
 
   const clearError = useCallback(() => setError(null), [])
 
@@ -284,14 +339,12 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     _setMode((prev) => {
       if (prev !== next) {
         setDestination(null)
-        setRoutePath([])
         setWaypoints([])
-        setProgress(0)
-        setEta(null)
+        patchPrimaryRuntime({ routePath: [], progress: 0, eta: null })
       }
       return next
     })
-  }, [])
+  }, [patchPrimaryRuntime])
 
   const teleport = useCallback(async (lat: number, lng: number, autoJitter?: boolean) => {
     // Mode is owned by the user's explicit tab choice; the backend
@@ -300,13 +353,11 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     // TeleportPanel "Go") keep the current Loop / MultiStop / Navigate.
     setError(null)
     const res = await api.teleport(lat, lng, undefined, autoJitter)
-    setCurrentPosition({ lat, lng })
+    patchPrimaryRuntime({ currentPos: { lat, lng }, progress: 0, eta: null })
     setBackendPositionSynced(true)
     setDestination(null)
-    setProgress(0)
-    setEta(null)
     return res
-  }, [])
+  }, [patchPrimaryRuntime])
 
   const navigate = useCallback(
     async (lat: number, lng: number) => {
@@ -317,10 +368,13 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       const prevMode = modeRef.current
       _setMode(SimMode.Navigate)
       setDestination({ lat, lng })
-      setProgress(0)
+      patchPrimaryRuntime({ progress: 0 })
       try {
         const res = await api.navigate(lat, lng, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, undefined, straightLine)
-        setStatus((prev) => ({ ...prev, running: true, paused: false }))
+        // Optimistic running flip: the derived status reads running=true
+        // from the active state string; the authoritative `state_change`
+        // lands moments later with the same value.
+        patchPrimaryRuntime({ state: 'navigating' })
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err) {
@@ -331,7 +385,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     },
     // navigate body doesn't read pauseMultiStop / pauseLoop / pauseRandomWalk —
     // dropping them so this callback identity doesn't churn on unrelated edits.
-    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, straightLine],
+    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, straightLine, patchPrimaryRuntime],
   )
 
   const startLoop = useCallback(
@@ -343,11 +397,11 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       // (already includes the start position from caller). Overwriting UI
       // waypoints here would prepend the start point on every restart,
       // and break the backend↔UI seg_idx mapping for highlighting.
-      setProgress(0)
+      patchPrimaryRuntime({ progress: 0 })
       setLapProgress(loopLapCount != null ? { current: 0, total: loopLapCount } : null)
       try {
         const res = await api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, undefined, straightLine, loopLapCount)
-        setStatus((prev) => ({ ...prev, running: true, paused: false }))
+        patchPrimaryRuntime({ state: 'looping' })
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err) {
@@ -358,7 +412,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     },
     // Body reads only pauseLoop — keep deps tight so this callback identity
     // doesn't churn on unrelated pauseMultiStop / pauseRandomWalk edits.
-    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseLoop, straightLine, loopLapCount],
+    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseLoop, straightLine, loopLapCount, patchPrimaryRuntime],
   )
 
   const multiStop = useCallback(
@@ -367,11 +421,11 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       const prevMode = modeRef.current
       _setMode(SimMode.MultiStop)
       // See startLoop — do not overwrite UI waypoints with the backend route.
-      setProgress(0)
+      patchPrimaryRuntime({ progress: 0 })
       setLapProgress(loop && loopLapCount != null ? { current: 0, total: loopLapCount } : null)
       try {
         const res = await api.multiStop(wps, moveMode, stopDuration, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, undefined, straightLine, loop ? loopLapCount : null)
-        setStatus((prev) => ({ ...prev, running: true, paused: false }))
+        patchPrimaryRuntime({ state: 'multi_stop' })
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err) {
@@ -381,7 +435,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       }
     },
     // Body reads only pauseMultiStop — mirror of startLoop above.
-    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, straightLine, loopLapCount],
+    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, straightLine, loopLapCount, patchPrimaryRuntime],
   )
 
   const randomWalk = useCallback(
@@ -389,10 +443,10 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       setError(null)
       const prevMode = modeRef.current
       _setMode(SimMode.RandomWalk)
-      setProgress(0)
+      patchPrimaryRuntime({ progress: 0 })
       try {
         const res = await api.randomWalk(center, radiusM, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseRandomWalk.enabled, pause_min: pauseRandomWalk.min, pause_max: pauseRandomWalk.max }, undefined, undefined, straightLine)
-        setStatus((prev) => ({ ...prev, running: true, paused: false }))
+        patchPrimaryRuntime({ state: 'random_walk' })
         setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
         return res
       } catch (err) {
@@ -401,7 +455,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       }
     },
     // Body uses only pauseRandomWalk — drop the other two pause settings.
-    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseRandomWalk, straightLine],
+    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseRandomWalk, straightLine, patchPrimaryRuntime],
   )
 
   const joystickStart = useCallback(async () => {
@@ -410,43 +464,45 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     _setMode(SimMode.Joystick)
     try {
       const res = await api.joystickStart(moveMode)
-      setStatus((prev) => ({ ...prev, running: true, paused: false }))
+      patchPrimaryRuntime({ state: 'joystick' })
       return res
     } catch (err) {
       _setMode(prevMode)
       throw err
     }
-  }, [moveMode])
+  }, [moveMode, patchPrimaryRuntime])
 
   const joystickStop = useCallback(async () => {
     setError(null)
     const res = await api.joystickStop()
-    // leave mode as-is; status drives running state
-    setStatus((prev) => ({ ...prev, running: false, paused: false }))
+    // leave mode as-is; the derived status drives running state
+    patchPrimaryRuntime({ state: 'idle' })
     return res
-  }, [])
+  }, [patchPrimaryRuntime])
 
   const pause = useCallback(async () => {
     setError(null)
     const res = await api.pauseSim()
-    setStatus((prev) => ({ ...prev, paused: true }))
+    patchPrimaryRuntime({ state: 'paused' })
     return res
-  }, [])
+  }, [patchPrimaryRuntime])
 
   const resume = useCallback(async () => {
     setError(null)
     const res = await api.resumeSim()
-    setStatus((prev) => ({ ...prev, paused: false }))
+    // Optimistically return to the active mode's state string. When the
+    // mode tab doesn't map to a running state (e.g. the user switched to
+    // Teleport while paused), skip the patch — the backend's
+    // `state_change` lands moments later with the real state.
+    const resumedState = modeToState(modeRef.current)
+    if (resumedState) patchPrimaryRuntime({ state: resumedState })
     return res
-  }, [])
+  }, [patchPrimaryRuntime])
 
   const stop = useCallback(async () => {
     setError(null)
     const res = await api.stopSim()
-    setStatus((prev) => ({ ...prev, running: false, paused: false }))
-    setProgress(0)
-    setEta(null)
-    setRoutePath([])
+    patchPrimaryRuntime({ state: 'idle', progress: 0, eta: null, routePath: [] })
     setWaypointProgress(null)
     // Clear the lap progress counter too — otherwise a stopped run
     // keeps showing "3 / 5" in the Loop / MultiStop panel until the
@@ -458,25 +514,32 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     // lingering destination pin after Stop was a reported UX bug.
     setDestination(null)
     return res
-  }, [])
+  }, [patchPrimaryRuntime])
 
   const restore = useCallback(async () => {
     setError(null)
     const res = await api.restoreSim()
-    // leave mode as-is; status drives running state
-    setStatus({ running: false, paused: false, speed: 0 })
-    setCurrentPosition(null)
+    // leave mode as-is; the derived status drives running state
+    patchPrimaryRuntime({
+      state: 'idle',
+      currentPos: null,
+      destination: null,
+      routePath: [],
+      progress: 0,
+      eta: null,
+      distanceRemaining: 0,
+      distanceTraveled: 0,
+      waypointIndex: null,
+    })
+    setStatusSpeed(0)
     setBackendPositionSynced(false)
     setDestination(null)
-    setProgress(0)
-    setEta(null)
     setWaypoints([])
-    setRoutePath([])
     setWaypointProgress(null)
     setLapProgress(null)
     setEffectiveSpeed(null)
     return res
-  }, [])
+  }, [patchPrimaryRuntime])
 
   const applySpeed = useCallback(async (sel?: SpeedSelection) => {
     setError(null)
@@ -536,7 +599,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
         const res = statusRes.value
         if (res.position) {
           hadLivePosition = true
-          setCurrentPosition({ lat: res.position.lat, lng: res.position.lng })
+          patchPrimaryRuntime({ currentPos: { lat: res.position.lat, lng: res.position.lng } })
           setBackendPositionSynced(true)
         }
         if (res.mode) {
@@ -544,10 +607,13 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
           if (mapped) _setMode(mapped)
         }
         if (res.running != null || res.paused != null) {
-          setStatus({
-            running: !!res.running,
-            paused: !!res.paused,
-            speed: res.speed ?? 0,
+          setStatusSpeed(res.speed ?? 0)
+          // Seed the runtime state so the derived running/paused flags
+          // match the engine snapshot. Lands in the local slot before the
+          // first udid-tagged frame; the slot is promoted into the real
+          // udid entry when that frame arrives.
+          patchPrimaryRuntime({
+            state: !res.running ? 'idle' : res.paused ? 'paused' : (res.mode ?? 'navigating'),
           })
         }
       }
@@ -557,7 +623,10 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       if (!hadLivePosition && lastPosRes.status === 'fulfilled') {
         const { position } = lastPosRes.value
         if (position) {
-          setCurrentPosition((prev) => prev ?? { lat: position.lat, lng: position.lng })
+          // Functional patch: keep an already-set position (mirrors the
+          // old `prev ?? value` updater).
+          patchPrimaryRuntime((cur) =>
+            cur.currentPos ? {} : { currentPos: { lat: position.lat, lng: position.lng } })
         }
       }
     }
@@ -567,7 +636,9 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     return () => {
       aborted = true
     }
-  }, [])
+    // patchPrimaryRuntime is a stable useCallback — listing it keeps the
+    // deps honest without re-running the mount fetch.
+  }, [patchPrimaryRuntime])
 
   // ── Group-mode fan-out helpers ──────────────────────────────────────
   // Each takes an explicit list of udids so the caller (App.tsx) decides
@@ -638,23 +709,20 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const stopAll = useCallback((udids: string[]) => fanout(udids, (u) => api.stopSim(u)), [fanout])
   const restoreAll = useCallback(async (udids: string[]) => {
     const outcome = await fanout(udids, (u) => api.restoreSim(u))
-    // Clear per-device runtime state (markers, routes) and legacy state so
-    // the map immediately reflects the wipe without waiting for events.
+    // Clear per-device runtime state (markers, routes) so the map — and
+    // the single-device view derived from the primary runtime —
+    // immediately reflects the wipe without waiting for events.
     setRuntimes((prev) => {
       const next: RuntimesMap = { ...prev }
       for (const u of udids) {
         if (next[u]) {
-          next[u] = { ...next[u], currentPos: null, destination: null, routePath: [], progress: 0, eta: 0, distanceRemaining: 0, distanceTraveled: 0, waypointIndex: null, state: 'idle' }
+          next[u] = { ...next[u], currentPos: null, destination: null, routePath: [], progress: 0, eta: null, distanceRemaining: 0, distanceTraveled: 0, waypointIndex: null, state: 'idle' }
         }
       }
       return next
     })
-    setCurrentPosition(null)
     setDestination(null)
-    setProgress(0)
-    setEta(null)
     setWaypoints([])
-    setRoutePath([])
     setWaypointProgress(null)
     setLapProgress(null)
     setEffectiveSpeed(null)
@@ -666,18 +734,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   }, [fanout, preSyncStart, moveMode])
   const joystickStopAll = useCallback((udids: string[]) =>
     fanout(udids, (u) => api.joystickStop(u)), [fanout])
-
-  // Derived: primary runtime for legacy single-device components.
-  // Memoised so consumers see a stable reference between renders when
-  // `runtimes` itself is unchanged — `Object.keys(runtimes)` allocates,
-  // and re-allocating it every render churns downstream `useMemo` deps.
-  const primaryRuntime: DeviceRuntime | null = useMemo(() => {
-    const keys = Object.keys(runtimes)
-    return keys.length ? runtimes[keys[0]] : null
-  }, [runtimes])
-  const anyRunning = Object.values(runtimes).some((r) =>
-    r.state && r.state !== 'idle' && r.state !== 'disconnected',
-  )
 
   return {
     runtimes,

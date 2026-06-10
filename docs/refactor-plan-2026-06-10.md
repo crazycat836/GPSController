@@ -156,7 +156,7 @@ All verified dead by project-wide grep including dynamic-key patterns.
 
 ### 4A Frontend state architecture (highest leverage)
 
-- [ ] **4A.1** Make legacy single-device sim fields a derived view of `runtimes`
+- [x] **4A.1** Make legacy single-device sim fields a derived view of `runtimes`
       (`primaryRuntime` memo already exists, useSimulation.ts:685-688) so there is one
       write path; migrate remaining consumers; delete the legacy branch of
       `useSimWsDispatcher` (310-465). Gate on the Phase 1.4 dispatcher tests.
@@ -183,7 +183,7 @@ All verified dead by project-wide grep including dynamic-key patterns.
       TunnelRunner in wifi_tunnel_service.py:35; watchdog handle in
       api/tunnel/_helpers.py:33) and route the 29 direct `ctx.app_state` accesses
       through one expanded `api/_deps.py` accessor set.
-- [ ] **4B.2** Extract device-health probes out of `api/websocket.py` (50-217) into
+- [x] **4B.2** Extract device-health probes out of `api/websocket.py` (50-217) into
       `services/device_health.py`; give LocationService a **public** probe API (the
       `getattr(loc, "_ensure_instrument", None)` pattern silently disables the probe on
       rename).

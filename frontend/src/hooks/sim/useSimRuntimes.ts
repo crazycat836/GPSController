@@ -1,15 +1,33 @@
 /**
- * Per-device simulation runtime state (group mode).
+ * Per-device simulation runtime state — the SINGLE source of truth for
+ * device simulation state.
  *
  * Each connected device gets a slot in the `runtimes` map keyed by udid.
  * Slots are populated by `useSimWsDispatcher` from incoming
  * `position_update` / `state_change` / `route_path` / `waypoint_progress`
- * / `device_connected` events. Consumers (DeviceChip, EtaBar) read the
- * map to render per-device markers, ETAs, and chips.
+ * / `device_connected` events, and patched optimistically by the action
+ * handlers in `useSimulation` (teleport, navigate, stop, …).
+ *
+ * Consumers read the map directly (DeviceChip, EtaBar, MiniStatusBar)
+ * or through the derived single-device view in `useSimulation`
+ * (`currentPosition`, `status`, `progress`, `eta`, `routePath` are all
+ * projections of the primary runtime).
+ *
+ * ── The local slot ─────────────────────────────────────────────────────
+ * Before the first udid-tagged event arrives (cold start, page reload),
+ * single-device state still needs a home: the rehydrated last position,
+ * the `getStatus()` snapshot, and udid-less WS frames. Those writes land
+ * in a reserved `LOCAL_RUNTIME_KEY` slot. The first write for a real
+ * udid PROMOTES the local slot — its accumulated state seeds the new
+ * udid entry and the sentinel is removed — so the derived primary view
+ * stays continuous across the udid becoming known.
  */
 
 import { useState, useCallback } from 'react'
 import type { LatLng } from './types'
+
+/** Reserved runtimes key for the pre-udid single-device slot. */
+export const LOCAL_RUNTIME_KEY = '__local__'
 
 export interface DeviceRuntime {
   udid: string
@@ -18,7 +36,10 @@ export interface DeviceRuntime {
   destination: LatLng | null
   routePath: LatLng[]
   progress: number
-  eta: number
+  /** Seconds remaining, or null when no run is in flight (mirrors the
+   *  legacy single-device `eta` nullability so the derived view can
+   *  distinguish "no ETA" from "arriving now"). */
+  eta: number | null
   distanceRemaining: number
   distanceTraveled: number
   waypointIndex: number | null
@@ -44,7 +65,7 @@ export function emptyRuntime(udid: string): DeviceRuntime {
     destination: null,
     routePath: [],
     progress: 0,
-    eta: 0,
+    eta: null,
     distanceRemaining: 0,
     distanceTraveled: 0,
     waypointIndex: null,
@@ -56,21 +77,59 @@ export function emptyRuntime(udid: string): DeviceRuntime {
   }
 }
 
+/**
+ * Patch for the primary runtime. The functional form receives the
+ * current entry so callers can express conditional writes (e.g. "set
+ * position only if none is cached"); returning an empty object makes
+ * the patch a no-op that keeps the previous map reference.
+ */
+export type PrimaryRuntimePatch =
+  | Partial<DeviceRuntime>
+  | ((current: DeviceRuntime) => Partial<DeviceRuntime>)
+
 export interface UseSimRuntimesValue {
   runtimes: RuntimesMap
   setRuntimes: React.Dispatch<React.SetStateAction<RuntimesMap>>
-  /** Patch a single device's runtime; auto-creates an empty entry on first
-   *  write so callers don't have to pre-seed the map. */
+  /** Patch a single device's runtime; auto-creates an entry on first
+   *  write (promoting the local slot's state when one exists) so callers
+   *  don't have to pre-seed the map. */
   updateRuntime: (udid: string, patch: Partial<DeviceRuntime>) => void
+  /** Patch the primary runtime (first map entry), falling back to the
+   *  reserved local slot when no device has been seen yet. Used by the
+   *  udid-less WS path and by optimistic single-device actions. */
+  patchPrimaryRuntime: (patch: PrimaryRuntimePatch) => void
 }
 
 export function useSimRuntimes(): UseSimRuntimesValue {
   const [runtimes, setRuntimes] = useState<RuntimesMap>({})
+
   const updateRuntime = useCallback((udid: string, patch: Partial<DeviceRuntime>) => {
     setRuntimes((prev) => {
-      const cur = prev[udid] ?? emptyRuntime(udid)
-      return { ...prev, [udid]: { ...cur, ...patch } }
+      const existing = prev[udid]
+      if (existing) return { ...prev, [udid]: { ...existing, ...patch } }
+      // First write for this udid: promote the local slot's accumulated
+      // state (rehydrated position, getStatus snapshot) into the new
+      // entry so the derived primary view doesn't blank out the moment
+      // the udid becomes known.
+      const local = udid !== LOCAL_RUNTIME_KEY ? prev[LOCAL_RUNTIME_KEY] : undefined
+      const base = local ? { ...local, udid } : emptyRuntime(udid)
+      const next: RuntimesMap = { ...prev, [udid]: { ...base, ...patch } }
+      // `next` is a fresh copy owned by this updater — removing the
+      // promoted sentinel from it is not a mutation of shared state.
+      if (local) delete next[LOCAL_RUNTIME_KEY]
+      return next
     })
   }, [])
-  return { runtimes, setRuntimes, updateRuntime }
+
+  const patchPrimaryRuntime = useCallback((patch: PrimaryRuntimePatch) => {
+    setRuntimes((prev) => {
+      const key = Object.keys(prev)[0] ?? LOCAL_RUNTIME_KEY
+      const current = prev[key] ?? emptyRuntime(key)
+      const resolved = typeof patch === 'function' ? patch(current) : patch
+      if (Object.keys(resolved).length === 0) return prev
+      return { ...prev, [key]: { ...current, ...resolved } }
+    })
+  }, [])
+
+  return { runtimes, setRuntimes, updateRuntime, patchPrimaryRuntime }
 }

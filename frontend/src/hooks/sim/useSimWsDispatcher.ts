@@ -2,15 +2,23 @@
  * WebSocket dispatcher for simulation events.
  *
  * Subscribes to the shared WS stream and routes ~24 backend event types
- * to two parallel state surfaces:
+ * into a SINGLE write path:
  *
- *   1. The per-device `runtimes` map (group mode) — populated for every
- *      udid-tagged event so DeviceChip / EtaBar / per-device markers
- *      stay current.
- *   2. The legacy single-device state (currentPosition, status, mode,
- *      destination, waypoints, routePath, etc.) — read by older
- *      single-device components that haven't been migrated to consume
- *      from `runtimes` yet.
+ *   - Per-device state (position, route, engine state, progress, ETA,
+ *     tunnel health) goes into the `runtimes` map. Frames tagged with a
+ *     udid target that device's slot; untagged frames target the primary
+ *     slot (first map entry, falling back to the reserved local slot —
+ *     see `useSimRuntimes`). The legacy single-device view in
+ *     `useSimulation` is DERIVED from the primary runtime, so writing
+ *     the runtime is sufficient to update every consumer.
+ *   - Session-global state that has no per-device meaning (pause
+ *     countdown, waypoint/lap overlays, DDI mount progress, the error
+ *     banner, the backend-sync flag) keeps dedicated setters — each of
+ *     those datums has exactly one home, so this is still one path per
+ *     datum.
+ *   - `destination` is USER-INPUT state owned by `useSimulation`; the
+ *     dispatcher only CLEARS it (on run completion / idle), mirroring
+ *     the same clear applied to the runtime entry.
  *
  * The dispatcher itself owns no state; it accepts a bundle of setters
  * via a ref so the subscribe effect's deps stay `[subscribe]` and the
@@ -22,7 +30,6 @@
 import { useEffect, useRef } from 'react'
 import type { LatLng } from './types'
 import type { DeviceRuntime, RuntimesMap } from './useSimRuntimes'
-import { emptyRuntime } from './useSimRuntimes'
 import type { WsMessage } from '../useWebSocket'
 
 // ── Typed WS payloads ──────────────────────────────────────────────────
@@ -184,19 +191,15 @@ export interface SimulationStatus {
  * and the WS subscribe effect itself only depends on `subscribe`.
  */
 export interface SimWsSetters {
-  // Per-device runtime
+  // Per-device runtime — the single home for device simulation state.
   setRuntimes: React.Dispatch<React.SetStateAction<RuntimesMap>>
   updateRuntime: (udid: string, patch: Partial<DeviceRuntime>) => void
-  // Legacy single-device state
-  setCurrentPosition: React.Dispatch<React.SetStateAction<LatLng | null>>
+  /** Target for udid-less frames: first map entry or the local slot. */
+  patchPrimaryRuntime: (patch: Partial<DeviceRuntime>) => void
+  // Session-global state with no per-device counterpart.
   setBackendPositionSynced: React.Dispatch<React.SetStateAction<boolean>>
-  setProgress: React.Dispatch<React.SetStateAction<number>>
-  setEta: React.Dispatch<React.SetStateAction<number | null>>
-  setStatus: React.Dispatch<React.SetStateAction<SimulationStatus>>
-  setMode: (next: string) => void
+  /** User-input destination; the dispatcher only clears it. */
   setDestination: React.Dispatch<React.SetStateAction<LatLng | null>>
-  setWaypoints: React.Dispatch<React.SetStateAction<LatLng[]>>
-  setRoutePath: React.Dispatch<React.SetStateAction<LatLng[]>>
   setPauseEndAt: React.Dispatch<React.SetStateAction<number | null>>
   setWaypointProgress: React.Dispatch<
     React.SetStateAction<{ current: number; next: number; total: number } | null>
@@ -230,113 +233,95 @@ export function useSimWsDispatcher(
     if (!subscribe) return
     return subscribe((wsMessage) => {
       const s = settersRef.current
-
-      // ── Group mode: mirror per-device state into `runtimes` map ────
       const udid = extractUdid(wsMessage.data)
-      if (udid) {
-        switch (wsMessage.type) {
-          case 'position_update': {
-            const d = parsePositionUpdate(wsMessage.data)
-            if (!d) break
-            // Only include a key when the incoming payload carries it,
-            // so a tick without `eta` doesn't wipe the cached value.
-            const patch: Partial<DeviceRuntime> = {}
-            if (d.lat != null && d.lng != null) {
-              patch.currentPos = { lat: d.lat, lng: d.lng }
-            }
-            if (d.progress != null) patch.progress = d.progress
-            const etaVal = d.eta_seconds ?? d.eta
-            if (etaVal != null) patch.eta = etaVal
-            if (d.distance_remaining != null) patch.distanceRemaining = d.distance_remaining
-            if (d.distance_traveled != null) patch.distanceTraveled = d.distance_traveled
-            if (d.speed_mps != null) patch.currentSpeedKmh = d.speed_mps * 3.6
-            if (Object.keys(patch).length > 0) s.updateRuntime(udid, patch)
-            break
-          }
-          case 'route_path': {
-            const d = parseRoutePath(wsMessage.data)
-            if (d?.coords) {
-              s.updateRuntime(udid, { routePath: d.coords.map(coordOf) })
-            }
-            break
-          }
-          case 'state_change': {
-            const d = parseStateChange(wsMessage.data)
-            if (d?.state) {
-              s.updateRuntime(udid, {
-                state: d.state,
-                ...(d.state === 'idle' || d.state === 'disconnected' ? { routePath: [] } : {}),
-              })
-            }
-            break
-          }
-          case 'device_connected': {
-            // `device_connected` is the authoritative "fresh connection"
-            // signal — a hard-reset reconnect cycle does NOT re-emit
-            // `tunnel_recovered`, so any stale `tunnelDegraded` left over
-            // from before the disconnect must be cleared here. Without
-            // this the left chip sticks at "重連中" even after the right
-            // card flips to "已連線".
-            s.setRuntimes((prev) => ({
-              ...prev,
-              [udid]: { ...(prev[udid] ?? emptyRuntime(udid)), tunnelDegraded: false },
-            }))
-            s.setError(null)
-            break
-          }
-          case 'device_disconnected': {
-            // Device leaves the connected pool — chip switches to
-            // "已斷線" via `device.connectedDevices`. Reset transient
-            // tunnel-degraded so the next reconnect doesn't inherit it.
-            s.updateRuntime(udid, { state: 'disconnected', tunnelDegraded: false })
-            break
-          }
-          case 'multi_stop_complete':
-          case 'navigation_complete':
-          case 'random_walk_complete': {
-            s.updateRuntime(udid, { progress: 1, state: 'idle' })
-            break
-          }
-          case 'waypoint_progress': {
-            const d = parseWaypointProgress(wsMessage.data)
-            if (d?.current_index != null) {
-              s.updateRuntime(udid, { waypointIndex: d.current_index })
-            }
-            break
-          }
-        }
+
+      // Route a runtime patch to the udid's slot, or to the primary /
+      // local slot when the frame carries no udid (the backend tags all
+      // engine emissions, so the udid-less path is defensive).
+      const patchRuntime = (patch: Partial<DeviceRuntime>) => {
+        if (udid) s.updateRuntime(udid, patch)
+        else s.patchPrimaryRuntime(patch)
       }
 
-      // ── Legacy single-device state ─────────────────────────────────
       switch (wsMessage.type) {
         case 'position_update': {
           const d = parsePositionUpdate(wsMessage.data)
           if (!d) break
+          // Only include a key when the incoming payload carries it,
+          // so a tick without `eta` doesn't wipe the cached value.
+          const patch: Partial<DeviceRuntime> = {}
           if (d.lat != null && d.lng != null) {
-            s.setCurrentPosition({ lat: d.lat, lng: d.lng })
+            patch.currentPos = { lat: d.lat, lng: d.lng }
+            // A real device coordinate arrived — the backend engine and
+            // the UI pin are in sync (session-global flag).
             s.setBackendPositionSynced(true)
           }
-          if (d.progress != null) s.setProgress(d.progress)
+          if (d.progress != null) patch.progress = d.progress
           const etaVal = d.eta_seconds ?? d.eta
-          if (etaVal != null) s.setEta(etaVal)
-          if (d.distance_remaining != null || d.distance_traveled != null) {
-            s.setStatus((prev) => ({
-              ...prev,
-              ...(d.distance_remaining != null ? { distance_remaining: d.distance_remaining } : {}),
-              ...(d.distance_traveled != null ? { distance_traveled: d.distance_traveled } : {}),
-            }))
+          if (etaVal != null) patch.eta = etaVal
+          if (d.distance_remaining != null) patch.distanceRemaining = d.distance_remaining
+          if (d.distance_traveled != null) patch.distanceTraveled = d.distance_traveled
+          if (d.speed_mps != null) patch.currentSpeedKmh = d.speed_mps * 3.6
+          if (Object.keys(patch).length > 0) patchRuntime(patch)
+          break
+        }
+        case 'route_path': {
+          const d = parseRoutePath(wsMessage.data)
+          if (d?.coords) {
+            patchRuntime({ routePath: d.coords.map(coordOf) })
           }
+          break
+        }
+        case 'state_change': {
+          const st = parseStateChange(wsMessage.data)?.state
+          if (!st) break
+          if (st === 'idle' || st === 'disconnected') {
+            // Run torn down: clear the route, ETA, and destination in the
+            // runtime. routePath was always cleared here; eta/destination
+            // clearing is the legacy single-device behavior folded into
+            // the runtime now that it feeds the UI directly.
+            patchRuntime({ state: st, routePath: [], eta: null, destination: null })
+            // The user-input destination marker follows the same clear.
+            s.setDestination(null)
+          } else {
+            patchRuntime({ state: st })
+          }
+          break
+        }
+        case 'device_connected': {
+          // `device_connected` is the authoritative "fresh connection"
+          // signal — a hard-reset reconnect cycle does NOT re-emit
+          // `tunnel_recovered`, so any stale `tunnelDegraded` left over
+          // from before the disconnect must be cleared here. Without
+          // this the left chip sticks at "重連中" even after the right
+          // card flips to "已連線". udid-gated: an untagged frame has
+          // no device to seed.
+          if (udid) {
+            s.updateRuntime(udid, { tunnelDegraded: false })
+            s.setError(null)
+          }
+          break
+        }
+        case 'device_disconnected': {
+          // Device leaves the connected pool — chip switches to
+          // "已斷線" via `device.connectedDevices`. Reset transient
+          // tunnel-degraded so the next reconnect doesn't inherit it.
+          // The derived single-device status reads running/paused=false
+          // from the 'disconnected' state. (User-facing notice is a
+          // toast fired by App.tsx off device.lastDisconnect.)
+          patchRuntime({ state: 'disconnected', tunnelDegraded: false })
           break
         }
         case 'multi_stop_complete':
         case 'navigation_complete':
         case 'random_walk_complete': {
           // Run finished — collapse the dock back to idle. `state_change`
-          // → 'idle' arrives separately and clears `running`/`paused`/
-          // `routePath`; this case clears the per-run progress overlays
-          // those don't touch.
-          s.setProgress(1)
-          s.setEta(null)
+          // → 'idle' arrives separately and clears running/routePath;
+          // this case clears the per-run progress overlays those don't
+          // touch. eta/destination clearing matches the legacy
+          // single-device behavior, now applied to the runtime since the
+          // runtime is the single source feeding the UI.
+          patchRuntime({ progress: 1, state: 'idle', eta: null, destination: null })
           s.setPauseEndAt(null)
           s.setWaypointProgress(null)
           s.setLapProgress(null)
@@ -346,6 +331,7 @@ export function useSimWsDispatcher(
         case 'waypoint_progress': {
           const d = parseWaypointProgress(wsMessage.data)
           if (d?.current_index != null) {
+            patchRuntime({ waypointIndex: d.current_index })
             s.setWaypointProgress({
               current: d.current_index,
               next: d.next_index ?? d.current_index + 1,
@@ -397,9 +383,8 @@ export function useSimWsDispatcher(
           // so the "reconnecting" chip pulse shows up even in single-device
           // mode where the emit doesn't carry a UDID.
           const degraded = wsMessage.type === 'tunnel_degraded'
-          const targetUdid = extractUdid(wsMessage.data)
-          if (targetUdid) {
-            s.updateRuntime(targetUdid, { tunnelDegraded: degraded })
+          if (udid) {
+            s.updateRuntime(udid, { tunnelDegraded: degraded })
           } else {
             s.setRuntimes((prev) => {
               let changed = false
@@ -417,18 +402,9 @@ export function useSimWsDispatcher(
           }
           break
         }
-        case 'device_disconnected': {
-          // User-facing notice is a toast fired by App.tsx off
-          // device.lastDisconnect (canonical Toast per DESIGN.md §4),
-          // which picks a cause-specific copy. The legacy ErrorBanner
-          // path was removed: banner isn't in DESIGN.md and DeviceChip's
-          // "已斷線" pill already persists the state until reconnect.
-          s.setStatus((prev) => ({ ...prev, running: false, paused: false }))
-          break
-        }
         // `device_reconnected` removed — the watchdog now emits
         // `device_connected` after a re-plug, which clears the error
-        // via the existing case below.
+        // via the existing case above.
         case 'pause_countdown': {
           const d = parsePauseCountdown(wsMessage.data)
           const dur = d?.duration_seconds
@@ -439,27 +415,6 @@ export function useSimWsDispatcher(
         }
         case 'pause_countdown_end': {
           s.setPauseEndAt(null)
-          break
-        }
-        case 'route_path': {
-          const d = parseRoutePath(wsMessage.data)
-          if (d?.coords) {
-            s.setRoutePath(d.coords.map(coordOf))
-          }
-          break
-        }
-        case 'state_change': {
-          const st = parseStateChange(wsMessage.data)?.state
-          if (st === 'idle' || st === 'disconnected') {
-            s.setStatus((prev) => ({ ...prev, running: false, paused: false, state: st }))
-            s.setRoutePath([])
-            s.setDestination(null)
-            s.setEta(null)
-          } else if (st === 'paused') {
-            s.setStatus((prev) => ({ ...prev, paused: true, state: st }))
-          } else if (st) {
-            s.setStatus((prev) => ({ ...prev, running: true, paused: false, state: st }))
-          }
           break
         }
       }
