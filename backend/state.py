@@ -7,6 +7,7 @@ HTTP wiring. Owns:
   - Persistent settings (``last_position`` / ``initial_map_position`` /
     ``coord_format``) in ``~/.gpscontroller/settings.json``
   - The CooldownTimer / BookmarkManager / CoordinateFormatter singletons
+  - The RouteService / GpxService / SavedRoutesStore route singletons
   - Dual-device auto-sync (``_sync_new_device_to_primary``): when a
     secondary device connects while the primary is mid-route, replay
     the primary's in-flight snapshot on the newcomer.
@@ -23,12 +24,15 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from config import DEFAULT_LOCATION, SETTINGS_FILE, STATE_SAVE_INTERVAL_SEC
+from config import DEFAULT_LOCATION, ROUTES_FILE, SETTINGS_FILE, STATE_SAVE_INTERVAL_SEC
 from core.device_manager import DeviceManager
 from core.dual_sync import DualSyncCoordinator
 from services.bookmarks import BookmarkManager
 from services.coord_format import CoordinateFormatter
 from services.cooldown import CooldownTimer
+from services.gpx_service import GpxService
+from services.route_service import RouteService
+from services.saved_routes import SavedRoutesStore
 
 if TYPE_CHECKING:
     from core.simulation_engine import SimulationEngine
@@ -52,6 +56,14 @@ class AppState:
         self.cooldown_timer = CooldownTimer(broadcast=broadcast)
         self.bookmark_manager = BookmarkManager()
         self.coord_formatter = CoordinateFormatter()
+        # Route-planning singletons. Previously module-globals in
+        # api/route.py, which made `import api.route` hit the disk
+        # (SavedRoutesStore loads routes.json on construction). Owning
+        # them here keeps all long-lived state on the composition root;
+        # construction now happens when AppState is built in main.py.
+        self.route_service = RouteService()
+        self.gpx_service = GpxService()
+        self.saved_routes_store = SavedRoutesStore(ROUTES_FILE)
         self._last_position = None
         # User-chosen initial map center (persisted between launches). When
         # None, the frontend falls back to a hardcoded default.

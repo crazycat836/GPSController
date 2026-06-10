@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Route as RouteIcon, Save } from 'lucide-react'
-import { useBookmarkContext } from '../../contexts/BookmarkContext'
+import { useRouteLibrary } from '../../contexts/RouteLibraryContext'
 import { useSimState } from '../../contexts/SimContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
@@ -32,7 +32,7 @@ interface OverwriteState {
  */
 export default function SaveRouteDialog({ open, onClose }: SaveRouteDialogProps) {
   const t = useT()
-  const bm = useBookmarkContext()
+  const routeLib = useRouteLibrary()
   const { waypoints: simWaypoints, moveMode: simMoveMode } = useSimState()
   const { showToast } = useToastContext()
 
@@ -62,7 +62,7 @@ export default function SaveRouteDialog({ open, onClose }: SaveRouteDialogProps)
     setBusy(true)
     // Try `reject` first so a same-name match surfaces the overwrite
     // prompt instead of silently creating a duplicate.
-    const result = await bm.handleRouteSave(trimmed, waypoints, moveMode, {
+    const result = await routeLib.handleRouteSave(trimmed, waypoints, moveMode, {
       categoryId,
       onConflict: 'reject',
     })
@@ -75,21 +75,21 @@ export default function SaveRouteDialog({ open, onClose }: SaveRouteDialogProps)
       setOverwrite({ name: trimmed, waypoints, moveMode, categoryId, existingCreatedAt: result.existingCreatedAt })
     }
     // 'error' — the context already surfaced a toast.
-  }, [name, simWaypoints, simMoveMode, bm, categoryId, onClose])
+  }, [name, simWaypoints, simMoveMode, routeLib, categoryId, onClose])
 
   const resolveOverwrite = useCallback(async (policy: 'overwrite' | 'new') => {
     if (!overwrite) return
     const { name: pendingName, waypoints, moveMode, categoryId: pendingCat } = overwrite
     setOverwrite(null)
     setBusy(true)
-    const result = await bm.handleRouteSave(pendingName, waypoints, moveMode, {
+    const result = await routeLib.handleRouteSave(pendingName, waypoints, moveMode, {
       categoryId: pendingCat,
       onConflict: policy,
     })
     setBusy(false)
     if (result.kind === 'overwritten') showToast(t('toast.route_overwritten', { name: pendingName }))
     if (result.kind !== 'error') onClose()
-  }, [overwrite, bm, showToast, t, onClose])
+  }, [overwrite, routeLib, showToast, t, onClose])
 
   return (
     <>
@@ -132,14 +132,14 @@ export default function SaveRouteDialog({ open, onClose }: SaveRouteDialogProps)
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) void handleSave() }}
           />
-          {bm.routeCategories.length > 1 && (
+          {routeLib.routeCategories.length > 1 && (
             <select
               className="seg-input w-full"
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
               aria-label={t('panel.route_category_manage')}
             >
-              {bm.routeCategories.map((cat) => (
+              {routeLib.routeCategories.map((cat) => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>

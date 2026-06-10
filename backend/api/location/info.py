@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 import auth
-from api.location._helpers import get_cooldown_timer, get_engine
-from context import ctx
+from api._deps import get_app_state, get_cooldown_timer
+from api.location._helpers import get_engine
 from models.schemas import SimulationStatus
 
 router = APIRouter()
@@ -27,7 +27,7 @@ async def debug_info():
         # to anyone scanning with a leaked token.
         raise HTTPException(status_code=404)
 
-    app_state = ctx.app_state
+    app_state = get_app_state()
     engine = app_state.simulation_engine
     if engine is None:
         return {"engine": None}

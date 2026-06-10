@@ -3,7 +3,7 @@ import {
   Route as RouteIcon, Save, Pencil, Trash2, FileUp, Upload, Download,
   Folder, FolderInput, GripVertical, ListTree, X,
 } from 'lucide-react'
-import { useBookmarkContext } from '../../contexts/BookmarkContext'
+import { useRouteLibrary } from '../../contexts/RouteLibraryContext'
 import { useSimActions, useSimState } from '../../contexts/SimContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
@@ -41,7 +41,7 @@ const CATEGORY_CHIPS_VISIBLE_CAP = 5
 
 export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   const t = useT()
-  const bm = useBookmarkContext()
+  const routeLib = useRouteLibrary()
   // `waypoints` / `moveMode` only change identity on actual user edits
   // (never on position ticks), so callbacks below can depend on them
   // directly; `setWaypoints` is a stable action.
@@ -49,8 +49,8 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   const { setWaypoints } = useSimActions()
   const { showToast } = useToastContext()
 
-  const savedRoutes = bm.savedRoutes
-  const routeCategories = bm.routeCategories
+  const savedRoutes = routeLib.savedRoutes
+  const routeCategories = routeLib.routeCategories
   const waypointsCount = simWaypoints.length
 
   // ─── State ─────────────────────────────────────────────
@@ -174,7 +174,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
     const moveMode = simMoveMode
     // Always try with `on_conflict=reject` first so a same-name match
     // surfaces the overwrite dialog instead of silently double-saving.
-    const result = await bm.handleRouteSave(name, waypoints, moveMode, {
+    const result = await routeLib.handleRouteSave(name, waypoints, moveMode, {
       categoryId: saveCategoryId,
       onConflict: 'reject',
     })
@@ -196,37 +196,37 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       })
     }
     // result.kind === 'error' — toast already shown by the context
-  }, [routeName, waypointsCount, simWaypoints, simMoveMode, bm, saveCategoryId])
+  }, [routeName, waypointsCount, simWaypoints, simMoveMode, routeLib, saveCategoryId])
 
   const resolveOverwrite = useCallback(async (policy: 'overwrite' | 'new') => {
     if (!overwriteDialog) return
     const { name, waypoints, moveMode, categoryId } = overwriteDialog
     setOverwriteDialog(null)
-    const result = await bm.handleRouteSave(name, waypoints, moveMode, {
+    const result = await routeLib.handleRouteSave(name, waypoints, moveMode, {
       categoryId, onConflict: policy,
     })
     if (result.kind === 'overwritten') {
       showToast(t('toast.route_overwritten', { name }))
     }
     if (result.kind !== 'error') setRouteName('')
-  }, [overwriteDialog, bm, showToast, t])
+  }, [overwriteDialog, routeLib, showToast, t])
 
   const handleLoad = useCallback((id: string) => {
     if (selectionMode || reorderMode) return
-    const waypoints = bm.handleRouteLoad(id)
+    const waypoints = routeLib.handleRouteLoad(id)
     if (waypoints) {
       setWaypoints(waypoints)
       onRouteLoaded()
     }
-  }, [bm, setWaypoints, onRouteLoaded, selectionMode, reorderMode])
+  }, [routeLib, setWaypoints, onRouteLoaded, selectionMode, reorderMode])
 
   const commitRename = useCallback((routeId: string, currentName: string) => {
     const next = editingRouteName.trim()
     if (next && next !== currentName) {
-      void bm.handleRouteRename(routeId, next)
+      void routeLib.handleRouteRename(routeId, next)
     }
     setEditingRouteId(null)
-  }, [editingRouteName, bm])
+  }, [editingRouteName, routeLib])
 
   // ─── Selection mode ───────────────────────────────────
   const toggleSelected = useCallback((id: string) => {
@@ -258,8 +258,8 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
     const newIndex = sorted.findIndex((r) => r.id === over.id)
     if (oldIndex < 0 || newIndex < 0) return
     const next = arrayMove(sorted, oldIndex, newIndex)
-    void bm.handleRoutesReorder(next.map((r) => r.id))
-  }, [sorted, bm])
+    void routeLib.handleRoutesReorder(next.map((r) => r.id))
+  }, [sorted, routeLib])
 
   // ─── Header kebab — bulk + selection + reorder toggles ─
   const headerMenuItems: KebabMenuItem[] = useMemo(() => [
@@ -269,7 +269,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       icon: <FileUp width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
       onSelect: async () => {
         const f = await pickFile('.gpx,application/gpx+xml')
-        if (f) void bm.handleGpxImport(f)
+        if (f) void routeLib.handleGpxImport(f)
       },
     },
     {
@@ -278,7 +278,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       icon: <Upload width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
       onSelect: async () => {
         const f = await pickFile('.json,application/json')
-        if (f) void bm.handleRoutesImportAll(f)
+        if (f) void routeLib.handleRoutesImportAll(f)
       },
     },
     {
@@ -286,7 +286,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       label: t('panel.routes_export_all'),
       icon: <Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
       disabled: savedRoutes.length === 0,
-      onSelect: () => { void bm.handleRoutesExportAll() },
+      onSelect: () => { void routeLib.handleRoutesExportAll() },
     },
     {
       id: 'multi-select',
@@ -306,7 +306,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       icon: <Folder width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
       onSelect: () => setCategoryMgrOpen(true),
     },
-  ], [t, bm, savedRoutes.length, selectionMode, reorderMode, exitSelection, enterSelection, exitReorderMode, enterReorderMode])
+  ], [t, routeLib, savedRoutes.length, selectionMode, reorderMode, exitSelection, enterSelection, exitReorderMode, enterReorderMode])
 
   // ─── Row kebab — per-route actions ────────────────────
   const rowMenuItems = useCallback((route: SavedRoute): KebabMenuItem[] => {
@@ -319,7 +319,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       {
         id: 'gpx-export', label: t('route.gpx_export'),
         icon: <Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
-        onSelect: () => { void bm.handleGpxExport(route.id) },
+        onSelect: () => { void routeLib.handleGpxExport(route.id) },
       },
       {
         id: 'delete', label: t('generic.delete'),
@@ -336,12 +336,12 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
           id: `move-${cat.id}`,
           label: cat.name,
           icon: <FolderInput width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
-          onSelect: () => { void bm.handleRoutesMoveToCategory([route.id], cat.id) },
+          onSelect: () => { void routeLib.handleRoutesMoveToCategory([route.id], cat.id) },
         })
       })
     }
     return items
-  }, [t, bm, routeCategories])
+  }, [t, routeLib, routeCategories])
 
   const saveDisabled = !routeName.trim() || waypointsCount === 0
   const searching = search.trim().length > 0
@@ -439,7 +439,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
               onChange={(e) => {
                 const target = e.target.value
                 if (!target || selectedIds.size === 0) return
-                void bm.handleRoutesMoveToCategory(Array.from(selectedIds), target)
+                void routeLib.handleRoutesMoveToCategory(Array.from(selectedIds), target)
                 exitSelection()
               }}
               aria-label={t('panel.route_move_to')}
@@ -569,7 +569,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
         cancelLabel={t('generic.cancel')}
         tone="danger"
         onConfirm={async () => {
-          if (confirmDelete) await bm.handleRouteDelete(confirmDelete.id)
+          if (confirmDelete) await routeLib.handleRouteDelete(confirmDelete.id)
           setConfirmDelete(null)
         }}
         onCancel={() => setConfirmDelete(null)}
@@ -584,7 +584,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
         cancelLabel={t('generic.cancel')}
         tone="danger"
         onConfirm={async () => {
-          await bm.handleRoutesBatchDelete(Array.from(selectedIds))
+          await routeLib.handleRoutesBatchDelete(Array.from(selectedIds))
           setConfirmBatchDelete(false)
           exitSelection()
         }}
@@ -617,11 +617,11 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
         onClose={() => setCategoryMgrOpen(false)}
         categories={routeCategories}
         defaultColor={DEFAULT_CATEGORY_COLOR}
-        onCreate={(name, color) => bm.handleRouteCategoryCreate(name, color).then(() => undefined)}
-        onRename={(id, name) => bm.handleRouteCategoryUpdate(id, { name })}
-        onRecolor={(id, color) => bm.handleRouteCategoryUpdate(id, { color })}
-        onDelete={(id) => bm.handleRouteCategoryDelete(id)}
-        onReorder={(ids) => bm.handleRouteCategoriesReorder(ids)}
+        onCreate={(name, color) => routeLib.handleRouteCategoryCreate(name, color).then(() => undefined)}
+        onRename={(id, name) => routeLib.handleRouteCategoryUpdate(id, { name })}
+        onRecolor={(id, color) => routeLib.handleRouteCategoryUpdate(id, { color })}
+        onDelete={(id) => routeLib.handleRouteCategoryDelete(id)}
+        onReorder={(ids) => routeLib.handleRouteCategoriesReorder(ids)}
       />
     </div>
   )

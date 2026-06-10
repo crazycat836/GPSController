@@ -1,68 +1,10 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react'
 import { useBookmarks, type Bookmark, type BookmarkPlace, type BookmarkTag } from '../hooks/useBookmarks'
 import * as api from '../services/api'
-import type { SavedRoute, RouteCategory, RouteConflictPolicy } from '../services/api'
 import { useToastContext } from './ToastContext'
 import { useT } from '../i18n'
-import { devLog } from '../lib/dev-log'
-import {
-  parseConflictExtras,
-  safeFilenameStem,
-  validateBookmarkImport,
-  validateRoutesImport,
-  type SaveRouteResult,
-} from '../lib/bookmark_helpers'
-
-// Re-export so existing consumers (`RoutesPanel`, etc.) can keep
-// importing `SaveRouteResult` from `'../contexts/BookmarkContext'`.
-export type { SaveRouteResult }
-
-/**
- * Serialized optimistic reorder with an in-flight guard. A rapid second
- * drag while the first reorder POST is still landing would otherwise race
- * — the second drag's id list is computed from the stale pre-refresh local
- * order, both POSTs hit the server back-to-back, and whichever refresh lands
- * second wins. We serialise the POST and queue the *latest* ordering on top,
- * so a burst of N drags collapses into one in-flight call plus one tail call
- * carrying the final order.
- *
- * `deps` is forwarded to the handler's `useCallback` so each caller keeps its
- * own memo profile: routes key on `refreshRoutes` (stable), bookmarks key on
- * `bm` (which `useBookmarks` rebuilds every render).
- */
-function useSerializedReorder(
-  post: (orderedIds: string[]) => Promise<unknown>,
-  refresh: () => Promise<unknown>,
-  label: string,
-  deps: React.DependencyList,
-): (orderedIds: string[]) => Promise<void> {
-  const inflightRef = useRef(false)
-  const pendingRef = useRef<string[] | null>(null)
-  const handlerRef = useRef<((orderedIds: string[]) => Promise<void>) | null>(null)
-  const handler = useCallback(async (orderedIds: string[]) => {
-    if (inflightRef.current) {
-      pendingRef.current = orderedIds
-      return
-    }
-    inflightRef.current = true
-    try {
-      await post(orderedIds)
-    } catch (err) {
-      devLog(label, err)
-    } finally {
-      await refresh()
-      inflightRef.current = false
-      const queued = pendingRef.current
-      pendingRef.current = null
-      if (queued) void handlerRef.current?.(queued)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
-  // Self-ref lets the finally block re-enter without a forward reference;
-  // updated in an effect so the latest handler is always called.
-  useEffect(() => { handlerRef.current = handler }, [handler])
-  return handler
-}
+import { useSerializedReorder } from '../hooks/useSerializedReorder'
+import { validateBookmarkImport } from '../lib/bookmark_helpers'
 
 interface AddBmDialog {
   lat: number
@@ -104,39 +46,8 @@ interface BookmarkContextValue {
   handleBookmarkImport: (file: File) => Promise<void>
   handleBookmarkExport: () => Promise<void>
 
-  // Saved routes
-  savedRoutes: readonly SavedRoute[]
-  handleRouteLoad: (id: string) => { lat: number; lng: number }[] | null
-  handleRouteSave: (
-    name: string,
-    waypoints: { lat: number; lng: number }[],
-    moveMode: string,
-    options?: {
-      categoryId?: string
-      onConflict?: RouteConflictPolicy
-    },
-  ) => Promise<SaveRouteResult>
-  handleRouteRename: (id: string, name: string) => Promise<void>
-  handleRouteDelete: (id: string) => Promise<void>
-  handleRoutesBatchDelete: (ids: string[]) => Promise<void>
-  handleRoutesMoveToCategory: (ids: string[], targetCategoryId: string) => Promise<void>
-  handleRoutesReorder: (orderedIds: string[]) => Promise<void>
+  // Reorder
   handleBookmarksReorder: (orderedIds: string[]) => Promise<void>
-
-  // Route categories
-  routeCategories: readonly RouteCategory[]
-  handleRouteCategoryCreate: (name: string, color: string) => Promise<RouteCategory | null>
-  handleRouteCategoryUpdate: (id: string, patch: { name?: string; color?: string }) => Promise<void>
-  handleRouteCategoryDelete: (id: string) => Promise<void>
-  handleRouteCategoriesReorder: (orderedIds: string[]) => Promise<void>
-
-  // GPX
-  handleGpxImport: (file: File) => Promise<void>
-  handleGpxExport: (id: string) => Promise<void>
-
-  // Bulk route import/export
-  handleRoutesImportAll: (file: File) => Promise<void>
-  handleRoutesExportAll: () => Promise<void>
 }
 
 const BookmarkContext = createContext<BookmarkContextValue | null>(null)
@@ -146,14 +57,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
   const { showToast } = useToastContext()
   const bm = useBookmarks()
 
-  const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([])
-  const [routeCategories, setRouteCategories] = useState<RouteCategory[]>([])
   const [addBmDialog, setAddBmDialog] = useState<AddBmDialog | null>(null)
-
-  useEffect(() => {
-    api.getSavedRoutes().then(setSavedRoutes).catch((err) => devLog('Failed to load saved routes', err))
-    api.getRouteCategories().then(setRouteCategories).catch((err) => devLog('Failed to load route categories', err))
-  }, [])
 
   const handleAddBookmark = useCallback((lat: number, lng: number) => {
     setAddBmDialog({ lat, lng })
@@ -173,214 +77,11 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [bm, showToast, t])
 
-  const handleRouteLoad = useCallback((id: string): { lat: number; lng: number }[] | null => {
-    const route = savedRoutes.find((r) => r.id === id)
-    if (!route || !Array.isArray(route.waypoints)) return null
-    return (route.waypoints as { lat: number; lng: number }[]).map((w) => ({
-      lat: w.lat,
-      lng: w.lng,
-    }))
-  }, [savedRoutes])
-
-  // Re-fetch the saved-route list and push it through state. Every
-  // mutation handler below funnels through here so the cache shape +
-  // sort order is identical regardless of which path triggered the
-  // refresh. Errors are logged and re-thrown so callers' existing
-  // try/catch blocks can surface the right toast.
-  const refreshRoutes = useCallback(async () => {
-    try {
-      const routes = await api.getSavedRoutes()
-      setSavedRoutes(routes)
-    } catch (err) {
-      devLog('Failed to refresh saved routes', err)
-      throw err
-    }
-  }, [])
-
-  // parseConflictExtras / safeFilenameStem / validate*Import live in
-  // lib/bookmark_helpers.ts so this provider stays focused on the
-  // state-machine + handlers shape.
-
-  const handleRouteSave = useCallback(async (
-    name: string,
-    waypoints: { lat: number; lng: number }[],
-    moveMode: string,
-    options?: { categoryId?: string; onConflict?: RouteConflictPolicy },
-  ): Promise<SaveRouteResult> => {
-    if (waypoints.length === 0) {
-      showToast(t('toast.route_need_waypoint'))
-      return { kind: 'error', message: t('toast.route_need_waypoint') }
-    }
-    const policy = options?.onConflict ?? 'new'
-    try {
-      const saved = await api.saveRoute(
-        {
-          name,
-          waypoints,
-          profile: moveMode,
-          category_id: options?.categoryId ?? 'default',
-        },
-        policy,
-      )
-      await refreshRoutes()
-      // "overwritten" is inferred when the caller asked for that policy
-      // and the request succeeded — the backend doesn't ship the action
-      // separately to keep the response shape `SavedRoute`.
-      const kind = policy === 'overwrite' ? 'overwritten' : 'created'
-      if (kind === 'created') showToast(t('toast.route_saved', { name }))
-      return { kind, route: saved }
-    } catch (err: unknown) {
-      // The /api endpoint returns 409 + route_name_conflict when policy
-      // is "reject" and a duplicate exists. api.ts surfaces that as an
-      // ApiError carrying the envelope's `code` plus the raw error
-      // payload on `.detail` (existing_id / existing_created_at).
-      if (err instanceof api.ApiError && err.code === 'route_name_conflict') {
-        const { existingId, existingCreatedAt } = parseConflictExtras(err)
-        return { kind: 'conflict', existingId, existingCreatedAt }
-      }
-      const message = err instanceof Error ? err.message : ''
-      showToast(t('toast.save_failed', { msg: message }))
-      return { kind: 'error', message }
-    }
-  }, [refreshRoutes, showToast, t, parseConflictExtras])
-
-  const handleRouteRename = useCallback(async (id: string, name: string) => {
-    try {
-      await api.renameRoute(id, name)
-      await refreshRoutes()
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t('toast.rename_failed')
-      showToast(message)
-    }
-  }, [refreshRoutes, showToast, t])
-
-  const handleRouteDelete = useCallback(async (id: string) => {
-    try {
-      await api.deleteRoute(id)
-      await refreshRoutes()
-      showToast(t('toast.route_deleted'))
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t('toast.route_delete_failed')
-      showToast(message)
-    }
-  }, [refreshRoutes, showToast, t])
-
-  const handleRoutesBatchDelete = useCallback(async (ids: string[]) => {
-    if (ids.length === 0) return
-    try {
-      const res = await api.batchDeleteRoutes(ids)
-      await refreshRoutes()
-      showToast(t('toast.routes_batch_deleted', { n: res.deleted }))
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : ''
-      showToast(t('toast.routes_batch_delete_failed', { msg: message }))
-    }
-  }, [refreshRoutes, showToast, t])
-
-  const handleRoutesMoveToCategory = useCallback(async (ids: string[], targetCategoryId: string) => {
-    if (ids.length === 0) return
-    try {
-      const res = await api.moveRoutesToCategory(ids, targetCategoryId)
-      await refreshRoutes()
-      showToast(t('toast.routes_moved', { n: res.moved }))
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : ''
-      showToast(t('toast.routes_move_failed', { msg: message }))
-    }
-  }, [refreshRoutes, showToast, t])
-
-  // Routes key on refreshRoutes (stable); bookmarks key on bm (rebuilt
-  // every render). See useSerializedReorder for the in-flight/queue rationale.
-  const handleRoutesReorder = useSerializedReorder(
-    api.reorderRoutes, refreshRoutes, 'reorderRoutes failed', [refreshRoutes],
-  )
+  // Keys on bm (rebuilt every render). See useSerializedReorder for the
+  // in-flight/queue rationale.
   const handleBookmarksReorder = useSerializedReorder(
     api.reorderBookmarks, bm.refresh, 'reorderBookmarks failed', [bm],
   )
-
-  // ── Route categories ────────────────────────────────────
-  const refreshRouteCategories = useCallback(async () => {
-    try {
-      const cats = await api.getRouteCategories()
-      setRouteCategories(cats)
-    } catch (err) {
-      devLog('Failed to refresh route categories', err)
-    }
-  }, [])
-
-  const handleRouteCategoryCreate = useCallback(
-    async (name: string, color: string): Promise<RouteCategory | null> => {
-      const trimmed = name.trim()
-      if (!trimmed) return null
-      try {
-        const cat = await api.createRouteCategory(trimmed, color)
-        await refreshRouteCategories()
-        return cat
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : ''
-        showToast(t('toast.save_failed', { msg: message }))
-        return null
-      }
-    },
-    [refreshRouteCategories, showToast, t],
-  )
-
-  const handleRouteCategoryUpdate = useCallback(
-    async (id: string, patch: { name?: string; color?: string }) => {
-      try {
-        await api.updateRouteCategory(id, patch)
-        await refreshRouteCategories()
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : ''
-        showToast(t('toast.save_failed', { msg: message }))
-      }
-    },
-    [refreshRouteCategories, showToast, t],
-  )
-
-  const handleRouteCategoryDelete = useCallback(async (id: string) => {
-    try {
-      await api.deleteRouteCategory(id)
-      // Routes pointing at the deleted category server-side fall back to
-      // "default" — re-fetch both so the UI's local view matches.
-      await Promise.all([refreshRouteCategories(), refreshRoutes()])
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : ''
-      showToast(t('toast.save_failed', { msg: message }))
-    }
-  }, [refreshRouteCategories, refreshRoutes, showToast, t])
-
-  const handleRouteCategoriesReorder = useCallback(async (orderedIds: string[]) => {
-    try {
-      await api.reorderRouteCategories(orderedIds)
-      await refreshRouteCategories()
-    } catch (err) {
-      devLog('reorderRouteCategories failed', err)
-      await refreshRouteCategories()
-    }
-  }, [refreshRouteCategories])
-
-  const handleGpxImport = useCallback(async (file: File) => {
-    try {
-      const res = await api.importGpx(file)
-      await refreshRoutes()
-      showToast(t('toast.gpx_imported', { n: res.points }))
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : ''
-      showToast(t('toast.gpx_import_failed', { msg: message }))
-    }
-  }, [refreshRoutes, showToast, t])
-
-  const handleGpxExport = useCallback(async (id: string) => {
-    const route = savedRoutes.find((r) => r.id === id)
-    const stem = safeFilenameStem(route?.name ?? '', id)
-    try {
-      await api.downloadGpx(id, `${stem}.gpx`)
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : ''
-      showToast(t('toast.export_failed', { msg: message }))
-    }
-  }, [savedRoutes, showToast, t])
 
   const handleBookmarkExport = useCallback(async () => {
     try {
@@ -388,30 +89,6 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : ''
       showToast(t('toast.export_failed', { msg: message }))
-    }
-  }, [showToast, t])
-
-  const handleRoutesExportAll = useCallback(async () => {
-    try {
-      await api.downloadAllRoutes('gpscontroller-routes.json')
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : ''
-      showToast(t('toast.export_failed', { msg: message }))
-    }
-  }, [showToast, t])
-
-  const handleRoutesImportAll = useCallback(async (file: File) => {
-    try {
-      const text = await file.text()
-      const data = JSON.parse(text)
-      validateRoutesImport(data)
-      const res = await api.importAllRoutes({ routes: data.routes })
-      const routes = await api.getSavedRoutes()
-      setSavedRoutes(routes)
-      showToast(t('toast.routes_imported', { n: res.imported }))
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : ''
-      showToast(t('toast.routes_import_failed', { msg: message }))
     }
   }, [showToast, t])
 
@@ -453,7 +130,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     [bm, showToast, t],
   )
 
-  // Memoize so the 8 consumers don't re-render on every provider re-render.
+  // Memoize so consumers don't re-render on every provider re-render.
   // Keys on the individual members (not `bm` itself, which useBookmarks
   // rebuilds each render); each member is a useCallback / stable state value,
   // so the value identity only changes when something real does.
@@ -486,27 +163,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     handleBookmarkImport,
     handleBookmarkExport,
 
-    savedRoutes,
-    handleRouteLoad,
-    handleRouteSave,
-    handleRouteRename,
-    handleRouteDelete,
-    handleRoutesBatchDelete,
-    handleRoutesMoveToCategory,
-    handleRoutesReorder,
     handleBookmarksReorder,
-
-    routeCategories,
-    handleRouteCategoryCreate,
-    handleRouteCategoryUpdate,
-    handleRouteCategoryDelete,
-    handleRouteCategoriesReorder,
-
-    handleGpxImport,
-    handleGpxExport,
-
-    handleRoutesImportAll,
-    handleRoutesExportAll,
   }), [
     bm.bookmarks, bm.places, bm.tags,
     bm.createBookmark, bm.updateBookmark, bm.touchBookmark, bm.deleteBookmark,
@@ -516,13 +173,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     createBookmarksBulk,
     addBmDialog, setAddBmDialog, handleAddBookmark,
     handleBookmarkImport, handleBookmarkExport,
-    savedRoutes, handleRouteLoad, handleRouteSave, handleRouteRename,
-    handleRouteDelete, handleRoutesBatchDelete, handleRoutesMoveToCategory,
-    handleRoutesReorder, handleBookmarksReorder,
-    routeCategories, handleRouteCategoryCreate, handleRouteCategoryUpdate,
-    handleRouteCategoryDelete, handleRouteCategoriesReorder,
-    handleGpxImport, handleGpxExport,
-    handleRoutesImportAll, handleRoutesExportAll,
+    handleBookmarksReorder,
   ])
 
   return (

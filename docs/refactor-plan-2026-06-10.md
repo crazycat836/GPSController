@@ -167,7 +167,7 @@ All verified dead by project-wide grep including dynamic-key patterns.
       (RoutesPanel.tsx:73-80) and App.tsx's keydown re-subscription (258-282).
 - [x] **4A.3** Shrink `useSimulation` (762L): extract `useSpeedPrefs` and
       `useSimGroupActions` into `hooks/sim/`.
-- [ ] **4A.4** Split `BookmarkContext`: extract `RouteLibraryContext` (savedRoutes,
+- [x] **4A.4** Split `BookmarkContext`: extract `RouteLibraryContext` (savedRoutes,
       routeCategories, handleRoute*/handleGpx*, import/export) — the halves share no
       state, only `showToast`/`t`.
 - [ ] **4A.5** Break the services↔hooks type cycle: move `Bookmark`/`BookmarkPlace`/
@@ -178,7 +178,7 @@ All verified dead by project-wide grep including dynamic-key patterns.
 
 ### 4B Backend boundaries
 
-- [ ] **4B.1** Composition root: register all long-lived singletons on AppState
+- [x] **4B.1** Composition root: register all long-lived singletons on AppState
       (SavedRoutesStore/RouteService/GpxService now module-globals in api/route.py:34;
       TunnelRunner in wifi_tunnel_service.py:35; watchdog handle in
       api/tunnel/_helpers.py:33) and route the 29 direct `ctx.app_state` accesses

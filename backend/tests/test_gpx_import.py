@@ -30,6 +30,27 @@ if str(_BACKEND) not in sys.path:
 from api.route import import_gpx  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _stub_app_state(monkeypatch):
+    """Park a minimal AppState stand-in on ctx so the api._deps accessors
+    resolve (the route singletons live on AppState now, not as module
+    globals in api.route). The store's ``add`` is stubbed so these tests
+    never persist to the real routes file."""
+    from types import SimpleNamespace
+
+    from context import ctx
+    from services.gpx_service import GpxService
+
+    async def _fake_add(route, on_conflict="new"):
+        return route, "new"
+
+    stub = SimpleNamespace(
+        gpx_service=GpxService(),
+        saved_routes_store=SimpleNamespace(add=_fake_add),
+    )
+    monkeypatch.setattr(ctx, "app_state", stub, raising=False)
+
+
 def _make_upload(content: bytes, filename: str = "trace.gpx") -> UploadFile:
     """Build a real Starlette UploadFile around in-memory bytes."""
     return UploadFile(
@@ -66,19 +87,12 @@ def test_non_xml_text_returns_structured_400():
     assert exc_info.value.detail["code"] == "gpx_decode_failed"
 
 
-def test_valid_gpx_still_imports(monkeypatch):
+def test_valid_gpx_still_imports():
     """Negative control: the new guard must not swallow the happy path.
 
-    ``_store.add`` is stubbed so the test never persists to the real
-    routes file.
+    The store's ``add`` is stubbed (see ``_stub_app_state``) so the test
+    never persists to the real routes file.
     """
-    from api import route as route_module
-
-    async def _fake_add(route, on_conflict="new"):
-        return route, "new"
-
-    monkeypatch.setattr(route_module._store, "add", _fake_add)
-
     gpx_xml = (
         b"<?xml version='1.0' encoding='UTF-8'?>"
         b"<gpx version='1.1' creator='test'>"

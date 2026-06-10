@@ -18,8 +18,8 @@ from typing import Any, Awaitable, Callable
 
 from fastapi import HTTPException
 
+from api._deps import get_app_state
 from api._errors import ErrorCode, http_err
-from context import ctx
 from services import connection_state, engine_recovery
 from services.engine_recovery import NoDeviceError
 from services.location_service import (
@@ -42,7 +42,7 @@ async def get_engine(udid: str | None = None):
     unspecified), lazily rebuilding when the slot is empty. Translates the
     service-level :class:`NoDeviceError` into ``400 no_device``."""
     try:
-        return await engine_recovery.acquire_engine(ctx.app_state, udid)
+        return await engine_recovery.acquire_engine(get_app_state(), udid)
     except NoDeviceError as exc:
         raise http_err(400, ErrorCode.NO_DEVICE, str(exc))
 
@@ -66,7 +66,7 @@ async def handle_device_lost(exc: DeviceLostError) -> HTTPException:
     extract a nested one via ``unwrap_device_lost`` before calling.
     """
     cause = exc.cause
-    app_state = ctx.app_state
+    app_state = get_app_state()
     dm = app_state.device_manager
     lost_udids = dm.connected_udids
     for udid in lost_udids:
@@ -91,14 +91,6 @@ async def handle_device_lost(exc: DeviceLostError) -> HTTPException:
         _DEVICE_LOST_MESSAGE.get(cause, _DEVICE_LOST_MESSAGE[DeviceLostCause.UNKNOWN]),
         cause=cause.value,
     )
-
-
-def get_cooldown_timer():
-    return ctx.app_state.cooldown_timer
-
-
-def get_coord_formatter():
-    return ctx.app_state.coord_formatter
 
 
 async def guard(coro: Awaitable[Any]) -> Any:
@@ -130,7 +122,7 @@ async def exec_with_retry(
     DeviceLostError funnels into :func:`handle_device_lost` (cleanup +
     broadcast + 503) via :func:`guard`."""
     return await guard(
-        engine_recovery.exec_with_retry(ctx.app_state, udid_arg, engine, label, op)
+        engine_recovery.exec_with_retry(get_app_state(), udid_arg, engine, label, op)
     )
 
 

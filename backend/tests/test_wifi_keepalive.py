@@ -88,8 +88,10 @@ def test_appstate_keepalive_setting_roundtrips(tmp_path):
     import config
 
     settings_file = tmp_path / "settings.json"
+    routes_file = tmp_path / "routes.json"
     with patch.object(config, "SETTINGS_FILE", settings_file), \
-         patch("state.SETTINGS_FILE", settings_file):
+         patch("state.SETTINGS_FILE", settings_file), \
+         patch("state.ROUTES_FILE", routes_file):
         from state import AppState
 
         s1 = AppState()

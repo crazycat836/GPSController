@@ -7,9 +7,9 @@ Provides:
     failure in one step doesn't skip the rest.
   * ``validate_local_ip`` — SSRF guard: only loopback / RFC1918 /
     link-local addresses may reach the tunnel endpoints.
-  * Module-level watchdog handle (``get_watchdog`` / ``set_watchdog`` /
-    ``cancel_watchdog``) — singleton because ``TunnelRunner`` itself is
-    process-wide.
+
+The watchdog task handle lives in :mod:`services.wifi_tunnel_service`,
+next to the ``TunnelRunner`` it guards.
 """
 
 from __future__ import annotations
@@ -21,9 +21,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TypedDict
 
-from api._deps import get_device_manager
+from api._deps import get_app_state, get_device_manager
 from api._errors import ErrorCode, http_err
-from context import ctx
 from core.device_utils import (  # noqa: F401  (re-exported for existing importers)
     purge_stale_remote_pair_record,
 )
@@ -31,18 +30,6 @@ from services import connection_state
 
 _tunnel_logger = logging.getLogger("wifi_tunnel")
 logger = logging.getLogger(__name__)
-
-# Watchdog task handle (module-level since TunnelRunner is process-wide).
-_tunnel_watchdog_task: "asyncio.Task | None" = None
-
-
-def get_watchdog() -> "asyncio.Task | None":
-    return _tunnel_watchdog_task
-
-
-def set_watchdog(task: "asyncio.Task | None") -> None:
-    global _tunnel_watchdog_task
-    _tunnel_watchdog_task = task
 
 
 class RemotePairResources(TypedDict):
@@ -234,16 +221,6 @@ async def select_usb_device() -> str:
     return usb_dev.serial
 
 
-def cancel_watchdog() -> None:
-    """Cancel + drop the module-level watchdog task if it's still alive."""
-    task = get_watchdog()
-    if task is None or task.done():
-        set_watchdog(None)
-        return
-    task.cancel()
-    set_watchdog(None)
-
-
 async def connect_device_over_tunnel(rsd_address: str, rsd_port: int) -> dict:
     """Connect a device over an existing WiFi RSD tunnel and register it.
 
@@ -264,7 +241,7 @@ async def connect_device_over_tunnel(rsd_address: str, rsd_port: int) -> dict:
     # Engine failure rolls the store back to DISCONNECTED (+ device_error)
     # and re-raises, so the callers' CONNECT_FAILED mapping is unchanged.
     await connection_state.create_engine_with_rollback(
-        dm, ctx.app_state, info.udid,
+        dm, get_app_state(), info.udid,
         cause="engine_create_failed",
         stage="wifi_tunnel_connect",
         error="Engine creation failed after tunnel connect",

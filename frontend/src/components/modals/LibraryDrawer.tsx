@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { BookOpen, Upload, Download, FileUp } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
+import { useRouteLibrary } from '../../contexts/RouteLibraryContext'
 import { useSimActions, useSimState } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
@@ -21,12 +22,13 @@ type TabId = 'bookmarks' | 'routes'
 function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
   const t = useT()
   const bm = useBookmarkContext()
+  const routeLib = useRouteLibrary()
   const { handleTeleport } = useSimActions()
   const simState = useSimState()
 
   const [activeTab, setActiveTab] = useState<TabId>('bookmarks')
 
-  const savedRoutes = bm.savedRoutes as readonly { id: string }[]
+  const savedRoutes = routeLib.savedRoutes as readonly { id: string }[]
   const currentPosition = simState.currentPosition
     ? { lat: simState.currentPosition.lat, lng: simState.currentPosition.lng }
     : null
@@ -68,7 +70,7 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
           label={t('panel.route_gpx_import')}
           onClick={async () => {
             const f = await pickFile('.gpx,application/gpx+xml')
-            if (f) void bm.handleGpxImport(f)
+            if (f) void routeLib.handleGpxImport(f)
           }}
           icon={<FileUp width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
         />
@@ -76,19 +78,19 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
           label={t('panel.routes_import_all')}
           onClick={async () => {
             const f = await pickFile('.json,application/json')
-            if (f) void bm.handleRoutesImportAll(f)
+            if (f) void routeLib.handleRoutesImportAll(f)
           }}
           icon={<Upload width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
         />
         <GlassIconButton
           label={t('panel.routes_export_all')}
           disabled={savedRoutes.length === 0}
-          onClick={() => { void bm.handleRoutesExportAll() }}
+          onClick={() => { void routeLib.handleRoutesExportAll() }}
           icon={<Download width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
         />
       </>
     )
-  }, [activeTab, t, bm, savedRoutes.length])
+  }, [activeTab, t, bm, routeLib, savedRoutes.length])
 
   return (
     <Drawer

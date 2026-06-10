@@ -17,6 +17,7 @@ import { SimProvider, useSimActions, useSimState, SPEED_MAP } from './contexts/S
 import { SimSettingsProvider, useSimSettings } from './contexts/SimSettingsContext'
 import { SimDerivedProvider, useSimDerived } from './contexts/SimDerivedContext'
 import { BookmarkProvider, useBookmarkContext } from './contexts/BookmarkContext'
+import { RouteLibraryProvider } from './contexts/RouteLibraryContext'
 import { AvatarProvider } from './contexts/AvatarContext'
 
 // Components
@@ -76,9 +77,11 @@ function App() {
               <SimProvider>
                 <SimDerivedProvider>
                   <BookmarkProvider>
-                    <AvatarProvider>
-                      <AppShell />
-                    </AvatarProvider>
+                    <RouteLibraryProvider>
+                      <AvatarProvider>
+                        <AppShell />
+                      </AvatarProvider>
+                    </RouteLibraryProvider>
                   </BookmarkProvider>
                 </SimDerivedProvider>
               </SimProvider>

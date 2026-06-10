@@ -10,11 +10,11 @@ from datetime import datetime, timezone
 import gpxpy.gpx
 from fastapi import APIRouter, UploadFile, File
 
+from api._deps import get_gpx_service, get_route_service, get_saved_routes_store
 from api._errors import ErrorCode, http_err
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from config import ROUTES_FILE
 from models.schemas import (
     Coordinate,
     RouteBatchDeleteRequest,
@@ -23,17 +23,12 @@ from models.schemas import (
     RoutePlanRequest,
     SavedRoute,
 )
-from services.route_service import RouteService
-from services.gpx_service import GpxService
 from services.route_optimizer import optimize_order
-from services.saved_routes import ConflictPolicy, SavedRoutesStore
+from services.saved_routes import ConflictPolicy
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/route", tags=["route"])
-
-route_service = RouteService()
-gpx_service = GpxService()
 
 # Reject GPX uploads larger than this before loading into memory. 10 MiB
 # holds a long multi-day trace at 1 Hz; anything larger is either an
@@ -53,13 +48,16 @@ _GPX_ALLOWED_CONTENT_TYPES = frozenset({
 })
 
 
-# Single store instance for the process. The class owns the dict + lock +
-# persist cycle so the route handlers stay thin.
-_store = SavedRoutesStore(ROUTES_FILE)
+# The single SavedRoutesStore / RouteService / GpxService instances for
+# the process live on AppState (see state.py) — the composition root —
+# and are reached via api._deps so importing this module never hits the
+# disk. The store class owns the dict + lock + persist cycle so the
+# route handlers stay thin.
 
 
 @router.post("/plan")
 async def plan_route(req: RoutePlanRequest):
+    route_service = get_route_service()
     result = await route_service.get_route(req.start.lat, req.start.lng, req.end.lat, req.end.lng, req.profile)
     return result
 
@@ -99,7 +97,7 @@ async def optimize_route_order(req: _OptimizeOrderRequest):
 
 @router.get("/saved", response_model=list[SavedRoute])
 async def list_saved():
-    return _store.list()
+    return get_saved_routes_store().list()
 
 
 @router.post("/saved", response_model=SavedRoute)
@@ -120,7 +118,7 @@ async def save_route(
     Returns the freshly-saved (or overwritten) row directly to keep the
     legacy ``SavedRoute`` response contract.
     """
-    saved, action = await _store.add(route, on_conflict=on_conflict)
+    saved, action = await get_saved_routes_store().add(route, on_conflict=on_conflict)
     if action == "conflict":
         # ``add`` already located the existing row under the lock and
         # returns it as the SavedRoute payload here. No follow-up
@@ -138,7 +136,7 @@ async def save_route(
 
 @router.delete("/saved/{route_id}")
 async def delete_saved(route_id: str):
-    if not await _store.delete(route_id):
+    if not await get_saved_routes_store().delete(route_id):
         raise http_err(404, ErrorCode.ROUTE_NOT_FOUND, "Route not found")
     return {"status": "deleted"}
 
@@ -152,7 +150,7 @@ async def rename_saved(route_id: str, req: _RouteRenameRequest):
     name = req.name.strip()
     if not name:
         raise http_err(400, ErrorCode.INVALID_NAME, "Route name must not be empty")
-    result = await _store.rename(route_id, name)
+    result = await get_saved_routes_store().rename(route_id, name)
     if result is None:
         raise http_err(404, ErrorCode.ROUTE_NOT_FOUND, "Route not found")
     action, payload = result
@@ -173,7 +171,7 @@ async def rename_saved(route_id: str, req: _RouteRenameRequest):
 @router.get("/saved/export")
 async def export_all_saved_routes():
     """Export every saved route as a single JSON bundle."""
-    payload = {"routes": [r.model_dump(mode="json") for r in _store.list()]}
+    payload = {"routes": [r.model_dump(mode="json") for r in get_saved_routes_store().list()]}
     body = json.dumps(payload, ensure_ascii=False, indent=2)
     return Response(content=body, media_type="application/json",
                     headers={"Content-Disposition": 'attachment; filename="gpscontroller-routes.json"'})
@@ -186,7 +184,7 @@ class _RouteImportBody(BaseModel):
 @router.post("/saved/import")
 async def import_all_saved_routes(body: _RouteImportBody):
     """Merge imported routes into saved. Imports get fresh ids so they never collide."""
-    imported = await _store.import_all(body.routes)
+    imported = await get_saved_routes_store().import_all(body.routes)
     return {"imported": imported}
 
 
@@ -242,7 +240,7 @@ async def import_gpx(file: UploadFile = File(...)):
     # malformed XML. Unguarded, that escapes as a plain-text 500 instead
     # of the structured envelope every other decode failure here uses.
     try:
-        coords = gpx_service.parse_gpx(text)
+        coords = get_gpx_service().parse_gpx(text)
     except gpxpy.gpx.GPXException as e:
         logger.warning("GPX parse failed for %r: %s", file.filename, e)
         raise http_err(400, ErrorCode.GPX_DECODE_FAILED, "GPX file could not be parsed as valid GPX XML")
@@ -258,12 +256,12 @@ async def import_gpx(file: UploadFile = File(...)):
         profile="walking",
         created_at=datetime.now(timezone.utc).isoformat(),
     )
-    # _store.add() reassigns a fresh id + created_at and persists.
+    # get_saved_routes_store().add() reassigns a fresh id + created_at and persists.
     # GPX import always inserts (the user explicitly picked the file and
     # we just stripped the extension), so conflict policy is "new" — a
     # rare same-name match still ships as a fresh row rather than
     # surprising the user with an overwrite prompt mid-import.
-    saved, _action = await _store.add(route, on_conflict="new")
+    saved, _action = await get_saved_routes_store().add(route, on_conflict="new")
     return {"status": "imported", "id": saved.id, "points": len(coords)}
 
 
@@ -281,11 +279,11 @@ def _ascii_safe_filename(name: str) -> str:
 
 @router.get("/gpx/export/{route_id}")
 async def export_gpx(route_id: str):
-    route = _store.get(route_id)
+    route = get_saved_routes_store().get(route_id)
     if route is None:
         raise http_err(404, ErrorCode.ROUTE_NOT_FOUND, "Route not found")
     points = [{"lat": c.lat, "lng": c.lng} for c in route.waypoints]
-    gpx_xml = gpx_service.generate_gpx(points, name=route.name)
+    gpx_xml = get_gpx_service().generate_gpx(points, name=route.name)
     # RFC 5987 / RFC 6266: emit both a plain ASCII `filename` for legacy
     # clients and `filename*=UTF-8''<percent-encoded>` so modern browsers
     # save routes with Chinese / emoji / etc. names intact. Previously the
@@ -322,7 +320,7 @@ class _CategoryUpdateRequest(BaseModel):
 
 @router.get("/saved/categories", response_model=list[RouteCategory])
 async def list_categories():
-    return _store.list_categories()
+    return get_saved_routes_store().list_categories()
 
 
 @router.post("/saved/categories", response_model=RouteCategory)
@@ -330,7 +328,7 @@ async def create_category(req: _CategoryCreateRequest):
     name = req.name.strip()
     if not name:
         raise http_err(400, ErrorCode.INVALID_NAME, "Category name must not be empty")
-    return await _store.create_category(name=name, color=req.color)
+    return await get_saved_routes_store().create_category(name=name, color=req.color)
 
 
 @router.put("/saved/categories/{category_id}", response_model=RouteCategory)
@@ -338,7 +336,7 @@ async def update_category(category_id: str, req: _CategoryUpdateRequest):
     name = req.name.strip() if req.name is not None else None
     if name is not None and not name:
         raise http_err(400, ErrorCode.INVALID_NAME, "Category name must not be empty")
-    updated = await _store.update_category(category_id, name=name, color=req.color)
+    updated = await get_saved_routes_store().update_category(category_id, name=name, color=req.color)
     if updated is None:
         raise http_err(404, ErrorCode.ROUTE_CATEGORY_NOT_FOUND, "Category not found")
     return updated
@@ -349,7 +347,7 @@ async def delete_category(category_id: str):
     # The preset "default" bucket is the fallback for orphaned routes after
     # any other category deletion — deleting it would leave routes pointing
     # at a non-existent category id, so the store refuses the request.
-    ok = await _store.delete_category(category_id)
+    ok = await get_saved_routes_store().delete_category(category_id)
     if not ok:
         if category_id == "default":
             raise http_err(
@@ -366,7 +364,7 @@ async def delete_category(category_id: str):
 
 @router.post("/saved/batch-delete")
 async def batch_delete_routes(req: RouteBatchDeleteRequest):
-    deleted = await _store.batch_delete(req.route_ids)
+    deleted = await get_saved_routes_store().batch_delete(req.route_ids)
     return {"deleted": deleted}
 
 
@@ -377,14 +375,14 @@ async def move_routes_to_category(req: RouteMoveRequest):
     # carries a stale category, but on /move the target IS the entire
     # point of the call, so a typo should surface as a 404 instead of
     # silently re-bucketing every selected route.
-    known = {c.id for c in _store.list_categories()}
+    known = {c.id for c in get_saved_routes_store().list_categories()}
     if req.target_category_id not in known:
         raise http_err(
             404,
             ErrorCode.ROUTE_CATEGORY_NOT_FOUND,
             "Target category does not exist",
         )
-    moved = await _store.move(req.route_ids, req.target_category_id)
+    moved = await get_saved_routes_store().move(req.route_ids, req.target_category_id)
     return {"moved": moved}
 
 
@@ -402,12 +400,12 @@ async def reorder_routes(req: _RouteReorderRequest):
     """Persist a drag-reorder of route items within the current sort.
     Unknown ids are ignored — the frontend's optimistic update doesn't
     have to wait for the server to validate the id set before moving on."""
-    changed = await _store.reorder_routes(req.ordered_ids)
+    changed = await get_saved_routes_store().reorder_routes(req.ordered_ids)
     return {"reordered": changed}
 
 
 @router.post("/saved/categories/reorder")
 async def reorder_categories(req: _RouteReorderRequest):
     """Persist a drag-reorder of category items in the sidebar."""
-    changed = await _store.reorder_categories(req.ordered_ids)
+    changed = await get_saved_routes_store().reorder_categories(req.ordered_ids)
     return {"reordered": changed}

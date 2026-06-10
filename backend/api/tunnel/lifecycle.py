@@ -8,21 +8,22 @@ import logging
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, field_validator
 
-from api._deps import get_device_manager
+from api._deps import get_app_state, get_device_manager, get_tunnel_runner
 from api._errors import ErrorCode, http_err, max_devices_error
 from api.tunnel._helpers import (
     TeardownStep,
-    cancel_watchdog,
     connect_device_over_tunnel,
-    get_watchdog,
     run_teardown_steps,
-    set_watchdog,
     validate_local_ip,
 )
 from config import MAX_DEVICES, REMOTE_PAIRING_PORT
-from context import ctx
 from services import connection_state
-from services.wifi_tunnel_service import cleanup_wifi_connections, tunnel
+from services.wifi_tunnel_service import (
+    cancel_watchdog,
+    cleanup_wifi_connections,
+    get_watchdog,
+    set_watchdog,
+)
 
 logger = logging.getLogger(__name__)
 _tunnel_logger = logging.getLogger("wifi_tunnel")
@@ -54,6 +55,7 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
     ``stop()`` and the next ``start()``) would have torn down the
     brand-new tunnel's resources by mistake.
     """
+    tunnel = get_tunnel_runner()
     try:
         try:
             await task
@@ -114,6 +116,7 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
 async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
     """Start an in-process WiFi tunnel (requires admin). Used by the
     /wifi/tunnel/start-and-connect route."""
+    tunnel = get_tunnel_runner()
     async with tunnel.lock:
         if tunnel.is_running():
             if tunnel.info:
@@ -162,6 +165,7 @@ async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
 @router.get("/wifi/tunnel/status")
 async def wifi_tunnel_status():
     """Check if the WiFi tunnel is running."""
+    tunnel = get_tunnel_runner()
     if not tunnel.is_running():
         tunnel.info = None
         return {"running": False}
@@ -208,8 +212,9 @@ async def _attempt_usb_fallback(app_state, dm) -> None:
 async def wifi_tunnel_stop():
     """Stop the WiFi tunnel and clean up any network-based device
     connections that were routed through it."""
-    app_state = ctx.app_state
+    app_state = get_app_state()
     dm = get_device_manager()
+    tunnel = get_tunnel_runner()
 
     async with tunnel.lock:
         # Always disconnect Network devices first — even when the tunnel

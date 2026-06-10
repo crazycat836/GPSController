@@ -9,7 +9,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 import auth
-from context import ctx
+from api._deps import get_app_state
 from models.schemas import JoystickInput
 from services import device_health
 from services.ws_broadcaster import (
@@ -68,7 +68,7 @@ async def _send_initial_state(ws: WebSocket) -> None:
     from services import connection_state
     from services.connection_state import DeviceState
 
-    app_state = ctx.app_state
+    app_state = get_app_state()
     # Current position from any active engine
     for engine in app_state.simulation_engines.values():
         pos = engine.current_position
@@ -177,7 +177,7 @@ async def websocket_endpoint(ws: WebSocket):
 
             if msg_type == "joystick_input":
                 data = msg.get("data", {})
-                app_state = ctx.app_state
+                app_state = get_app_state()
                 # Route per-udid if provided; otherwise fan out to all engines.
                 udid = msg.get("udid") or data.get("udid")
                 # JoystickInput enforces strict bounds (direction 0–360,
@@ -204,7 +204,7 @@ async def websocket_endpoint(ws: WebSocket):
                         engine.joystick_move(inp)
 
             elif msg_type == "joystick_stop":
-                app_state = ctx.app_state
+                app_state = get_app_state()
                 udid = msg.get("udid") or msg.get("data", {}).get("udid")
                 if udid:
                     engine = app_state.get_engine(udid)

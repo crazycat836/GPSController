@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from api.location._helpers import get_cooldown_timer
+from api._deps import get_cooldown_timer
 from models.schemas import CooldownSettings, CooldownStatus
 
 router = APIRouter()

@@ -7,9 +7,8 @@ import asyncio
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from api._deps import get_app_state, get_coord_formatter
 from api._errors import ErrorCode, http_err
-from api.location._helpers import get_coord_formatter
-from context import ctx
 from models.schemas import CoordFormatRequest
 from utils.geo import validate_coords
 
@@ -31,7 +30,7 @@ async def set_coord_format(req: CoordFormatRequest):
     # setting happened to flush settings.json afterward). Mirrors
     # set_initial_position, which already persists on write. Offload the
     # blocking file write so the event loop isn't stalled by disk I/O.
-    await asyncio.to_thread(ctx.app_state.save_settings)
+    await asyncio.to_thread(get_app_state().save_settings)
     return {"format": fmt.format.value}
 
 
@@ -42,7 +41,7 @@ class _InitialPosRequest(BaseModel):
 
 @router.get("/settings/initial-position", tags=["settings"])
 async def get_initial_position():
-    app_state = ctx.app_state
+    app_state = get_app_state()
     pos = app_state.get_initial_map_position()
     return {"position": pos}
 
@@ -51,7 +50,7 @@ async def get_initial_position():
 async def set_initial_position(req: _InitialPosRequest):
     """Pass `{lat: null, lng: null}` (or omit) to clear the custom initial
     map center and fall back to the default on next launch."""
-    app_state = ctx.app_state
+    app_state = get_app_state()
     if req.lat is None or req.lng is None:
         new_pos: dict | None = None
     else:
@@ -70,7 +69,7 @@ class _WifiKeepaliveRequest(BaseModel):
 @router.get("/settings/wifi-keepalive", tags=["settings"])
 async def get_wifi_keepalive():
     """Whether the WiFi-tunnel keep-alive loop is enabled (opt-in)."""
-    return {"enabled": ctx.app_state.get_wifi_keepalive()}
+    return {"enabled": get_app_state().get_wifi_keepalive()}
 
 
 @router.put("/settings/wifi-keepalive", tags=["settings"])
@@ -79,8 +78,9 @@ async def set_wifi_keepalive(req: _WifiKeepaliveRequest):
     re-asserted periodically so the tunnel survives the iPhone screen
     dimming. Persisted immediately so the choice survives a restart."""
     # set_wifi_keepalive persists synchronously; run it off the event loop.
-    await asyncio.to_thread(ctx.app_state.set_wifi_keepalive, req.enabled)
-    return {"enabled": ctx.app_state.get_wifi_keepalive()}
+    app_state = get_app_state()
+    await asyncio.to_thread(app_state.set_wifi_keepalive, req.enabled)
+    return {"enabled": app_state.get_wifi_keepalive()}
 
 
 @router.get("/last-device-position", tags=["settings"])
@@ -93,5 +93,4 @@ async def get_last_device_position():
     until the user explicitly teleports / navigates (preserves the phone's
     real GPS on connect).
     """
-    app_state = ctx.app_state
-    return {"position": app_state.get_last_position()}
+    return {"position": get_app_state().get_last_position()}

@@ -7,6 +7,10 @@ reach back up into ``api/``:
   - ``tunnel`` — process-wide :class:`TunnelRunner` singleton. The
     :mod:`api.tunnel_router` router and the liveness watcher both serialise
     against the same instance via its internal lock.
+  - The tunnel-watchdog task handle (``get_watchdog`` / ``set_watchdog`` /
+    ``cancel_watchdog``) — lives next to the TunnelRunner it guards so
+    ``main.py``'s lifespan and the api/tunnel router both depend downward
+    on this service instead of reaching into each other.
   - ``_tcp_probe`` — single-port TCP reachability probe used both by the
     /24 subnet scan and by ``tunnel_liveness`` to confirm the RSD is
     still answering.
@@ -33,6 +37,28 @@ logger = logging.getLogger("wifi_tunnel")
 # Process-wide tunnel runner. Serialised by its own asyncio.Lock so
 # concurrent /start or /stop requests never race.
 tunnel = TunnelRunner()
+
+# Watchdog task handle (module-level since TunnelRunner is process-wide).
+_tunnel_watchdog_task: "asyncio.Task | None" = None
+
+
+def get_watchdog() -> "asyncio.Task | None":
+    return _tunnel_watchdog_task
+
+
+def set_watchdog(task: "asyncio.Task | None") -> None:
+    global _tunnel_watchdog_task
+    _tunnel_watchdog_task = task
+
+
+def cancel_watchdog() -> None:
+    """Cancel + drop the module-level watchdog task if it's still alive."""
+    task = get_watchdog()
+    if task is None or task.done():
+        set_watchdog(None)
+        return
+    task.cancel()
+    set_watchdog(None)
 
 
 async def _tcp_probe(ip: str, port: int, timeout: float = 0.4) -> bool:

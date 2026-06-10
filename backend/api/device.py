@@ -4,11 +4,10 @@ import logging
 
 from fastapi import APIRouter
 
-from api._deps import get_device_manager
+from api._deps import get_app_state, get_device_manager
 from api._errors import ErrorCode, http_err, ios_unsupported_error, max_devices_error
 from services import connection_state
 from config import MAX_DEVICES
-from context import ctx
 from core import device_forget
 from core.device_forget import ForgetFailedError
 from core.device_manager import (
@@ -70,7 +69,7 @@ async def list_devices():
 
 @router.post("/{udid}/connect")
 async def connect_device(udid: str):
-    app_state = ctx.app_state
+    app_state = get_app_state()
     dm = get_device_manager()
     # Max MAX_DEVICES devices (group mode). Allow re-connect of an already-connected udid.
     if not dm.is_connected(udid) and dm.connected_count >= MAX_DEVICES:
@@ -99,7 +98,7 @@ async def connect_device(udid: str):
 
 @router.delete("/{udid}/connect")
 async def disconnect_device(udid: str):
-    app_state = ctx.app_state
+    app_state = get_app_state()
     dm = get_device_manager()
     # Terminate the simulation engine *before* the transport goes away so
     # any running Navigate/Loop/MultiStop/RandomWalk task exits cleanly.
@@ -122,7 +121,7 @@ async def forget_device(udid: str):
     translates the result into the HTTP response / ``forget_failed`` error.
     """
     try:
-        result = await device_forget.forget_device(ctx.app_state, get_device_manager(), udid)
+        result = await device_forget.forget_device(get_app_state(), get_device_manager(), udid)
     except ForgetFailedError:
         raise http_err(
             500,

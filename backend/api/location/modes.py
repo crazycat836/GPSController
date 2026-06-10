@@ -14,15 +14,14 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from api._deps import get_app_state, get_cooldown_timer
 from api._errors import ErrorCode, http_err
 from api.location._helpers import (
     exec_with_retry,
-    get_cooldown_timer,
     get_engine,
     guard,
     spawn,
 )
-from context import ctx
 from models.schemas import (
     Coordinate,
     JoystickStartRequest,
@@ -46,7 +45,7 @@ async def teleport(req: TeleportRequest):
     # Group mode (2+ engines): bypass cooldown entirely. The UI also locks the
     # toggle off, but the saved cooldown_enabled value is preserved so single-
     # device mode restores the user's preference automatically.
-    _app_state = ctx.app_state
+    _app_state = get_app_state()
     dual_mode = len(_app_state.simulation_engines) >= 2
 
     # Enforce cooldown server-side: if enabled and currently active,

@@ -197,8 +197,7 @@ async def lifespan(application: FastAPI):
     # /wifi/tunnel/stop route: cancel the watchdog BEFORE stopping the tunnel
     # so it can't race the teardown. Both calls are idempotent.
     try:
-        from api.tunnel._helpers import cancel_watchdog
-        from services.wifi_tunnel_service import tunnel as wifi_tunnel
+        from services.wifi_tunnel_service import cancel_watchdog, tunnel as wifi_tunnel
         cancel_watchdog()
         await wifi_tunnel.stop()
     except Exception:
