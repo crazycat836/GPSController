@@ -78,7 +78,7 @@ const FANOUT_MIN_DEVICES = 2
 // `confirmStartFromCached`, success toasts on the single path, custom
 // outcome handling) stays in the caller — that's intentional, the
 // helper exists for the common case, not to be a do-everything wrapper.
-async function runWithFanout<T>(params: {
+export async function runWithFanout<T>(params: {
   udids: string[]
   devices: { udid: string }[]
   action: string
