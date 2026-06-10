@@ -13,7 +13,7 @@ import { ToastProvider, useToastContext } from './contexts/ToastContext'
 import { WebSocketProvider } from './contexts/WebSocketContext'
 import { DeviceProvider, useDeviceContext } from './contexts/DeviceContext'
 import { ConnectionHealthProvider } from './contexts/ConnectionHealthContext'
-import { SimProvider, useSimContext, SPEED_MAP } from './contexts/SimContext'
+import { SimProvider, useSimActions, useSimState, SPEED_MAP } from './contexts/SimContext'
 import { SimSettingsProvider, useSimSettings } from './contexts/SimSettingsContext'
 import { SimDerivedProvider, useSimDerived } from './contexts/SimDerivedContext'
 import { BookmarkProvider, useBookmarkContext } from './contexts/BookmarkContext'
@@ -129,12 +129,16 @@ function AppShell() {
   const t = useT()
   const toast = useToastContext()
   const device = useDeviceContext()
-  const simCtx = useSimContext()
+  // Actions are referentially stable for the app's lifetime; `sim` is
+  // the ticking state slice (AppShell renders MapView / EtaBar, so it
+  // legitimately re-renders at position-stream rate).
+  const simActions = useSimActions()
+  const sim = useSimState()
   const { currentPos: simCurrentPos, destPos: simDestPos } = useSimDerived()
   const simSettings = useSimSettings()
   const bm = useBookmarkContext()
   const health = useConnectionHealth()
-  const { sim, handlePause, handleResume } = simCtx
+  const { handlePause, handleResume, setMode, clearError } = simActions
 
   // Track the last-used Route sub-mode so switching back to "Route"
   // resumes the same sub-tab (Loop / Multi-Stop / Random).
@@ -179,18 +183,18 @@ function AppShell() {
   // Other modes keep instant teleport.
   const handleTeleportOrStage = useCallback((lat: number, lng: number) => {
     if (sim.mode === SimMode.Teleport) {
-      simCtx.handleSetTeleportDest(lat, lng)
+      simActions.handleSetTeleportDest(lat, lng)
     } else {
-      simCtx.handleTeleport(lat, lng)
+      simActions.handleTeleport(lat, lng)
     }
-  }, [sim.mode, simCtx])
+  }, [sim.mode, simActions])
 
   // Map right-click "Teleport here" always teleports immediately, in every
   // mode (including Teleport) — the context-menu action is an explicit
   // "go there now" gesture, so it never stages a pending pin.
   const handleTeleportNow = useCallback((lat: number, lng: number) => {
-    simCtx.handleTeleport(lat, lng)
-  }, [simCtx])
+    simActions.handleTeleport(lat, lng)
+  }, [simActions])
 
   // UI state
   const [devicesPopoverAnchor, setDevicesPopoverAnchor] = useState<DOMRect | null>(null)
@@ -268,7 +272,7 @@ function AppShell() {
       }
       if (!isInput && e.key >= '1' && e.key <= '4') {
         const modeForKey: SimMode[] = [SimMode.Teleport, SimMode.Navigate, lastRouteSubMode, SimMode.Joystick]
-        sim.setMode(modeForKey[parseInt(e.key) - 1])
+        setMode(modeForKey[parseInt(e.key) - 1])
         return
       }
       if (!isInput && e.key === ' ' && sim.status.running) {
@@ -279,7 +283,9 @@ function AppShell() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [libraryOpen, sim, handlePause, handleResume, lastRouteSubMode])
+    // Deps are stable actions + the two run-state booleans — the listener
+    // re-subscribes when the run/pause state flips, not on position ticks.
+  }, [libraryOpen, setMode, sim.status.running, sim.status.paused, handlePause, handleResume, lastRouteSubMode])
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
@@ -341,11 +347,11 @@ function AppShell() {
             (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) ? simSettings.wpGenRadius :
             null
           }
-          onMapClick={simCtx.handleMapClick}
+          onMapClick={simActions.handleMapClick}
           onTeleport={handleTeleportNow}
-          onNavigate={simCtx.handleNavigate}
+          onNavigate={simActions.handleNavigate}
           onAddBookmark={bm.handleAddBookmark}
-          onAddWaypoint={simCtx.handleAddWaypoint}
+          onAddWaypoint={simActions.handleAddWaypoint}
           showWaypointOption={sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop || sim.mode === SimMode.Navigate}
           onSaveRoute={() => setSaveRouteOpen(true)}
           showSaveRouteOption={sim.waypoints.length > 0}
@@ -384,7 +390,7 @@ function AppShell() {
         />
 
         {sim.error && (
-          <ErrorBanner message={sim.error} onDismiss={sim.clearError} />
+          <ErrorBanner message={sim.error} onDismiss={clearError} />
         )}
 
         {/* The bottom-left device chip was removed in the design-handoff
@@ -439,7 +445,7 @@ function AppShell() {
 
       <BottomDock />
 
-      <BottomModeBar activeMode={sim.mode} onModeChange={sim.setMode} lastRouteSubMode={lastRouteSubMode} />
+      <BottomModeBar activeMode={sim.mode} onModeChange={setMode} lastRouteSubMode={lastRouteSubMode} />
       <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} layerKey={layerKey} onLayerChange={handleLayerChange} />
       <DevicesPopover
         anchor={devicesPopoverAnchor}

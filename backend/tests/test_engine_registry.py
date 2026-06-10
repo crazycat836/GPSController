@@ -108,12 +108,13 @@ def _make_state():
     the real __init__ pulls in settings I/O / BookmarkManager / the WS
     broadcaster, none of which the registry methods need.
     """
+    from core.dual_sync import DualSyncCoordinator
     from state import AppState
 
     state = AppState.__new__(AppState)
     state.simulation_engines = {}
     state._primary_udid = None
-    state._sync_tasks = set()
+    state._dual_sync = DualSyncCoordinator()
     state._engine_lock = asyncio.Lock()
     state.device_manager = SimpleNamespace(
         get_location_service=AsyncMock(return_value=MagicMock(name="loc_service")),
@@ -133,8 +134,8 @@ def fake_engine_cls(monkeypatch):
 
 async def _drain_sync_tasks(state) -> None:
     """Await every in-flight dual-sync task so assertions are deterministic."""
-    while state._sync_tasks:
-        await asyncio.gather(*list(state._sync_tasks), return_exceptions=True)
+    while state._dual_sync._tasks:
+        await asyncio.gather(*list(state._dual_sync._tasks), return_exceptions=True)
 
 
 # ─── (a) Primary-slot rules + promotion on terminate ─────────────────
@@ -294,7 +295,7 @@ def test_terminate_cancels_inflight_dual_sync_task(fake_engine_cls):
         await state.create_engine_for_device("udid-B")
         await asyncio.sleep(0)  # let the dual-sync task enter teleport()
 
-        sync_tasks = [t for t in state._sync_tasks if t.get_name() == "dual-sync-udid-B"]
+        sync_tasks = [t for t in state._dual_sync._tasks if t.get_name() == "dual-sync-udid-B"]
         assert len(sync_tasks) == 1
         sync_task = sync_tasks[0]
 
@@ -441,4 +442,4 @@ def test_secondary_connect_with_unknown_movement_mode_skips_replay(fake_engine_c
 
     state, engine_b = asyncio.run(_run())
     assert engine_b.calls == []
-    assert state._sync_tasks == set()
+    assert state._dual_sync._tasks == set()

@@ -1,14 +1,12 @@
 import { type ChainPoint } from '../../WaypointChain'
 import { haversineM, polylineDistanceM } from '../../../lib/geo'
 import { SimMode } from '../../../hooks/useSimulation'
-import type { useSimContext } from '../../../contexts/SimContext'
 import type { useT } from '../../../i18n'
 
 const KM_THRESHOLD_M = 1000
 const MIN_PTS_FOR_DIST = 2
 
 type LatLng = { lat: number; lng: number }
-type SimSlice = ReturnType<typeof useSimContext>['sim']
 type Translator = ReturnType<typeof useT>
 
 export interface DockCtx {
@@ -20,15 +18,15 @@ export interface DockCtx {
 
 // Build the per-mode meta (title, subtitle, optional waypoint chain)
 // rendered in the dock's `panel-meta` column. Pure derivation from
-// the live sim slice + positions; no side effects.
+// the staged waypoints + positions; no side effects.
 export function buildDockContext(
   mode: SimMode,
-  sim: SimSlice,
+  waypoints: LatLng[],
   currentPos: LatLng | null,
   destPos: LatLng | null,
   t: Translator,
 ): DockCtx {
-  const wp = sim.waypoints
+  const wp = waypoints
   const toChain = (pts: LatLng[]): ChainPoint[] =>
     pts.map((p, i) => ({
       id: `wp-${i}`,

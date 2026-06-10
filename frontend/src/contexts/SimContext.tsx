@@ -100,21 +100,33 @@ export async function runWithFanout<T>(params: {
   }
 }
 
-// Re-export `SPEED_MAP` so existing consumers (`App.tsx`,
-// `SimDerivedContext`) keep importing it through `contexts/SimContext`.
-// The canonical definition lives in `lib/constants.ts` next to
-// `SPEED_PRESETS` so the two cannot drift.
+// Re-export `SPEED_MAP` so existing consumers (`App.tsx`) keep importing
+// it through `contexts/SimContext`. The canonical definition lives in
+// `lib/constants.ts` next to `SPEED_PRESETS` so the two cannot drift.
 export { SPEED_MAP }
 
-interface SimContextValue {
-  // From useSimulation — full simulation state passthrough.
-  sim: ReturnType<typeof useSimulation>
-  // From useJoystick — direction/intensity for the active joystick UI.
-  joystick: ReturnType<typeof useJoystick>
-  // Action dispatchers. Settings (randomWalkRadius / wpGen* / cooldown)
-  // live in `SimSettingsContext` and derived values
-  // (currentPos / destPos / displaySpeed / isRunning / isPaused) live in
-  // `SimDerivedContext`; both expose their own hooks.
+// `useSimulation`'s return shape — the source the two context slices
+// below are carved from. Using `Pick` keeps every field/function type
+// identical to the hook's by construction.
+type Sim = ReturnType<typeof useSimulation>
+
+// ── Stable actions slice ───────────────────────────────────────────────
+// Everything here is referentially stable for the lifetime of the
+// provider: the handle* dispatchers read their inputs through a ref at
+// call time, and the passthroughs are useState setters / []-dep
+// useCallbacks from `useSimulation`. Consumers that only fire actions
+// (buttons, menus, dialogs) subscribe here and never re-render on
+// position ticks.
+export interface SimActionsValue extends Pick<Sim,
+  | 'setMode'
+  | 'setWaypoints'
+  | 'setMoveMode'
+  | 'setCustomSpeedKmh'
+  | 'setSpeedMinKmh'
+  | 'setSpeedMaxKmh'
+  | 'setLoopLapCount'
+  | 'clearError'
+> {
   handleTeleport: (lat: number, lng: number) => void
   handleNavigate: (lat: number, lng: number) => void
   handleStart: () => void
@@ -134,7 +146,41 @@ interface SimContextValue {
   handleMapClick: (lat: number, lng: number) => void
 }
 
-const SimContext = createContext<SimContextValue | null>(null)
+// ── Ticking state slice ────────────────────────────────────────────────
+// Live simulation data — updates at position-stream rate while a run is
+// in flight. Consumers that render coordinates / progress / runtimes
+// subscribe here; derived values (currentPos / displaySpeed / isRunning
+// / isPaused) live one level down in `SimDerivedContext`.
+export interface SimStateValue extends Pick<Sim,
+  | 'mode'
+  | 'moveMode'
+  | 'status'
+  | 'currentPosition'
+  | 'backendPositionSynced'
+  | 'destination'
+  | 'progress'
+  | 'eta'
+  | 'waypoints'
+  | 'routePath'
+  | 'customSpeedKmh'
+  | 'speedMinKmh'
+  | 'speedMaxKmh'
+  | 'runtimes'
+  | 'pauseRemaining'
+  | 'ddiMounting'
+  | 'waypointProgress'
+  | 'loopLapCount'
+  | 'lapProgress'
+  | 'effectiveSpeed'
+  | 'error'
+> {
+  // From useJoystick — direction/intensity for the active joystick UI
+  // (ticks while the pad is being driven) plus its stable input setter.
+  joystick: ReturnType<typeof useJoystick>
+}
+
+const SimActionsContext = createContext<SimActionsValue | null>(null)
+const SimStateContext = createContext<SimStateValue | null>(null)
 
 interface SimProviderProps {
   children: React.ReactNode
@@ -157,7 +203,7 @@ export function SimProvider({ children }: SimProviderProps) {
 
   // Settings live in `SimSettingsContext`. Handlers below pull values
   // from there; consumers that read settings directly should call
-  // `useSimSettings()` not `useSimContext()`.
+  // `useSimSettings()` not the sim contexts.
   const {
     randomWalkRadius,
     wpGenRadius,
@@ -175,6 +221,37 @@ export function SimProvider({ children }: SimProviderProps) {
     sim.mode === SimMode.Joystick,
     joystickSensitivity / 3,
   )
+
+  // ── Latest-value snapshot for the stable action handlers ───────────
+  // Every handle* callback below reads its inputs through this ref at
+  // call time instead of closing over them, so each handler's identity
+  // is permanently stable and the actions context value never
+  // invalidates — that's what stops position ticks from re-rendering
+  // action-only consumers. User events always fire after the commit
+  // effect has refreshed the ref, so call-time reads see exactly what a
+  // per-render closure would have seen.
+  const latest = useRef({
+    sim,
+    connectedDevices: device.connectedDevices,
+    t,
+    showToast,
+    autoJitter,
+    randomWalkRadius,
+    wpGenRadius,
+    wpGenCount,
+  })
+  useEffect(() => {
+    latest.current = {
+      sim,
+      connectedDevices: device.connectedDevices,
+      t,
+      showToast,
+      autoJitter,
+      randomWalkRadius,
+      wpGenRadius,
+      wpGenCount,
+    }
+  })
 
   // ── Start-from-cached-position confirmation ────────────────────────
   // After a server restart the UI rehydrates the last-known position
@@ -197,6 +274,7 @@ export function SimProvider({ children }: SimProviderProps) {
   // (backend is synced), false if they cancel. Resolves true immediately
   // when no prompt is needed.
   const confirmStartFromCached = useCallback(async (): Promise<boolean> => {
+    const { sim, connectedDevices } = latest.current
     // Already synced this session (live position or a prior teleport) —
     // no prompt, no side effect.
     if (sim.backendPositionSynced) return true
@@ -206,19 +284,20 @@ export function SimProvider({ children }: SimProviderProps) {
     // Group mode (2+ devices) runs its own preSyncStart across all
     // engines. Prompting there would need a multi-device teleport path;
     // single-device is the only case this UX currently covers.
-    const udids = device.connectedDevices.map((d) => d.udid)
-    if (udids.length >= 2) return true
+    const udids = connectedDevices.map((d) => d.udid)
+    if (udids.length >= FANOUT_MIN_DEVICES) return true
 
     const position = { lat: sim.currentPosition.lat, lng: sim.currentPosition.lng }
     return new Promise<boolean>((resolve) => {
       pendingSyncRef.current = { position, resolve }
       setSyncPrompt({ position })
     })
-  }, [sim, device.connectedDevices])
+  }, [])
 
   const handleSyncConfirm = useCallback(async () => {
     const pending = pendingSyncRef.current
     if (!pending) return
+    const { sim, t, showToast } = latest.current
     try {
       await sim.teleport(pending.position.lat, pending.position.lng)
       pending.resolve(true)
@@ -229,7 +308,7 @@ export function SimProvider({ children }: SimProviderProps) {
       pendingSyncRef.current = null
       setSyncPrompt(null)
     }
-  }, [sim, showToast, t])
+  }, [])
 
   const handleSyncCancel = useCallback(() => {
     const pending = pendingSyncRef.current
@@ -251,13 +330,16 @@ export function SimProvider({ children }: SimProviderProps) {
   }, [sim.ddiMissing, showToast, t])
 
   // --- Handlers ---
+  // All read live state through `latest` (see above) so their useCallback
+  // deps are [] or other stable handlers — never ticking values.
 
   const handleRestore = useCallback(async () => {
+    const { sim, connectedDevices, t, showToast } = latest.current
     showToast(t('status.restore_in_progress'), 10000)
     const startedAt = Date.now()
     try {
-      const udids = device.connectedDevices.map((d) => d.udid)
-      if (udids.length >= 2) {
+      const udids = connectedDevices.map((d) => d.udid)
+      if (udids.length >= FANOUT_MIN_DEVICES) {
         const outcome = await sim.restoreAll(udids)
         if (outcome.failed.length > 0 && outcome.ok.length === 0) {
           throw new Error(outcome.failed[0]?.reason ?? 'restore failed')
@@ -273,19 +355,21 @@ export function SimProvider({ children }: SimProviderProps) {
     } catch {
       showToast(t('status.restore_failed'))
     }
-  }, [showToast, t, sim, device])
+  }, [])
 
   const generateWaypoints = useCallback((radius: number, count: number) => {
+    const { sim, t, showToast } = latest.current
     if (!sim.currentPosition) {
       showToast(t('toast.no_position_random'))
       return
     }
     sim.setWaypoints(generateRandomTour(sim.currentPosition, radius, count))
-  }, [sim, showToast, t])
+  }, [])
 
   const handleGenerateRandomWaypoints = useCallback(() => {
+    const { wpGenRadius, wpGenCount } = latest.current
     generateWaypoints(wpGenRadius, wpGenCount)
-  }, [generateWaypoints, wpGenRadius, wpGenCount])
+  }, [generateWaypoints])
 
   const handleGenerateAllRandom = useCallback(() => {
     // Inclusive on both ends — `+ 1` widens the open upper bound so MAX is
@@ -302,6 +386,7 @@ export function SimProvider({ children }: SimProviderProps) {
   }, [generateWaypoints, setWpGenRadius, setWpGenCount])
 
   const handleMapClick = useCallback((lat: number, lng: number) => {
+    const { sim } = latest.current
     const nlat = clampLat(lat)
     const nlng = normalizeLng(lng)
 
@@ -324,26 +409,27 @@ export function SimProvider({ children }: SimProviderProps) {
         break
       // RandomWalk / Joystick: no map-click action
     }
-  }, [sim])
+  }, [])
 
   const handleSetTeleportDest = useCallback((latIn: number, lngIn: number) => {
     const lat = clampLat(latIn)
     const lng = normalizeLng(lngIn)
-    sim.setDestination({ lat, lng })
-  }, [sim])
+    latest.current.sim.setDestination({ lat, lng })
+  }, [])
 
   const handleClearTeleportDest = useCallback(() => {
-    sim.setDestination(null)
-  }, [sim])
+    latest.current.sim.setDestination(null)
+  }, [])
 
   const handleTeleport = useCallback(async (latIn: number, lngIn: number) => {
+    const { sim, connectedDevices, t, showToast, autoJitter } = latest.current
     const lat = clampLat(latIn)
     const lng = normalizeLng(lngIn)
-    const udids = device.connectedDevices.map((d) => d.udid)
+    const udids = connectedDevices.map((d) => d.udid)
     try {
       await runWithFanout({
         udids,
-        devices: device.connectedDevices,
+        devices: connectedDevices,
         action: t('mode.teleport'),
         single: () => sim.teleport(lat, lng, autoJitter),
         multi: (us) => {
@@ -360,16 +446,17 @@ export function SimProvider({ children }: SimProviderProps) {
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : t('err.teleport_failed'))
     }
-  }, [sim, device, t, showToast, autoJitter])
+  }, [])
 
   const handleNavigate = useCallback(async (latIn: number, lngIn: number) => {
+    const { sim, connectedDevices, t, showToast } = latest.current
     const lat = clampLat(latIn)
     const lng = normalizeLng(lngIn)
-    const udids = device.connectedDevices.map((d) => d.udid)
+    const udids = connectedDevices.map((d) => d.udid)
     try {
       await runWithFanout({
         udids,
-        devices: device.connectedDevices,
+        devices: connectedDevices,
         action: t('mode.navigate'),
         // Single-device path is gated on `confirmStartFromCached` so
         // the user has to consent before we teleport from a cached
@@ -386,9 +473,10 @@ export function SimProvider({ children }: SimProviderProps) {
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : t('err.no_position'))
     }
-  }, [sim, device, t, showToast, confirmStartFromCached])
+  }, [confirmStartFromCached])
 
   const handleAddWaypoint = useCallback((lat: number, lng: number) => {
+    const { sim } = latest.current
     const nlat = clampLat(lat)
     const nlng = normalizeLng(lng)
     sim.setWaypoints((prev) => {
@@ -400,28 +488,29 @@ export function SimProvider({ children }: SimProviderProps) {
       }
       return [...prev, { lat: nlat, lng: nlng }]
     })
-  }, [sim])
+  }, [])
 
   const handleClearWaypoints = useCallback(() => {
-    sim.setWaypoints([])
-  }, [sim])
+    latest.current.sim.setWaypoints([])
+  }, [])
 
   const handleRemoveWaypoint = useCallback((index: number) => {
-    sim.setWaypoints((prev) => prev.filter((_, i) => i !== index))
-  }, [sim])
+    latest.current.sim.setWaypoints((prev) => prev.filter((_, i) => i !== index))
+  }, [])
 
   const handleStartWaypointRoute = useCallback(async () => {
+    const { sim, connectedDevices, t, showToast } = latest.current
     const route = sim.waypoints
     if (route.length < 2) {
       showToast(t('toast.no_waypoints'))
       return
     }
-    const udids = device.connectedDevices.map((d) => d.udid)
+    const udids = connectedDevices.map((d) => d.udid)
     try {
       if (sim.mode === SimMode.Loop) {
         await runWithFanout({
           udids,
-          devices: device.connectedDevices,
+          devices: connectedDevices,
           action: t('mode.loop'),
           single: () => sim.startLoop(route),
           multi: (us) => sim.startLoopAll(us, route),
@@ -431,7 +520,7 @@ export function SimProvider({ children }: SimProviderProps) {
       } else if (sim.mode === SimMode.MultiStop) {
         await runWithFanout({
           udids,
-          devices: device.connectedDevices,
+          devices: connectedDevices,
           action: t('mode.multi_stop'),
           // Single-device multi-stop is gated on the cached-position
           // confirm prompt; the multi path runs preSyncStart server-side.
@@ -447,15 +536,16 @@ export function SimProvider({ children }: SimProviderProps) {
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : t('toast.start_failed'))
     }
-  }, [sim, device, showToast, t, confirmStartFromCached])
+  }, [confirmStartFromCached])
 
   const handleStart = useCallback(async () => {
-    const udids = device.connectedDevices.map((d) => d.udid)
+    const { sim, connectedDevices, t, showToast, randomWalkRadius } = latest.current
+    const udids = connectedDevices.map((d) => d.udid)
     try {
       if (sim.mode === SimMode.Joystick) {
         await runWithFanout({
           udids,
-          devices: device.connectedDevices,
+          devices: connectedDevices,
           action: t('mode.joystick'),
           single: () => sim.joystickStart(),
           multi: (us) => sim.joystickStartAll(us),
@@ -470,14 +560,15 @@ export function SimProvider({ children }: SimProviderProps) {
         const startPos = sim.currentPosition
         await runWithFanout({
           udids,
-          devices: device.connectedDevices,
+          devices: connectedDevices,
           action: t('mode.random_walk'),
           // Single-device path: gate on confirm, then re-read position
-          // (the confirm flow may have teleported to a confirmed cached
-          // coord, so `sim.currentPosition` may differ from `startPos`).
+          // through `latest` (the confirm flow may have teleported to a
+          // confirmed cached coord, so the live position may differ from
+          // `startPos`).
           single: async () => {
             if (!(await confirmStartFromCached())) return
-            const pos = sim.currentPosition
+            const pos = latest.current.sim.currentPosition
             if (pos) await sim.randomWalk(pos, randomWalkRadius)
           },
           multi: (us) => sim.randomWalkAll(us, startPos, randomWalkRadius),
@@ -492,7 +583,7 @@ export function SimProvider({ children }: SimProviderProps) {
         }
         await runWithFanout({
           udids,
-          devices: device.connectedDevices,
+          devices: connectedDevices,
           action: t('mode.navigate'),
           single: async () => {
             if (!(await confirmStartFromCached())) return
@@ -510,35 +601,37 @@ export function SimProvider({ children }: SimProviderProps) {
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : t('toast.start_failed'))
     }
-  }, [sim, device, randomWalkRadius, handleStartWaypointRoute, showToast, t, confirmStartFromCached])
+  }, [handleStartWaypointRoute, confirmStartFromCached])
 
   const handleStop = useCallback(async () => {
-    const udids = device.connectedDevices.map((d) => d.udid)
+    const { sim, connectedDevices, t, showToast } = latest.current
+    const udids = connectedDevices.map((d) => d.udid)
     // Joystick fan-out has no single-device fallback in this handler
     // (single-device joystick stop happens via the joystick UI itself),
     // so it stays inline rather than going through `runWithFanout`.
-    if (sim.mode === SimMode.Joystick && udids.length >= 2) {
+    if (sim.mode === SimMode.Joystick && udids.length >= FANOUT_MIN_DEVICES) {
       const outcome = await sim.joystickStopAll(udids)
-      showToast(toastForFanout(t, t('mode.joystick'), outcome, device.connectedDevices))
+      showToast(toastForFanout(t, t('mode.joystick'), outcome, connectedDevices))
       return
     }
     await runWithFanout({
       udids,
-      devices: device.connectedDevices,
+      devices: connectedDevices,
       action: t('generic.stop'),
       single: () => sim.stop(),
       multi: (us) => sim.stopAll(us),
       t,
       showToast,
     })
-  }, [sim, device, t, showToast])
+  }, [])
 
   const handleApplySpeed = useCallback(async (sel?: SpeedSelection) => {
-    const udids = device.connectedDevices.map((d) => d.udid)
+    const { sim, connectedDevices, t, showToast } = latest.current
+    const udids = connectedDevices.map((d) => d.udid)
     try {
       await runWithFanout({
         udids,
-        devices: device.connectedDevices,
+        devices: connectedDevices,
         action: t('panel.apply_speed_success'),
         // Single-device path needs an explicit success toast — the multi
         // path gets one through toastForFanout, single does not.
@@ -553,48 +646,49 @@ export function SimProvider({ children }: SimProviderProps) {
     } catch (err: unknown) {
       showToast(t('panel.apply_speed_failed') + (err instanceof Error ? `: ${err.message}` : ''))
     }
-  }, [sim, device, showToast, t])
+  }, [])
 
   const handlePause = useCallback(async () => {
-    const udids = device.connectedDevices.map((d) => d.udid)
+    const { sim, connectedDevices, t, showToast } = latest.current
+    const udids = connectedDevices.map((d) => d.udid)
     await runWithFanout({
       udids,
-      devices: device.connectedDevices,
+      devices: connectedDevices,
       action: t('generic.pause'),
       single: () => sim.pause(),
       multi: (us) => sim.pauseAll(us),
       t,
       showToast,
     })
-  }, [sim, device, t, showToast])
+  }, [])
 
   const handleResume = useCallback(async () => {
-    const udids = device.connectedDevices.map((d) => d.udid)
+    const { sim, connectedDevices, t, showToast } = latest.current
+    const udids = connectedDevices.map((d) => d.udid)
     await runWithFanout({
       udids,
-      devices: device.connectedDevices,
+      devices: connectedDevices,
       action: t('generic.resume'),
       single: () => sim.resume(),
       multi: (us) => sim.resumeAll(us),
       t,
       showToast,
     })
-  }, [sim, device, t, showToast])
+  }, [])
 
   const handleOpenLog = useCallback(async () => {
+    const { t, showToast } = latest.current
     try {
       await api.openLogFolder()
     } catch (err: unknown) {
       showToast(t('status.open_log_failed') + (err instanceof Error ? `: ${err.message}` : ''))
     }
-  }, [showToast, t])
+  }, [])
 
-  // Derived values (currentPos / destPos / displaySpeed / isRunning /
-  // isPaused) live in SimDerivedContext — single source via
-  // `lib/sim-derive.ts`, no duplicate computation here.
-  const value = useMemo<SimContextValue>(() => ({
-    sim,
-    joystick,
+  // Stable actions value — every dep here is a []-dep useCallback above
+  // or a stable function from useSimulation (state setters / []-dep
+  // callbacks), so this memo computes once and never invalidates.
+  const actions = useMemo<SimActionsValue>(() => ({
     handleSetTeleportDest,
     handleClearTeleportDest,
     handleTeleport,
@@ -612,9 +706,15 @@ export function SimProvider({ children }: SimProviderProps) {
     handleGenerateAllRandom,
     handleOpenLog,
     handleMapClick,
+    setMode: sim.setMode,
+    setWaypoints: sim.setWaypoints,
+    setMoveMode: sim.setMoveMode,
+    setCustomSpeedKmh: sim.setCustomSpeedKmh,
+    setSpeedMinKmh: sim.setSpeedMinKmh,
+    setSpeedMaxKmh: sim.setSpeedMaxKmh,
+    setLoopLapCount: sim.setLoopLapCount,
+    clearError: sim.clearError,
   }), [
-    sim,
-    joystick,
     handleSetTeleportDest,
     handleClearTeleportDest,
     handleTeleport,
@@ -632,28 +732,98 @@ export function SimProvider({ children }: SimProviderProps) {
     handleGenerateAllRandom,
     handleOpenLog,
     handleMapClick,
+    sim.setMode,
+    sim.setWaypoints,
+    sim.setMoveMode,
+    sim.setCustomSpeedKmh,
+    sim.setSpeedMinKmh,
+    sim.setSpeedMaxKmh,
+    sim.setLoopLapCount,
+    sim.clearError,
+  ])
+
+  // Ticking state value — invalidates whenever any live field changes
+  // (position-stream rate while running). Deps are the individual fields
+  // rather than `sim` itself so unrelated provider re-renders (toast,
+  // sync prompt, i18n) don't fan out to state consumers.
+  const state = useMemo<SimStateValue>(() => ({
+    mode: sim.mode,
+    moveMode: sim.moveMode,
+    status: sim.status,
+    currentPosition: sim.currentPosition,
+    backendPositionSynced: sim.backendPositionSynced,
+    destination: sim.destination,
+    progress: sim.progress,
+    eta: sim.eta,
+    waypoints: sim.waypoints,
+    routePath: sim.routePath,
+    customSpeedKmh: sim.customSpeedKmh,
+    speedMinKmh: sim.speedMinKmh,
+    speedMaxKmh: sim.speedMaxKmh,
+    runtimes: sim.runtimes,
+    pauseRemaining: sim.pauseRemaining,
+    ddiMounting: sim.ddiMounting,
+    waypointProgress: sim.waypointProgress,
+    loopLapCount: sim.loopLapCount,
+    lapProgress: sim.lapProgress,
+    effectiveSpeed: sim.effectiveSpeed,
+    error: sim.error,
+    joystick,
+  }), [
+    sim.mode,
+    sim.moveMode,
+    sim.status,
+    sim.currentPosition,
+    sim.backendPositionSynced,
+    sim.destination,
+    sim.progress,
+    sim.eta,
+    sim.waypoints,
+    sim.routePath,
+    sim.customSpeedKmh,
+    sim.speedMinKmh,
+    sim.speedMaxKmh,
+    sim.runtimes,
+    sim.pauseRemaining,
+    sim.ddiMounting,
+    sim.waypointProgress,
+    sim.loopLapCount,
+    sim.lapProgress,
+    sim.effectiveSpeed,
+    sim.error,
+    joystick.direction,
+    joystick.intensity,
+    joystick.updateFromPad,
   ])
 
   return (
-    <SimContext.Provider value={value}>
-      {children}
-      <ConfirmDialog
-        open={syncPrompt != null}
-        title={t('sync.confirm.title')}
-        description={syncPrompt ? t('sync.confirm.body', {
-          coord: `${syncPrompt.position.lat.toFixed(5)}, ${syncPrompt.position.lng.toFixed(5)}`,
-        }) : ''}
-        confirmLabel={t('sync.confirm.ok')}
-        cancelLabel={t('sync.confirm.cancel')}
-        onConfirm={handleSyncConfirm}
-        onCancel={handleSyncCancel}
-      />
-    </SimContext.Provider>
+    <SimActionsContext.Provider value={actions}>
+      <SimStateContext.Provider value={state}>
+        {children}
+        <ConfirmDialog
+          open={syncPrompt != null}
+          title={t('sync.confirm.title')}
+          description={syncPrompt ? t('sync.confirm.body', {
+            coord: `${syncPrompt.position.lat.toFixed(5)}, ${syncPrompt.position.lng.toFixed(5)}`,
+          }) : ''}
+          confirmLabel={t('sync.confirm.ok')}
+          cancelLabel={t('sync.confirm.cancel')}
+          onConfirm={handleSyncConfirm}
+          onCancel={handleSyncCancel}
+        />
+      </SimStateContext.Provider>
+    </SimActionsContext.Provider>
   )
 }
 
-export function useSimContext() {
-  const ctx = useContext(SimContext)
-  if (!ctx) throw new Error('useSimContext must be used within SimProvider')
+export function useSimActions(): SimActionsValue {
+  const ctx = useContext(SimActionsContext)
+  if (!ctx) throw new Error('useSimActions must be used within SimProvider')
+  return ctx
+}
+
+export function useSimState(): SimStateValue {
+  const ctx = useContext(SimStateContext)
+  if (!ctx) throw new Error('useSimState must be used within SimProvider')
   return ctx
 }

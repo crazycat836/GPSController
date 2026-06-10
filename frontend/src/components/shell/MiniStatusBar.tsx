@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { Copy, Check, Usb, Wifi, MapPinOff } from 'lucide-react'
-import { useSimContext } from '../../contexts/SimContext'
+import { useSimState } from '../../contexts/SimContext'
 import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useConnectionHealth } from '../../contexts/ConnectionHealthContext'
@@ -15,14 +15,14 @@ import { copyToClipboard } from '../../lib/clipboard'
 export default function MiniStatusBar() {
   const t = useT()
   const { lang } = useI18n()
-  const { sim } = useSimContext()
+  const { backendPositionSynced } = useSimState()
   const { currentPos, isRunning } = useSimDerived()
   const device = useDeviceContext()
   const health = useConnectionHealth()
   const { countryCode, country } = useReverseGeocode(currentPos, lang, { paused: isRunning })
   const weather = useWeather(currentPos, { paused: isRunning })
 
-  const isSimulating = sim.backendPositionSynced
+  const isSimulating = backendPositionSynced
 
   const isDual = device.connectedDevices.length >= 2
   const isStale = health.device === 'stale'
@@ -132,7 +132,7 @@ function DevicePill({ dev, letter, color, coord, stale, degraded }: DevicePillPr
 }
 
 function DualDevicePills({ devices, stale }: { devices: DeviceInfo[]; stale?: boolean }) {
-  const { sim } = useSimContext()
+  const { runtimes } = useSimState()
   return (
     <>
       {devices.map((dev, i) => (
@@ -141,9 +141,9 @@ function DualDevicePills({ devices, stale }: { devices: DeviceInfo[]; stale?: bo
           dev={dev}
           letter={DEVICE_LETTERS[i]}
           color={DEVICE_COLORS[i]}
-          coord={sim.runtimes[dev.udid]?.currentPos ?? null}
+          coord={runtimes[dev.udid]?.currentPos ?? null}
           stale={stale}
-          degraded={!!sim.runtimes[dev.udid]?.tunnelDegraded}
+          degraded={!!runtimes[dev.udid]?.tunnelDegraded}
         />
       ))}
     </>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useSimContext } from '../../../contexts/SimContext'
+import { useSimActions, useSimState } from '../../../contexts/SimContext'
 import { useSimDerived } from '../../../contexts/SimDerivedContext'
 import {
   useSimSettings,
@@ -192,9 +192,9 @@ function formatDist(m: number): string {
 }
 
 function useActiveSpeedKmh(): number {
-  const { sim } = useSimContext()
-  if (sim.customSpeedKmh != null) return sim.customSpeedKmh
-  return SPEED_MAP[sim.moveMode as SpeedPresetMode] ?? 10.8
+  const { customSpeedKmh, moveMode } = useSimState()
+  if (customSpeedKmh != null) return customSpeedKmh
+  return SPEED_MAP[moveMode as SpeedPresetMode] ?? 10.8
 }
 
 function formatEta(distM: number, speedKmh: number, laps: number | null): string {
@@ -221,21 +221,21 @@ function formatRadius(m: number): string {
 // ── Per-mode card content ─────────────────────────────────────────────
 
 function useTotalWaypointDist(loop: boolean): number {
-  const { sim } = useSimContext()
+  const { waypoints } = useSimState()
   return useMemo(() => {
-    if (sim.waypoints.length < 2) return 0
+    if (waypoints.length < 2) return 0
     let d = 0
-    for (let i = 1; i < sim.waypoints.length; i++) {
-      d += haversineM(sim.waypoints[i - 1], sim.waypoints[i])
+    for (let i = 1; i < waypoints.length; i++) {
+      d += haversineM(waypoints[i - 1], waypoints[i])
     }
-    if (loop && sim.waypoints.length >= 2) {
+    if (loop && waypoints.length >= 2) {
       d += haversineM(
-        sim.waypoints[sim.waypoints.length - 1],
-        sim.waypoints[0],
+        waypoints[waypoints.length - 1],
+        waypoints[0],
       )
     }
     return d
-  }, [sim.waypoints, loop])
+  }, [waypoints, loop])
 }
 
 function useNavDist(): number {
@@ -309,24 +309,25 @@ function NavigateCard() {
 
 function LoopCard() {
   const t = useT()
-  const { sim } = useSimContext()
-  const loopEnabled = sim.loopLapCount !== 1
+  const { loopLapCount } = useSimState()
+  const { setLoopLapCount } = useSimActions()
+  const loopEnabled = loopLapCount !== 1
   const totalDist = useTotalWaypointDist(loopEnabled)
   const speedKmh = useActiveSpeedKmh()
-  const eta = formatEta(totalDist, speedKmh, sim.loopLapCount)
-  const displayCount = sim.loopLapCount === null ? '∞' : String(sim.loopLapCount)
+  const eta = formatEta(totalDist, speedKmh, loopLapCount)
+  const displayCount = loopLapCount === null ? '∞' : String(loopLapCount)
 
   const handleToggle = (on: boolean) => {
-    sim.setLoopLapCount(on ? null : 1)
+    setLoopLapCount(on ? null : 1)
   }
   const handleDec = () => {
-    if (sim.loopLapCount === null) { sim.setLoopLapCount(10) }
-    else if (sim.loopLapCount > 2) { sim.setLoopLapCount(sim.loopLapCount - 1) }
+    if (loopLapCount === null) { setLoopLapCount(10) }
+    else if (loopLapCount > 2) { setLoopLapCount(loopLapCount - 1) }
   }
   const handleInc = () => {
-    if (sim.loopLapCount === null) return
-    if (sim.loopLapCount >= 99) { sim.setLoopLapCount(null) }
-    else { sim.setLoopLapCount(sim.loopLapCount + 1) }
+    if (loopLapCount === null) return
+    if (loopLapCount >= 99) { setLoopLapCount(null) }
+    else { setLoopLapCount(loopLapCount + 1) }
   }
 
   return (
@@ -357,7 +358,7 @@ function LoopCard() {
 
 function MultiStopCard() {
   const t = useT()
-  const { sim } = useSimContext()
+  const { waypoints } = useSimState()
   const totalDist = useTotalWaypointDist(false)
   return (
     <CardShell>
@@ -379,7 +380,7 @@ function MultiStopCard() {
           <ToggleSwitch checked={true} />
         </ControlCell>
         <ControlCell label={t('dock.stops')} divider>
-          <Stepper value={String(sim.waypoints.length)} />
+          <Stepper value={String(waypoints.length)} />
         </ControlCell>
       </div>
     </CardShell>
@@ -488,9 +489,9 @@ function JoystickCard() {
 // ── Public component ──────────────────────────────────────────────────
 
 export default function ModeStatsCard() {
-  const { sim } = useSimContext()
+  const { mode } = useSimState()
 
-  switch (sim.mode) {
+  switch (mode) {
     case SimMode.Teleport:
       return <TeleportCard />
     case SimMode.Navigate:

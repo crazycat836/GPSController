@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Route as RouteIcon, Save, Pencil, Trash2, FileUp, Upload, Download,
   Folder, FolderInput, GripVertical, ListTree, X,
 } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
-import { useSimContext } from '../../contexts/SimContext'
+import { useSimActions, useSimState } from '../../contexts/SimContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
@@ -42,12 +42,16 @@ const CATEGORY_CHIPS_VISIBLE_CAP = 5
 export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   const t = useT()
   const bm = useBookmarkContext()
-  const sim = useSimContext()
+  // `waypoints` / `moveMode` only change identity on actual user edits
+  // (never on position ticks), so callbacks below can depend on them
+  // directly; `setWaypoints` is a stable action.
+  const { waypoints: simWaypoints, moveMode: simMoveMode } = useSimState()
+  const { setWaypoints } = useSimActions()
   const { showToast } = useToastContext()
 
   const savedRoutes = bm.savedRoutes
   const routeCategories = bm.routeCategories
-  const waypointsCount = sim.sim.waypoints.length
+  const waypointsCount = simWaypoints.length
 
   // ─── State ─────────────────────────────────────────────
   const [routeName, setRouteName] = useState('')
@@ -68,16 +72,6 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
     moveMode: string
     existingCreatedAt: string | null
   }>(null)
-
-  // Live sim state in a ref so handleSave / resolveOverwrite can read
-  // the current waypoints without re-creating on every position tick.
-  // ``sim.sim.waypoints`` is a fresh array reference each sim tick;
-  // putting it in useCallback deps would invalidate every KebabMenu
-  // and row that captures the resulting handler.
-  const simRef = useRef({ waypoints: sim.sim.waypoints, moveMode: sim.sim.moveMode })
-  useEffect(() => {
-    simRef.current = { waypoints: sim.sim.waypoints, moveMode: sim.sim.moveMode }
-  }, [sim.sim.waypoints, sim.sim.moveMode])
 
   // List controls
   const [search, setSearch] = useState('')
@@ -173,12 +167,11 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   }, [savedRoutes, routeCategories, t])
 
   // ─── Save (with conflict handling) ────────────────────
-  // Sim state (waypoints + moveMode) is read through simRef so this
-  // callback's identity doesn't churn on every position tick.
   const handleSave = useCallback(async () => {
     const name = routeName.trim()
     if (!name || waypointsCount === 0) return
-    const { waypoints, moveMode } = simRef.current
+    const waypoints = simWaypoints
+    const moveMode = simMoveMode
     // Always try with `on_conflict=reject` first so a same-name match
     // surfaces the overwrite dialog instead of silently double-saving.
     const result = await bm.handleRouteSave(name, waypoints, moveMode, {
@@ -203,7 +196,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       })
     }
     // result.kind === 'error' — toast already shown by the context
-  }, [routeName, waypointsCount, bm, saveCategoryId])
+  }, [routeName, waypointsCount, simWaypoints, simMoveMode, bm, saveCategoryId])
 
   const resolveOverwrite = useCallback(async (policy: 'overwrite' | 'new') => {
     if (!overwriteDialog) return
@@ -222,10 +215,10 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
     if (selectionMode || reorderMode) return
     const waypoints = bm.handleRouteLoad(id)
     if (waypoints) {
-      sim.sim.setWaypoints(waypoints)
+      setWaypoints(waypoints)
       onRouteLoaded()
     }
-  }, [bm, sim, onRouteLoaded, selectionMode, reorderMode])
+  }, [bm, setWaypoints, onRouteLoaded, selectionMode, reorderMode])
 
   const commitRename = useCallback((routeId: string, currentName: string) => {
     const next = editingRouteName.trim()

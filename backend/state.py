@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 
 from config import DEFAULT_LOCATION, SETTINGS_FILE, STATE_SAVE_INTERVAL_SEC
 from core.device_manager import DeviceManager
+from core.dual_sync import DualSyncCoordinator
 from services.bookmarks import BookmarkManager
 from services.coord_format import CoordinateFormatter
 from services.cooldown import CooldownTimer
@@ -66,12 +67,9 @@ class AppState:
         # rationale sits next to other tunables.
         self._last_save_time: float = 0.0
         self._save_interval: float = STATE_SAVE_INTERVAL_SEC
-        # In-flight dual-device auto-sync tasks. Stored so the event loop
-        # keeps a strong reference — a bare ``create_task`` can be GC'd
-        # mid-run (documented asyncio footgun) — and so each can be
-        # cancelled when its target engine is terminated or the app shuts
-        # down, instead of outliving the device it mirrors.
-        self._sync_tasks: set[asyncio.Task] = set()
+        # Dual-device auto-sync task lifecycle (spawn / cancel / drain)
+        # lives in core.dual_sync; AppState only decides *when* to sync.
+        self._dual_sync = DualSyncCoordinator()
         # Serialises mutation of ``simulation_engines`` / ``_primary_udid``.
         # These are touched from many concurrent contexts (lifespan auto-
         # connect, USB watchdog, REST connect/disconnect, WS probe, tunnel
@@ -206,12 +204,8 @@ class AppState:
                     self._primary_udid = next(iter(self.simulation_engines), None)
 
     def _cancel_sync_task_for(self, udid: str) -> None:
-        """Cancel the in-flight dual-sync task targeting *udid*, if any.
-        Tasks are named ``dual-sync-{udid}`` (see _sync_new_device_to_primary)."""
-        name = f"dual-sync-{udid}"
-        for task in list(self._sync_tasks):
-            if task.get_name() == name and not task.done():
-                task.cancel()
+        """Cancel the in-flight dual-sync task targeting *udid*, if any."""
+        self._dual_sync.cancel_for(udid)
 
     async def cancel_sync_tasks(self) -> None:
         """Cancel + drain every in-flight dual-device auto-sync task.
@@ -219,15 +213,7 @@ class AppState:
         Called from the lifespan shutdown so a mid-flight OSRM-backed sync
         can't keep running after the engines it targets are gone.
         """
-        tasks = [t for t in self._sync_tasks if not t.done()]
-        for task in tasks:
-            task.cancel()
-        for task in tasks:
-            try:
-                await task
-            except (asyncio.CancelledError, Exception):
-                pass
-        self._sync_tasks.clear()
+        await self._dual_sync.cancel_all()
 
     async def create_engine_for_device(self, udid: str):
         """Create a SimulationEngine for the connected device.
@@ -288,10 +274,12 @@ class AppState:
     async def _sync_new_device_to_primary(self, new_udid: str) -> None:
         """Replay the primary device's in-flight simulation on *new_udid*.
 
-        Run as fire-and-forget so the connect flow doesn't block on OSRM
-        route fetches. Always writes the primary's current position first so
-        the newcomer starts from the same coordinate; then dispatches the
-        snapshot-matching engine call on the new device's engine.
+        Resolves both engines from the registry, then hands off to the
+        DualSyncCoordinator, which spawns the fire-and-forget replay task
+        (teleport to the primary's position, then
+        ``SimulationSnapshot.replay_on``) — or rejects it up front when
+        the primary is idle / position-less / carries an unknown
+        movement_mode.
         """
         primary_udid = self._primary_udid
         if primary_udid is None or primary_udid == new_udid:
@@ -300,100 +288,9 @@ class AppState:
         new_engine = self.simulation_engines.get(new_udid)
         if primary is None or new_engine is None:
             return
-        snapshot = primary.snapshot
-        if snapshot is None:
-            # Primary is idle — nothing to mirror.
-            return
-        start_pos = primary.current_position
-        if start_pos is None:
-            return
-
-        from models.schemas import Coordinate, MovementMode
-        from services.ws_broadcaster import broadcast
-
-        try:
-            mmode = MovementMode(snapshot.movement_mode)
-        except ValueError:
-            logger.warning(
-                "Cannot replay snapshot on %s: unknown movement_mode %r",
-                new_udid, snapshot.movement_mode,
-            )
-            return
-
-        async def _do_sync() -> None:
-            try:
-                # Anchor the secondary to the primary's current coordinate
-                # so OSRM routing / random-walk origin matches.
-                await new_engine.teleport(start_pos.lat, start_pos.lng)
-                try:
-                    await broadcast("dual_sync_start", {
-                        "udid": new_udid,
-                        "primary_udid": primary_udid,
-                        "mode": snapshot.mode,
-                    })
-                except Exception:
-                    logger.debug(
-                        "dual_sync_start broadcast failed for %s",
-                        new_udid, exc_info=True,
-                    )
-
-                if snapshot.mode == "navigate" and snapshot.destination:
-                    await new_engine.navigate(
-                        Coordinate(lat=snapshot.destination["lat"], lng=snapshot.destination["lng"]),
-                        mmode,
-                        speed_kmh=snapshot.speed_kmh,
-                        speed_min_kmh=snapshot.speed_min_kmh,
-                        speed_max_kmh=snapshot.speed_max_kmh,
-                        straight_line=snapshot.straight_line,
-                    )
-                elif snapshot.mode == "loop" and snapshot.waypoints:
-                    wps = [Coordinate(lat=w["lat"], lng=w["lng"]) for w in snapshot.waypoints]
-                    await new_engine.start_loop(
-                        wps, mmode,
-                        speed_kmh=snapshot.speed_kmh,
-                        speed_min_kmh=snapshot.speed_min_kmh,
-                        speed_max_kmh=snapshot.speed_max_kmh,
-                        pause_enabled=snapshot.pause_enabled,
-                        pause_min=snapshot.pause_min,
-                        pause_max=snapshot.pause_max,
-                        straight_line=snapshot.straight_line,
-                        lap_count=snapshot.lap_count,
-                    )
-                elif snapshot.mode == "multi_stop" and snapshot.waypoints:
-                    wps = [Coordinate(lat=w["lat"], lng=w["lng"]) for w in snapshot.waypoints]
-                    await new_engine.multi_stop(
-                        wps, mmode,
-                        stop_duration=snapshot.stop_duration,
-                        loop=snapshot.loop_multistop,
-                        speed_kmh=snapshot.speed_kmh,
-                        speed_min_kmh=snapshot.speed_min_kmh,
-                        speed_max_kmh=snapshot.speed_max_kmh,
-                        pause_enabled=snapshot.pause_enabled,
-                        pause_min=snapshot.pause_min,
-                        pause_max=snapshot.pause_max,
-                        straight_line=snapshot.straight_line,
-                        lap_count=snapshot.lap_count,
-                    )
-                elif snapshot.mode == "random_walk" and snapshot.center and snapshot.radius_m:
-                    await new_engine.random_walk(
-                        Coordinate(lat=snapshot.center["lat"], lng=snapshot.center["lng"]),
-                        snapshot.radius_m, mmode,
-                        speed_kmh=snapshot.speed_kmh,
-                        speed_min_kmh=snapshot.speed_min_kmh,
-                        speed_max_kmh=snapshot.speed_max_kmh,
-                        pause_enabled=snapshot.pause_enabled,
-                        pause_min=snapshot.pause_min,
-                        pause_max=snapshot.pause_max,
-                        seed=snapshot.seed,
-                        straight_line=snapshot.straight_line,
-                    )
-            except Exception:
-                logger.exception(
-                    "Dual-device auto-sync failed for %s (snapshot mode=%s)",
-                    new_udid, snapshot.mode,
-                )
-
-        sync_task = asyncio.create_task(_do_sync(), name=f"dual-sync-{new_udid}")
-        # Keep a strong ref (weak-ref GC footgun) + auto-remove on completion.
-        self._sync_tasks.add(sync_task)
-        sync_task.add_done_callback(self._sync_tasks.discard)
+        self._dual_sync.sync_to_primary(
+            primary_udid=primary_udid,
+            primary=primary,
+            new_udid=new_udid,
+            new_engine=new_engine,
+        )

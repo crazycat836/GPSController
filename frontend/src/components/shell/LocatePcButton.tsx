@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import { usePcLocation, type PcLocationErrorCode } from '../../hooks/usePcLocation'
-import { useSimContext } from '../../contexts/SimContext'
+import { useSimActions, useSimState } from '../../contexts/SimContext'
 import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useT } from '../../i18n'
 
@@ -54,7 +54,8 @@ const SECONDARY_BTN = [
 
 export default function LocatePcButton({ onFlyToCoordinate, onPcLocated }: LocatePcButtonProps) {
   const t = useT()
-  const simCtx = useSimContext()
+  const { handleTeleport } = useSimActions()
+  const { status } = useSimState()
   const { isRunning, isPaused } = useSimDerived()
   const { coord, loading, error, request } = usePcLocation()
 
@@ -118,9 +119,9 @@ export default function LocatePcButton({ onFlyToCoordinate, onPcLocated }: Locat
     }
     onFlyToCoordinate(coord.lat, coord.lng, LOCATE_ZOOM)
     onPcLocated?.(null)
-    simCtx.handleTeleport(coord.lat, coord.lng)
+    handleTeleport(coord.lat, coord.lng)
     closePopover()
-  }, [coord, needsConfirm, onFlyToCoordinate, onPcLocated, simCtx, closePopover])
+  }, [coord, needsConfirm, onFlyToCoordinate, onPcLocated, handleTeleport, closePopover])
 
   // Keep the existing fix visible while re-fetching (refreshing sub-state)
   // so the popover layout doesn't collapse to a bare spinner.
@@ -134,10 +135,10 @@ export default function LocatePcButton({ onFlyToCoordinate, onPcLocated }: Locat
     const { lat, lng } = pendingTeleport
     onFlyToCoordinate(lat, lng, LOCATE_ZOOM)
     onPcLocated?.(null)
-    simCtx.handleTeleport(lat, lng)
+    handleTeleport(lat, lng)
     setPendingTeleport(null)
     closePopover()
-  }, [pendingTeleport, onFlyToCoordinate, onPcLocated, simCtx, closePopover])
+  }, [pendingTeleport, onFlyToCoordinate, onPcLocated, handleTeleport, closePopover])
 
   const isRefreshing = loading && !!coord
   const TriggerIcon = loading ? Loader2 : (coord ? LocateFixed : Locate)
@@ -281,7 +282,7 @@ export default function LocatePcButton({ onFlyToCoordinate, onPcLocated }: Locat
         title={t('locate.confirm_teleport_title')}
         description={pendingTeleport
           ? t('locate.confirm_teleport_body', {
-              state: simCtx.sim.status?.state ?? '-',
+              state: status?.state ?? '-',
               lat: pendingTeleport.lat.toFixed(5),
               lng: pendingTeleport.lng.toFixed(5),
             })

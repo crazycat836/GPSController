@@ -3,7 +3,7 @@ import { Locate, Wand2 } from 'lucide-react'
 import Modal from '../Modal'
 import { useT } from '../../i18n'
 import { useToastContext } from '../../contexts/ToastContext'
-import { useSimContext } from '../../contexts/SimContext'
+import { useSimState } from '../../contexts/SimContext'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
 import * as api from '../../services/api'
 
@@ -60,7 +60,7 @@ function saveAnchor(anchor: StoredAnchor): void {
 export default function GoldDittoDialog({ open, onClose }: GoldDittoDialogProps) {
   const t = useT()
   const { showToast } = useToastContext()
-  const { sim } = useSimContext()
+  const { currentPosition } = useSimState()
 
   const [lat, setLat] = useState('')
   const [lng, setLng] = useState('')
@@ -94,7 +94,7 @@ export default function GoldDittoDialog({ open, onClose }: GoldDittoDialogProps)
   }, [lat, lng])
 
   const fillFromCurrent = useCallback(() => {
-    const pos = sim.currentPosition
+    const pos = currentPosition
     if (!pos) {
       setError(t('settings.gold_ditto_no_position'))
       return
@@ -102,7 +102,7 @@ export default function GoldDittoDialog({ open, onClose }: GoldDittoDialogProps)
     setLat(pos.lat.toFixed(6))
     setLng(pos.lng.toFixed(6))
     setError(null)
-  }, [sim.currentPosition, t])
+  }, [currentPosition, t])
 
   const handleSave = useCallback(() => {
     if (!parsed) {
@@ -167,7 +167,7 @@ export default function GoldDittoDialog({ open, onClose }: GoldDittoDialogProps)
           type="button"
           className="action-btn text-[11px] self-start"
           onClick={fillFromCurrent}
-          disabled={!sim.currentPosition}
+          disabled={!currentPosition}
           title={t('settings.gold_ditto_use_current_hint')}
         >
           <Locate width={12} height={12} />

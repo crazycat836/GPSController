@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { BookOpen, Upload, Download, FileUp } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
-import { useSimContext } from '../../contexts/SimContext'
+import { useSimActions, useSimState } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
 import { pickFile } from '../../lib/fileIo'
@@ -21,13 +21,14 @@ type TabId = 'bookmarks' | 'routes'
 function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
   const t = useT()
   const bm = useBookmarkContext()
-  const sim = useSimContext()
+  const { handleTeleport } = useSimActions()
+  const simState = useSimState()
 
   const [activeTab, setActiveTab] = useState<TabId>('bookmarks')
 
   const savedRoutes = bm.savedRoutes as readonly { id: string }[]
-  const currentPosition = sim.sim.currentPosition
-    ? { lat: sim.sim.currentPosition.lat, lng: sim.sim.currentPosition.lng }
+  const currentPosition = simState.currentPosition
+    ? { lat: simState.currentPosition.lat, lng: simState.currentPosition.lng }
     : null
 
   const tabs: PanelTab<TabId>[] = [
@@ -112,7 +113,7 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
       {activeTab === 'bookmarks' ? (
         <div {...panelPropsForTab('bookmarks')}>
           <BookmarksPanel
-            onBookmarkClick={(lat, lng) => { sim.handleTeleport(lat, lng); onClose() }}
+            onBookmarkClick={(lat, lng) => { handleTeleport(lat, lng); onClose() }}
             currentPosition={currentPosition}
           />
         </div>

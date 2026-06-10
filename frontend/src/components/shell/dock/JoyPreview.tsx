@@ -1,4 +1,4 @@
-import { useSimContext } from '../../../contexts/SimContext'
+import { useSimState } from '../../../contexts/SimContext'
 import JoystickPad from '../../JoystickPad'
 
 // Interactive joystick pad rendered in the dock-meta column when joystick
@@ -6,7 +6,7 @@ import JoystickPad from '../../JoystickPad'
 // (the underlying pad component owns input handling). Replaces what was
 // previously a decorative SVG mock-up.
 export default function JoyPreview() {
-  const { joystick } = useSimContext()
+  const { joystick } = useSimState()
   return (
     <div className="mt-3.5 flex justify-center">
       <JoystickPad

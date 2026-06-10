@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Repeat, Route, Shuffle, Crosshair, Navigation, Gamepad2, SquareCheckBig, X, Check, ChevronDown } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ChainPoint } from '../WaypointChain'
-import { useSimContext } from '../../contexts/SimContext'
+import { useSimActions, useSimState } from '../../contexts/SimContext'
 import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useSimSettings } from '../../contexts/SimSettingsContext'
 import { SimMode } from '../../hooks/useSimulation'
@@ -45,13 +45,13 @@ function readDockCollapsed(): boolean {
 
 export default function BottomDock() {
   const t = useT()
-  const simCtx = useSimContext()
-  const { sim, handleRemoveWaypoint, handleGenerateRandomWaypoints } = simCtx
+  const { handleRemoveWaypoint, handleGenerateRandomWaypoints } = useSimActions()
+  const { mode, waypoints } = useSimState()
   const { currentPos, destPos } = useSimDerived()
   const [showRandomConfig, setShowRandomConfig] = useState(false)
   const [collapsed, setCollapsed] = useState(readDockCollapsed)
 
-  useEffect(() => { setShowRandomConfig(false) }, [sim.mode])
+  useEffect(() => { setShowRandomConfig(false) }, [mode])
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -62,12 +62,12 @@ export default function BottomDock() {
   }, [])
 
   const ctx = useMemo(
-    () => buildDockContext(sim.mode, sim, currentPos, destPos, t),
-    [sim.mode, sim.waypoints, currentPos, destPos, t],
+    () => buildDockContext(mode, waypoints, currentPos, destPos, t),
+    [mode, waypoints, currentPos, destPos, t],
   )
 
-  const speedToggleDisabled = sim.mode === SimMode.Teleport || sim.mode === SimMode.Joystick
-  const Icon = MODE_ICON[sim.mode] ?? SquareCheckBig
+  const speedToggleDisabled = mode === SimMode.Teleport || mode === SimMode.Joystick
+  const Icon = MODE_ICON[mode] ?? SquareCheckBig
 
   const handleRandomGenerate = () => {
     handleGenerateRandomWaypoints()
@@ -148,7 +148,7 @@ export default function BottomDock() {
             {/* Left column */}
             <div className="flex flex-col gap-2 min-w-0 min-h-0 h-full">
               <LeftColumn
-                mode={sim.mode}
+                mode={mode}
                 chainPoints={ctx.chainPoints}
                 loop={ctx.loop}
                 onRemoveWaypoint={handleRemoveWaypoint}

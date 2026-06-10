@@ -1,10 +1,10 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
-import { useSimContext } from './SimContext'
+import { useSimState } from './SimContext'
 import { pickDisplaySpeed, toLatLng } from '../lib/sim-derive'
 
-// A focused slice of SimContext for read-only consumers (route cards,
-// pause-resume pill, action gating). The 5 fields here also live on
-// SimContext.value for backward compat with non-migrated consumers.
+// A focused slice of sim state for read-only consumers (route cards,
+// pause-resume pill, action gating). Derived from `SimStateContext` so
+// every formula lives in `lib/sim-derive.ts` exactly once.
 export interface SimDerivedContextValue {
   currentPos: { lat: number; lng: number } | null
   destPos: { lat: number; lng: number } | null
@@ -21,7 +21,7 @@ interface SimDerivedProviderProps {
 }
 
 export function SimDerivedProvider({ children }: SimDerivedProviderProps) {
-  const { sim } = useSimContext()
+  const sim = useSimState()
 
   // Derivations live in `lib/sim-derive.ts` so this provider and
   // `SimContext` agree on every formula (toLatLng, pickDisplaySpeed) by

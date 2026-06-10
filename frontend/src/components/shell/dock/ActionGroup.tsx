@@ -1,6 +1,6 @@
 import React from 'react'
 import { Play, Square, Pause, ArrowRight } from 'lucide-react'
-import { useSimContext } from '../../../contexts/SimContext'
+import { useSimActions, useSimState } from '../../../contexts/SimContext'
 import { useSimDerived } from '../../../contexts/SimDerivedContext'
 import { SimMode } from '../../../hooks/useSimulation'
 import { useT } from '../../../i18n'
@@ -15,12 +15,11 @@ const MIN_WAYPOINTS_FOR_PATH = 2
 export default function ActionGroup({ fullWidth }: { fullWidth?: boolean } = {}) {
   const t = useT()
   const {
-    sim,
     handleStart, handleStop, handlePause, handleResume, handleTeleport,
-  } = useSimContext()
+  } = useSimActions()
+  const { mode, waypoints } = useSimState()
   const { isRunning, isPaused, destPos } = useSimDerived()
-  const mode = sim.mode
-  const waypointCount = sim.waypoints.length
+  const waypointCount = waypoints.length
 
   if (mode === SimMode.Teleport) {
     return (

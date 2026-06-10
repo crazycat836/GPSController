@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Route as RouteIcon, Save } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
-import { useSimContext } from '../../contexts/SimContext'
+import { useSimState } from '../../contexts/SimContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
@@ -33,7 +33,7 @@ interface OverwriteState {
 export default function SaveRouteDialog({ open, onClose }: SaveRouteDialogProps) {
   const t = useT()
   const bm = useBookmarkContext()
-  const { sim } = useSimContext()
+  const { waypoints: simWaypoints, moveMode: simMoveMode } = useSimState()
   const { showToast } = useToastContext()
 
   const [name, setName] = useState('')
@@ -41,7 +41,7 @@ export default function SaveRouteDialog({ open, onClose }: SaveRouteDialogProps)
   const [busy, setBusy] = useState(false)
   const [overwrite, setOverwrite] = useState<OverwriteState | null>(null)
 
-  const waypointsCount = sim.waypoints.length
+  const waypointsCount = simWaypoints.length
 
   // Reset transient fields each time the dialog opens.
   useEffect(() => {
@@ -56,9 +56,9 @@ export default function SaveRouteDialog({ open, onClose }: SaveRouteDialogProps)
 
   const handleSave = useCallback(async () => {
     const trimmed = name.trim()
-    if (!trimmed || sim.waypoints.length === 0) return
-    const waypoints = sim.waypoints.map((w) => ({ lat: w.lat, lng: w.lng }))
-    const moveMode = sim.moveMode
+    if (!trimmed || simWaypoints.length === 0) return
+    const waypoints = simWaypoints.map((w) => ({ lat: w.lat, lng: w.lng }))
+    const moveMode = simMoveMode
     setBusy(true)
     // Try `reject` first so a same-name match surfaces the overwrite
     // prompt instead of silently creating a duplicate.
@@ -75,7 +75,7 @@ export default function SaveRouteDialog({ open, onClose }: SaveRouteDialogProps)
       setOverwrite({ name: trimmed, waypoints, moveMode, categoryId, existingCreatedAt: result.existingCreatedAt })
     }
     // 'error' — the context already surfaced a toast.
-  }, [name, sim.waypoints, sim.moveMode, bm, categoryId, onClose])
+  }, [name, simWaypoints, simMoveMode, bm, categoryId, onClose])
 
   const resolveOverwrite = useCallback(async (policy: 'overwrite' | 'new') => {
     if (!overwrite) return

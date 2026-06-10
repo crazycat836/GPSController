@@ -160,7 +160,7 @@ All verified dead by project-wide grep including dynamic-key patterns.
       (`primaryRuntime` memo already exists, useSimulation.ts:685-688) so there is one
       write path; migrate remaining consumers; delete the legacy branch of
       `useSimWsDispatcher` (310-465). Gate on the Phase 1.4 dispatcher tests.
-- [ ] **4A.2** Split `SimContext` into a stable `SimActionsContext` (the ~17 useCallback-
+- [x] **4A.2** Split `SimContext` into a stable `SimActionsContext` (the ~17 useCallback-
       stable handlers) and a ticking `SimStateContext`, extending the existing
       SimDerivedContext pattern. Stop exposing the raw `sim` object. Fixes the
       every-tick re-render of 14 consumers + removes the workaround refs
@@ -190,7 +190,7 @@ All verified dead by project-wide grep including dynamic-key patterns.
 - [ ] **4B.3** Move engine recovery (`_get_or_rebuild_engine`, `_force_reconnect`,
       `exec_with_retry` — api/location/_helpers.py:60-148) into a service; move the
       forget_device flow (api/device.py:127-292) into core.
-- [ ] **4B.4** `SimulationSnapshot.replay_on(engine)` to replace the hand-spelled 4-way
+- [x] **4B.4** `SimulationSnapshot.replay_on(engine)` to replace the hand-spelled 4-way
       kwargs dispatch in `state.py:368-417`; extract `_sync_new_device_to_primary` into
       its own module; extract a `SettingsStore` from AppState.
 - [ ] **4B.5** Decide and document the real core↔services arrow; pass AppState/engine
