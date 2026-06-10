@@ -7,5 +7,3 @@ export const ICON_SIZE = {
   md: 16,
   lg: 20,
 } as const
-
-export type IconSize = keyof typeof ICON_SIZE

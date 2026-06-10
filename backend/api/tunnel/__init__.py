@@ -1,6 +1,6 @@
 """/api/device/wifi/* router aggregate.
 
-Sub-routers each handle one concern (scan / pair / lifecycle). This
+Sub-routers each handle one concern (discover / repair / lifecycle). This
 module wires them up under the shared ``/api/device`` prefix so
 ``main.py`` can use a single ``from api.tunnel import router`` import.
 """

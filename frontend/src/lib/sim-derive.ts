@@ -31,7 +31,7 @@ export function toLatLng(p: LatLng | null | undefined): LatLng | null {
  * caller has no overrides. This is the function that used to be a local
  * `fmt` closure inside both providers.
  */
-export function formatDisplaySpeed(
+function formatDisplaySpeed(
   kmh: number | null,
   lo: number | null,
   hi: number | null,

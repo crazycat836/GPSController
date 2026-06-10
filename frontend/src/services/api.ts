@@ -12,7 +12,6 @@ import { devWarn } from '../lib/dev-log'
 import { STRINGS } from '../i18n/strings'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../hooks/useBookmarks'
 import type { DeviceInfo } from '../hooks/useDevice'
-import type { LatLng } from '../hooks/sim/types'
 
 // ─── Shared response shapes ─────────────────────────────────
 
@@ -52,15 +51,6 @@ export interface RouteCategory {
 /** Saved-route conflict policy mirroring backend `ConflictPolicy`. */
 export type RouteConflictPolicy = 'new' | 'overwrite' | 'reject'
 
-/** Detail body the backend ships with a 409 ROUTE_NAME_CONFLICT so the
- *  overwrite-prompt has enough context without a follow-up GET. */
-export interface RouteNameConflictDetail {
-  code: 'route_name_conflict'
-  message: string
-  existing_id: string | null
-  existing_created_at: string | null
-}
-
 /** Store envelope returned by `/api/bookmarks`. */
 export interface BookmarkStore {
   places: BookmarkPlace[]
@@ -74,13 +64,6 @@ export interface WifiTunnelStatus {
   port?: number
   rsd_address?: string
   rsd_port?: number
-}
-
-export interface WifiScanResult {
-  ip: string
-  name: string
-  udid: string
-  ios_version: string
 }
 
 export interface AddressSearchResult {
@@ -381,8 +364,6 @@ export const forgetDevice = (udid: string) =>
     // "partial" and the UI can warn that the host is still trusted.
     failed?: { path: string; error: string }[]
   }>('DELETE', `/api/device/${udid}/pair`)
-export const clearAutoReconnectBlocks = () =>
-  request<{ status: string }>('POST', '/api/device/auto-reconnect/reset')
 export interface WifiConnectResponse {
   status: string
   udid: string
@@ -390,8 +371,6 @@ export interface WifiConnectResponse {
   ios_version: string
   connection_type?: string
 }
-export const wifiConnect = (ip: string) => request<WifiConnectResponse>('POST', '/api/device/wifi/connect', { ip })
-export const wifiScan = () => request<WifiScanResult[]>('GET', '/api/device/wifi/scan')
 export const wifiTunnelStartAndConnect = (ip: string, port = DEFAULT_TUNNEL_PORT, udid?: string) =>
   request<WifiConnectResponse & WifiTunnelStatus>('POST', '/api/device/wifi/tunnel/start-and-connect', { ip, port, ...(udid ? { udid } : {}) })
 export const wifiTunnelStatus = () => request<WifiTunnelStatus>('GET', '/api/device/wifi/tunnel/status')
@@ -477,12 +456,6 @@ export const getCooldownStatus = () =>
   request<CooldownStatusResponse>('GET', '/api/location/cooldown/status')
 export const setCooldownEnabled = (enabled: boolean) =>
   request<StatusResponse>('PUT', '/api/location/cooldown/settings', { enabled })
-export const dismissCooldown = () => request<StatusResponse>('POST', '/api/location/cooldown/dismiss')
-
-// Coord format
-export const getCoordFormat = () => request<{ format: string }>('GET', '/api/location/settings/coord-format')
-export const setCoordFormat = (format: string) =>
-  request<StatusResponse>('PUT', '/api/location/settings/coord-format', { format })
 
 // Geocoding
 export interface ReverseGeocodeResult {
@@ -609,7 +582,6 @@ export const setWifiKeepalive = (enabled: boolean) =>
 export const getLastDevicePosition = () =>
   request<{ position: { lat: number; lng: number } | null }>('GET', '/api/location/last-device-position')
 
-export const openLog = () => request<{ status: string; path: string }>('POST', '/api/system/open-log')
 export const openLogFolder = () => request<{ status: string; path: string }>('POST', '/api/system/open-log-folder')
 
 export const applySpeed = (mode: string, opts: SpeedOpts, udid?: string) =>
@@ -622,13 +594,6 @@ export const applySpeed = (mode: string, opts: SpeedOpts, udid?: string) =>
   })
 
 // Routes
-export interface RoutePlanResponse {
-  coordinates: LatLng[]
-  distance_m?: number
-  duration_s?: number
-}
-export const planRoute = (start: LatLng, end: LatLng, profile: string) =>
-  request<RoutePlanResponse>('POST', '/api/route/plan', { start, end, profile })
 export const getSavedRoutes = () => request<SavedRoute[]>('GET', '/api/route/saved')
 export const saveRoute = (
   route: Omit<SavedRoute, 'id' | 'created_at' | 'updated_at' | 'sort_order'>,
@@ -656,19 +621,6 @@ export const moveRoutesToCategory = (routeIds: string[], targetCategoryId: strin
 // Drag-reorder
 export const reorderRoutes = (orderedIds: string[]) =>
   request<{ reordered: number }>('POST', '/api/route/saved/reorder', { ordered_ids: orderedIds })
-
-// Optimize order — reorders waypoints to minimise total travel time
-// under the given profile. Index 0 is anchored. See backend
-// services/route_optimizer.py for the heuristic.
-export interface OptimizeOrderResponse {
-  order: number[]
-  waypoints: { lat: number; lng: number }[]
-  total_seconds: number
-}
-export const optimizeRoute = (
-  waypoints: { lat: number; lng: number }[],
-  profile: string,
-) => request<OptimizeOrderResponse>('POST', '/api/route/optimize', { waypoints, profile })
 
 // Gold Ditto (拉金盆) one-shot cycle — pushes simulated GPS to ``lat,lng``
 // then immediately restores real GPS. See backend core/gold_ditto.py.

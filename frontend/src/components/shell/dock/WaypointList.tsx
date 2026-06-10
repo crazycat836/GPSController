@@ -1,4 +1,3 @@
-import React from 'react'
 import { Crosshair, MapPin, X, Star, Plus, Dices, Repeat } from 'lucide-react'
 import { haversineM } from '../../../lib/geo'
 import { useT } from '../../../i18n'

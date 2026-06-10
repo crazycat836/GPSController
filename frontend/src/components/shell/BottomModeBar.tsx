@@ -1,4 +1,3 @@
-import React from 'react'
 import { Crosshair, Navigation, SquareCheckBig, Gamepad2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SimMode } from '../../hooks/useSimulation'

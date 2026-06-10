@@ -7,8 +7,6 @@ HTTP wiring. Owns:
   - Persistent settings (``last_position`` / ``initial_map_position`` /
     ``coord_format``) in ``~/.gpscontroller/settings.json``
   - The CooldownTimer / BookmarkManager / CoordinateFormatter singletons
-  - Auto-reconnect blocklist (UDIDs the user explicitly disconnected;
-    the usbmux watchdog skips them)
   - Dual-device auto-sync (``_sync_new_device_to_primary``): when a
     secondary device connects while the primary is mid-route, replay
     the primary's in-flight snapshot on the newcomer.
@@ -68,12 +66,6 @@ class AppState:
         # rationale sits next to other tunables.
         self._last_save_time: float = 0.0
         self._save_interval: float = STATE_SAVE_INTERVAL_SEC
-        # UDIDs the user explicitly disconnected. The usbmux watchdog
-        # respects this set: a blocked UDID is NOT auto-reconnected even
-        # if usbmuxd still reports it. Unblocked when (a) the user
-        # clicks Connect, (b) the frontend boots and calls the reset
-        # endpoint, or (c) the backend restarts (set is in-memory only).
-        self._no_auto_reconnect: set[str] = set()
         # In-flight dual-device auto-sync tasks. Stored so the event loop
         # keeps a strong reference — a bare ``create_task`` can be GC'd
         # mid-run (documented asyncio footgun) — and so each can be
@@ -167,26 +159,6 @@ class AppState:
         frontend can pre-render the position pin on app launch.
         """
         return self._last_position
-
-    def block_auto_reconnect(self, udid: str) -> None:
-        """Mark *udid* as 'user-disconnected' — watchdog will skip it."""
-        self._no_auto_reconnect.add(udid)
-
-    def unblock_auto_reconnect(self, udid: str) -> None:
-        """Allow auto-reconnect for *udid* again (e.g. user clicked Connect)."""
-        self._no_auto_reconnect.discard(udid)
-
-    def clear_auto_reconnect_blocks(self) -> None:
-        """Reset the entire blocklist (called when the frontend boots)."""
-        self._no_auto_reconnect.clear()
-
-    def is_auto_reconnect_blocked(self, udid: str) -> bool:
-        return udid in self._no_auto_reconnect
-
-    def clear_position_settings(self) -> None:
-        """Clear both the initial map center and the last-known device position."""
-        self._initial_map_position = None
-        self._last_position = None
 
     @property
     def simulation_engine(self):

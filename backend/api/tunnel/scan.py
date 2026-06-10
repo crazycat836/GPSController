@@ -1,4 +1,4 @@
-"""WiFi-scan / discover endpoints under /api/device/wifi/*."""
+"""WiFi-discover endpoint under /api/device/wifi/*."""
 
 from __future__ import annotations
 
@@ -7,27 +7,12 @@ import logging
 
 from fastapi import APIRouter
 
-from api._deps import get_device_manager
-from api._errors import ErrorCode, http_err
 from config import REMOTE_PAIRING_PORT
 from services.wifi_discovery import resolve_hostname, scan_subnet_for_port
 
-logger = logging.getLogger(__name__)
 _tunnel_logger = logging.getLogger("wifi_tunnel")
 
 router = APIRouter()
-
-
-@router.get("/wifi/scan")
-async def wifi_scan():
-    """Scan the local network for iOS devices."""
-    dm = get_device_manager()
-    try:
-        results = await dm.scan_wifi_devices()
-        return results
-    except Exception:
-        logger.exception("WiFi scan failed")
-        raise http_err(500, ErrorCode.SCAN_FAILED, "WiFi scan failed; please retry shortly")
 
 
 @router.get("/wifi/tunnel/discover")

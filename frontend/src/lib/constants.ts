@@ -33,7 +33,7 @@ export type DeviceLetter = (typeof DEVICE_LETTERS)[number]
  * have to fork the source. `API_BASE` and `WS_BASE` are derived, so a
  * single override covers both transports.
  */
-export const API_HOST = import.meta.env.VITE_API_HOST ?? '127.0.0.1:8777'
+const API_HOST = import.meta.env.VITE_API_HOST ?? '127.0.0.1:8777'
 export const API_BASE = `http://${API_HOST}`
 export const WS_BASE = `ws://${API_HOST}/ws/status`
 export const DEFAULT_TUNNEL_PORT = 49152

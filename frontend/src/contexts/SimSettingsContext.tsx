@@ -36,7 +36,7 @@ export interface SimSettingsContextValue {
 // (mapped to the speed multiplier as level/3 on the wire).
 export const JOYSTICK_SENSITIVITY_MIN = 1
 export const JOYSTICK_SENSITIVITY_MAX = 5
-export const JOYSTICK_SENSITIVITY_DEFAULT = 3
+const JOYSTICK_SENSITIVITY_DEFAULT = 3
 
 const SimSettingsContext = createContext<SimSettingsContextValue | null>(null)
 

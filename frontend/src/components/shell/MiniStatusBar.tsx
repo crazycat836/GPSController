@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Copy, Check, Usb, Wifi, MapPinOff } from 'lucide-react'
 import { useSimContext } from '../../contexts/SimContext'
 import { useSimDerived } from '../../contexts/SimDerivedContext'

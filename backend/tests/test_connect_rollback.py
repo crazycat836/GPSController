@@ -93,9 +93,6 @@ class _FakeAppState:
         if self._fail_terminate:
             raise RuntimeError("simulated terminate failure")
 
-    def unblock_auto_reconnect(self, udid: str) -> None:
-        pass
-
 
 @pytest.fixture(autouse=True)
 def _reset_ctx() -> Iterator[None]:
@@ -186,28 +183,24 @@ def test_usb_connect_success_path_unchanged():
 
 # ─── Path 2: WiFi tunnel connect (connect_device_over_tunnel) ────────
 
-def test_tunnel_connect_engine_failure_rolls_back_store_and_keeps_connect_failed():
-    """Same rollback contract on the /wifi/tunnel route: store must not
-    stay CONNECTED, device_error fires, HTTP surface stays 500
-    CONNECT_FAILED (the route's pre-existing mapping)."""
-    from fastapi import HTTPException
-    from api.tunnel import pair
+def test_tunnel_connect_engine_failure_rolls_back_store_and_reraises():
+    """Same rollback contract on the shared tunnel-connect helper (used by
+    /wifi/tunnel/start-and-connect): store must not stay CONNECTED,
+    device_error fires, and the engine failure re-raises unchanged so the
+    route's existing 500 CONNECT_FAILED mapping still applies."""
+    from api.tunnel._helpers import connect_device_over_tunnel
     from services.connection_state import store, DeviceState
 
     dm = _FakeDM("u-wifi")
     app_state = _FakeAppState(dm, fail_engine=True)
     _install(app_state)
 
-    req = pair.WifiTunnelConnectRequest(rsd_address="127.0.0.1", rsd_port=49152)
-
     async def _run() -> AsyncMock:
         with patch(
             "services.connection_state.broadcast", new=AsyncMock(),
         ) as mock_bcast:
-            with pytest.raises(HTTPException) as ei:
-                await pair.wifi_tunnel_connect(req)
-            assert ei.value.status_code == 500
-            assert ei.value.detail["code"] == "connect_failed"
+            with pytest.raises(RuntimeError, match="simulated engine creation failure"):
+                await connect_device_over_tunnel("127.0.0.1", 49152)
             return mock_bcast
 
     mock_bcast = asyncio.run(_run())

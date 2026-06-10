@@ -33,7 +33,3 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
 ]
 
 export const DEFAULT_AVATAR_KEY: AvatarPresetKey = 'boy'
-
-export function getPresetSvg(key: AvatarPresetKey): string {
-  return AVATAR_PRESETS.find((p) => p.key === key)?.svg28 ?? AVATAR_PRESETS[0].svg28
-}

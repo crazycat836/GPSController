@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { MapPin, Crosshair } from 'lucide-react'
 import type { BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
 import { ICON_SIZE } from '../../lib/icons'

@@ -20,7 +20,6 @@ from models.schemas import (
 from services.location_service import DeviceLostError, LocationService, unwrap_device_lost
 from services.route_service import RouteService
 from config import (
-    SPEED_PROFILES,
     SpeedProfile,
     DEFAULT_PAUSE_ENABLED,
     DEFAULT_PAUSE_MIN,

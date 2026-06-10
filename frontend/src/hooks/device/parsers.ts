@@ -27,13 +27,6 @@ export interface DeviceInfo {
   can_reveal_developer_mode?: boolean
 }
 
-export interface WifiScanResult {
-  ip: string
-  name: string
-  udid: string
-  ios_version: string
-}
-
 export type WsSubscribe = (fn: (m: WsMessage) => void) => () => void
 
 export interface DeviceConnectedPayload {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type L from 'leaflet'
 import { useT } from './i18n'
@@ -134,7 +134,7 @@ function AppShell() {
   const simSettings = useSimSettings()
   const bm = useBookmarkContext()
   const health = useConnectionHealth()
-  const { sim, joystick, handlePause, handleResume } = simCtx
+  const { sim, handlePause, handleResume } = simCtx
 
   // Track the last-used Route sub-mode so switching back to "Route"
   // resumes the same sub-tab (Loop / Multi-Stop / Random).
@@ -352,7 +352,6 @@ function AppShell() {
           deviceConnected={device.connectedDevice !== null}
           onShowToast={toast.showToast}
           layerKey={layerKey}
-          onLayerChange={handleLayerChange}
           onMapReady={handleMapReady}
           pcPosition={pcMarkerCoord}
         />

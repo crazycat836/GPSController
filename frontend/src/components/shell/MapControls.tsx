@@ -1,4 +1,3 @@
-import React from 'react'
 import { useT } from '../../i18n'
 import VerticalToolbar, { ToolbarButton, ToolbarDivider } from './VerticalToolbar'
 

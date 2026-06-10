@@ -115,7 +115,6 @@ def _make_state():
     state._primary_udid = None
     state._sync_tasks = set()
     state._engine_lock = asyncio.Lock()
-    state._no_auto_reconnect = set()
     state.device_manager = SimpleNamespace(
         get_location_service=AsyncMock(return_value=MagicMock(name="loc_service")),
     )

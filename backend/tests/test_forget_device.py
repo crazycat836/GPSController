@@ -57,13 +57,9 @@ class _AppState:
     def __init__(self, dm) -> None:
         self.device_manager = dm
         self.terminate_calls: list[str] = []
-        self.unblock_calls: list[str] = []
 
     async def terminate_engine(self, udid: str) -> None:
         self.terminate_calls.append(udid)
-
-    def unblock_auto_reconnect(self, udid: str) -> None:
-        self.unblock_calls.append(udid)
 
 
 class _ProtectedPath:
@@ -131,7 +127,6 @@ def test_forget_unpairs_via_usbmux_lockdown_and_succeeds_despite_protected_file(
     assert res["device_unpaired"] is True
     # The protected file is still reported as failed, but it's non-fatal.
     assert res["failed"]
-    assert app_state.unblock_calls == ["u-ipad"]
 
 
 def test_forget_falls_back_to_lockdown_when_no_usbmux_lockdown():
@@ -218,5 +213,3 @@ def test_forget_succeeds_via_usbmuxd_when_device_disconnected_or_locked():
     assert res["status"] == "forgotten"
     assert res["device_unpaired"] is False
     assert res["usbmux_record_deleted"] is True
-    # disconnect_device must NOT be called when there was no live connection.
-    assert app_state.unblock_calls == ["u-locked"]

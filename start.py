@@ -10,7 +10,6 @@ import os
 import time
 import shutil
 import webbrowser
-import urllib.request
 import socket
 
 # 路徑設定
@@ -20,7 +19,7 @@ FRONTEND = os.path.join(ROOT, "frontend")
 
 # 共用 box-drawing helpers (與 build.py 共用)
 sys.path.insert(0, ROOT)
-from tools.terminal_ui import visual_width, box_line, box_border  # noqa: E402, F401
+from tools.terminal_ui import box_line, box_border  # noqa: E402
 
 # Single source of truth for the backend bind port lives in backend/config.py;
 # importing it here keeps start / stop / backend in lockstep automatically.

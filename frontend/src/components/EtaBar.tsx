@@ -1,4 +1,3 @@
-import React from 'react'
 import { Pause, Play } from 'lucide-react'
 import { useT } from '../i18n'
 import { useSimContext } from '../contexts/SimContext'

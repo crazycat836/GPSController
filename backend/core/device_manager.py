@@ -18,13 +18,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import socket
 import time
 from dataclasses import dataclass
 from typing import Any
 
 from pymobiledevice3.exceptions import DeviceNotFoundError, PairingError
-from pymobiledevice3.lockdown import create_using_usbmux, create_using_tcp
+from pymobiledevice3.lockdown import create_using_usbmux
 from pymobiledevice3.remote.remote_service_discovery import RemoteServiceDiscoveryService
 from pymobiledevice3.remote.tunnel_service import CoreDeviceTunnelProxy
 from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
@@ -39,8 +38,6 @@ from core.device_utils import (  # noqa: F401  (re-exported for existing importe
     UnsupportedIosVersionError,
     delete_usbmux_pair_record,
     parse_ios_version,
-    _guess_local_subnet,
-    _load_pair_record,
 )
 from models.schemas import DeviceInfo
 from services.location_service import LocationService
@@ -48,14 +45,9 @@ from services.location_service import LocationService
 
 logger = logging.getLogger(__name__)
 
-# Apple lockdownd TCP port — every iOS device listens here for the
-# usbmuxd / wifi pair-record handshake. Used by the WiFi /24 subnet
-# scan to identify which IPs on the LAN are likely iPhones/iPads.
-_LOCKDOWND_PORT = 62078
-
-# UnsupportedIosVersionError, parse_ios_version, delete_usbmux_pair_record,
-# _load_pair_record and _guess_local_subnet now live in core.device_utils and
-# are re-exported via the import at the top of this module.
+# UnsupportedIosVersionError, parse_ios_version and delete_usbmux_pair_record
+# now live in core.device_utils and are re-exported via the import at the
+# top of this module.
 
 
 @dataclass
@@ -640,69 +632,6 @@ class DeviceManager:
             connection_type="Network",
             is_connected=True,
         )
-
-    async def scan_wifi_devices(
-        self,
-        subnet: str | None = None,
-        timeout: float = 0.5,
-    ) -> list[dict]:
-        """Scan the local network for iOS devices on the lockdownd TCP port.
-
-        Tries each IP in the subnet concurrently.  Returns a list of
-        ``{"ip": ..., "name": ..., "udid": ...}`` dicts for reachable
-        devices.
-
-        If *subnet* is not given, the local machine's subnet is guessed
-        from the default route interface.
-        """
-        if subnet is None:
-            subnet = _guess_local_subnet()
-            if subnet is None:
-                logger.warning("Cannot determine local subnet for WiFi scan")
-                return []
-
-        logger.info("Scanning subnet %s for iOS devices...", subnet)
-
-        # Generate IPs: e.g. "192.168.1" → .1 to .254
-        base = subnet.rsplit(".", 1)[0]
-        ips = [f"{base}.{i}" for i in range(1, 255)]
-
-        async def _probe(ip: str) -> dict | None:
-            try:
-                _, writer = await asyncio.wait_for(
-                    asyncio.open_connection(ip, _LOCKDOWND_PORT),
-                    timeout=timeout,
-                )
-                writer.close()
-                await writer.wait_closed()
-                # Port is open — try a quick lockdown to get device info
-                try:
-                    pair_rec = _load_pair_record()
-                    lockdown = await asyncio.wait_for(
-                        create_using_tcp(
-                            ip,
-                            pair_record=pair_rec,
-                            autopair=pair_rec is None,
-                        ),
-                        timeout=5.0,
-                    )
-                    vals = lockdown.all_values
-                    return {
-                        "ip": ip,
-                        "name": vals.get("DeviceName", "Unknown"),
-                        "udid": vals.get("UniqueDeviceID", lockdown.udid or ""),
-                        "ios_version": vals.get("ProductVersion", "0.0"),
-                    }
-                except Exception:
-                    # Port open but lockdown failed — still report it
-                    return {"ip": ip, "name": "iOS Device", "udid": "", "ios_version": ""}
-            except (OSError, asyncio.TimeoutError):
-                return None
-
-        results = await asyncio.gather(*[_probe(ip) for ip in ips])
-        found = [r for r in results if r is not None]
-        logger.info("WiFi scan found %d device(s)", len(found))
-        return found
 
     # ------------------------------------------------------------------
     # Utilities

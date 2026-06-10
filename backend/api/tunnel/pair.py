@@ -1,55 +1,23 @@
-"""Pair / repair endpoints — connect via existing tunnel + regenerate pair record."""
+"""Repair endpoint — regenerate the RemotePairing pair record."""
 
 from __future__ import annotations
 
 import logging
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field, field_validator
 
-from api._deps import get_device_manager
-from api._errors import ErrorCode, http_err, ios_unsupported_error, max_devices_error
+from api._errors import ErrorCode, http_err
 from api.tunnel._helpers import (
     RemotePairResources,
     close_remote_pair_resources,
-    connect_device_over_tunnel,
     perform_remote_pair_handshake,
     select_usb_device,
-    validate_local_ip,
 )
-from config import MAX_DEVICES
 
 logger = logging.getLogger(__name__)
 _tunnel_logger = logging.getLogger("wifi_tunnel")
 
 router = APIRouter()
-
-
-class WifiTunnelConnectRequest(BaseModel):
-    rsd_address: str
-    rsd_port: int = Field(ge=1, le=65535)
-
-    @field_validator("rsd_address")
-    @classmethod
-    def _check_rsd_address(cls, v: str) -> str:
-        return validate_local_ip(v)
-
-
-@router.post("/wifi/tunnel")
-async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
-    """Connect to a device via an existing WiFi tunnel (RSD address/port)."""
-    from core.device_manager import UnsupportedIosVersionError
-    dm = get_device_manager()
-    # Gate stays OUTSIDE the try so max_devices_error isn't remapped to CONNECT_FAILED.
-    if dm.connected_count >= MAX_DEVICES:
-        raise max_devices_error()
-    try:
-        return await connect_device_over_tunnel(req.rsd_address, req.rsd_port)
-    except UnsupportedIosVersionError as e:
-        raise ios_unsupported_error(e.version)
-    except Exception:
-        logger.exception("WiFi tunnel connect failed", extra={"rsd_address": req.rsd_address})
-        raise http_err(500, ErrorCode.CONNECT_FAILED, "Connection failed; ensure the tunnel is still running and retry")
 
 
 @router.post("/wifi/repair")

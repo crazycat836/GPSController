@@ -3,73 +3,6 @@
    Migrated from styles.css — all using design system tokens.
    ═══════════════════════════════════════════════════════════════ */
 
-/* ── Section title ──────────────────────────────────────────── */
-.section-title {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-text-2);
-  margin-bottom: 8px;
-  padding: 0 4px;
-}
-
-/* ── Mode buttons ───────────────────────────────────────────── */
-.mode-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  background: var(--color-surface-2);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  color: var(--color-text-2);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 140ms var(--ease-out-expo);
-  text-align: left;
-}
-.mode-btn:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text-1);
-  border-color: var(--color-border-strong);
-  transform: translateY(-1px);
-}
-.mode-btn:active { transform: translateY(0) scale(0.98); transition-duration: 80ms; }
-.mode-btn.active {
-  background: var(--color-accent-dim);
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-accent-dim), 0 0 0 3px rgba(167, 139, 250, 0.1);
-}
-
-/* ── Speed buttons ──────────────────────────────────────────── */
-.speed-selector { display: flex; gap: 6px; }
-
-.speed-btn {
-  flex: 1;
-  padding: 10px 4px;
-  text-align: center;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-2);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 140ms var(--ease-out-expo);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-.speed-btn svg { opacity: 0.6; }
-.speed-btn:hover { background: var(--color-surface-hover); color: var(--color-text-1); border-color: var(--color-border-strong); }
-.speed-btn:hover svg { opacity: 1; }
-.speed-btn.active { background: var(--color-success-dim); color: var(--color-success); border-color: var(--color-success); }
-.speed-btn.active svg { opacity: 1; stroke: var(--color-success); }
-
 /* ── Search ─────────────────────────────────────────────────── */
 .search-input {
   width: 100%;
@@ -84,17 +17,6 @@
 }
 .search-input::placeholder { color: var(--color-text-3); }
 .search-input:focus { border-color: var(--color-accent); }
-
-.search-results { margin-top: 6px; max-height: 200px; overflow-y: auto; }
-.search-result-item {
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  color: var(--color-text-2);
-  cursor: pointer;
-  transition: background 140ms var(--ease-out-expo);
-}
-.search-result-item:hover { background: var(--color-surface-hover); color: var(--color-text-1); }
 
 /* ── Context menu ───────────────────────────────────────────── */
 .context-menu {
@@ -130,44 +52,6 @@
 }
 .context-menu-item svg { flex-shrink: 0; opacity: 0.7; }
 .context-menu-item:hover svg, .context-menu-item:focus-visible svg { opacity: 1; }
-
-/* ── Control panel & sections ───────────────────────────────── */
-.control-panel {
-  overflow-y: auto;
-  flex: 1;
-  scrollbar-gutter: stable;
-}
-
-.section {
-  padding: 12px 14px;
-  background: rgba(20, 23, 34, 0.75);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  transition: border-color 140ms var(--ease-out-expo), transform 140ms var(--ease-out-expo);
-}
-.section:hover { border-color: rgba(167, 139, 250, 0.18); }
-.section + .section { border-top: 1px solid var(--color-border-subtle); }
-.section > .section-title {
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  user-select: none;
-  position: relative;
-  padding-left: 10px;
-}
-.section > .section-title::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 2px; bottom: 2px;
-  width: 3px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, var(--color-accent), rgba(167, 139, 250, 0.25));
-  opacity: 0.7;
-}
-.section > .section-title:hover { color: var(--color-text-1); }
-.section > .section-title:hover::before { opacity: 1; }
-.section-content { padding-top: 10px; }
 
 /* ── Action buttons ─────────────────────────────────────────── */
 .action-btn {
@@ -228,17 +112,6 @@
   background: var(--dock-hover-bg);
 }
 
-/* ── Device status ──────────────────────────────────────────── */
-.device-status {
-  padding: 10px;
-  background: var(--color-surface-2);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  transition: border-color 140ms var(--ease-out-expo);
-}
-.device-status.device-connected { border-color: rgba(78, 205, 196, 0.3); }
-.device-status.device-disconnected { border-color: var(--color-border); }
-
 /* ── ETA bar ────────────────────────────────────────────────── */
 /* Per DESIGN.md §1 no backdrop-filter on full-width bars over the map;
    solid high-alpha fill avoids the Chrome GPU tile-boundary seam. */
@@ -294,33 +167,6 @@
   z-index: var(--z-bar);
   flex-shrink: 0;
 }
-
-/* ── Bookmark item ──────────────────────────────────────────── */
-.bookmark-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px;
-  min-height: 36px;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  color: var(--color-text-1);
-  transition: background 140ms var(--ease-out-expo);
-  border: none;
-  background: none;
-  width: 100%;
-  text-align: left;
-}
-.bookmark-item:hover { background: var(--color-surface-hover); }
-.bookmark-item:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
-  background: var(--color-surface-hover);
-}
-.bookmark-item svg { opacity: 0.5; flex-shrink: 0; }
-.bookmark-item:hover svg, .bookmark-item:focus-visible svg { opacity: 0.8; }
-.bookmark-group { margin-bottom: 4px; }
 
 /* ── Toast / notification pill ───────────────────────────────
    Unified floating notification style for toast, cooldown, pause.

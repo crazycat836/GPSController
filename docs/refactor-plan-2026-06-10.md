@@ -100,55 +100,55 @@ All verified dead by project-wide grep including dynamic-key patterns.
 
 ### Frontend
 
-- [ ] **3.1** i18n: delete the 157 orphaned keys in `src/i18n/strings.ts` (~25% of 624).
+- [x] **3.1** i18n: delete the 157 orphaned keys in `src/i18n/strings.ts` (~25% of 624).
       **Keep every `err.*` key** — live via `` `err.${e.code}` `` (api.ts:185) and pinned
       by the `BACKEND_ERROR_CODES` contract test. Largest dead groups: `panel.*` (61),
       `wifi.*` (24), `bm.*` (18), `status.*` (10).
-- [ ] **3.2** Dead files: `src/components/ui/CollapsibleSection.tsx`,
+- [x] **3.2** Dead files: `src/components/ui/CollapsibleSection.tsx`,
       `src/components/DeviceChip.tsx` (also fix the stale comment in
       `shell/StatusPill.tsx:7`), `src/hooks/useDisabledByConnection.ts`,
       `src/styles/components/skeleton.css` (+ its `@import` in `src/index.css:15`).
-- [ ] **3.3** `legacy.css`: strip dead rule blocks (`.section-title`, `.mode-btn`,
+- [x] **3.3** `legacy.css`: strip dead rule blocks (`.section-title`, `.mode-btn`,
       `.speed-selector/.speed-btn`, `.search-results`, `.control-panel`,
       `.device-status`, `.bookmark-item/.bookmark-group`); keep live selectors
       (`.action-btn`, `.context-menu`, `.eta-bar`, `.joystick-*`, `.search-input`,
       `.toast-pill*`, `.status-bar`, `.sr-only`).
-- [ ] **3.4** Dead API wrappers in `services/api.ts`: `dismissCooldown`, `getCoordFormat`,
+- [x] **3.4** Dead API wrappers in `services/api.ts`: `dismissCooldown`, `getCoordFormat`,
       `setCoordFormat`, `openLog`, `planRoute`, `optimizeRoute` + orphaned types
       (`RoutePlanResponse`, `OptimizeOrderResponse`, `RouteNameConflictDetail` — note 2.1
       may resurrect the conflict detail type; reconcile).
-- [ ] **3.5** Broken wifiConnect chain (endpoint removed in v0.1.49): `api.ts:344
+- [x] **3.5** Broken wifiConnect chain (endpoint removed in v0.1.49): `api.ts:344
       wifiConnect` → `useWifiTunnel.ts:64-84 connectWifi` → pass-through in
       `useDevice.ts:226-238`.
-- [ ] **3.6** Dead exports: `MODE_LABEL_KEYS` (useSimulation.ts:101), `getPresetSvg`
+- [x] **3.6** Dead exports: `MODE_LABEL_KEYS` (useSimulation.ts:101), `getPresetSvg`
       (lib/avatars.ts:37), `METERS_PER_DEGREE_LAT` (lib/geo.ts:11), `IconSize`
       (lib/icons.ts:11). Un-export internal-only symbols: `toastForFanout`,
       `stateToMode`, `summarizeResults`, `JOYSTICK_SENSITIVITY_DEFAULT`, `API_HOST`,
       `formatDisplaySpeed` (keep exported if Phase 1 tests need them).
-- [ ] **3.7** Enable `noUnusedLocals`/`noUnusedParameters` in `tsconfig.json` after
+- [x] **3.7** Enable `noUnusedLocals`/`noUnusedParameters` in `tsconfig.json` after
       clearing the 11 current hits (unused `joystick` in App.tsx:137 + 10 redundant
       `import React` defaults).
 
 ### Backend
 
-- [ ] **3.8** `/wifi/scan` chain: route (`api/tunnel/scan.py:21`),
+- [x] **3.8** `/wifi/scan` chain: route (`api/tunnel/scan.py:21`),
       `DeviceManager.scan_wifi_devices` (~70 lines), `_guess_local_subnet`,
       `_load_pair_record` (confirm no other caller), `create_using_tcp` import, plus the
       frontend `wifiScan`/`scanWifi`/`wifiDevices`/`wifiScanning` surface.
-- [ ] **3.9** `CoordinateFormatter` (`services/coord_format.py`): shrink to a coord-format
+- [x] **3.9** `CoordinateFormatter` (`services/coord_format.py`): shrink to a coord-format
       preference holder; delete the ~210 lines of format/parse logic (zero callers).
-- [ ] **3.10** Write-only `_no_auto_reconnect` blocklist (`state.py:76,183`): remove the
+- [x] **3.10** Write-only `_no_auto_reconnect` blocklist (`state.py:76,183`): remove the
       plumbing (state methods, `/auto-reconnect/reset` endpoint at api/device.py:100,
       frontend boot call in useDevice.ts:54).
-- [ ] **3.11** Unconsumed endpoints: `GET /api/device/{udid}/info` (device.py:295),
+- [x] **3.11** Unconsumed endpoints: `GET /api/device/{udid}/info` (device.py:295),
       `DELETE /api/location/simulation` (location/lifecycle.py:87), standalone
       `POST /wifi/tunnel` (pair.py:38) and `POST /wifi/tunnel/start` (lifecycle.py:164)
       — the UI uses `/wifi/tunnel/start-and-connect` exclusively.
-- [ ] **3.12** Dead method `AppState.clear_position_settings` (state.py:186); unused
+- [x] **3.12** Dead method `AppState.clear_position_settings` (state.py:186); unused
       imports: `time`/`MAX_DEVICES` (main.py), `SPEED_PROFILES` (simulation_engine.py:23),
       `HTTPException` (location/lifecycle.py:13), `urllib.request`+`visual_width`
       (start.py), `os`+`visual_width` (build.py — narrow the noqa to E402).
-- [ ] **3.13** Housekeeping: clear stale `.claude/worktrees/agent-*` leftovers.
+- [x] **3.13** Housekeeping: clear stale `.claude/worktrees/agent-*` leftovers.
 
 ---
 

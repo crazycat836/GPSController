@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from api._errors import ErrorCode, http_err
@@ -81,13 +81,4 @@ async def stop_movement(udid: str | None = None):
     real GPS. restore() is a separate endpoint for that."""
     engine = await get_engine(udid)
     await guard(engine.stop())
-    return {"status": "stopped"}
-
-
-@router.delete("/simulation")
-async def stop_simulation(udid: str | None = None):
-    """Legacy endpoint: stop + restore. Kept for backwards compatibility,
-    prefer /stop (movement only) or /restore (clear location)."""
-    engine = await get_engine(udid)
-    await exec_with_retry(udid, engine, "restore", lambda e: e.restore())
     return {"status": "stopped"}

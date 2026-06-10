@@ -1,4 +1,4 @@
-"""WiFi-tunnel lifecycle — start / status / stop / start-and-connect."""
+"""WiFi-tunnel lifecycle — status / stop / start-and-connect."""
 
 from __future__ import annotations
 
@@ -112,11 +112,8 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
 
 
 async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
-    """Start an in-process WiFi tunnel. Body of the /wifi/tunnel/start
-    route, hoisted out so /wifi/tunnel/start-and-connect can reuse it
-    without one route handler calling another (which blurs the routing
-    layer + bypasses dependency injection / middleware).
-    """
+    """Start an in-process WiFi tunnel (requires admin). Used by the
+    /wifi/tunnel/start-and-connect route."""
     async with tunnel.lock:
         if tunnel.is_running():
             if tunnel.info:
@@ -160,12 +157,6 @@ async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
                 _tunnel_watchdog(tunnel.task, tunnel.generation)
             ))
         return {"status": "started", **info}
-
-
-@router.post("/wifi/tunnel/start")
-async def wifi_tunnel_start(req: WifiTunnelStartRequest):
-    """Start an in-process WiFi tunnel (requires admin)."""
-    return await _do_tunnel_start(req)
 
 
 @router.get("/wifi/tunnel/status")

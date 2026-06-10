@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   listDevices, connectDevice, disconnectDevice, forgetDevice,
-  clearAutoReconnectBlocks,
 } from '../services/api'
 import { devWarn } from '../lib/dev-log'
 import { deviceListEqual } from './device/parsers'
@@ -10,7 +9,7 @@ import { useDeviceWs } from './device/useDeviceWs'
 import type { DeviceLastDisconnect, DeviceLastError } from './device/useDeviceWs'
 import { useWifiTunnel } from './device/useWifiTunnel'
 
-export type { DeviceInfo, WifiScanResult, WsSubscribe, DeviceLostCause } from './device/parsers'
+export type { DeviceInfo, WsSubscribe, DeviceLostCause } from './device/parsers'
 export type { DeviceLastDisconnect, DeviceLastError } from './device/useDeviceWs'
 
 // Coalesce burst scans (visibility-change + WS-reconnect debounce can
@@ -48,14 +47,6 @@ export function useDevice(subscribe?: WsSubscribe) {
   // auto-connect path in `scan` for the canonical use.
   const wsEventGenRef = useRef(0)
   const bumpWsGen = useCallback(() => { wsEventGenRef.current += 1 }, [])
-
-  // Frontend boot — drop any "user-disconnected" marks from the prior
-  // session so a fresh page treats every paired device as eligible
-  // for auto-reconnect again. Endpoint is idempotent + fire-and-forget,
-  // so the StrictMode double-mount in dev is harmless.
-  useEffect(() => {
-    clearAutoReconnectBlocks().catch((err) => devWarn('clearAutoReconnectBlocks failed', err))
-  }, [])
 
   useDeviceWs(subscribe, {
     setDevices, setConnectedDevice, setLostUdids, setLastDisconnect, setLastDeviceError, bumpWsGen,
@@ -221,21 +212,16 @@ export function useDevice(subscribe?: WsSubscribe) {
   // a listed value actually changes. Without this memo the Provider
   // value is a fresh object every render, and including `device` in
   // any useEffect dep array produces an infinite re-render loop.
-  const {
-    wifiScanning, wifiDevices, tunnelStatus,
-    scanWifi, connectWifi, startWifiTunnel, checkTunnelStatus, stopTunnel,
-  } = wifi
+  const { tunnelStatus, startWifiTunnel, checkTunnelStatus, stopTunnel } = wifi
   return useMemo(
     () => ({
       devices, connectedDevice, scanning, scan, connect, disconnect, forget,
-      connectWifi, scanWifi, wifiScanning, wifiDevices,
       startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
       connectedDevices, primaryDevice,
       lostUdids, lastDisconnect, lastDeviceError,
     }),
     [
       devices, connectedDevice, scanning, scan, connect, disconnect, forget,
-      connectWifi, scanWifi, wifiScanning, wifiDevices,
       startWifiTunnel, checkTunnelStatus, stopTunnel, tunnelStatus,
       connectedDevices, primaryDevice,
       lostUdids, lastDisconnect, lastDeviceError,

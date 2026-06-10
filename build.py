@@ -25,7 +25,6 @@ stage; a fresh build always omits them.
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys
@@ -41,7 +40,7 @@ RELEASE = FRONTEND / "release"
 
 # 共用 box-drawing helpers (與 start.py 共用)
 sys.path.insert(0, str(ROOT))
-from tools.terminal_ui import visual_width, box_line, box_border  # noqa: E402, F401
+from tools.terminal_ui import box_line, box_border  # noqa: E402
 
 BOX_WIDTH = 58
 

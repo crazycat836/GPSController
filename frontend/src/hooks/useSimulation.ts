@@ -97,18 +97,8 @@ function saveSpeedPrefs(p: SpeedPrefs): void {
   try { localStorage.setItem(STORAGE_KEYS.speedPrefs, JSON.stringify(p)) } catch { /* ignore */ }
 }
 
-/** SimMode → i18n label key mapping. */
-export const MODE_LABEL_KEYS = {
-  [SimMode.Teleport]: 'mode.teleport',
-  [SimMode.Navigate]: 'mode.navigate',
-  [SimMode.Loop]: 'mode.loop',
-  [SimMode.MultiStop]: 'mode.multi_stop',
-  [SimMode.RandomWalk]: 'mode.random_walk',
-  [SimMode.Joystick]: 'mode.joystick',
-} as const
-
 /** Map backend state strings to SimMode. */
-export function stateToMode(state: string): SimMode | null {
+function stateToMode(state: string): SimMode | null {
   switch (state) {
     case 'navigating': return SimMode.Navigate
     case 'looping': return SimMode.Loop
@@ -125,7 +115,7 @@ export interface FanoutOutcome<T> {
   failed: Array<{ udid: string; reason: string }>
 }
 
-export function summarizeResults<T>(
+function summarizeResults<T>(
   results: PromiseSettledResult<T>[],
   udids: string[],
 ): FanoutOutcome<T> {
@@ -584,7 +574,6 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   // which devices to target. Returns a FanoutOutcome for toast summarisation.
   const fanout = useCallback(async <T,>(
     udids: string[],
-    action: string,
     fn: (udid: string) => Promise<T>,
   ): Promise<FanoutOutcome<T>> => {
     // Caller-gated: udids is always non-empty.
@@ -619,36 +608,36 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   }, [currentPosition])
 
   const teleportAll = useCallback((udids: string[], lat: number, lng: number) =>
-    fanout(udids, 'teleport', (u) => api.teleport(lat, lng, u)), [fanout])
+    fanout(udids, (u) => api.teleport(lat, lng, u)), [fanout])
   const navigateAll = useCallback(async (udids: string[], lat: number, lng: number) => {
     await preSyncStart(udids)
-    return fanout(udids, 'navigate', (u) => api.navigate(lat, lng, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, u, straightLine))
+    return fanout(udids, (u) => api.navigate(lat, lng, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, u, straightLine))
   }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, straightLine])
   const startLoopAll = useCallback(async (udids: string[], wps: LatLng[]) => {
     await preSyncStart(udids)
     setLapProgress(loopLapCount != null ? { current: 0, total: loopLapCount } : null)
-    return fanout(udids, 'loop', (u) => api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, u, straightLine, loopLapCount))
+    return fanout(udids, (u) => api.startLoop(wps, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseLoop.enabled, pause_min: pauseLoop.min, pause_max: pauseLoop.max }, u, straightLine, loopLapCount))
   }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseLoop, straightLine, loopLapCount])
   const multiStopAll = useCallback(async (udids: string[], wps: LatLng[], dur: number, loop: boolean) => {
     await preSyncStart(udids)
     setLapProgress(loop && loopLapCount != null ? { current: 0, total: loopLapCount } : null)
-    return fanout(udids, 'multistop', (u) => api.multiStop(wps, moveMode, dur, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, u, straightLine, loop ? loopLapCount : null))
+    return fanout(udids, (u) => api.multiStop(wps, moveMode, dur, loop, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseMultiStop.enabled, pause_min: pauseMultiStop.min, pause_max: pauseMultiStop.max }, u, straightLine, loop ? loopLapCount : null))
   }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseMultiStop, straightLine, loopLapCount])
   const randomWalkAll = useCallback(async (udids: string[], center: LatLng, r: number) => {
     await preSyncStart(udids)
     // Shared seed → both engines produce identical destination sequences.
     const seed = udids.length >= 2 ? Date.now() : null
-    return fanout(udids, 'randomwalk', (u) => api.randomWalk(center, r, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseRandomWalk.enabled, pause_min: pauseRandomWalk.min, pause_max: pauseRandomWalk.max }, u, seed, straightLine))
+    return fanout(udids, (u) => api.randomWalk(center, r, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseRandomWalk.enabled, pause_min: pauseRandomWalk.min, pause_max: pauseRandomWalk.max }, u, seed, straightLine))
   }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseRandomWalk, straightLine])
   const applySpeedAll = useCallback((udids: string[], sel?: SpeedSelection) => {
     const s = sel ?? { moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh }
-    return fanout(udids, 'apply-speed', (u) => api.applySpeed(s.moveMode, { speed_kmh: s.customSpeedKmh, speed_min_kmh: s.speedMinKmh, speed_max_kmh: s.speedMaxKmh }, u))
+    return fanout(udids, (u) => api.applySpeed(s.moveMode, { speed_kmh: s.customSpeedKmh, speed_min_kmh: s.speedMinKmh, speed_max_kmh: s.speedMaxKmh }, u))
   }, [fanout, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh])
-  const pauseAll = useCallback((udids: string[]) => fanout(udids, 'pause', (u) => api.pauseSim(u)), [fanout])
-  const resumeAll = useCallback((udids: string[]) => fanout(udids, 'resume', (u) => api.resumeSim(u)), [fanout])
-  const stopAll = useCallback((udids: string[]) => fanout(udids, 'stop', (u) => api.stopSim(u)), [fanout])
+  const pauseAll = useCallback((udids: string[]) => fanout(udids, (u) => api.pauseSim(u)), [fanout])
+  const resumeAll = useCallback((udids: string[]) => fanout(udids, (u) => api.resumeSim(u)), [fanout])
+  const stopAll = useCallback((udids: string[]) => fanout(udids, (u) => api.stopSim(u)), [fanout])
   const restoreAll = useCallback(async (udids: string[]) => {
-    const outcome = await fanout(udids, 'restore', (u) => api.restoreSim(u))
+    const outcome = await fanout(udids, (u) => api.restoreSim(u))
     // Clear per-device runtime state (markers, routes) and legacy state so
     // the map immediately reflects the wipe without waiting for events.
     setRuntimes((prev) => {
@@ -673,10 +662,10 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   }, [fanout])
   const joystickStartAll = useCallback(async (udids: string[]) => {
     await preSyncStart(udids)
-    return fanout(udids, 'joystick-start', (u) => api.joystickStart(moveMode, u))
+    return fanout(udids, (u) => api.joystickStart(moveMode, u))
   }, [fanout, preSyncStart, moveMode])
   const joystickStopAll = useCallback((udids: string[]) =>
-    fanout(udids, 'joystick-stop', (u) => api.joystickStop(u)), [fanout])
+    fanout(udids, (u) => api.joystickStop(u)), [fanout])
 
   // Derived: primary runtime for legacy single-device components.
   // Memoised so consumers see a stable reference between renders when

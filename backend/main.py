@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 import secrets
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -24,7 +23,6 @@ from config import (
     API_HOST,
     API_PORT,
     TOKEN_FILE,
-    MAX_DEVICES,
     ensure_data_dir,
 )
 from logging_config import UVICORN_LOG_CONFIG, setup_logging

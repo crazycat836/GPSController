@@ -4,8 +4,8 @@ import React from 'react'
  * StatusPill — shared shell for status-bar family chips.
  *
  * All visual treatment (height, padding, radius, border, shadow, font size)
- * lives on the `.status-pill` CSS class so MiniStatusBar, DeviceChip, and
- * any future chip stay in lockstep without each re-declaring the tokens.
+ * lives on the `.status-pill` CSS class so MiniStatusBar and any future
+ * chip stay in lockstep without each re-declaring the tokens.
  *
  * Renders a `<div>` by default. Pass `as="button"` for clickable chips.
  * All standard HTML attributes forward to the underlying element.

@@ -36,7 +36,6 @@ interface MapViewProps {
   deviceConnected?: boolean;
   onShowToast?: (msg: string) => void;
   layerKey?: string;
-  onLayerChange?: (key: string) => void;
   /** Fires once after Leaflet initializes so parents can drive imperative
    *  camera moves (fly-to, setView) without owning the instance. Called
    *  with null on unmount. */
@@ -66,7 +65,6 @@ function MapView({
   deviceConnected = true,
   onShowToast,
   layerKey = 'osm',
-  onLayerChange,
   onMapReady,
   pcPosition,
 }: MapViewProps) {

@@ -1,9 +1,9 @@
 """Stateless device helpers extracted from :mod:`core.device_manager`.
 
-These are pure module-level utilities — iOS version parsing, host-side
-pair-record management, and LAN subnet guessing — with no dependency on the
-``DeviceManager`` instance. They live here so ``device_manager`` stays under
-the file-size budget and these helpers can be unit-tested in isolation.
+These are pure module-level utilities — iOS version parsing and host-side
+pair-record management — with no dependency on the ``DeviceManager``
+instance. They live here so ``device_manager`` stays under the file-size
+budget and these helpers can be unit-tested in isolation.
 
 ``core.device_manager`` re-exports every name below, so existing
 ``from core.device_manager import ...`` call sites (api.device, api._errors,
@@ -14,9 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
-import plistlib
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -101,54 +98,3 @@ async def delete_usbmux_pair_record(udid: str) -> bool:
                 logger.debug("delete_usbmux_pair_record: mux.close() raised", exc_info=True)
 
 
-def _load_pair_record(udid: str | None = None) -> dict | None:
-    """Load a USB pair record from Apple's system Lockdown store.
-
-    On Windows, pair records live in ``%ALLUSERSPROFILE%\\Apple\\Lockdown``.
-    If *udid* is given, loads that specific record; otherwise loads the
-    first ``.plist`` found (most setups have only one device).
-    """
-    lockdown_dir = Path(os.environ.get("ALLUSERSPROFILE", "C:/ProgramData")) / "Apple" / "Lockdown"
-    if not lockdown_dir.exists():
-        logger.debug("Apple Lockdown directory not found: %s", lockdown_dir)
-        return None
-
-    target: Path | None = None
-    if udid:
-        candidate = lockdown_dir / f"{udid}.plist"
-        if candidate.exists():
-            target = candidate
-    else:
-        # Pick the first device plist (skip SystemConfiguration.plist)
-        for f in lockdown_dir.glob("*.plist"):
-            if f.stem != "SystemConfiguration":
-                target = f
-                break
-
-    if target is None:
-        logger.debug("No pair record found in %s", lockdown_dir)
-        return None
-
-    try:
-        with open(target, "rb") as fh:
-            record = plistlib.load(fh)
-        logger.debug("Loaded pair record from %s", target)
-        return record
-    except Exception:
-        logger.exception("Failed to load pair record from %s", target)
-        return None
-
-
-def _guess_local_subnet() -> str | None:
-    """Best-effort guess of the local LAN subnet (e.g. '192.168.1.0/24').
-
-    Returns the base IP like '192.168.1.0' or ``None`` if unable to determine.
-    """
-    from utils.net import get_primary_local_ip
-    local_ip = get_primary_local_ip()
-    if not local_ip:
-        return None
-    try:
-        return f"{local_ip.rsplit('.', 1)[0]}.0"
-    except IndexError:
-        return None
