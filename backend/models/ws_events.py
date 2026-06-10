@@ -3,17 +3,10 @@
 Each Pydantic class describes the ``data`` payload of one event type;
 the ``WS_EVENTS`` registry at the bottom maps event name → model.
 
-Two consumers depend on this file:
-
-  - ``services.ws_events.broadcast_event(model)`` — typed broadcast
-    helper that validates the payload before going on the wire so
-    typos like ``"deivce_disconnected"`` (real review finding) become
-    a Python type error at the call site instead of a silent runtime
-    drop on the frontend.
-  - ``tools/gen_ws_types.py`` — walks ``WS_EVENTS`` and emits
-    ``frontend/src/generated/api-contract.ts`` so the renderer's WS
-    dispatcher narrows on a generated discriminated union instead of
-    its current loose-string ``msg.type === '...'`` checks.
+``tools/gen_ws_types.py`` walks ``WS_EVENTS`` and emits
+``frontend/src/generated/api-contract.ts`` so the renderer's WS
+dispatcher narrows on a generated discriminated union instead of its
+current loose-string ``msg.type === '...'`` checks.
 
 Adding a new event = one Pydantic class + one entry in ``WS_EVENTS``.
 The codegen step in ``build.py`` re-runs on every build so the

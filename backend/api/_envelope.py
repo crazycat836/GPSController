@@ -56,10 +56,11 @@ def ok(data: Any = None, meta: dict[str, Any] | None = None) -> dict[str, Any]:
     return body
 
 
-def err(code: str, message: str, *, status_code: int = 400) -> HTTPException:
-    """Raise via FastAPI's HTTPException flow with the structured detail
-    that the global handler converts into the error envelope."""
-    return HTTPException(status_code=status_code, detail={"code": code, "message": message})
+def _error_envelope(error: dict[str, Any]) -> dict[str, Any]:
+    """Wrap a pre-built ``error`` dict in the failure envelope. Each handler
+    below constructs its own ``error`` (preserving key insertion order); this
+    only de-duplicates the outer ``{success, data, error}`` shape."""
+    return {"success": False, "data": None, "error": error}
 
 
 class EnvelopeJSONResponse(JSONResponse):
@@ -73,7 +74,7 @@ class EnvelopeJSONResponse(JSONResponse):
 
     def render(self, content: Any) -> bytes:
         if not _is_already_enveloped(content):
-            content = {"success": True, "data": content, "error": None}
+            content = ok(content)
         return super().render(content)
 
 
@@ -95,24 +96,19 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
     else:
         message = str(detail) if detail is not None else ""
         error = {"code": f"http_{exc.status_code}", "message": message}
-    body = {"success": False, "data": None, "error": error}
     # Use plain JSONResponse so we don't recurse through the auto-wrap.
-    return JSONResponse(body, status_code=exc.status_code, headers=exc.headers)
+    return JSONResponse(_error_envelope(error), status_code=exc.status_code, headers=exc.headers)
 
 
 async def validation_exception_handler(
     _request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     """Convert FastAPI's 422 RequestValidationError into the error envelope."""
-    body = {
-        "success": False,
-        "data": None,
-        "error": {
-            "code": ErrorCode.VALIDATION_FAILED.value,
-            "message": "Request payload failed validation",
-            "errors": exc.errors(),
-        },
-    }
+    body = _error_envelope({
+        "code": ErrorCode.VALIDATION_FAILED.value,
+        "message": "Request payload failed validation",
+        "errors": exc.errors(),
+    })
     return JSONResponse(body, status_code=422)
 
 
@@ -120,10 +116,6 @@ def unauthorized_response() -> JSONResponse:
     """401 envelope used by the auth middleware. Lives here so middleware
     and route handlers share the same shape."""
     return JSONResponse(
-        {
-            "success": False,
-            "data": None,
-            "error": {"code": ErrorCode.UNAUTHORIZED.value, "message": "Missing or invalid X-GPS-Token"},
-        },
+        _error_envelope({"code": ErrorCode.UNAUTHORIZED.value, "message": "Missing or invalid X-GPS-Token"}),
         status_code=401,
     )

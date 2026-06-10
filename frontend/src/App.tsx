@@ -39,13 +39,6 @@ import Toast from './components/shell/Toast'
 // Contexts consumed inside AppShell
 import { useConnectionHealth } from './contexts/ConnectionHealthContext'
 
-// Panels
-import TeleportPanel from './components/panels/TeleportPanel'
-import NavigatePanel from './components/panels/NavigatePanel'
-import LoopPanel from './components/panels/LoopPanel'
-import MultiStopPanel from './components/panels/MultiStopPanel'
-import RandomWalkPanel from './components/panels/RandomWalkPanel'
-import JoystickPanel from './components/panels/JoystickPanel'
 
 // Modals/Drawers
 import DevicesPopover from './components/device/DevicesPopover'

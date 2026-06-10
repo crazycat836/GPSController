@@ -7,8 +7,7 @@ import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
 import ListRow from '../ui/ListRow'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
-import { getPlaceColor } from './PlaceManagerDialog'
-import { getTagColor } from './TagManagerDialog'
+import { getPlaceColor, getTagColor } from '../../lib/bookmarks'
 
 /** Width / left-offset (px) of the accent stripe marking the active row. */
 const ACTIVE_INDICATOR_STRIPE_PX = 2

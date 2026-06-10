@@ -18,6 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import type { BookmarkTag } from '../../hooks/useBookmarks'
 import { ICON_SIZE } from '../../lib/icons'
+import { getTagColor } from '../../lib/bookmarks'
 import { useT } from '../../i18n'
 import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
@@ -40,23 +41,6 @@ interface TagManagerDialogProps {
 // re-seed them on the next load anyway, and deletion would silently churn
 // bookmark tag lists for no user-visible gain.
 const PRESET_TAG_IDS = new Set(['preset_scanner', 'preset_mushroom', 'preset_flower'])
-
-const FIXED_COLORS: Record<string, string> = {
-  '掃描器': '#4A90E2',
-  '菇': '#A855F7',
-  '花': '#EC4899',
-}
-
-export function getTagColor(tag: Pick<BookmarkTag, 'name' | 'color'>): string {
-  if (tag.color) return tag.color
-  if (FIXED_COLORS[tag.name]) return FIXED_COLORS[tag.name]
-  let hash = 0
-  for (let i = 0; i < tag.name.length; i++) {
-    hash = tag.name.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  const hue = (Math.abs(hash) % 360 + 280) % 360  // bias toward purple/pink range
-  return `hsl(${hue}, 58%, 60%)`
-}
 
 interface SortableRowProps {
   tag: BookmarkTag

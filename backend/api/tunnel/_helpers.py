@@ -21,7 +21,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TypedDict
 
+from api._deps import get_device_manager
 from api._errors import ErrorCode, http_err
+from context import ctx
+from services import connection_state
 
 _tunnel_logger = logging.getLogger("wifi_tunnel")
 logger = logging.getLogger(__name__)
@@ -256,3 +259,30 @@ def cancel_watchdog() -> None:
         return
     task.cancel()
     set_watchdog(None)
+
+
+async def connect_device_over_tunnel(rsd_address: str, rsd_port: int) -> dict:
+    """Connect a device over an existing WiFi RSD tunnel and register it.
+
+    Shared by ``/wifi/tunnel`` and ``/wifi/tunnel/start-and-connect``: runs the
+    connect → ``announce_connected`` (SSoT sync, which also broadcasts
+    ``device_connected``) → ``create_engine`` sequence and returns the common
+    five-key response dict. Callers keep the ``MAX_DEVICES`` gate *outside*
+    their try block (so ``max_devices_error`` is never remapped to
+    ``CONNECT_FAILED``) and own their endpoint-specific error mapping; the
+    start-and-connect route merges ``rsd_address``/``rsd_port`` into the result.
+    """
+    dm = get_device_manager()
+    info = await dm.connect_wifi_tunnel(rsd_address, rsd_port)
+    await connection_state.announce_connected(
+        info.udid, name=info.name, ios_version=info.ios_version,
+        connection_type="Network", cause="wifi_tunnel",
+    )
+    await ctx.app_state.create_engine_for_device(info.udid)
+    return {
+        "status": "connected",
+        "udid": info.udid,
+        "name": info.name,
+        "ios_version": info.ios_version,
+        "connection_type": "Network",
+    }

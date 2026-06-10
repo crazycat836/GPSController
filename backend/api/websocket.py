@@ -8,6 +8,7 @@ import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+import auth
 from context import ctx
 from models.schemas import JoystickInput
 from services.ws_broadcaster import (
@@ -322,8 +323,7 @@ async def _require_auth_frame(ws: WebSocket) -> bool:
     dev mode) and the socket should remain open. Returns False after
     closing the socket with 4001 on any failure.
     """
-    import main as _main
-    if _main._is_auth_disabled():
+    if auth._is_auth_disabled():
         return True
     try:
         raw = await asyncio.wait_for(ws.receive_text(), timeout=_WS_AUTH_TIMEOUT_SECONDS)
@@ -338,7 +338,7 @@ async def _require_auth_frame(ws: WebSocket) -> bool:
         await ws.close(code=_WS_AUTH_FAIL_CODE, reason="bad auth frame")
         return False
     supplied = msg.get("token", "") if msg.get("type") == "auth" else ""
-    if not _main.API_TOKEN or not secrets.compare_digest(str(supplied), _main.API_TOKEN):
+    if not auth.API_TOKEN or not secrets.compare_digest(str(supplied), auth.API_TOKEN):
         await ws.close(code=_WS_AUTH_FAIL_CODE, reason="auth rejected")
         return False
     return True

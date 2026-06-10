@@ -8,7 +8,7 @@ import type { BookmarkTag } from '../../hooks/useBookmarks'
 import SearchField from '../ui/SearchField'
 import ChipFilterBar, { type Chip } from '../ui/ChipFilterBar'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
-import { getTagColor } from './TagManagerDialog'
+import { getTagColor } from '../../lib/bookmarks'
 
 export type SortMode = 'recent' | 'by_place'
 

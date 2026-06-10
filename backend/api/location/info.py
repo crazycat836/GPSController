@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+import auth
 from api.location._helpers import get_cooldown_timer, get_engine
 from context import ctx
 from models.schemas import SimulationStatus
@@ -20,8 +21,7 @@ async def debug_info():
     internals to a leaked token. Set ``GPSCONTROLLER_DEV_NOAUTH=1`` to
     enable.
     """
-    import main as _main
-    if not _main._is_auth_disabled():
+    if not auth._is_auth_disabled():
         # In production builds the route exists but returns 404 — same
         # response a typo would produce, so the surface area is invisible
         # to anyone scanning with a leaked token.

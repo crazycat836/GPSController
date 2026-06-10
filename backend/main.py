@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
+import auth
 from api._envelope import (
     EnvelopeJSONResponse,
     http_exception_handler,
@@ -49,26 +50,10 @@ if _old_data_dir.exists() and not _new_data_dir.exists():
 logger = setup_logging(_new_data_dir / "logs")
 
 
-# Session auth token. Generated once per backend process (see lifespan)
-# and required on every /api/* request via X-GPS-Token header; WebSocket
-# auth frame validates against the same value. Set to "" when running
-# with GPSCONTROLLER_DEV_NOAUTH=1 for local dev convenience.
-API_TOKEN: str = ""
-
-
-def _is_auth_disabled() -> bool:
-    return os.environ.get("GPSCONTROLLER_DEV_NOAUTH") == "1"
-
-
-# Paths that don't require the token. Docs + health check stay open so
-# the Electron shell can `GET /docs` to decide the backend is up.
-_AUTH_EXEMPT_PATHS = frozenset({
-    "/",
-    "/docs",
-    "/openapi.json",
-    "/redoc",
-    "/docs/oauth2-redirect",
-})
+# The session auth token and policy helpers (API_TOKEN, _is_auth_disabled,
+# _DOCS_ENABLED, _AUTH_EXEMPT_PATHS) live in the leaf `auth` module so the
+# routers don't reach up into this entrypoint for them. The token below is
+# (re)assigned on `auth` during lifespan and read late-bound everywhere.
 
 
 def _write_token_file(token: str) -> None:
@@ -102,7 +87,6 @@ ctx.app_state = app_state
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     from services import connection_state
-    global API_TOKEN
 
     # Wire the single WS observer that translates every per-device state
     # transition into the existing WS event contract. Done first so the
@@ -116,8 +100,8 @@ async def lifespan(application: FastAPI):
     # config.py module load so tests that import config don't hit disk.
     ensure_data_dir()
 
-    if _is_auth_disabled():
-        API_TOKEN = ""
+    if auth._is_auth_disabled():
+        auth.API_TOKEN = ""
         # Remove any stale token file so dev-mode frontends can't
         # accidentally pick up a value from a previous packaged run.
         try:
@@ -130,9 +114,9 @@ async def lifespan(application: FastAPI):
             "Auth DISABLED (GPSCONTROLLER_DEV_NOAUTH=1) — API reachable without X-GPS-Token",
         )
     else:
-        API_TOKEN = secrets.token_urlsafe(32)
+        auth.API_TOKEN = secrets.token_urlsafe(32)
         try:
-            _write_token_file(API_TOKEN)
+            _write_token_file(auth.API_TOKEN)
             logger.info("Session token written to %s", TOKEN_FILE)
         except OSError:
             logger.exception("Failed to write token file; renderer will not be able to auth")
@@ -263,12 +247,6 @@ async def lifespan(application: FastAPI):
 
 # ── FastAPI app ───────────────────────────────────────────
 
-# Only expose the interactive docs / OpenAPI schema in dev mode (when the
-# session token is disabled via GPSCONTROLLER_DEV_NOAUTH=1). In packaged
-# production runs the docs surface would let any local listener enumerate
-# every API path — there's no benefit to advertising it once auth is on.
-_DOCS_ENABLED = _is_auth_disabled()
-
 app = FastAPI(
     title="GPSController",
     version=__version__,
@@ -279,9 +257,9 @@ app = FastAPI(
     # return a Response(content=bytes, ...) bypass this so binary payloads
     # remain unwrapped.
     default_response_class=EnvelopeJSONResponse,
-    docs_url="/docs" if _DOCS_ENABLED else None,
-    redoc_url="/redoc" if _DOCS_ENABLED else None,
-    openapi_url="/openapi.json" if _DOCS_ENABLED else None,
+    docs_url="/docs" if auth._DOCS_ENABLED else None,
+    redoc_url="/redoc" if auth._DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if auth._DOCS_ENABLED else None,
 )
 
 # Convert HTTPException + 422 RequestValidationError into the same
@@ -301,10 +279,10 @@ class _TokenAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
-        if _is_auth_disabled():
+        if auth._is_auth_disabled():
             return await call_next(request)
         path = request.url.path
-        if path in _AUTH_EXEMPT_PATHS:
+        if path in auth._AUTH_EXEMPT_PATHS:
             return await call_next(request)
         # WebSocket connects arrive as ASGI "websocket" scope; HTTP
         # middleware still sees them on the way up. Let ws paths through
@@ -313,7 +291,7 @@ class _TokenAuthMiddleware(BaseHTTPMiddleware):
         if request.scope.get("type") == "websocket":
             return await call_next(request)
         supplied = request.headers.get("x-gps-token", "")
-        if not API_TOKEN or not secrets.compare_digest(supplied, API_TOKEN):
+        if not auth.API_TOKEN or not secrets.compare_digest(supplied, auth.API_TOKEN):
             return unauthorized_response()
         return await call_next(request)
 

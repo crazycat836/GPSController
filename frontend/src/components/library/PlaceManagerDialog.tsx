@@ -18,7 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import type { BookmarkPlace } from '../../hooks/useBookmarks'
 import { ICON_SIZE } from '../../lib/icons'
-import { isDefaultPlace } from '../../lib/bookmarks'
+import { getPlaceColor, isDefaultPlace } from '../../lib/bookmarks'
 import { useT } from '../../i18n'
 import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
@@ -32,26 +32,6 @@ interface PlaceManagerDialogProps {
   onDelete: (id: string) => void | Promise<void>
   onRename?: (id: string, name: string) => void | Promise<void>
   onReorder?: (orderedIds: string[]) => void | Promise<void>
-}
-
-// Deterministic colour per place name. Keeps the fixed mappings that
-// predate the place/tag split so existing names stay visually stable.
-const FIXED_COLORS: Record<string, string> = {
-  Default: 'var(--color-cat-default)',
-  Home: 'var(--color-cat-home)',
-  Work: 'var(--color-cat-work)',
-  Favorites: 'var(--color-cat-favorites)',
-  Custom: 'var(--color-cat-custom)',
-}
-
-export function getPlaceColor(name: string): string {
-  if (FIXED_COLORS[name]) return FIXED_COLORS[name]
-  let hash = 0
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 60%, 55%)`
 }
 
 const isDefault = (p: BookmarkPlace) =>

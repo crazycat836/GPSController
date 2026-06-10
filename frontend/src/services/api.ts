@@ -194,6 +194,36 @@ function formatError(error: unknown, fallback: string): string {
 }
 
 /**
+ * Throw a formatted Error from a non-ok response. Surfaces a structured
+ * envelope error when present, else the bare HTTP status. Reads the body
+ * once; always throws (hence `Promise<never>`).
+ */
+async function throwEnvelopeError(res: Response): Promise<never> {
+  const parsed: unknown = await res.json().catch(() => null)
+  if (isEnvelope(parsed)) {
+    throw new Error(formatError(parsed.error, res.statusText))
+  }
+  // Backend should always emit the envelope; this branch only fires if a
+  // proxy / dev-server intercepts the response and returns its own body.
+  throw new Error(res.statusText || `HTTP ${res.status}`)
+}
+
+/**
+ * Unwrap a JSON envelope response's `data`. Throws the structured error on
+ * a non-ok status, or a "missing envelope" error on a 200 with a non-API
+ * body (proxy hit or backend older than this client). Reads the body at
+ * most once per call.
+ */
+async function unwrapEnvelope<T>(res: Response): Promise<T> {
+  if (!res.ok) return throwEnvelopeError(res)
+  const parsed: unknown = await res.json().catch(() => null)
+  if (!isEnvelope(parsed) || parsed.success !== true) {
+    throw new Error('Malformed API response (missing envelope)')
+  }
+  return parsed.data as T
+}
+
+/**
  * Read the session auth token. In the packaged Electron build the token
  * is held by the main process and fetched once via the
  * `session:get-token` IPC handshake (see frontend/electron/preload.js
@@ -274,24 +304,7 @@ async function request<T>(
     if (body !== undefined) opts.body = JSON.stringify(body)
     return opts
   })
-  // Single .json() read regardless of status — the envelope shape is the
-  // same on success and on failure (just `success`/`data`/`error` fields
-  // flipped), so we don't need to branch before parsing.
-  const parsed: unknown = await res.json().catch(() => null)
-  if (!res.ok) {
-    if (isEnvelope(parsed)) {
-      throw new Error(formatError(parsed.error, res.statusText))
-    }
-    // Backend should always emit the envelope; this branch only fires if a
-    // proxy / dev-server intercepts the response and returns its own body.
-    throw new Error(res.statusText || `HTTP ${res.status}`)
-  }
-  if (!isEnvelope(parsed) || parsed.success !== true) {
-    // 200 with a non-envelope body means we hit a non-API endpoint or the
-    // backend version is older than this client expects.
-    throw new Error('Malformed API response (missing envelope)')
-  }
-  return parsed.data as T
+  return unwrapEnvelope<T>(res)
 }
 
 // Device
@@ -508,16 +521,10 @@ export const reorderTags = (orderedIds: string[]) =>
  */
 async function downloadAuthed(path: string, filename: string): Promise<void> {
   const res = await authedFetch(`${API}${path}`, (headers) => ({ method: 'GET', headers }))
-  if (!res.ok) {
-    // Try to surface a structured error from the standard envelope
-    // first; fall back to the bare HTTP status if the response isn't
-    // JSON (e.g. a proxy intercepted it).
-    const parsed: unknown = await res.json().catch(() => null)
-    if (isEnvelope(parsed)) {
-      throw new Error(formatError(parsed.error, res.statusText))
-    }
-    throw new Error(res.statusText || `HTTP ${res.status}`)
-  }
+  // Error path surfaces the structured envelope (or bare status); the
+  // success path reads the body as a Blob, not JSON, so we can't go
+  // through unwrapEnvelope here.
+  if (!res.ok) await throwEnvelopeError(res)
   const blob = await res.blob()
   const blobUrl = URL.createObjectURL(blob)
   try {
@@ -635,17 +642,7 @@ export async function importGpx(file: File): Promise<{ status: string; id: strin
     form.append('file', file)
     return { method: 'POST', body: form, headers }
   })
-  const parsed: unknown = await res.json().catch(() => null)
-  if (!res.ok) {
-    if (isEnvelope(parsed)) {
-      throw new Error(formatError(parsed.error, res.statusText))
-    }
-    throw new Error(res.statusText || `HTTP ${res.status}`)
-  }
-  if (!isEnvelope(parsed) || parsed.success !== true) {
-    throw new Error('Malformed API response (missing envelope)')
-  }
-  return parsed.data as { status: string; id: string; points: number }
+  return unwrapEnvelope<{ status: string; id: string; points: number }>(res)
 }
 
 export const downloadGpx = (routeId: string, filename: string) =>

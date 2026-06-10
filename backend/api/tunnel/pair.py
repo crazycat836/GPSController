@@ -12,13 +12,12 @@ from api._errors import ErrorCode, http_err, ios_unsupported_error, max_devices_
 from api.tunnel._helpers import (
     RemotePairResources,
     close_remote_pair_resources,
+    connect_device_over_tunnel,
     perform_remote_pair_handshake,
     select_usb_device,
     validate_local_ip,
 )
 from config import MAX_DEVICES
-from context import ctx
-from services import connection_state
 
 logger = logging.getLogger(__name__)
 _tunnel_logger = logging.getLogger("wifi_tunnel")
@@ -39,29 +38,13 @@ class WifiTunnelConnectRequest(BaseModel):
 @router.post("/wifi/tunnel")
 async def wifi_tunnel_connect(req: WifiTunnelConnectRequest):
     """Connect to a device via an existing WiFi tunnel (RSD address/port)."""
-    app_state = ctx.app_state
     from core.device_manager import UnsupportedIosVersionError
     dm = get_device_manager()
+    # Gate stays OUTSIDE the try so max_devices_error isn't remapped to CONNECT_FAILED.
     if dm.connected_count >= MAX_DEVICES:
         raise max_devices_error()
     try:
-        info = await dm.connect_wifi_tunnel(req.rsd_address, req.rsd_port)
-        # Sync the SSoT (and broadcast device_connected via its observer)
-        # instead of broadcasting by hand — keeps the store authoritative so
-        # the /api/device/list merge reports Network, and re-emits even when
-        # the device was already CONNECTED over USB before the tunnel.
-        await connection_state.announce_connected(
-            info.udid, name=info.name, ios_version=info.ios_version,
-            connection_type="Network", cause="wifi_tunnel",
-        )
-        await app_state.create_engine_for_device(info.udid)
-        return {
-            "status": "connected",
-            "udid": info.udid,
-            "name": info.name,
-            "ios_version": info.ios_version,
-            "connection_type": "Network",
-        }
+        return await connect_device_over_tunnel(req.rsd_address, req.rsd_port)
     except UnsupportedIosVersionError as e:
         raise ios_unsupported_error(e.version)
     except Exception:

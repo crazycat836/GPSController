@@ -17,6 +17,53 @@ import {
 // importing `SaveRouteResult` from `'../contexts/BookmarkContext'`.
 export type { SaveRouteResult }
 
+/**
+ * Serialized optimistic reorder with an in-flight guard. A rapid second
+ * drag while the first reorder POST is still landing would otherwise race
+ * — the second drag's id list is computed from the stale pre-refresh local
+ * order, both POSTs hit the server back-to-back, and whichever refresh lands
+ * second wins. We serialise the POST and queue the *latest* ordering on top,
+ * so a burst of N drags collapses into one in-flight call plus one tail call
+ * carrying the final order.
+ *
+ * `deps` is forwarded to the handler's `useCallback` so each caller keeps its
+ * own memo profile: routes key on `refreshRoutes` (stable), bookmarks key on
+ * `bm` (which `useBookmarks` rebuilds every render).
+ */
+function useSerializedReorder(
+  post: (orderedIds: string[]) => Promise<unknown>,
+  refresh: () => Promise<unknown>,
+  label: string,
+  deps: React.DependencyList,
+): (orderedIds: string[]) => Promise<void> {
+  const inflightRef = useRef(false)
+  const pendingRef = useRef<string[] | null>(null)
+  const handlerRef = useRef<((orderedIds: string[]) => Promise<void>) | null>(null)
+  const handler = useCallback(async (orderedIds: string[]) => {
+    if (inflightRef.current) {
+      pendingRef.current = orderedIds
+      return
+    }
+    inflightRef.current = true
+    try {
+      await post(orderedIds)
+    } catch (err) {
+      devLog(label, err)
+    } finally {
+      await refresh()
+      inflightRef.current = false
+      const queued = pendingRef.current
+      pendingRef.current = null
+      if (queued) void handlerRef.current?.(queued)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps)
+  // Self-ref lets the finally block re-enter without a forward reference;
+  // updated in an effect so the latest handler is always called.
+  useEffect(() => { handlerRef.current = handler }, [handler])
+  return handler
+}
+
 interface AddBmDialog {
   lat: number
   lng: number
@@ -244,60 +291,14 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refreshRoutes, showToast, t])
 
-  // Optimistic reorder with an in-flight guard: a rapid second drag
-  // while the first reorder POST is still landing would otherwise race
-  // — the second drag's id list is computed from the stale pre-refresh
-  // local order, both POSTs hit the server back-to-back, and whichever
-  // refresh lands second wins. We instead serialise the POST and queue
-  // the *latest* ordering on top, so a burst of N drags collapses into
-  // one in-flight call plus one tail call carrying the final order.
-  const routeReorderInflightRef = useRef(false)
-  const routeReorderPendingRef = useRef<string[] | null>(null)
-  const handleRoutesReorder = useCallback(async (orderedIds: string[]) => {
-    if (routeReorderInflightRef.current) {
-      routeReorderPendingRef.current = orderedIds
-      return
-    }
-    routeReorderInflightRef.current = true
-    try {
-      await api.reorderRoutes(orderedIds)
-    } catch (err) {
-      devLog('reorderRoutes failed', err)
-    } finally {
-      await refreshRoutes()
-      routeReorderInflightRef.current = false
-      const queued = routeReorderPendingRef.current
-      routeReorderPendingRef.current = null
-      if (queued) void handleRoutesReorderRef.current(queued)
-    }
-  }, [refreshRoutes])
-  // Self-ref pattern lets the finally block re-enter without a forward
-  // reference; the ref is updated in an effect below.
-  const handleRoutesReorderRef = useRef(handleRoutesReorder)
-  useEffect(() => { handleRoutesReorderRef.current = handleRoutesReorder }, [handleRoutesReorder])
-
-  const bookmarkReorderInflightRef = useRef(false)
-  const bookmarkReorderPendingRef = useRef<string[] | null>(null)
-  const handleBookmarksReorder = useCallback(async (orderedIds: string[]) => {
-    if (bookmarkReorderInflightRef.current) {
-      bookmarkReorderPendingRef.current = orderedIds
-      return
-    }
-    bookmarkReorderInflightRef.current = true
-    try {
-      await api.reorderBookmarks(orderedIds)
-    } catch (err) {
-      devLog('reorderBookmarks failed', err)
-    } finally {
-      await bm.refresh()
-      bookmarkReorderInflightRef.current = false
-      const queued = bookmarkReorderPendingRef.current
-      bookmarkReorderPendingRef.current = null
-      if (queued) void handleBookmarksReorderRef.current(queued)
-    }
-  }, [bm])
-  const handleBookmarksReorderRef = useRef(handleBookmarksReorder)
-  useEffect(() => { handleBookmarksReorderRef.current = handleBookmarksReorder }, [handleBookmarksReorder])
+  // Routes key on refreshRoutes (stable); bookmarks key on bm (rebuilt
+  // every render). See useSerializedReorder for the in-flight/queue rationale.
+  const handleRoutesReorder = useSerializedReorder(
+    api.reorderRoutes, refreshRoutes, 'reorderRoutes failed', [refreshRoutes],
+  )
+  const handleBookmarksReorder = useSerializedReorder(
+    api.reorderBookmarks, bm.refresh, 'reorderBookmarks failed', [bm],
+  )
 
   // ── Route categories ────────────────────────────────────
   const refreshRouteCategories = useCallback(async () => {

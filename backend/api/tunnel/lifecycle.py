@@ -13,6 +13,7 @@ from api._errors import ErrorCode, http_err, max_devices_error
 from api.tunnel._helpers import (
     TeardownStep,
     cancel_watchdog,
+    connect_device_over_tunnel,
     get_watchdog,
     run_teardown_steps,
     set_watchdog,
@@ -20,7 +21,6 @@ from api.tunnel._helpers import (
 )
 from config import MAX_DEVICES, REMOTE_PAIRING_PORT
 from context import ctx
-from services import connection_state
 from services.wifi_tunnel_service import cleanup_wifi_connections, tunnel
 
 logger = logging.getLogger(__name__)
@@ -268,8 +268,6 @@ async def wifi_tunnel_stop():
 @router.post("/wifi/tunnel/start-and-connect")
 async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
     """Start a WiFi tunnel and immediately connect the device through it."""
-    app_state = ctx.app_state
-
     tunnel_result = await _do_tunnel_start(req)
     if tunnel_result.get("status") not in ("started", "already_running"):
         raise http_err(500, ErrorCode.TUNNEL_FAILED, "Tunnel startup failed")
@@ -281,29 +279,15 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
         raise http_err(500, ErrorCode.TUNNEL_NO_RSD, "Tunnel started but RSD info is missing")
 
     dm = get_device_manager()
+    # Gate stays OUTSIDE the try so max_devices_error isn't remapped to CONNECT_FAILED.
     if dm.connected_count >= MAX_DEVICES:
         raise max_devices_error()
     try:
-        info = await dm.connect_wifi_tunnel(rsd_address, rsd_port)
-        # Sync the SSoT so the device flips USB→Network. connect_wifi_tunnel
-        # only touches DeviceManager's registry; without this the
-        # connection_state store keeps the stale USB metadata from the
-        # earlier USB auto-connect, and /api/device/list replays it as a
-        # USB pill once the cable is unplugged.
-        await connection_state.announce_connected(
-            info.udid, name=info.name, ios_version=info.ios_version,
-            connection_type="Network", cause="wifi_tunnel",
-        )
-        await app_state.create_engine_for_device(info.udid)
-        return {
-            "status": "connected",
-            "udid": info.udid,
-            "name": info.name,
-            "ios_version": info.ios_version,
-            "connection_type": "Network",
-            "rsd_address": rsd_address,
-            "rsd_port": rsd_port,
-        }
+        # Shared connect → announce_connected (SSoT sync so the device flips
+        # USB→Network and /api/device/list stops replaying the stale USB pill)
+        # → create_engine sequence; merge the RSD info into the result.
+        result = await connect_device_over_tunnel(rsd_address, rsd_port)
+        return {**result, "rsd_address": rsd_address, "rsd_port": rsd_port}
     except Exception:
         logger.exception(
             "Tunnel started but device connection failed",
