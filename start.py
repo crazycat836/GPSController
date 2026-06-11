@@ -17,9 +17,10 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 BACKEND = os.path.join(ROOT, "backend")
 FRONTEND = os.path.join(ROOT, "frontend")
 
-# 共用 box-drawing helpers (與 build.py 共用)
+# 共用 box-drawing helpers (與 build.py 共用) + port 清理 helper (與 stop.py 共用)
 sys.path.insert(0, ROOT)
 from tools.terminal_ui import box_line, box_border  # noqa: E402
+from tools.ports import kill_port  # noqa: E402
 
 # Single source of truth for the backend bind port lives in backend/config.py;
 # importing it here keeps start / stop / backend in lockstep automatically.
@@ -109,46 +110,6 @@ def is_port_open(port):
         return False
 
 
-def kill_port(port):
-    """清理佔用指定 port 的進程"""
-    if os.name == "nt":
-        # Run netstat with list-form args (no shell pipeline) and filter
-        # in Python: matches the listening socket on the target port and
-        # extracts the PID from the trailing column. Keeps the kill path
-        # shell-free so neither port nor PID can be used for injection.
-        result = subprocess.run(
-            ["netstat", "-ano"],
-            capture_output=True, text=True,
-        )
-        suffix = f":{port}"
-        for line in result.stdout.splitlines():
-            parts = line.split()
-            # Expected listening row:
-            #   "TCP  127.0.0.1:8000  0.0.0.0:0  LISTENING  1234"
-            if len(parts) < 5 or "LISTENING" not in parts:
-                continue
-            if not parts[1].endswith(suffix):
-                continue
-            try:
-                pid = int(parts[-1])
-            except ValueError:
-                continue
-            # taskkill is idempotent — repeated PIDs are a harmless no-op.
-            subprocess.run(
-                ["taskkill", "/F", "/PID", str(pid)],
-                check=False, capture_output=True,
-            )
-    else:
-        result = subprocess.run(
-            ["lsof", "-ti", f":{port}"],
-            capture_output=True, text=True,
-        )
-        for pid in result.stdout.strip().splitlines():
-            pid = pid.strip()
-            if pid:
-                subprocess.run(["kill", "-9", pid], capture_output=True)
-
-
 def wait_for_port(port, label, timeout=60):
     print(f"      等待{label}啟動中", end="", flush=True)
     start = time.time()
@@ -162,7 +123,28 @@ def wait_for_port(port, label, timeout=60):
     return False
 
 
-def install_backend():
+def _is_effective_root() -> bool:
+    """POSIX effective-root check (sudo). Windows has no geteuid — False."""
+    return os.name != "nt" and os.geteuid() == 0
+
+
+def _refuse_root_install(what: str) -> None:
+    """Explain why dependency installation is blocked under sudo.
+
+    Running `pip install` / `npm install` as root would execute arbitrary
+    package install scripts with full root privileges and litter
+    root-owned files into the user's caches. Installation must happen
+    once unprivileged; sudo is only needed afterwards for the iOS 17+
+    tunnel.
+    """
+    print("尚未安裝 ✗")
+    print(f"      [!] 偵測到以 sudo / root 執行，拒絕以 root 權限安裝{what}。")
+    print("      請先以一般使用者執行一次 python3 start.py 完成依賴安裝，")
+    print("      再視需要（iOS 17+ 通道）改用 sudo python3 start.py 啟動。")
+
+
+def install_backend() -> bool:
+    """Ensure backend deps are installed. Returns False when blocked."""
     print("  [1/4] 檢查後端依賴...", end=" ", flush=True)
     req = os.path.join(BACKEND, "requirements.txt")
 
@@ -173,24 +155,35 @@ def install_backend():
 
     if "would install" not in dry.stdout.lower():
         print("已就緒 ✓")
-    else:
-        print("安裝中...")
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", req, "-q"],
-            cwd=BACKEND,
-        )
-        print("        完成 ✓")
+        return True
+    if _is_effective_root():
+        # Never run package install scripts as root — see _refuse_root_install.
+        _refuse_root_install("後端依賴 (pip install)")
+        return False
+    print("安裝中...")
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-r", req, "-q"],
+        cwd=BACKEND,
+    )
+    print("        完成 ✓")
+    return True
 
 
-def install_frontend():
+def install_frontend() -> bool:
+    """Ensure frontend deps are installed. Returns False when blocked."""
     print("  [2/4] 檢查前端依賴...", end=" ", flush=True)
     nm = os.path.join(FRONTEND, "node_modules")
     if os.path.isdir(nm):
         print("已就緒 ✓")
-    else:
-        print("安裝中...")
-        subprocess.run(["npm", "install"], cwd=FRONTEND, shell=(os.name == "nt"))
-        print("        完成 ✓")
+        return True
+    if _is_effective_root():
+        # Never run npm lifecycle scripts as root — see _refuse_root_install.
+        _refuse_root_install("前端依賴 (npm install)")
+        return False
+    print("安裝中...")
+    subprocess.run(["npm", "install"], cwd=FRONTEND, shell=(os.name == "nt"))
+    print("        完成 ✓")
+    return True
 
 
 def start_backend():
@@ -338,11 +331,14 @@ def main():
         input("  缺少必要工具，請安裝後重試。按 Enter 離開...")
         return
 
-    # 安裝依賴
-    install_backend()
+    # 安裝依賴（以 root 執行且尚未安裝時會被拒絕 — 見 _refuse_root_install）
+    deps_ok = install_backend()
     print()
-    install_frontend()
+    deps_ok = install_frontend() and deps_ok
     print()
+    if not deps_ok:
+        input("  依賴尚未就緒，請先以一般使用者執行一次後重試。按 Enter 離開...")
+        return
 
     # 啟動服務
     if not start_backend():

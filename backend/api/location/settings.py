@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from api._deps import get_app_state, get_coord_formatter
@@ -13,6 +13,16 @@ from models.schemas import CoordFormatRequest
 from utils.geo import validate_coords
 
 router = APIRouter()
+
+
+def _settings_persist_error() -> HTTPException:
+    """500 raised when a settings write to disk failed. The detailed
+    cause (permissions / disk full / …) is logged by
+    ``AppState.save_settings``; the wire only carries the stable code."""
+    return http_err(
+        500, ErrorCode.SETTINGS_PERSIST_FAILED,
+        "Failed to persist settings; see ~/.gpscontroller/logs/backend.log",
+    )
 
 
 @router.get("/settings/coord-format", tags=["settings"])
@@ -30,7 +40,8 @@ async def set_coord_format(req: CoordFormatRequest):
     # setting happened to flush settings.json afterward). Mirrors
     # set_initial_position, which already persists on write. Offload the
     # blocking file write so the event loop isn't stalled by disk I/O.
-    await asyncio.to_thread(get_app_state().save_settings)
+    if not await asyncio.to_thread(get_app_state().save_settings):
+        raise _settings_persist_error()
     return {"format": fmt.format.value}
 
 
@@ -58,7 +69,8 @@ async def set_initial_position(req: _InitialPosRequest):
             raise http_err(400, ErrorCode.INVALID_COORD, "lat must be in [-90, 90], lng in [-180, 180]")
         new_pos = {"lat": float(req.lat), "lng": float(req.lng)}
     app_state.set_initial_position(new_pos)
-    await asyncio.to_thread(app_state.save_settings)
+    if not await asyncio.to_thread(app_state.save_settings):
+        raise _settings_persist_error()
     return {"position": new_pos}
 
 
@@ -79,7 +91,8 @@ async def set_wifi_keepalive(req: _WifiKeepaliveRequest):
     dimming. Persisted immediately so the choice survives a restart."""
     # set_wifi_keepalive persists synchronously; run it off the event loop.
     app_state = get_app_state()
-    await asyncio.to_thread(app_state.set_wifi_keepalive, req.enabled)
+    if not await asyncio.to_thread(app_state.set_wifi_keepalive, req.enabled):
+        raise _settings_persist_error()
     return {"enabled": app_state.get_wifi_keepalive()}
 
 

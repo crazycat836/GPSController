@@ -110,7 +110,12 @@ class AppState:
             except (json.JSONDecodeError, OSError, ValueError, KeyError):
                 logger.warning("Settings file malformed or unreadable; using defaults", exc_info=True)
 
-    def save_settings(self):
+    def save_settings(self) -> bool:
+        """Persist settings to disk. Returns False when the write failed
+        (the settings PUT routes map that to a 500
+        ``settings_persist_failed`` envelope instead of lying with a 200
+        while the write evaporated). Best-effort callers (throttled
+        position saves, shutdown flush) may ignore the result."""
         data = {
             "last_position": self._last_position,
             "coord_format": self.coord_formatter.format.value,
@@ -119,8 +124,10 @@ class AppState:
         }
         try:
             SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        except Exception as e:
-            logger.warning("Failed to save settings: %s", e)
+        except Exception:
+            logger.exception("Failed to save settings to %s", SETTINGS_FILE)
+            return False
+        return True
 
     def get_initial_position(self) -> dict:
         if self._last_position:
@@ -146,10 +153,13 @@ class AppState:
         """Whether the WiFi-tunnel keep-alive loop is enabled."""
         return self._wifi_keepalive
 
-    def set_wifi_keepalive(self, enabled: bool) -> None:
-        """Enable/disable the keep-alive loop and persist the choice."""
+    def set_wifi_keepalive(self, enabled: bool) -> bool:
+        """Enable/disable the keep-alive loop and persist the choice.
+        Returns False when persistence failed (the in-memory toggle is
+        still applied; the route maps False to a 500 envelope so the UI
+        can roll back)."""
         self._wifi_keepalive = bool(enabled)
-        self.save_settings()
+        return self.save_settings()
 
     def get_initial_map_position(self) -> dict | None:
         """Return the user-pinned initial map center, or None if unset.

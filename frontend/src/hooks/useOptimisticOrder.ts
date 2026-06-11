@@ -12,13 +12,18 @@ const DIALOG_ACTIVATION_DISTANCE_PX = 4
  *
  * Prefers the locally-reordered list while a drag is in flight — once the
  * parent persists the order and refreshes the `items` prop we drop the
- * local order and trust props again. `getId` must be referentially stable
- * (module-level fn) so `orderedItems` only recomputes on real changes.
+ * local order and trust props again. If `onReorder` rejects, the local
+ * order is also dropped (snap back to the props order — i.e. rollback)
+ * and the optional `onError` callback fires so callers can toast; without
+ * the catch the rejection was unhandled and the stale order stayed pinned.
+ * `getId` must be referentially stable (module-level fn) so `orderedItems`
+ * only recomputes on real changes.
  */
 export function useOptimisticOrder<T>(
   items: readonly T[],
   getId: (item: T) => string,
   onReorder?: (orderedIds: string[]) => void | Promise<void>,
+  onError?: (error: unknown) => void,
 ): {
   sensors: SensorDescriptor<SensorOptions>[]
   orderedItems: readonly T[]
@@ -54,8 +59,19 @@ export function useOptimisticOrder<T>(
     if (from < 0 || to < 0) return
     const next = arrayMove(ids, from, to)
     setLocalOrder(next)
-    if (onReorder) void Promise.resolve(onReorder(next)).then(() => setLocalOrder(null))
-  }, [orderedItems, getId, onReorder])
+    if (onReorder) {
+      void Promise.resolve(onReorder(next)).then(
+        () => setLocalOrder(null),
+        (error: unknown) => {
+          // Persist failed — drop the optimistic order so the list snaps
+          // back to the (unchanged) props order instead of pinning stale
+          // state, then let the caller surface a toast.
+          setLocalOrder(null)
+          onError?.(error)
+        },
+      )
+    }
+  }, [orderedItems, getId, onReorder, onError])
 
   return { sensors, orderedItems, handleDragEnd }
 }

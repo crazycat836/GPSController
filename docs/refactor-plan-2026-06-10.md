@@ -217,17 +217,17 @@ All verified dead by project-wide grep including dynamic-key patterns.
 
 ## Phase 5 — Lower priority (do opportunistically)
 
-- [ ] **5.1** Security: strip `initial_position` from the unauthenticated `/` health
+- [x] **5.1** Security: strip `initial_position` from the unauthenticated `/` health
       check (main.py:355-362); refuse root `pip install`/`npm install` in start.py (or
       drop privileges via SUDO_UID/GID); chown the token file back to the invoking user
       under sudo (main.py:59-77, reuse json_safe's `_chown_back`); consider Electron
       `safeStorage` for the Google Places key.
-- [ ] **5.2** Error-handling consistency: WS error event for crashed movement tasks
+- [x] **5.2** Error-handling consistency: WS error event for crashed movement tasks
       (api/location/_helpers.py:289-310); typed + size-capped bookmark import body
       (api/bookmarks.py:264); `save_settings` failure → 500 envelope (state.py:118);
       `.catch` + rollback toast on the optimistic reorders (PlaceManagerDialog.tsx:226,
       TagManagerDialog.tsx:214, BookmarkContext.tsx:355).
-- [ ] **5.3** Misc LOW: shared `kill_port` for start.py/stop.py; fix stale
+- [x] **5.3** Misc LOW: shared `kill_port` for start.py/stop.py; fix stale
       `from main import AppState` TYPE_CHECKING import (context.py:12); close the
       lockdown client in `wifi_repair` (api/tunnel/pair.py:76-106); hoist `_jitter_loop`
       magic numbers to module constants; code-split the 913KB bundle.

@@ -67,6 +67,18 @@ const DEVICE_LOST_TOAST_KEYS: Record<DeviceLostCause, StringKey> = {
   ddi_not_mounted: 'toast.device_lost.ddi_not_mounted',
 }
 
+// A crashed movement task arrives as device_error with stage
+// `simulation:<mode>` (backend api/location/_helpers.py `spawn`). The map
+// localizes the mode label in the toast; unknown modes fall back to the
+// raw stage suffix.
+const SIM_CRASH_STAGE_PREFIX = 'simulation:'
+const SIM_CRASH_MODE_KEYS: Record<string, StringKey> = {
+  navigate: 'mode.navigate',
+  loop: 'mode.loop',
+  multi_stop: 'mode.multi_stop',
+  random_walk: 'mode.random_walk',
+}
+
 function App() {
   return (
     <ToastProvider>
@@ -258,6 +270,17 @@ function AppShell() {
     if (!le) return
     if (le.ts <= prevLastDeviceErrorTs.current) return
     prevLastDeviceErrorTs.current = le.ts
+    if (le.stage.startsWith(SIM_CRASH_STAGE_PREFIX)) {
+      // Movement task crashed mid-run — the engine already dropped to
+      // idle; explain why instead of showing the generic setup-failure copy.
+      const rawMode = le.stage.slice(SIM_CRASH_STAGE_PREFIX.length)
+      const modeKey = SIM_CRASH_MODE_KEYS[rawMode]
+      toast.showToast(
+        t('toast.simulation_crashed', { mode: modeKey ? t(modeKey) : rawMode }),
+        4000,
+      )
+      return
+    }
     toast.showToast(t('toast.device_error'), 4000)
   }, [device.lastDeviceError, toast, t])
 

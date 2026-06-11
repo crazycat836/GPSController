@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter
@@ -50,33 +51,44 @@ async def wifi_repair():
             udid=udid,
         )
 
-    ios_version = lockdown.all_values.get("ProductVersion", "0.0")
-    name = lockdown.all_values.get("DeviceName", "iPhone")
-
     try:
-        major = int(ios_version.split(".")[0])
-    except (ValueError, IndexError):
-        major = 0
+        ios_version = lockdown.all_values.get("ProductVersion", "0.0")
+        name = lockdown.all_values.get("DeviceName", "iPhone")
 
-    remote_record_regenerated = False
-    if major >= 17:
-        resources: RemotePairResources = {
-            "proxy": None,
-            "tunnel_ctx": None,
-            "rsd": None,
-            "tunnel_svc": None,
-        }
         try:
-            remote_record_regenerated = await perform_remote_pair_handshake(
-                lockdown, udid, ios_version, resources,
-            )
-        finally:
-            await close_remote_pair_resources(resources)
+            major = int(ios_version.split(".")[0])
+        except (ValueError, IndexError):
+            major = 0
 
-    return {
-        "status": "paired",
-        "udid": udid,
-        "name": name,
-        "ios_version": ios_version,
-        "remote_record_regenerated": remote_record_regenerated,
-    }
+        remote_record_regenerated = False
+        if major >= 17:
+            resources: RemotePairResources = {
+                "proxy": None,
+                "tunnel_ctx": None,
+                "rsd": None,
+                "tunnel_svc": None,
+            }
+            try:
+                remote_record_regenerated = await perform_remote_pair_handshake(
+                    lockdown, udid, ios_version, resources,
+                )
+            finally:
+                await close_remote_pair_resources(resources)
+
+        return {
+            "status": "paired",
+            "udid": udid,
+            "name": name,
+            "ios_version": ios_version,
+            "remote_record_regenerated": remote_record_regenerated,
+        }
+    finally:
+        try:
+            r = lockdown.close()
+            if asyncio.iscoroutine(r):
+                await r
+        except Exception as exc:
+            _tunnel_logger.debug(
+                "Re-pair cleanup: lockdown.close() raised (%s); ignoring",
+                exc.__class__.__name__, exc_info=True,
+            )

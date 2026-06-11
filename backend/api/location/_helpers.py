@@ -22,6 +22,7 @@ from api._deps import get_app_state
 from api._errors import ErrorCode, http_err
 from services import connection_state, engine_recovery
 from services.engine_recovery import NoDeviceError
+from services.ws_broadcaster import broadcast
 from services.location_service import (
     DeviceLostCause,
     DeviceLostError,
@@ -132,12 +133,53 @@ async def exec_with_retry(
 _bg_tasks: set[asyncio.Task] = set()
 
 
-def spawn(coro: Awaitable[Any]) -> asyncio.Task:
+def _track(task: asyncio.Task) -> None:
+    """Keep a strong ref to a follow-up task until it completes."""
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+
+
+async def _broadcast_task_crash(
+    label: str | None, udid: str | None, exc: BaseException
+) -> None:
+    """Tell the renderer a movement task died mid-run.
+
+    Reuses the existing ``device_error`` WS event (already consumed by
+    the frontend's device dispatcher → toast) with a ``simulation:<mode>``
+    stage instead of introducing a new contract event. Without this the
+    UI only sees the engine's bare ``state_change: idle`` and the crash
+    is silent.
+    """
+    try:
+        await broadcast("device_error", {
+            "udid": udid or "",
+            "stage": f"simulation:{label or 'movement'}",
+            "error": str(exc),
+        })
+    except Exception:
+        logger.exception("simulation-crash broadcast failed (mode=%s)", label)
+
+
+def spawn(
+    coro: Awaitable[Any],
+    *,
+    label: str | None = None,
+    udid: str | None = None,
+) -> asyncio.Task:
+    """Fire-and-forget *coro* with crash reporting.
+
+    ``label`` / ``udid`` identify the movement mode + device so a
+    non-DeviceLost crash can be surfaced to the UI via ``device_error``
+    (see :func:`_broadcast_task_crash`) instead of dying silently in
+    the log file.
+    """
     task = asyncio.create_task(coro)
     _bg_tasks.add(task)
 
     def _on_done(t: asyncio.Task) -> None:
         _bg_tasks.discard(t)
+        if t.cancelled():
+            return
         exc = t.exception()
         if exc is None:
             return
@@ -146,11 +188,10 @@ def spawn(coro: Awaitable[Any]) -> asyncio.Task:
         # device_disconnected instead of a silently-dead engine.
         nested = unwrap_device_lost(exc)
         if nested is not None:
-            cleanup = asyncio.create_task(handle_device_lost(nested))
-            _bg_tasks.add(cleanup)
-            cleanup.add_done_callback(lambda t: _bg_tasks.discard(t))
+            _track(asyncio.create_task(handle_device_lost(nested)))
             return
         logger.exception("background task crashed: %s", exc, exc_info=exc)
+        _track(asyncio.create_task(_broadcast_task_crash(label, udid, exc)))
 
     task.add_done_callback(_on_done)
     return task

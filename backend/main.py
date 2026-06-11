@@ -26,6 +26,7 @@ from config import (
     ensure_data_dir,
 )
 from logging_config import UVICORN_LOG_CONFIG, setup_logging
+from services.json_safe import chown_back
 from state import AppState
 from version import __version__
 
@@ -55,8 +56,8 @@ logger = setup_logging(_new_data_dir / "logs")
 # (re)assigned on `auth` during lifespan and read late-bound everywhere.
 
 
-def _write_token_file(token: str) -> None:
-    """Write the session token to ~/.gpscontroller/token with mode 0600.
+def _open_and_write_token(token: str) -> None:
+    """Single 0600-atomic write attempt for the session token file.
 
     Using ``Path.write_text`` followed by ``os.chmod`` opens a race window
     where the token sits at the default umask (typically 0o644) and is
@@ -74,6 +75,33 @@ def _write_token_file(token: str) -> None:
         os.write(fd, token.encode("utf-8"))
     finally:
         os.close(fd)
+
+
+def _write_token_file(token: str) -> None:
+    """Write the session token to ~/.gpscontroller/token with mode 0600.
+
+    Recovers from a stale root-owned token: a previous `sudo python3
+    start.py` run could leave the file owned by root, so the next
+    unprivileged run gets EACCES on open. The directory itself is owned
+    by the user, so unlink-and-rewrite succeeds where the in-place
+    truncate cannot — without this the user is locked out until they
+    delete the file by hand.
+
+    After a successful write, ``chown_back`` hands ownership back to the
+    invoking user when running under sudo (same sudo-drop every other
+    persisted file gets via ``safe_write_json``), so the renderer can
+    read the token and the NEXT non-sudo run can rewrite it.
+    """
+    try:
+        _open_and_write_token(token)
+    except PermissionError:
+        logger.warning(
+            "Token file %s is not writable (stale root-owned file from a "
+            "previous sudo run?) — removing and rewriting", TOKEN_FILE,
+        )
+        TOKEN_FILE.unlink(missing_ok=True)
+        _open_and_write_token(token)
+    chown_back(TOKEN_FILE)
 
 
 app_state = AppState()
@@ -366,11 +394,17 @@ app.include_router(ws_router)
 
 @app.get("/")
 async def root():
+    """Unauthenticated health check (auth-exempt — see auth._AUTH_EXEMPT_PATHS).
+
+    Must never carry position data: any local account can read this
+    endpoint without the X-GPS-Token, and the user's last simulated GPS
+    coordinate would leak. The renderer fetches the initial position via
+    the tokened GET /api/location/settings/initial-position instead.
+    """
     return {
         "name": "GPSController",
         "version": __version__,
         "status": "running",
-        "initial_position": app_state.get_initial_position(),
     }
 
 

@@ -44,6 +44,14 @@ logger = logging.getLogger(__name__)
 _DEFAULT_RANDOM_WALK_SEED_MASK = 0x7FFFFFFF
 
 
+# Auto-jitter (idle anti-detection wobble): every JITTER_INTERVAL_RANGE_S
+# seconds the reported position is nudged up to ±JITTER_RADIUS_M metres
+# around the anchor. METERS_PER_DEG_LAT converts that offset to degrees.
+JITTER_INTERVAL_RANGE_S = (2.0, 4.0)
+JITTER_RADIUS_M = 4.0
+METERS_PER_DEG_LAT = 111_111.0
+
+
 # Waypoint-pass detection thresholds (WP_HARD_HIT_M / WP_NEAR_M /
 # WP_RECEDE_M) live in core.movement_loop alongside the only function
 # that uses them.
@@ -360,14 +368,14 @@ class SimulationEngine:
                 self.state == SimulationState.IDLE
                 and self._jitter_anchor is not None
             ):
-                await asyncio.sleep(random.uniform(2.0, 4.0))
+                await asyncio.sleep(random.uniform(*JITTER_INTERVAL_RANGE_S))
                 anchor = self._jitter_anchor
                 if anchor is None or self.state != SimulationState.IDLE:
                     break
-                # ±4 m converted to degrees; longitude scaled by latitude.
-                dlat = random.uniform(-4.0, 4.0) / 111_111.0
+                # ±JITTER_RADIUS_M converted to degrees; longitude scaled by latitude.
+                dlat = random.uniform(-JITTER_RADIUS_M, JITTER_RADIUS_M) / METERS_PER_DEG_LAT
                 cos_lat = max(0.01, math.cos(math.radians(anchor.lat)))
-                dlng = random.uniform(-4.0, 4.0) / (111_111.0 * cos_lat)
+                dlng = random.uniform(-JITTER_RADIUS_M, JITTER_RADIUS_M) / (METERS_PER_DEG_LAT * cos_lat)
                 try:
                     await self._set_position(anchor.lat + dlat, anchor.lng + dlng)
                     await self._emit("position_update", {

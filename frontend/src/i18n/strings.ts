@@ -61,6 +61,10 @@ export const STRINGS = {
   'toast.device_lost.phone_locked': { zh: '手機鎖屏,請解鎖後再操作', en: 'iPhone is locked. Unlock the device and try again.' },
   'toast.device_lost.ddi_not_mounted': { zh: 'Developer Disk Image 未掛載,請重新連線裝置', en: 'Developer Disk Image not mounted. Please reconnect the device.' },
   'toast.device_error': { zh: '裝置啟動失敗,請重新連線裝置', en: 'Device setup failed. Please reconnect the device.' },
+  // Crashed movement task — device_error with a `simulation:<mode>` stage
+  // (see backend api/location/_helpers.py spawn). {mode} is the localized
+  // movement-mode label.
+  'toast.simulation_crashed': { zh: '模擬移動異常中止({mode}),請重新開始', en: 'Simulation stopped unexpectedly ({mode}); please start it again.' },
 
   // ── Connection health (banner + stale visuals) ───────────
   'conn.ws_reconnecting': { zh: '與背景服務連線中…', en: 'Reconnecting to backend…' },
@@ -192,6 +196,9 @@ export const STRINGS = {
   'toast.routes_batch_delete_failed': { zh: '批次刪除失敗: {msg}', en: 'Batch delete failed: {msg}' },
   'toast.routes_moved': { zh: '已搬移 {n} 條路線', en: 'Moved {n} routes' },
   'toast.routes_move_failed': { zh: '搬移失敗: {msg}', en: 'Move failed: {msg}' },
+  // Drag-reorder persist failure (routes / categories / places / tags) —
+  // the optimistic order rolls back to the server order.
+  'toast.reorder_failed': { zh: '排序儲存失敗,已還原原本順序', en: 'Could not save the new order; reverted' },
   'toast.route_overwritten': { zh: '已覆蓋路線「{name}」', en: 'Route "{name}" overwritten' },
   'panel.route_search': { zh: '搜尋路線…', en: 'Search routes…' },
   'panel.route_sort_default': { zh: '預設順序', en: 'Default order' },
@@ -270,6 +277,7 @@ export const STRINGS = {
   'err.amfi_unavailable': { zh: 'AMFI 服務無法使用', en: 'AMFI service unavailable' },
   'err.amfi_reveal_failed': { zh: '顯示開發者模式失敗', en: 'Failed to reveal Developer Mode' },
   'err.open_log_failed': { zh: '開啟日誌檔案失敗', en: 'Failed to open log file' },
+  'err.settings_persist_failed': { zh: '設定儲存失敗,請檢查磁碟空間與權限', en: 'Failed to save settings; check disk space and permissions' },
   // Catch-all for uncaught backend exceptions (Exception handler in main.py)
   'err.internal_error': { zh: '伺服器發生內部錯誤,請重試', en: 'Internal server error, please retry' },
 

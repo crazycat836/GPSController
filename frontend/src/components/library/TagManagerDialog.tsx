@@ -8,6 +8,7 @@ import { ICON_SIZE } from '../../lib/icons'
 import { getTagColor } from '../../lib/bookmarks'
 import { commitTrimmedRename } from '../../lib/rename'
 import { useT } from '../../i18n'
+import { useToastContext } from '../../contexts/ToastContext'
 import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { useOptimisticOrder } from '../../hooks/useOptimisticOrder'
@@ -50,16 +51,23 @@ export default function TagManagerDialog({
   onReorder,
 }: TagManagerDialogProps) {
   const t = useT()
+  const { showToast } = useToastContext()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<BookmarkTag | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
 
+  // Persist failure → the hook snaps back to the props order; surface the
+  // rollback so the list doesn't just silently rearrange itself.
+  const handleReorderError = useCallback(() => {
+    showToast(t('toast.reorder_failed'))
+  }, [showToast, t])
+
   const {
     sensors,
     orderedItems: orderedTags,
     handleDragEnd,
-  } = useOptimisticOrder(tags, getTagId, onReorder)
+  } = useOptimisticOrder(tags, getTagId, onReorder, handleReorderError)
 
   useModalDismiss({ open, onDismiss: onClose })
   useFocusTrap(dialogRef, open)

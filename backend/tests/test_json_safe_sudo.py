@@ -1,9 +1,9 @@
-"""Tests for the sudo-drop (_chown_back) behavior in json_safe.
+"""Tests for the sudo-drop (chown_back) behavior in json_safe.
 
 When GPSController runs via ``sudo python3 start.py``, ``Path.home()``
 still resolves to the invoking user's home (macOS sudo preserves
 ``$HOME``), so runtime JSON files end up in the user's home directory
-but owned by root. ``safe_write_json`` calls ``_chown_back`` after every
+but owned by root. ``safe_write_json`` calls ``chown_back`` after every
 atomic replace so the invoker can read their own data without
 re-escalating.
 """

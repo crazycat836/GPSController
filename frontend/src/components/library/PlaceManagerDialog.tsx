@@ -8,6 +8,7 @@ import { ICON_SIZE } from '../../lib/icons'
 import { getPlaceColor, isDefaultPlace } from '../../lib/bookmarks'
 import { commitTrimmedRename } from '../../lib/rename'
 import { useT } from '../../i18n'
+import { useToastContext } from '../../contexts/ToastContext'
 import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { useOptimisticOrder } from '../../hooks/useOptimisticOrder'
@@ -45,17 +46,24 @@ export default function PlaceManagerDialog({
   onReorder,
 }: PlaceManagerDialogProps) {
   const t = useT()
+  const { showToast } = useToastContext()
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<BookmarkPlace | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
 
+  // Persist failure → the hook snaps back to the props order; surface the
+  // rollback so the list doesn't just silently rearrange itself.
+  const handleReorderError = useCallback(() => {
+    showToast(t('toast.reorder_failed'))
+  }, [showToast, t])
+
   const {
     sensors,
     orderedItems: orderedPlaces,
     handleDragEnd,
-  } = useOptimisticOrder(places, getPlaceId, onReorder)
+  } = useOptimisticOrder(places, getPlaceId, onReorder, handleReorderError)
 
   useModalDismiss({ open, onDismiss: onClose })
   useFocusTrap(dialogRef, open)

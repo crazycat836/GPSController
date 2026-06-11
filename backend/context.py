@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from main import AppState  # forward reference only — never executed at runtime
+    from state import AppState  # forward reference only — never executed at runtime
 
 
 class _Context:

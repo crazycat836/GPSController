@@ -182,10 +182,22 @@ export function RouteLibraryProvider({ children }: { children: React.ReactNode }
     }
   }, [refreshRoutes, showToast, t])
 
+  // Toast on persist failure, then rethrow so useSerializedReorder's
+  // devLog + refresh (rollback) still run — standardizes route reorders
+  // on the rollback + toast convention the other mutation handlers use.
+  const postRoutesReorder = useCallback(async (orderedIds: string[]) => {
+    try {
+      await api.reorderRoutes(orderedIds)
+    } catch (err: unknown) {
+      showToast(t('toast.reorder_failed'))
+      throw err
+    }
+  }, [showToast, t])
+
   // Stable handler; latest refreshRoutes is picked up via the hook's
   // internal ref. See useSerializedReorder for the in-flight/queue rationale.
   const handleRoutesReorder = useSerializedReorder(
-    api.reorderRoutes, refreshRoutes, 'reorderRoutes failed',
+    postRoutesReorder, refreshRoutes, 'reorderRoutes failed',
   )
 
   // ── Route categories ────────────────────────────────────
@@ -246,9 +258,12 @@ export function RouteLibraryProvider({ children }: { children: React.ReactNode }
       await refreshRouteCategories()
     } catch (err) {
       devLog('reorderRouteCategories failed', err)
+      // Rollback (re-fetch the server order) + toast — the snap-back used
+      // to be silent while every sibling mutation handler toasts.
       await refreshRouteCategories()
+      showToast(t('toast.reorder_failed'))
     }
-  }, [refreshRouteCategories])
+  }, [refreshRouteCategories, showToast, t])
 
   const handleGpxImport = useCallback(async (file: File) => {
     try {

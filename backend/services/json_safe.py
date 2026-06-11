@@ -44,12 +44,13 @@ def _sudo_target() -> tuple[int, int] | None:
         return None
 
 
-def _chown_back(path: Path) -> None:
+def chown_back(path: Path) -> None:
     """If running under sudo, chown *path* back to the invoking user.
 
     Otherwise `sudo python3 start.py` writes runtime files as root into
     the invoker's home directory, and the invoker later can't read them
-    without re-escalating.
+    without re-escalating. Public so non-JSON writers (e.g. the session
+    token file in ``main``) can reuse the same sudo-drop behaviour.
     """
     target = _sudo_target()
     if target is None:
@@ -94,7 +95,7 @@ def safe_write_json(path: Path, payload: Any, *, indent: int = 2) -> bool:
         parent_existed = path.parent.exists()
         path.parent.mkdir(parents=True, exist_ok=True)
         if not parent_existed:
-            _chown_back(path.parent)
+            chown_back(path.parent)
         body = json.dumps(payload, ensure_ascii=False, indent=indent)
         fd = tempfile.NamedTemporaryFile(
             mode="w",
@@ -112,7 +113,7 @@ def safe_write_json(path: Path, payload: Any, *, indent: int = 2) -> bool:
         finally:
             fd.close()
         tmp_path.replace(path)
-        _chown_back(path)
+        chown_back(path)
         return True
     except Exception as exc:
         logger.error("failed to write %s: %s", path.name, exc)
