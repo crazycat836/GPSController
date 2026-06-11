@@ -82,3 +82,84 @@ def test_discover_does_not_crash_and_skips_tcp_when_mdns_has_hits():
 
     res = asyncio.run(_run())
     assert res["devices"][0]["ip"] == "10.0.0.42"
+
+
+def test_discover_filters_usb_link_local_ipv4():
+    """A USB-attached iPhone broadcasts RemotePairing on the USB-NCM
+    interface with a 169.254 link-local address. remoted rejects the WiFi
+    pair record on that interface (pair-verify ERROR → tunnel spawn fails),
+    so discover must only offer routable IPv4s."""
+    from pymobiledevice3.bonjour import Address
+    from api.tunnel import scan
+
+    inst = _make_instance([
+        Address(ip="169.254.145.214", iface="en5"),
+        Address(ip="192.168.10.9", iface="en0"),
+    ])
+
+    async def _run():
+        with patch(
+            "pymobiledevice3.bonjour.browse_remotepairing",
+            new=AsyncMock(return_value=[inst]),
+        ):
+            return await scan.wifi_tunnel_discover()
+
+    res = asyncio.run(_run())
+    devices = res["devices"]
+    assert len(devices) == 1
+    assert devices[0]["ip"] == "192.168.10.9"
+
+
+def test_discover_falls_back_to_tcp_scan_when_only_link_local():
+    """If mDNS only yields the doomed USB link-local address, treat it as
+    no mDNS result and run the /24 TCP-scan fallback on the real LAN."""
+    from pymobiledevice3.bonjour import Address
+    from api.tunnel import scan
+
+    inst = _make_instance([Address(ip="169.254.145.214", iface="en5")])
+
+    async def _run():
+        with (
+            patch(
+                "pymobiledevice3.bonjour.browse_remotepairing",
+                new=AsyncMock(return_value=[inst]),
+            ),
+            patch(
+                "api.tunnel.scan.scan_subnet_for_port",
+                new=AsyncMock(return_value=["192.168.10.7"]),
+            ),
+            patch(
+                "api.tunnel.scan.resolve_hostname",
+                new=AsyncMock(return_value="Johns-iPhone"),
+            ),
+        ):
+            return await scan.wifi_tunnel_discover()
+
+    res = asyncio.run(_run())
+    devices = res["devices"]
+    assert len(devices) == 1
+    assert devices[0]["ip"] == "192.168.10.7"
+    assert devices[0]["method"] == "tcp_scan"
+
+
+def test_discover_keeps_ipv6_fallback_when_no_ipv4():
+    """No IPv4 at all → the scoped link-local IPv6 fallback must survive
+    the link-local IPv4 filter (it predates it and tunnel start accepts
+    %iface-scoped v6)."""
+    from pymobiledevice3.bonjour import Address
+    from api.tunnel import scan
+
+    addr = Address(ip="fe80::1", iface="en0")
+    inst = _make_instance([addr])
+
+    async def _run():
+        with patch(
+            "pymobiledevice3.bonjour.browse_remotepairing",
+            new=AsyncMock(return_value=[inst]),
+        ):
+            return await scan.wifi_tunnel_discover()
+
+    res = asyncio.run(_run())
+    devices = res["devices"]
+    assert len(devices) == 1
+    assert devices[0]["ip"] == addr.full_ip

@@ -134,7 +134,8 @@ export const STRINGS = {
   'wifi.usb_paired_none': { zh: '尚未偵測到 USB 連接的裝置。首次建立 Wi-Fi Tunnel 前,請先用 USB 連接並信任該 iPhone。', en: 'No USB-connected device detected. Before establishing a Wi-Fi tunnel for the first time, connect and trust the iPhone over USB.' },
   'wifi.device_not_detected': { zh: '未偵測到裝置,請確認 iPhone 與電腦在同一 WiFi', en: 'Device not detected, ensure iPhone and computer are on the same Wi-Fi' },
   'wifi.detect_failed': { zh: '偵測失敗', en: 'Detection failed' },
-  'wifi.tunnel_detect_multiple': { zh: '找到 {n} 台 iPhone,請選一台', en: 'Found {n} iPhones — pick one' },
+  'wifi.tunnel_detect_found': { zh: '掃描到 {n} 台裝置', en: 'Found {n} device(s)' },
+  'wifi.scan_usb_badge': { zh: 'USB 已連線', en: 'USB connected' },
   'wifi.tunnel_use_this': { zh: '選擇', en: 'Use' },
 
   // ── Map ──────────────────────────────────────
@@ -226,6 +227,7 @@ export const STRINGS = {
   // ── Error codes (backend → i18n) ────────────
   'err.python313_missing': { zh: '需要 Python 3.13+ 才能啟動 WiFi Tunnel', en: 'Python 3.13+ is required to start the Wi-Fi tunnel' },
   'err.tunnel_spawn_failed': { zh: '無法啟動 Tunnel 進程', en: 'Failed to spawn tunnel process' },
+  'err.tunnel_pair_rejected': { zh: 'iPhone 拒絕配對驗證,請確認 iPhone 與電腦在同一 WiFi,或點「修復」用 USB 重新配對後再試', en: 'The iPhone rejected pairing verification — make sure it is on the same Wi-Fi as this computer, or tap Repair to re-pair via USB and retry' },
   'err.tunnel_exited': { zh: 'Tunnel 進程異常結束', en: 'Tunnel process exited unexpectedly' },
   'err.tunnel_timeout': { zh: 'Tunnel 啟動逾時,請確認 iPhone 解鎖且與電腦同網段', en: 'Tunnel startup timed out, ensure iPhone is unlocked and on the same subnet' },
   'err.no_device': { zh: '尚未連接任何 iOS 裝置,請先透過 USB 連線', en: 'No iOS device connected, connect via USB first' },
@@ -563,9 +565,10 @@ export const STRINGS = {
   'device.add_via_usb_hint': { zh: '用傳輸線連接 iPhone,它會出現在裝置清單。按裝置旁的「連線」開始配對(裝置上點「信任這台電腦」)。', en: 'Connect your iPhone with a cable — it appears in the device list. Tap Connect next to it to pair (tap Trust This Computer on the device).' },
   'device.add_or': { zh: '或', en: 'or' },
   'device.add_via_wifi': { zh: 'Wi-Fi Tunnel', en: 'Wi-Fi Tunnel' },
-  'device.add_via_wifi_hint': { zh: 'iPhone 與電腦必須在同一 Wi-Fi。先用 USB 配對,再切換無線連線。', en: 'iPhone and PC must be on the same Wi-Fi network. First pair via USB, then go wireless.' },
+  'device.add_via_wifi_hint': { zh: 'iPhone 與電腦必須在同一 Wi-Fi。第一次需用 USB 連接並信任這台電腦(建立配對紀錄),之後即可拔線,用「自動偵測」直接無線連線。', en: 'iPhone and computer must be on the same Wi-Fi. The first time, connect via USB and tap Trust This Computer (this creates the pairing record); after that you can unplug and connect wirelessly with Auto-detect.' },
   'device.popover_aria': { zh: '已配對裝置', en: 'Paired devices' },
   'device.tunnel_connected': { zh: 'WiFi Tunnel 已連線', en: 'Wi-Fi tunnel connected' },
+  'device.tunnel_already_connected': { zh: '裝置已透過 Wi-Fi 連線,不需再啟動 Tunnel', en: 'Device is already connected over Wi-Fi — no tunnel needed' },
   'device.tunnel_failed': { zh: 'WiFi Tunnel 連線失敗', en: 'Wi-Fi tunnel failed' },
   'device.unknown_error': { zh: '未知錯誤', en: 'Unknown error' },
   'device.status_unsupported': { zh: '不支援', en: 'Unsupported' },

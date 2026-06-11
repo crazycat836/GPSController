@@ -39,7 +39,19 @@ async def wifi_tunnel_discover():
             # ``.full_ip`` (carries the %iface scope for link-local v6).
             addr_objs = inst.addresses or []
             ipv4s = [a.ip for a in addr_objs if ":" not in a.ip]
-            addrs = ipv4s if ipv4s else [a.full_ip for a in addr_objs]
+            # A USB-attached iPhone also broadcasts RemotePairing on the
+            # USB-NCM interface with a 169.254 link-local IPv4. remoted
+            # rejects the WiFi pair record's pair-verify on that interface
+            # (ConnectionTerminatedError at tunnel start), so offering it
+            # only produces a doomed auto-fill. Keep routable IPv4s; if a
+            # hit is link-local-only, drop it so the TCP-scan fallback can
+            # search the real LAN instead.
+            routable_ipv4s = [
+                ip for ip in ipv4s if not ip.startswith("169.254.")
+            ]
+            if ipv4s and not routable_ipv4s:
+                continue
+            addrs = routable_ipv4s if routable_ipv4s else [a.full_ip for a in addr_objs]
             for addr in addrs:
                 results.append({
                     "ip": addr,

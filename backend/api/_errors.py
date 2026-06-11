@@ -66,6 +66,7 @@ class ErrorCode(StrEnum):
     TUNNEL_FAILED = "tunnel_failed"
     TUNNEL_NO_RSD = "tunnel_no_rsd"
     TUNNEL_SPAWN_FAILED = "tunnel_spawn_failed"
+    TUNNEL_PAIR_REJECTED = "tunnel_pair_rejected"
     TUNNEL_TIMEOUT = "tunnel_timeout"
     SCAN_FAILED = "scan_failed"
 

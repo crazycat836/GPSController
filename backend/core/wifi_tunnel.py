@@ -9,8 +9,54 @@ release it via a stop event.
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger("wifi_tunnel")
+
+# pymobiledevice3 hard-codes a 1-second TCP timeout on the RemotePairing
+# connect (tunnel_service.TIMEOUT = 1). A WiFi iPhone with a locked screen
+# often drops the first SYN while its radio wakes, so one attempt is not a
+# verdict. 5 attempts x (1 s timeout + 1.5 s spacing) stays well inside the
+# 20 s budget TunnelRunner.start() gives the whole handshake.
+CONNECT_ATTEMPTS = 5
+CONNECT_RETRY_DELAY_S = 1.5
+
+# Transient transport errors worth retrying. asyncio.TimeoutError is a
+# subclass of OSError on Python >= 3.11, listed anyway for clarity.
+_RETRYABLE_ERRORS = (asyncio.TimeoutError, OSError, ConnectionError)
+
+
+async def connect_with_retries(
+    connect: Callable[[], Awaitable],
+    *,
+    attempts: int = CONNECT_ATTEMPTS,
+    delay_s: float = CONNECT_RETRY_DELAY_S,
+    stop_event: asyncio.Event | None = None,
+):
+    """Run ``connect()`` retrying transient transport failures.
+
+    Non-transport exceptions (e.g. pymobiledevice3's
+    ``ConnectionTerminatedError`` — the device rejected pair-verify) are
+    definitive and propagate immediately; retrying them only spams the
+    device. A set ``stop_event`` aborts between attempts so a runner
+    being stopped doesn't keep dialing.
+    """
+    last_error: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return await connect()
+        except _RETRYABLE_ERRORS as exc:
+            last_error = exc
+            logger.info(
+                "RemotePairing connect attempt %d/%d failed (%s)",
+                attempt, attempts, exc.__class__.__name__,
+            )
+            if stop_event is not None and stop_event.is_set():
+                break
+            if attempt < attempts:
+                await asyncio.sleep(delay_s)
+    assert last_error is not None
+    raise last_error
 
 
 class TunnelRunner:
@@ -95,8 +141,11 @@ class TunnelRunner:
         )
         try:
             logger.info("Connecting to RemotePairing service at %s:%d", ip, port)
-            service = await create_core_device_tunnel_service_using_remotepairing(
-                udid, ip, port,
+            service = await connect_with_retries(
+                lambda: create_core_device_tunnel_service_using_remotepairing(
+                    udid, ip, port,
+                ),
+                stop_event=self._stop,
             )
             logger.info("RemotePairing connected (identifier=%s)", service.remote_identifier)
 

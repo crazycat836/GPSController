@@ -124,6 +124,16 @@ class LocationService(ABC):
     service (iOS < 17).
     """
 
+    async def aclose(self) -> None:
+        """Release transport resources owned by this service.
+
+        Default is a no-op (LegacyLocationService holds no background
+        tasks). DvtLocationService overrides this — it is the SSoT for
+        the *current* DvtProvider after reconnect swaps, so disconnect
+        teardown must close through it rather than a stale reference.
+        """
+        return None
+
     @abstractmethod
     async def set(self, lat: float, lng: float) -> None:
         """Simulate the device location to the given coordinates."""
@@ -203,6 +213,28 @@ class DvtLocationService(LocationService):
         self._location_sim: LocationSimulation | None = None
         self._active = False
         self._reconnect_lock = asyncio.Lock()
+
+    async def aclose(self) -> None:
+        """Close the CURRENT DvtProvider.
+
+        ``_reconnect()`` swaps ``self._dvt`` to a fresh provider, so the
+        ``conn.dvt_provider`` reference device_manager captured at connect
+        time can go stale. Closing through this method guarantees the live
+        DTXConnection's reader tasks get cancelled — otherwise they linger
+        until GC and surface as asyncio "Task was destroyed but it is
+        pending!" (dtx-reader / DTXChannelReader) noise mid-simulation.
+        """
+        async with self._reconnect_lock:
+            self._location_sim = None
+            dvt, self._dvt = self._dvt, None
+            if dvt is None:
+                return
+            try:
+                await dvt.__aexit__(None, None, None)
+            except Exception as exc:
+                logger.warning(
+                    "Error closing DvtProvider for %s: %s", self._udid, exc,
+                )
 
     async def _ensure_instrument(self) -> LocationSimulation:
         """Lazily create, connect, and cache the LocationSimulation instrument."""

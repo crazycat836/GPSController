@@ -7,11 +7,13 @@ import { wifiTunnelDiscover } from '../../services/api'
 import { ICON_SIZE } from '../../lib/icons'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
 import { DEFAULT_TUNNEL_PORT } from '../../lib/constants'
+import { discoveredDisplayName, findUsbDeviceName } from '../../lib/usbDeviceMatch'
 
 interface DiscoverResult {
   ip: string
   port: number
   name: string
+  host?: string
 }
 
 export interface DeviceAddViewProps {
@@ -32,7 +34,8 @@ export default function DeviceAddView({ onConnected }: DeviceAddViewProps) {
   const [tunnelConnecting, setTunnelConnecting] = useState(false)
   const [tunnelError, setTunnelError] = useState<string | null>(null)
   const [discovering, setDiscovering] = useState(false)
-  // Multi-iPhone picker — populated when /detect returns 2+ hits.
+  // Scan result list — every hit is shown with name + IP so the user can
+  // see what was found; a single hit additionally auto-fills the form.
   const [discoverResults, setDiscoverResults] = useState<DiscoverResult[]>([])
 
   const handleDiscover = useCallback(async () => {
@@ -44,11 +47,14 @@ export default function DeviceAddView({ onConnected }: DeviceAddViewProps) {
       const list = res?.devices ?? []
       if (list.length === 0) {
         setTunnelError(t('wifi.device_not_detected'))
-      } else if (list.length === 1) {
+        return
+      }
+      setDiscoverResults(
+        list.map((d) => ({ ip: d.ip, port: d.port, name: d.name || d.ip, host: d.host })),
+      )
+      if (list.length === 1) {
         setTunnelIp(list[0].ip)
         setTunnelPort(String(list[0].port))
-      } else {
-        setDiscoverResults(list.map((d) => ({ ip: d.ip, port: d.port, name: d.name || d.ip })))
       }
     } catch (err: unknown) {
       setTunnelError(err instanceof Error ? err.message : t('wifi.detect_failed'))
@@ -60,7 +66,6 @@ export default function DeviceAddView({ onConnected }: DeviceAddViewProps) {
   const pickDiscoverResult = useCallback((r: DiscoverResult) => {
     setTunnelIp(r.ip)
     setTunnelPort(String(r.port))
-    setDiscoverResults([])
   }, [])
 
   // The Wi-Fi tunnel reuses the host↔device pairing record that USB
@@ -71,16 +76,21 @@ export default function DeviceAddView({ onConnected }: DeviceAddViewProps) {
     () => device.devices.filter((d) => d.connection_type === 'USB' && d.is_connected),
     [device.devices],
   )
+  const usbDeviceNames = useMemo(() => usbDevices.map((d) => d.name), [usbDevices])
 
   const handleTunnelConnect = useCallback(async () => {
     if (!tunnelIp.trim()) return
     setTunnelConnecting(true)
     setTunnelError(null)
     try {
-      await device.startWifiTunnel(tunnelIp.trim(), parseInt(tunnelPort) || DEFAULT_TUNNEL_PORT)
+      const result = await device.startWifiTunnel(tunnelIp.trim(), parseInt(tunnelPort) || DEFAULT_TUNNEL_PORT)
       localStorage.setItem(STORAGE_KEYS.tunnelIp, tunnelIp.trim())
       localStorage.setItem(STORAGE_KEYS.tunnelPort, tunnelPort || String(DEFAULT_TUNNEL_PORT))
-      showToast(t('device.tunnel_connected'))
+      showToast(
+        result.alreadyConnected
+          ? t('device.tunnel_already_connected')
+          : t('device.tunnel_connected'),
+      )
       onConnected()
     } catch (err: unknown) {
       setTunnelError(err instanceof Error ? err.message : t('device.tunnel_failed'))
@@ -156,27 +166,56 @@ export default function DeviceAddView({ onConnected }: DeviceAddViewProps) {
         {discoverResults.length > 0 && (
           <div className="text-[11px] p-2 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-dim)]">
             <div className="font-semibold mb-1 text-[var(--color-accent-strong)]">
-              {t('wifi.tunnel_detect_multiple', { n: discoverResults.length })}
+              {t('wifi.tunnel_detect_found', { n: discoverResults.length })}
             </div>
             <div className="flex flex-col gap-1">
-              {discoverResults.map((r) => (
-                <div
-                  key={`${r.ip}:${r.port}`}
-                  className="flex items-center gap-2 py-1 border-t border-white/5 first:border-t-0"
-                >
-                  <div className="flex-1 min-w-0 truncate">
-                    <span className="font-mono text-[var(--color-text-2)]">{r.ip}</span>
-                    <span className="ml-2 text-[var(--color-text-3)]">{r.name}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => pickDiscoverResult(r)}
-                    className="action-btn primary text-[10px] px-2 py-0.5"
+              {discoverResults.map((r) => {
+                // The mDNS instance name is often an opaque pairing ID, so
+                // prefer the matched USB device's real name, then the most
+                // readable broadcast candidate.
+                const matchedUsbName = findUsbDeviceName(r, usbDeviceNames)
+                const isUsbConnected = matchedUsbName !== null
+                const displayName = matchedUsbName ?? discoveredDisplayName(r)
+                return (
+                  <div
+                    key={`${r.ip}:${r.port}`}
+                    className={[
+                      'flex items-center gap-2 py-1 px-1.5 -mx-0.5 rounded-md',
+                      isUsbConnected
+                        ? 'border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10'
+                        : 'border-t border-white/5 first:border-t-0',
+                    ].join(' ')}
                   >
-                    {t('wifi.tunnel_use_this')}
-                  </button>
-                </div>
-              ))}
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span
+                        className={
+                          isUsbConnected
+                            ? 'truncate font-medium text-[var(--color-text-1)]'
+                            : 'truncate text-[var(--color-text-2)]'
+                        }
+                      >
+                        {displayName}
+                      </span>
+                      <span className="font-mono text-[10px] text-[var(--color-text-3)] shrink-0">
+                        {r.ip}
+                      </span>
+                      {isUsbConnected && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9.5px] font-semibold shrink-0 text-[var(--color-accent-strong)] bg-[var(--color-accent-dim)] border border-[var(--color-accent)]/40">
+                          <Usb width={10} height={10} />
+                          {t('wifi.scan_usb_badge')}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => pickDiscoverResult(r)}
+                      className="action-btn primary text-[10px] px-2 py-0.5"
+                    >
+                      {t('wifi.tunnel_use_this')}
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}

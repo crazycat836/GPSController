@@ -476,6 +476,20 @@ class DeviceManager:
             except Exception as exc:
                 logger.warning("Error clearing location on disconnect for %s: %s", udid, exc)
 
+        # Close whatever DvtProvider the location service holds NOW. After
+        # a DVT reconnect, conn.dvt_provider points at the OLD provider and
+        # the live one would otherwise leak its dtx reader tasks (asyncio
+        # "Task was destroyed but it is pending!" at the next GC). Bounded
+        # wait: aclose() shares the reconnect lock, and a reconnect ladder
+        # in flight can hold it for ~15s we don't want to spend here.
+        if conn.location_service is not None:
+            try:
+                await asyncio.wait_for(conn.location_service.aclose(), timeout=5.0)
+            except Exception as exc:
+                logger.warning(
+                    "Error closing location service for %s: %s", udid, exc,
+                )
+
         # Shut down the DVT provider if it was opened.
         if conn.dvt_provider is not None:
             try:

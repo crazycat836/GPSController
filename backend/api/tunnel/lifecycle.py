@@ -7,6 +7,7 @@ import logging
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, field_validator
+from pymobiledevice3.exceptions import ConnectionTerminatedError
 
 from api._deps import get_app_state, get_device_manager, get_tunnel_runner
 from api._errors import ErrorCode, http_err, max_devices_error
@@ -146,6 +147,20 @@ async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
             info = await tunnel.start(resolved_udid, req.ip, req.port, timeout=20.0)
         except asyncio.TimeoutError:
             raise http_err(500, ErrorCode.TUNNEL_TIMEOUT, "Tunnel startup timed out (20 s)")
+        except ConnectionTerminatedError:
+            # Device answered pair-verify with an ERROR TLV: the host's
+            # RemotePairing record is stale/revoked, or the target IP is
+            # the USB-NCM link-local interface, where remoted refuses the
+            # WiFi pair record. Generic "spawn failed" hid both causes.
+            _tunnel_logger.warning(
+                "Tunnel pair-verify rejected by device (udid=%s ip=%s port=%d)",
+                resolved_udid, req.ip, req.port,
+            )
+            raise http_err(
+                500, ErrorCode.TUNNEL_PAIR_REJECTED,
+                "Device rejected pairing verification — re-pair over USB "
+                "or check the device is on the same Wi-Fi network",
+            )
         except Exception:
             logger.exception(
                 "Tunnel spawn failed",
@@ -250,6 +265,27 @@ async def wifi_tunnel_stop():
 @router.post("/wifi/tunnel/start-and-connect")
 async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
     """Start a WiFi tunnel and immediately connect the device through it."""
+    # usbmux WiFi-sync (Finder's "Show this iPhone when on Wi-Fi") connects
+    # Network devices with their own CoreDevice tunnel — no RemotePairing
+    # tunnel needed. Starting one anyway races a second tunnel against the
+    # live connection, or times out against a phone that is already busy.
+    # Without an explicit udid we can't map the requested IP to a device,
+    # so any live Network device counts as "this is the one you meant".
+    network_udids = get_device_manager().udids_by_connection_type("Network")
+    if network_udids and (req.udid is None or req.udid in network_udids):
+        udid = req.udid or network_udids[0]
+        md = connection_state.store.metadata_for(udid)
+        _tunnel_logger.info(
+            "Tunnel start skipped: %s already connected via Network", udid,
+        )
+        return {
+            "status": "already_connected",
+            "udid": udid,
+            "name": md.get("name", ""),
+            "ios_version": md.get("ios_version", ""),
+            "connection_type": "Network",
+        }
+
     tunnel_result = await _do_tunnel_start(req)
     if tunnel_result.get("status") not in ("started", "already_running"):
         raise http_err(500, ErrorCode.TUNNEL_FAILED, "Tunnel startup failed")

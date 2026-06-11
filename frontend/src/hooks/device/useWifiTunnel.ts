@@ -31,9 +31,17 @@ export interface WifiTunnelDeps {
   setConnectedDevice: React.Dispatch<React.SetStateAction<DeviceInfo | null>>
 }
 
+export interface StartWifiTunnelResult {
+  device: DeviceInfo
+  // True when the backend skipped the RemotePairing tunnel because the
+  // device is already connected over usbmux WiFi-sync (its own CoreDevice
+  // tunnel). No manual tunnel is running in that case.
+  alreadyConnected: boolean
+}
+
 export interface WifiTunnelApi {
   tunnelStatus: TunnelStatus
-  startWifiTunnel: (ip: string, port?: number) => Promise<DeviceInfo>
+  startWifiTunnel: (ip: string, port?: number) => Promise<StartWifiTunnelResult>
   checkTunnelStatus: () => Promise<TunnelStatus>
   stopTunnel: () => Promise<void>
 }
@@ -57,6 +65,7 @@ export function useWifiTunnel({ setDevices, setConnectedDevice }: WifiTunnelDeps
     async (ip: string, port: number = DEFAULT_TUNNEL_PORT) => {
       try {
         const res = await wifiTunnelStartAndConnect(ip, port)
+        const alreadyConnected = res.status === 'already_connected'
         const info: DeviceInfo = {
           udid: res.udid,
           name: res.name,
@@ -66,8 +75,10 @@ export function useWifiTunnel({ setDevices, setConnectedDevice }: WifiTunnelDeps
         }
         setConnectedDevice(info)
         setDevices((prev) => upsertDevice(prev, info))
-        setTunnelStatus({ running: true, rsd_address: res.rsd_address, rsd_port: res.rsd_port })
-        return info
+        if (!alreadyConnected) {
+          setTunnelStatus({ running: true, rsd_address: res.rsd_address, rsd_port: res.rsd_port })
+        }
+        return { device: info, alreadyConnected }
       } catch (err) {
         devWarn('WiFi tunnel failed:', err)
         throw err
