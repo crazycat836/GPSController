@@ -161,5 +161,35 @@ def test_bookmark_manager_migrates_on_load(tmp_path, monkeypatch):
     assert "categories" not in disk  # old key must be gone from disk too
 
 
+def test_bookmark_manager_quarantines_invalid_payload(tmp_path, monkeypatch):
+    """A bookmarks.json that parses as JSON but fails schema validation must
+    be quarantined to ``bookmarks.json.bak-<ts>`` (original bytes preserved)
+    instead of being silently clobbered by the next save — same protection
+    the saved-routes store has, now shared via JsonModelStore."""
+    bookmarks_file = tmp_path / "bookmarks.json"
+    invalid = {"version": 1, "places": "not-a-list", "tags": [], "bookmarks": []}
+    bookmarks_file.write_text(json.dumps(invalid), encoding="utf-8")
+
+    import config as config_mod
+    import services.bookmarks as svc_mod
+    monkeypatch.setattr(config_mod, "BOOKMARKS_FILE", bookmarks_file)
+    monkeypatch.setattr(svc_mod, "BOOKMARKS_FILE", bookmarks_file)
+
+    manager = BookmarkManager()
+
+    # In-memory store fell back to presets-only defaults.
+    assert manager.store.bookmarks == []
+    assert {p.id for p in manager.store.places} == {"default"}
+    assert {t.id for t in manager.store.tags} == {
+        "preset_scanner", "preset_mushroom", "preset_flower",
+    }
+
+    # The broken file was renamed aside, original bytes preserved.
+    assert not bookmarks_file.exists()
+    backups = list(tmp_path.glob("bookmarks.json.bak-*"))
+    assert len(backups) == 1
+    assert json.loads(backups[0].read_text(encoding="utf-8")) == invalid
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

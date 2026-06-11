@@ -1,28 +1,18 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { MapPin, Pencil, Trash2, Plus, GripVertical } from 'lucide-react'
-import {
-  DndContext,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { MapPin, Plus } from 'lucide-react'
+import { DndContext, closestCenter } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import type { BookmarkPlace } from '../../hooks/useBookmarks'
 import { ICON_SIZE } from '../../lib/icons'
 import { getPlaceColor, isDefaultPlace } from '../../lib/bookmarks'
+import { commitTrimmedRename } from '../../lib/rename'
 import { useT } from '../../i18n'
 import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import { useOptimisticOrder } from '../../hooks/useOptimisticOrder'
 import ConfirmDialog from '../ui/ConfirmDialog'
+import SortableNameRow from './SortableNameRow'
 
 interface PlaceManagerDialogProps {
   open: boolean
@@ -37,121 +27,13 @@ interface PlaceManagerDialogProps {
 const isDefault = (p: BookmarkPlace) =>
   p.id === 'default' || isDefaultPlace(p.name)
 
-interface SortableRowProps {
-  place: BookmarkPlace
-  editable: boolean
-  deletable: boolean
-  isEditing: boolean
-  editingName: string
-  onStartEdit: () => void
-  onCommitEdit: () => void
-  onChangeEditingName: (v: string) => void
-  onCancelEdit: () => void
-  onDelete: () => void
-  displayName: string
-}
-
-function SortableRow({
-  place,
-  editable,
-  deletable,
-  isEditing,
-  editingName,
-  onStartEdit,
-  onCommitEdit,
-  onChangeEditingName,
-  onCancelEdit,
-  onDelete,
-  displayName,
-}: SortableRowProps) {
-  const t = useT()
-  const sortable = useSortable({ id: place.id, disabled: isDefault(place) })
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = sortable
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    background: 'var(--color-surface-2)',
-    opacity: isDragging ? 0.6 : 1,
-  }
-
-  return (
-    <div ref={setNodeRef} className="list-row list-row--compact" style={style}>
-      <span className="list-row-leading flex items-center gap-1">
-        {!isDefault(place) ? (
-          <button
-            type="button"
-            className="kebab-btn"
-            aria-label={t('bm.reorder')}
-            {...attributes}
-            {...listeners}
-            style={{ cursor: 'grab', color: 'var(--color-text-3)' }}
-          >
-            <GripVertical width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-          </button>
-        ) : (
-          <span aria-hidden style={{ width: 22 }} />
-        )}
-        <span
-          aria-hidden="true"
-          style={{
-            width: 10, height: 10, borderRadius: '50%',
-            background: getPlaceColor(place.name),
-            flexShrink: 0,
-          }}
-        />
-      </span>
-      <div className="list-row-body">
-        {isEditing ? (
-          <input
-            autoFocus
-            type="text"
-            className="search-input"
-            value={editingName}
-            onChange={(e) => onChangeEditingName(e.target.value)}
-            onBlur={onCommitEdit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing) onCommitEdit()
-              else if (e.key === 'Escape') onCancelEdit()
-            }}
-            style={{ paddingLeft: 8 }}
-          />
-        ) : (
-          <div className="list-row-title">{displayName}</div>
-        )}
-      </div>
-      <span className="list-row-trailing">
-        {editable && !isEditing && (
-          <button
-            type="button"
-            className="kebab-btn"
-            title={t('bm.rename_category')}
-            aria-label={t('bm.rename_category')}
-            onClick={onStartEdit}
-          >
-            <Pencil width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-          </button>
-        )}
-        {deletable && (
-          <button
-            type="button"
-            className="kebab-btn"
-            title={t('generic.delete')}
-            aria-label={t('generic.delete')}
-            onClick={onDelete}
-            style={{ color: 'var(--color-danger-text)' }}
-          >
-            <Trash2 width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-          </button>
-        )}
-      </span>
-    </div>
-  )
-}
+const getPlaceId = (p: BookmarkPlace) => p.id
 
 /**
  * Manage the "place" axis (single-valued per bookmark: where the bookmark
  * is located). Mirrors the Tag manager but for places; the two are kept
- * structurally identical so the mental model stays consistent.
+ * structurally identical (via SortableNameRow + useOptimisticOrder) so
+ * the mental model stays consistent.
  */
 export default function PlaceManagerDialog({
   open,
@@ -167,35 +49,16 @@ export default function PlaceManagerDialog({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<BookmarkPlace | null>(null)
-  const [localOrder, setLocalOrder] = useState<string[] | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      // Require a small drag before activating so plain-click still edits /
-      // deletes via the row buttons instead of immediately entering a drag.
-      activationConstraint: { distance: 4 },
-    }),
-  )
+  const {
+    sensors,
+    orderedItems: orderedPlaces,
+    handleDragEnd,
+  } = useOptimisticOrder(places, getPlaceId, onReorder)
 
   useModalDismiss({ open, onDismiss: onClose })
   useFocusTrap(dialogRef, open)
-
-  // Prefer the locally-reordered list while a drag is in flight — once the
-  // parent refreshes the `places` prop we drop it and trust props again.
-  const orderedPlaces = useMemo(() => {
-    if (!localOrder) return places
-    const byId = new Map(places.map((p) => [p.id, p]))
-    const ordered: BookmarkPlace[] = []
-    for (const id of localOrder) {
-      const p = byId.get(id)
-      if (p) ordered.push(p)
-    }
-    for (const p of places) {
-      if (!localOrder.includes(p.id)) ordered.push(p)
-    }
-    return ordered
-  }, [places, localOrder])
 
   const commitAdd = useCallback(() => {
     const n = newName.trim()
@@ -205,28 +68,12 @@ export default function PlaceManagerDialog({
   }, [newName, onAdd])
 
   const commitRename = useCallback((id: string) => {
-    const n = editingName.trim()
     const current = places.find((p) => p.id === id)
-    if (current && n && n !== current.name && onRename) {
-      void onRename(id, n)
+    if (onRename) {
+      commitTrimmedRename(editingName, current?.name, (n) => onRename(id, n))
     }
     setEditingId(null)
   }, [editingName, places, onRename])
-
-  const handleDragEnd = useCallback(
-    (e: DragEndEvent) => {
-      const { active, over } = e
-      if (!over || active.id === over.id) return
-      const ids = orderedPlaces.map((p) => p.id)
-      const from = ids.indexOf(String(active.id))
-      const to = ids.indexOf(String(over.id))
-      if (from < 0 || to < 0) return
-      const next = arrayMove(ids, from, to)
-      setLocalOrder(next)
-      if (onReorder) void Promise.resolve(onReorder(next)).then(() => setLocalOrder(null))
-    },
-    [orderedPlaces, onReorder],
-  )
 
   if (!open) return null
 
@@ -257,20 +104,23 @@ export default function PlaceManagerDialog({
                 const deletable = !isDefault(place)
                 const displayName = isDefault(place) ? t('bm.default') : place.name
                 return (
-                  <SortableRow
+                  <SortableNameRow
                     key={place.id}
-                    place={place}
-                    editable={editable}
-                    deletable={deletable}
+                    id={place.id}
+                    dragDisabled={isDefault(place)}
+                    dotColor={getPlaceColor(place.name)}
                     isEditing={editingId === place.id}
                     editingName={editingName}
                     onStartEdit={() => { setEditingId(place.id); setEditingName(place.name) }}
                     onCommitEdit={() => commitRename(place.id)}
                     onChangeEditingName={setEditingName}
                     onCancelEdit={() => setEditingId(null)}
-                    onDelete={() => setConfirmDelete(place)}
-                    displayName={displayName}
-                  />
+                    renameLabel={t('bm.rename_category')}
+                    renamable={editable}
+                    onDelete={deletable ? () => setConfirmDelete(place) : undefined}
+                  >
+                    <div className="list-row-title">{displayName}</div>
+                  </SortableNameRow>
                 )
               })}
             </SortableContext>

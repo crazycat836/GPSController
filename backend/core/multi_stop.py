@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import random
 from typing import TYPE_CHECKING
 
-from models.schemas import Coordinate, MovementMode, SimulationState
+from models.schemas import Coordinate, MovementMode, SimulationState, osrm_profile_for
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -17,6 +16,7 @@ from config import (
     DEFAULT_PAUSE_MIN,
     clamp_pause_range,
 )
+from core.handler_common import fetch_route_coords, finish_mode, pause_with_countdown
 from core.lap_limit import record_lap_and_check_limit
 from utils.geo import haversine_m
 
@@ -100,7 +100,7 @@ class MultiStopNavigator:
             )
 
         profile_name = mode.value
-        osrm_profile = "foot" if mode in (MovementMode.WALKING, MovementMode.RUNNING) else "car"
+        osrm_profile = osrm_profile_for(mode)
 
         def _pick_profile() -> dict:
             # Honor mid-flight apply_speed across legs / laps; otherwise
@@ -190,12 +190,11 @@ class MultiStopNavigator:
                 running = False
 
         engine._route_offset_remaining = 0.0
-        if engine.state == SimulationState.MULTI_STOP:
-            engine.state = SimulationState.IDLE
-            await engine._emit("multi_stop_complete", {
-                "laps": engine.lap_count,
-            })
-            await engine._emit("state_change", {"state": engine.state.value})
+        await finish_mode(
+            engine, (SimulationState.MULTI_STOP,),
+            "multi_stop_complete",
+            {"laps": engine.lap_count},
+        )
 
         logger.info("Multi-stop finished after %d laps", engine.lap_count)
 
@@ -238,13 +237,13 @@ class MultiStopNavigator:
         start_pos = engine.current_position
         if self._quick_distance(start_pos, first) <= _FIRST_WAYPOINT_REACH_THRESHOLD_M:
             return False
-        route_data = await engine.route_service.get_route(
+        coords, _route_data = await fetch_route_coords(
+            engine.route_service,
             start_pos.lat, start_pos.lng,
             first.lat, first.lng,
             profile=osrm_profile,
-            force_straight=straight_line,
+            straight=straight_line,
         )
-        coords = [Coordinate(lat=pt[0], lng=pt[1]) for pt in route_data["coords"]]
         if len(coords) >= _MIN_LEG_COORDS:
             await engine._move_along_route(coords, pick_profile())
             if engine._stop_event.is_set():
@@ -276,14 +275,13 @@ class MultiStopNavigator:
             wp_a.lat, wp_a.lng, wp_b.lat, wp_b.lng,
         )
 
-        route_data = await engine.route_service.get_route(
+        coords, route_data = await fetch_route_coords(
+            engine.route_service,
             wp_a.lat, wp_a.lng,
             wp_b.lat, wp_b.lng,
             profile=osrm_profile,
-            force_straight=straight_line,
+            straight=straight_line,
         )
-
-        coords = [Coordinate(lat=pt[0], lng=pt[1]) for pt in route_data["coords"]]
         leg_distance = float(route_data.get("distance") or 0.0)
         engine.distance_remaining = leg_distance
 
@@ -303,22 +301,8 @@ class MultiStopNavigator:
         events on either side. Returns True if the user requested stop
         during the pause.
         """
-        engine = self.engine
         logger.info("Multi-stop: pausing %.1fs at stop %d", this_pause, stop_index)
-        await engine._emit("pause_countdown", {
-            "duration_seconds": this_pause,
-            "source": "multi_stop",
-        })
-        try:
-            await asyncio.wait_for(
-                engine._stop_event.wait(),
-                timeout=this_pause,
-            )
-            return True
-        except asyncio.TimeoutError:
-            pass
-        await engine._emit("pause_countdown_end", {"source": "multi_stop"})
-        return False
+        return await pause_with_countdown(self.engine, this_pause, "multi_stop")
 
     @staticmethod
     def _quick_distance(a: Coordinate, b: Coordinate) -> float:

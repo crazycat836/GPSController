@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import random
 
-from models.schemas import Coordinate, MovementMode, SimulationState
+from models.schemas import Coordinate, MovementMode, SimulationState, osrm_profile_for
 from config import (
     DEFAULT_PAUSE_ENABLED,
     DEFAULT_PAUSE_MAX,
     DEFAULT_PAUSE_MIN,
     clamp_pause_range,
+)
+from core.handler_common import (
+    emit_route_path,
+    finish_mode,
+    pause_with_countdown,
+    route_coords,
 )
 from core.lap_limit import record_lap_and_check_limit
 
@@ -59,7 +64,7 @@ class RouteLooper:
             raise ValueError("At least 2 waypoints are required for a loop")
 
         profile_name = mode.value
-        osrm_profile = "foot" if mode in (MovementMode.WALKING, MovementMode.RUNNING) else "car"
+        osrm_profile = osrm_profile_for(mode)
 
         # Close the loop: append the first waypoint at the end
         closed_waypoints = list(waypoints) + [waypoints[0]]
@@ -71,7 +76,7 @@ class RouteLooper:
             force_straight=straight_line,
         )
 
-        coords = [Coordinate(lat=pt[0], lng=pt[1]) for pt in route_data["coords"]]
+        coords = route_coords(route_data)
 
         if len(coords) < 2:
             raise ValueError("OSRM returned an empty route for the loop")
@@ -81,9 +86,7 @@ class RouteLooper:
         engine.total_segments = len(coords) - 1
         engine.segment_index = 0
 
-        await engine._emit("route_path", {
-            "coords": [{"lat": c.lat, "lng": c.lng} for c in coords],
-        })
+        await emit_route_path(engine, coords)
         await engine._emit("state_change", {
             "state": engine.state.value,
             "waypoints": [{"lat": wp.lat, "lng": wp.lng} for wp in waypoints],
@@ -125,19 +128,10 @@ class RouteLooper:
                 if hi > 0:
                     lap_pause = random.uniform(lo, hi)
                     logger.info("Loop: pausing %.1fs before next lap", lap_pause)
-                    await engine._emit("pause_countdown", {
-                        "duration_seconds": lap_pause,
-                        "source": "loop",
-                    })
-                    try:
-                        await asyncio.wait_for(engine._stop_event.wait(), timeout=lap_pause)
+                    if await pause_with_countdown(engine, lap_pause, "loop"):
                         break
-                    except asyncio.TimeoutError:
-                        pass
-                    await engine._emit("pause_countdown_end", {"source": "loop"})
 
-        if engine.state == SimulationState.LOOPING:
-            engine.state = SimulationState.IDLE
-            await engine._emit("state_change", {"state": engine.state.value})
+        # Loop end has no <mode>_complete event — state_change only.
+        await finish_mode(engine, (SimulationState.LOOPING,))
 
         logger.info("Route loop stopped after %d laps", engine.lap_count)

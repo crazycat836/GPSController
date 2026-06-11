@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from models.schemas import Coordinate, MovementMode, SimulationState
+from models.schemas import Coordinate, MovementMode, SimulationState, osrm_profile_for
 from config import resolve_speed_profile
+from core.handler_common import emit_route_path, fetch_route_coords, finish_mode
 
 if TYPE_CHECKING:
     from core.simulation_engine import SimulationEngine
@@ -47,23 +48,21 @@ class Navigator:
         speed_profile = resolve_speed_profile(profile_name, speed_kmh, speed_min_kmh, speed_max_kmh)
 
         # Map movement mode to OSRM routing profile
-        osrm_profile = "foot" if mode in (MovementMode.WALKING, MovementMode.RUNNING) else "car"
+        osrm_profile = osrm_profile_for(mode)
 
         logger.info(
             "Navigating from (%.6f, %.6f) to (%.6f, %.6f) [%s]",
             start.lat, start.lng, dest.lat, dest.lng, profile_name,
         )
 
-        # Fetch route from OSRM
-        route_data = await engine.route_service.get_route(
+        # Fetch route from OSRM and convert to Coordinate objects
+        coords, route_data = await fetch_route_coords(
+            engine.route_service,
             start.lat, start.lng,
             dest.lat, dest.lng,
             profile=osrm_profile,
-            force_straight=straight_line,
+            straight=straight_line,
         )
-
-        # Convert [lat, lng] lists to Coordinate objects
-        coords = [Coordinate(lat=pt[0], lng=pt[1]) for pt in route_data["coords"]]
 
         if len(coords) < 2:
             logger.warning("Route returned fewer than 2 points; teleporting instead")
@@ -76,9 +75,7 @@ class Navigator:
         engine.distance_traveled = 0.0
         engine.distance_remaining = route_data["distance"]
 
-        await engine._emit("route_path", {
-            "coords": [{"lat": c.lat, "lng": c.lng} for c in coords],
-        })
+        await emit_route_path(engine, coords)
         await engine._emit("state_change", {
             "state": engine.state.value,
             "destination": {"lat": dest.lat, "lng": dest.lng},
@@ -92,11 +89,10 @@ class Navigator:
         await engine._move_along_route(coords, speed_profile)
 
         # Navigation complete
-        if engine.state == SimulationState.NAVIGATING:
-            engine.state = SimulationState.IDLE
-            await engine._emit("navigation_complete", {
-                "destination": {"lat": dest.lat, "lng": dest.lng},
-            })
-            await engine._emit("state_change", {"state": engine.state.value})
+        await finish_mode(
+            engine, (SimulationState.NAVIGATING,),
+            "navigation_complete",
+            {"destination": {"lat": dest.lat, "lng": dest.lng}},
+        )
 
         logger.info("Navigation to (%.6f, %.6f) finished", dest.lat, dest.lng)

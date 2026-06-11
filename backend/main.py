@@ -83,6 +83,40 @@ ctx.app_state = app_state
 
 # ── Lifespan ─────────────────────────────────────────────
 
+# Grace window for cooperative-exit background loops before they get
+# force-cancelled at shutdown.
+_SHUTDOWN_GRACE_S = 2.0
+
+
+async def _stop_background_task(
+    task: asyncio.Task,
+    stop_event: asyncio.Event,
+    *,
+    label: str,
+    timeout_s: float = _SHUTDOWN_GRACE_S,
+) -> None:
+    """Signal a cooperative-exit loop to stop, cancelling it on timeout.
+
+    Shared teardown for the lifespan background loops (liveness probe,
+    WiFi keep-alive). Sets *stop_event*, waits up to *timeout_s* for the
+    task to unblock, and falls back to cancel if it doesn't.
+    """
+    stop_event.set()
+    try:
+        await asyncio.wait_for(task, timeout=timeout_s)
+    except asyncio.TimeoutError:
+        # Cooperative exit didn't finish in the grace window — force it.
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        # A genuine bug in the loop teardown — don't let it vanish.
+        logger.exception("shutdown: %s raised during teardown", label)
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     from services import connection_state
@@ -156,35 +190,8 @@ async def lifespan(application: FastAPI):
     # ── Shutdown ──
     # Signal cooperative-exit loops first, then fall back to cancel if
     # they don't unblock within the grace window.
-    liveness_stop.set()
-    try:
-        await asyncio.wait_for(liveness_task, timeout=2.0)
-    except asyncio.TimeoutError:
-        # Cooperative exit didn't finish in the grace window — force it.
-        liveness_task.cancel()
-        try:
-            await liveness_task
-        except (asyncio.CancelledError, Exception):
-            pass
-    except asyncio.CancelledError:
-        pass
-    except Exception:
-        # A genuine bug in the liveness loop teardown — don't let it vanish.
-        logger.exception("shutdown: liveness loop raised during teardown")
-
-    keepalive_stop.set()
-    try:
-        await asyncio.wait_for(keepalive_task, timeout=2.0)
-    except asyncio.TimeoutError:
-        keepalive_task.cancel()
-        try:
-            await keepalive_task
-        except (asyncio.CancelledError, Exception):
-            pass
-    except asyncio.CancelledError:
-        pass
-    except Exception:
-        logger.exception("shutdown: keep-alive loop raised during teardown")
+    await _stop_background_task(liveness_task, liveness_stop, label="liveness loop")
+    await _stop_background_task(keepalive_task, keepalive_stop, label="keep-alive loop")
 
     watchdog_task.cancel()
     try:

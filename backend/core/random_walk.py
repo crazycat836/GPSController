@@ -8,7 +8,13 @@ import random
 
 from pymobiledevice3.exceptions import ConnectionTerminatedError
 
-from models.schemas import Coordinate, MovementMode, SimulationState
+from models.schemas import Coordinate, MovementMode, SimulationState, osrm_profile_for
+from core.handler_common import (
+    emit_route_path,
+    fetch_route_coords,
+    finish_mode,
+    pause_with_countdown,
+)
 from services.interpolator import RouteInterpolator
 from config import (
     DEFAULT_PAUSE_ENABLED,
@@ -89,7 +95,7 @@ class RandomWalkHandler:
             )
 
         profile_name = mode.value
-        osrm_profile = "foot" if mode in (MovementMode.WALKING, MovementMode.RUNNING) else "car"
+        osrm_profile = osrm_profile_for(mode)
 
         engine.state = SimulationState.RANDOM_WALK
         engine.distance_traveled = 0.0
@@ -181,12 +187,11 @@ class RandomWalkHandler:
                 break
 
         # Ensure state returns to IDLE when random walk ends
-        if engine.state in (SimulationState.RANDOM_WALK, SimulationState.PAUSED):
-            engine.state = SimulationState.IDLE
-            await engine._emit("random_walk_complete", {
-                "destinations_visited": walk_count,
-            })
-            await engine._emit("state_change", {"state": engine.state.value})
+        await finish_mode(
+            engine, (SimulationState.RANDOM_WALK, SimulationState.PAUSED),
+            "random_walk_complete",
+            {"destinations_visited": walk_count},
+        )
 
         logger.info("Random walk finished after %d destinations", walk_count)
 
@@ -210,14 +215,13 @@ class RandomWalkHandler:
         """
         engine = self.engine
         try:
-            route_data = await engine.route_service.get_route(
+            coords, route_data = await fetch_route_coords(
+                engine.route_service,
                 current.lat, current.lng,
                 dest_lat, dest_lng,
                 profile=osrm_profile,
-                force_straight=straight_line,
+                straight=straight_line,
             )
-
-            coords = [Coordinate(lat=pt[0], lng=pt[1]) for pt in route_data["coords"]]
             engine.distance_remaining = route_data["distance"]
 
             if len(coords) < _MIN_LEG_COORDS:
@@ -227,9 +231,7 @@ class RandomWalkHandler:
                 )
                 return _LEG_RETRY
 
-            await engine._emit("route_path", {
-                "coords": [{"lat": c.lat, "lng": c.lng} for c in coords],
-            })
+            await emit_route_path(engine, coords)
             speed_profile = self._pick_speed_profile(
                 profile_name, speed_kmh, speed_min_kmh, speed_max_kmh,
             )
@@ -326,21 +328,4 @@ class RandomWalkHandler:
             return False
         pause_duration = (rng or random).uniform(lo, hi)
         logger.info("Random walk pausing for %.1fs before next leg", pause_duration)
-
-        engine = self.engine
-        await engine._emit("pause_countdown", {
-            "duration_seconds": pause_duration,
-            "source": "random_walk",
-        })
-
-        try:
-            await asyncio.wait_for(
-                engine._stop_event.wait(),
-                timeout=pause_duration,
-            )
-            return True
-        except asyncio.TimeoutError:
-            pass
-
-        await engine._emit("pause_countdown_end", {"source": "random_walk"})
-        return False
+        return await pause_with_countdown(self.engine, pause_duration, "random_walk")

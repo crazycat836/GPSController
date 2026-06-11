@@ -7,13 +7,11 @@ import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
 import ListRow from '../ui/ListRow'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
+import InlineRenameInput, { INLINE_RENAME_HEIGHT_PX } from '../ui/InlineRenameInput'
 import { getPlaceColor, getTagColor } from '../../lib/bookmarks'
 
 /** Width / left-offset (px) of the accent stripe marking the active row. */
 const ACTIVE_INDICATOR_STRIPE_PX = 2
-
-/** Inline rename input height — matches compact list-row baseline. */
-const INLINE_INPUT_HEIGHT_PX = 28
 
 interface BookmarkRowProps {
   bookmark: Bookmark
@@ -77,19 +75,13 @@ function BookmarkRowImpl({
   )
 
   const titleNode = isInlineEditing ? (
-    <input
-      autoFocus
-      type="text"
-      className="search-input w-full"
+    <InlineRenameInput
       value={inlineEditName}
-      onChange={(e) => onInlineEditChange(e.target.value)}
-      onBlur={() => onInlineEditCommit(b.id)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && !e.nativeEvent.isComposing) onInlineEditCommit(b.id)
-        else if (e.key === 'Escape') onInlineEditCancel()
-      }}
-      onClick={(e) => e.stopPropagation()}
-      style={{ paddingLeft: 8, height: INLINE_INPUT_HEIGHT_PX }}
+      onChange={onInlineEditChange}
+      onCommit={() => onInlineEditCommit(b.id)}
+      onCancel={onInlineEditCancel}
+      className="search-input w-full"
+      style={{ height: INLINE_RENAME_HEIGHT_PX }}
     />
   ) : (
     <>

@@ -18,12 +18,9 @@ re-shaped on load by :func:`_migrate_v0_to_v1`.
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Literal
 
 from models.schemas import (
@@ -32,7 +29,7 @@ from models.schemas import (
     RouteStore,
     SavedRoute,
 )
-from services.json_safe import safe_load_json, safe_write_json
+from services.json_store import JsonModelStore, next_sort_order, reorder_by_ids
 
 logger = logging.getLogger(__name__)
 
@@ -112,93 +109,37 @@ def _normalise_name(name: str) -> str:
     return name.strip().casefold()
 
 
-class SavedRoutesStore:
-    """Persistent route store with categories, guarded by an asyncio.Lock."""
+class SavedRoutesStore(JsonModelStore[RouteStore]):
+    """Persistent route store with categories, guarded by an asyncio.Lock.
 
-    def __init__(self, routes_file: Path) -> None:
-        self._routes_file = routes_file
-        self._store: RouteStore = self._load()
-        self._lock = asyncio.Lock()
+    Load / quarantine / persist / locking come from :class:`JsonModelStore`;
+    this class owns the route/category mutators and the conflict policy.
+    """
+
+    store_label = "route"
 
     # ------------------------------------------------------------------
-    # Persistence
+    # JsonModelStore hooks
     # ------------------------------------------------------------------
 
-    def _load(self) -> RouteStore:
-        raw = safe_load_json(self._routes_file)
-        if raw is None:
-            return RouteStore(
-                version=ROUTE_STORE_VERSION,
-                categories=_build_preset_categories(),
-                routes=[],
-            )
-        migrated = False
-        try:
-            raw, migrated = _migrate_v0_to_v1(raw)
-            store = RouteStore(**raw)
-        except Exception as exc:
-            # JSON parsed but the migration / Pydantic validation failed.
-            # ``safe_load_json`` only quarantines on JSON parse errors, so
-            # we have to do the rename ourselves — otherwise the next
-            # mutation will ``_persist()`` an empty store over the user's
-            # data. Side-stepping the file altogether (rename + start
-            # fresh) is the cheapest way to preserve the original bytes.
-            self._quarantine_invalid_file(exc)
-            return RouteStore(
-                version=ROUTE_STORE_VERSION,
-                categories=_build_preset_categories(),
-                routes=[],
-            )
+    def _build_default_store(self) -> RouteStore:
+        return RouteStore(
+            version=ROUTE_STORE_VERSION,
+            categories=_build_preset_categories(),
+            routes=[],
+        )
 
-        # Ensure presets exist even if a hand-edited file dropped them.
-        store, ensured = self._ensure_presets(store)
-        if migrated or ensured:
-            self._persist_now(store)
-        return store
+    def _migrate(self, raw: dict) -> tuple[dict, bool]:
+        return _migrate_v0_to_v1(raw)
 
-    def _quarantine_invalid_file(self, exc: Exception) -> None:
-        """Rename the on-disk routes file to ``<name>.bak-<ts>`` so a
-        Pydantic validation failure during migration doesn't get
-        clobbered by the next mutation. Best-effort — if the rename
-        itself fails we log and proceed so the app still starts."""
-        if not self._routes_file.exists():
-            logger.warning("Route payload failed validation (%s); file missing", exc)
-            return
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        backup = self._routes_file.with_name(f"{self._routes_file.name}.bak-{ts}")
-        try:
-            self._routes_file.rename(backup)
-            logger.warning(
-                "Route payload failed validation (%s); quarantined to %s",
-                exc, backup.name,
-            )
-        except OSError as rename_exc:
-            logger.error(
-                "Route payload failed validation (%s); rename to %s also failed (%s); "
-                "in-memory store will be empty",
-                exc, backup.name, rename_exc,
-            )
+    def _validate(self, raw: dict) -> RouteStore:
+        return RouteStore(**raw)
 
-    def _persist_now(self, store: RouteStore) -> None:
-        """Write *store* to disk. Used during load when we don't hold
-        ``self._lock`` yet; the public mutators call ``_persist()`` which
-        snapshots ``self._store`` for the same purpose."""
-        payload = json.loads(store.model_dump_json())
-        safe_write_json(self._routes_file, payload)
-
-    async def _persist(self) -> None:
-        """Offload the blocking write to a worker thread. Callers hold
-        ``self._lock`` across the await, so the store can't be mutated
-        mid-serialise — no torn read despite running off the event loop.
-        The synchronous load path uses :meth:`_persist_now` directly."""
-        await asyncio.to_thread(self._persist_now, self._store)
-
-    @staticmethod
-    def _ensure_presets(store: RouteStore) -> tuple[RouteStore, bool]:
+    def _ensure_presets(self, store: RouteStore) -> tuple[RouteStore, bool]:
         """Return *store* with any missing preset categories appended.
 
-        Idempotent — existing entries by id are preserved. Returns
-        ``(store, added)`` so the caller knows whether to persist.
+        Idempotent — existing entries by id are preserved (covers
+        hand-edited files that dropped the preset "default" category).
         """
         existing_ids = {c.id for c in store.categories}
         missing: list[RouteCategory] = []
@@ -269,12 +210,11 @@ class SavedRoutesStore:
     async def _insert_locked(self, route: SavedRoute) -> SavedRoute:
         """Append a fresh row. Must be called under ``self._lock``."""
         now = _now_iso()
-        max_order = max((r.sort_order for r in self._store.routes), default=-1)
         new_route = route.model_copy(update={
             "id": str(uuid.uuid4()),
             "created_at": now,
             "updated_at": now,
-            "sort_order": max_order + 1,
+            "sort_order": next_sort_order(self._store.routes),
             "category_id": self._resolve_category_id(route.category_id),
         })
         self._store.routes.append(new_route)
@@ -406,13 +346,13 @@ class SavedRoutesStore:
             return 0
         async with self._lock:
             now = _now_iso()
-            max_order = max((r.sort_order for r in self._store.routes), default=-1)
-            for offset, r in enumerate(routes, start=1):
+            base_order = next_sort_order(self._store.routes)
+            for offset, r in enumerate(routes):
                 self._store.routes.append(r.model_copy(update={
                     "id": str(uuid.uuid4()),
                     "created_at": now,
                     "updated_at": now,
-                    "sort_order": max_order + offset,
+                    "sort_order": base_order + offset,
                     "category_id": self._resolve_category_id(r.category_id),
                 }))
             await self._persist()
@@ -424,12 +364,11 @@ class SavedRoutesStore:
 
     async def create_category(self, name: str, color: str = "#6c8cff") -> RouteCategory:
         async with self._lock:
-            max_order = max((c.sort_order for c in self._store.categories), default=-1)
             category = RouteCategory(
                 id=str(uuid.uuid4()),
                 name=name,
                 color=color,
-                sort_order=max_order + 1,
+                sort_order=next_sort_order(self._store.categories),
                 created_at=_now_iso(),
             )
             self._store.categories.append(category)
@@ -463,16 +402,7 @@ class SavedRoutesStore:
         their current order. Returns the number whose sort_order
         actually changed."""
         async with self._lock:
-            id_to_order = {iid: i for i, iid in enumerate(ordered_ids)}
-            changed = 0
-            new_cats: list[RouteCategory] = []
-            for c in self._store.categories:
-                new_order = id_to_order.get(c.id)
-                if new_order is None or c.sort_order == new_order:
-                    new_cats.append(c)
-                    continue
-                new_cats.append(c.model_copy(update={"sort_order": new_order}))
-                changed += 1
+            new_cats, changed = reorder_by_ids(self._store.categories, ordered_ids)
             if changed:
                 self._store.categories = new_cats
                 await self._persist()
@@ -483,16 +413,7 @@ class SavedRoutesStore:
         sequence. Same contract as :meth:`reorder_categories` — unknown
         ids ignored, untouched routes keep their order."""
         async with self._lock:
-            id_to_order = {iid: i for i, iid in enumerate(ordered_ids)}
-            changed = 0
-            new_routes: list[SavedRoute] = []
-            for r in self._store.routes:
-                new_order = id_to_order.get(r.id)
-                if new_order is None or r.sort_order == new_order:
-                    new_routes.append(r)
-                    continue
-                new_routes.append(r.model_copy(update={"sort_order": new_order}))
-                changed += 1
+            new_routes, changed = reorder_by_ids(self._store.routes, ordered_ids)
             if changed:
                 self._store.routes = new_routes
                 await self._persist()

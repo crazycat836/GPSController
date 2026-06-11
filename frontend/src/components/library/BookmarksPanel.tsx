@@ -1,17 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Plus, Bookmark as BookmarkIcon, Pencil, Trash2, Copy,
   FolderInput, ClipboardList, ClipboardPaste, GripVertical,
 } from 'lucide-react'
-import {
-  DndContext, closestCenter, KeyboardSensor, PointerSensor,
-  useSensor, useSensors, type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  arrayMove, SortableContext, sortableKeyboardCoordinates,
-  useSortable, verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { DndContext, closestCenter } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
@@ -19,11 +12,17 @@ import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
 import { isDefaultPlace } from '../../lib/bookmarks'
 import { copyToClipboard } from '../../lib/clipboard'
+import { commitTrimmedRename } from '../../lib/rename'
+import { toggleInSet } from '../../lib/sets'
+import { useDragReorder } from '../../hooks/useDragReorder'
+import { useReorderMode } from '../../hooks/useReorderMode'
+import { useSelectionSet } from '../../hooks/useSelectionSet'
 import { type Chip } from '../ui/ChipFilterBar'
 import { type KebabMenuItem } from '../ui/KebabMenu'
 import EmptyState from '../ui/EmptyState'
 import SectionHeader from '../ui/SectionHeader'
 import ConfirmDialog from '../ui/ConfirmDialog'
+import SortableHandleRow from '../ui/SortableHandleRow'
 import BookmarkEditDialog, { type BookmarkEditValues } from './BookmarkEditDialog'
 import PlaceManagerDialog from './PlaceManagerDialog'
 import TagManagerDialog from './TagManagerDialog'
@@ -50,6 +49,8 @@ const COPIED_FLASH_MS = 1200
 /** Number of place chips kept visible before the bar collapses into a "+N" overflow. */
 const PLACE_CHIPS_VISIBLE_CAP = 5
 
+const getBookmarkId = (b: Bookmark) => b.id
+
 export default function BookmarksPanel({ onBookmarkClick, currentPosition }: BookmarksPanelProps) {
   const t = useT()
   const bm = useBookmarkContext()
@@ -60,8 +61,10 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   const [activePlaceId, setActivePlaceId] = useState<string>(ALL_ID)
   const [activeTagIds, setActiveTagIds] = useState<Set<string>>(new Set())
   const [sortMode, setSortMode] = useState<SortMode>('by_place')
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const {
+    selectionMode, selectedIds, toggleSelected,
+    enterSelection, exitSelection, clearSelected,
+  } = useSelectionSet()
   const [editing, setEditing] = useState<{ mode: 'create' | 'edit'; bookmark?: Bookmark } | null>(null)
   const [placeMgrOpen, setPlaceMgrOpen] = useState(false)
   const [tagMgrOpen, setTagMgrOpen] = useState(false)
@@ -70,19 +73,23 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   const [inlineEditName, setInlineEditName] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
-  const [reorderMode, setReorderMode] = useState(false)
-  // Filter snapshot for reorder-mode round-trip. Entering reorder
-  // clears the place/tag filters (so dragging operates on the full
-  // list); exiting restores whatever the user had before.
-  const prevFiltersRef = useRef<{ placeId: string; tagIds: string[] }>({
-    placeId: ALL_ID,
-    tagIds: [],
+  // Reorder-mode round-trip: entering snapshots + clears the place/tag
+  // filters (so dragging operates on the full list); exiting restores
+  // whatever the user had before.
+  const { reorderMode, enterReorderMode, exitReorderMode } = useReorderMode({
+    takeSnapshot: () => ({ placeId: activePlaceId, tagIds: Array.from(activeTagIds) }),
+    onEnter: () => {
+      setActivePlaceId(ALL_ID)
+      setActiveTagIds(new Set())
+      // Selection-mode and reorder-mode share the leading row slot
+      // (checkbox vs handle), so they're mutually exclusive.
+      exitSelection()
+    },
+    restore: (snapshot) => {
+      setActivePlaceId(snapshot.placeId)
+      setActiveTagIds(new Set(snapshot.tagIds))
+    },
   })
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  )
 
   const displayPlace = useCallback((name: string) => {
     if (!isDefaultPlace(name)) return name
@@ -194,27 +201,8 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     return list
   }, [bookmarks, places, displayPlace, t])
 
-  // ─── Selection mode ─────────────────────────────────
-  const toggleSelected = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
-  const exitSelection = useCallback(() => {
-    setSelectionMode(false)
-    setSelectedIds(new Set())
-  }, [])
-
   const toggleTagFilter = useCallback((tagId: string) => {
-    setActiveTagIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(tagId)) next.delete(tagId)
-      else next.add(tagId)
-      return next
-    })
+    setActiveTagIds((prev) => toggleInSet(prev, tagId))
   }, [])
 
   // ─── Mutations ──────────────────────────────────────
@@ -275,17 +263,17 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     setConfirm(null)
   }, [confirm, bm, exitSelection])
 
-  const commitInlineRename = useCallback(async (id: string) => {
-    const next = inlineEditName.trim()
+  const commitInlineRename = useCallback((id: string) => {
     const current = bookmarks.find((b) => b.id === id)
     setInlineEditId(null)
-    if (!next || !current || next === current.name) return
-    try {
-      await bm.updateBookmark(id, { name: next })
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t('toast.rename_failed')
-      showToast(message)
-    }
+    commitTrimmedRename(inlineEditName, current?.name, async (next) => {
+      try {
+        await bm.updateBookmark(id, { name: next })
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : t('toast.rename_failed')
+        showToast(message)
+      }
+    })
   }, [inlineEditName, bookmarks, bm, showToast, t])
 
   // ─── Header kebab items ─────────────────────────────
@@ -308,7 +296,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       icon: <ClipboardList width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
       onSelect: () => {
         if (selectionMode) exitSelection()
-        else setSelectionMode(true)
+        else enterSelection()
       },
     },
     {
@@ -316,31 +304,11 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       label: reorderMode ? t('generic.cancel') : t('panel.route_reorder_mode'),
       icon: <GripVertical width={ICON_SIZE.sm} height={ICON_SIZE.sm} />,
       onSelect: () => {
-        if (reorderMode) {
-          // Exiting: restore the place/tag filters the user had before.
-          setReorderMode(false)
-          setActivePlaceId(prevFiltersRef.current.placeId)
-          setActiveTagIds(new Set(prevFiltersRef.current.tagIds))
-          return
-        }
-        // Entering: snapshot the current filters and clear them so the
-        // drag list shows every bookmark. Reordering within a filtered
-        // view would silently leave hidden bookmarks' sort_order
-        // untouched, and the user wouldn't see why their drag didn't
-        // "stick" after switching back to All.
-        prevFiltersRef.current = {
-          placeId: activePlaceId,
-          tagIds: Array.from(activeTagIds),
-        }
-        setActivePlaceId(ALL_ID)
-        setActiveTagIds(new Set())
-        setReorderMode(true)
-        // Selection-mode and reorder-mode share the leading row slot
-        // (checkbox vs handle), so they're mutually exclusive.
-        exitSelection()
+        if (reorderMode) exitReorderMode()
+        else enterReorderMode()
       },
     },
-  ], [t, selectionMode, exitSelection, reorderMode])
+  ], [t, selectionMode, enterSelection, exitSelection, reorderMode, enterReorderMode, exitReorderMode])
 
   // ─── Row kebab ──────────────────────────────────────
   const rowMenuItems = useCallback((b: Bookmark): KebabMenuItem[] => {
@@ -406,16 +374,11 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     return [...filtered].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
   }, [reorderMode, filtered])
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    if (!reorderList) return
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    const oldIndex = reorderList.findIndex((b) => b.id === active.id)
-    const newIndex = reorderList.findIndex((b) => b.id === over.id)
-    if (oldIndex < 0 || newIndex < 0) return
-    const next = arrayMove(reorderList, oldIndex, newIndex)
-    void bm.handleBookmarksReorder(next.map((b) => b.id))
-  }, [reorderList, bm])
+  const { sensors, handleDragEnd } = useDragReorder(
+    reorderList,
+    getBookmarkId,
+    bm.handleBookmarksReorder,
+  )
 
   // Narrow the touchBookmark binding out of the full context value so
   // BookmarkRow's memo doesn't bust on every BookmarkProvider render
@@ -475,7 +438,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         hasBookmarks={bookmarks.length > 0}
         selectionMode={selectionMode}
         selectedCount={selectedIds.size}
-        onClearSelection={() => setSelectedIds(new Set())}
+        onClearSelection={clearSelected}
         onConfirmBatchDelete={confirmBatchDelete}
         onExitSelection={exitSelection}
         headerMenuItems={headerMenuItems}
@@ -497,9 +460,9 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
           <SortableContext items={reorderList.map((b) => b.id)} strategy={verticalListSortingStrategy}>
             <div className="flex flex-col gap-1.5">
               {reorderList.map((b) => (
-                <SortableBookmarkWrapper key={b.id} id={b.id}>
+                <SortableHandleRow key={b.id} id={b.id}>
                   {renderBookmarkRow(b)}
-                </SortableBookmarkWrapper>
+                </SortableHandleRow>
               ))}
             </div>
           </SortableContext>
@@ -617,39 +580,6 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         onManageTags={() => setTagMgrOpen(true)}
         onAdd={() => setEditing({ mode: 'create' })}
       />
-    </div>
-  )
-}
-
-// ── Sortable bookmark wrapper ────────────────────────────
-// Wraps a fully-rendered BookmarkRow with a leading drag handle in
-// reorder mode. Kept inline because BookmarkRow's prop surface is
-// already large and a presentation wrapper that just adds a handle
-// belongs next to the orchestrator that decides when to apply it.
-interface SortableBookmarkWrapperProps {
-  id: string
-  children: React.ReactNode
-}
-
-function SortableBookmarkWrapper({ id, children }: SortableBookmarkWrapperProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.55 : 1,
-  }
-  return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-1.5">
-      <button
-        type="button"
-        className="cursor-grab active:cursor-grabbing px-1 text-[var(--color-text-3)] hover:text-[var(--color-text-1)] focus:outline-none"
-        aria-label="drag handle"
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-      </button>
-      <div className="flex-1 min-w-0">{children}</div>
     </div>
   )
 }

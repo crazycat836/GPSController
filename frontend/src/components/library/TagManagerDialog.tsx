@@ -1,28 +1,18 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Tag as TagIcon, Pencil, Trash2, GripVertical } from 'lucide-react'
-import {
-  DndContext,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { Tag as TagIcon } from 'lucide-react'
+import { DndContext, closestCenter } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import type { BookmarkTag } from '../../hooks/useBookmarks'
 import { ICON_SIZE } from '../../lib/icons'
 import { getTagColor } from '../../lib/bookmarks'
+import { commitTrimmedRename } from '../../lib/rename'
 import { useT } from '../../i18n'
 import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import { useOptimisticOrder } from '../../hooks/useOptimisticOrder'
 import ConfirmDialog from '../ui/ConfirmDialog'
+import SortableNameRow from './SortableNameRow'
 
 interface TagManagerDialogProps {
   open: boolean
@@ -42,112 +32,7 @@ interface TagManagerDialogProps {
 // bookmark tag lists for no user-visible gain.
 const PRESET_TAG_IDS = new Set(['preset_scanner', 'preset_mushroom', 'preset_flower'])
 
-interface SortableRowProps {
-  tag: BookmarkTag
-  isEditing: boolean
-  editingName: string
-  onStartEdit: () => void
-  onCommitEdit: () => void
-  onChangeEditingName: (v: string) => void
-  onCancelEdit: () => void
-  onDelete?: () => void
-  onRenameAvailable: boolean
-}
-
-function SortableRow({
-  tag,
-  isEditing,
-  editingName,
-  onStartEdit,
-  onCommitEdit,
-  onChangeEditingName,
-  onCancelEdit,
-  onDelete,
-  onRenameAvailable,
-}: SortableRowProps) {
-  const t = useT()
-  const sortable = useSortable({ id: tag.id })
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = sortable
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    background: 'var(--color-surface-2)',
-    opacity: isDragging ? 0.6 : 1,
-  }
-
-  const deletable = !!onDelete && !PRESET_TAG_IDS.has(tag.id)
-
-  return (
-    <div ref={setNodeRef} className="list-row list-row--compact" style={style}>
-      <span className="list-row-leading flex items-center gap-1">
-        <button
-          type="button"
-          className="kebab-btn"
-          aria-label={t('bm.reorder')}
-          {...attributes}
-          {...listeners}
-          style={{ cursor: 'grab', color: 'var(--color-text-3)' }}
-        >
-          <GripVertical width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-        </button>
-        <span
-          aria-hidden="true"
-          style={{
-            width: 10, height: 10, borderRadius: '50%',
-            background: getTagColor(tag),
-            flexShrink: 0,
-          }}
-        />
-      </span>
-      <div className="list-row-body">
-        {isEditing ? (
-          <input
-            autoFocus
-            type="text"
-            className="search-input"
-            value={editingName}
-            onChange={(e) => onChangeEditingName(e.target.value)}
-            onBlur={onCommitEdit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing) onCommitEdit()
-              else if (e.key === 'Escape') onCancelEdit()
-            }}
-            style={{ paddingLeft: 8 }}
-          />
-        ) : (
-          <div className="list-row-title flex items-center gap-1.5">
-            <span>{tag.name}</span>
-          </div>
-        )}
-      </div>
-      <span className="list-row-trailing">
-        {onRenameAvailable && !isEditing && (
-          <button
-            type="button"
-            className="kebab-btn"
-            title={t('bm.rename_tag')}
-            aria-label={t('bm.rename_tag')}
-            onClick={onStartEdit}
-          >
-            <Pencil width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-          </button>
-        )}
-        {deletable && (
-          <button
-            type="button"
-            className="kebab-btn"
-            title={t('generic.delete')}
-            aria-label={t('generic.delete')}
-            onClick={onDelete}
-            style={{ color: 'var(--color-danger-text)' }}
-          >
-            <Trash2 width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-          </button>
-        )}
-      </span>
-    </div>
-  )
-}
+const getTagId = (tg: BookmarkTag) => tg.id
 
 /**
  * Manage the "tag" axis (multi-valued per bookmark: what you'll find there).
@@ -168,53 +53,24 @@ export default function TagManagerDialog({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<BookmarkTag | null>(null)
-  const [localOrder, setLocalOrder] = useState<string[] | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-  )
+  const {
+    sensors,
+    orderedItems: orderedTags,
+    handleDragEnd,
+  } = useOptimisticOrder(tags, getTagId, onReorder)
 
   useModalDismiss({ open, onDismiss: onClose })
   useFocusTrap(dialogRef, open)
 
-  const orderedTags = useMemo(() => {
-    if (!localOrder) return tags
-    const byId = new Map(tags.map((t) => [t.id, t]))
-    const ordered: BookmarkTag[] = []
-    for (const id of localOrder) {
-      const tg = byId.get(id)
-      if (tg) ordered.push(tg)
-    }
-    for (const tg of tags) {
-      if (!localOrder.includes(tg.id)) ordered.push(tg)
-    }
-    return ordered
-  }, [tags, localOrder])
-
   const commitRename = useCallback((id: string) => {
-    const n = editingName.trim()
     const current = tags.find((x) => x.id === id)
-    if (current && n && n !== current.name && onRename) {
-      void onRename(id, n)
+    if (onRename) {
+      commitTrimmedRename(editingName, current?.name, (n) => onRename(id, n))
     }
     setEditingId(null)
   }, [editingName, tags, onRename])
-
-  const handleDragEnd = useCallback(
-    (e: DragEndEvent) => {
-      const { active, over } = e
-      if (!over || active.id === over.id) return
-      const ids = orderedTags.map((tg) => tg.id)
-      const from = ids.indexOf(String(active.id))
-      const to = ids.indexOf(String(over.id))
-      if (from < 0 || to < 0) return
-      const next = arrayMove(ids, from, to)
-      setLocalOrder(next)
-      if (onReorder) void Promise.resolve(onReorder(next)).then(() => setLocalOrder(null))
-    },
-    [orderedTags, onReorder],
-  )
 
   if (!open) return null
 
@@ -237,20 +93,29 @@ export default function TagManagerDialog({
         <div className="flex flex-col gap-1.5 mt-2 max-h-[320px] overflow-y-auto scrollbar-thin">
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={orderedTags.map((tg) => tg.id)} strategy={verticalListSortingStrategy}>
-              {orderedTags.map((tg) => (
-                <SortableRow
-                  key={tg.id}
-                  tag={tg}
-                  isEditing={editingId === tg.id}
-                  editingName={editingName}
-                  onStartEdit={() => { setEditingId(tg.id); setEditingName(tg.name) }}
-                  onCommitEdit={() => commitRename(tg.id)}
-                  onChangeEditingName={setEditingName}
-                  onCancelEdit={() => setEditingId(null)}
-                  onDelete={onDelete ? () => setConfirmDelete(tg) : undefined}
-                  onRenameAvailable={!!onRename}
-                />
-              ))}
+              {orderedTags.map((tg) => {
+                const deletable = !!onDelete && !PRESET_TAG_IDS.has(tg.id)
+                return (
+                  <SortableNameRow
+                    key={tg.id}
+                    id={tg.id}
+                    dotColor={getTagColor(tg)}
+                    isEditing={editingId === tg.id}
+                    editingName={editingName}
+                    onStartEdit={() => { setEditingId(tg.id); setEditingName(tg.name) }}
+                    onCommitEdit={() => commitRename(tg.id)}
+                    onChangeEditingName={setEditingName}
+                    onCancelEdit={() => setEditingId(null)}
+                    renameLabel={t('bm.rename_tag')}
+                    renamable={!!onRename}
+                    onDelete={deletable ? () => setConfirmDelete(tg) : undefined}
+                  >
+                    <div className="list-row-title flex items-center gap-1.5">
+                      <span>{tg.name}</span>
+                    </div>
+                  </SortableNameRow>
+                )
+              })}
             </SortableContext>
           </DndContext>
         </div>

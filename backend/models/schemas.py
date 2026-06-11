@@ -35,6 +35,16 @@ class MovementMode(str, Enum):
     DRIVING = "driving"
 
 
+def osrm_profile_for(mode: MovementMode) -> str:
+    """OSRM routing profile for a movement mode.
+
+    On-foot modes route on the pedestrian network ("foot"); driving uses
+    the road network ("car"). Single source of the policy shared by every
+    movement-mode handler.
+    """
+    return "foot" if mode in (MovementMode.WALKING, MovementMode.RUNNING) else "car"
+
+
 class CoordinateFormat(str, Enum):
     DD = "dd"
     DMS = "dms"

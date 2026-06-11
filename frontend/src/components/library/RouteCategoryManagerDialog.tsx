@@ -1,18 +1,15 @@
 import { useCallback, useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X, GripVertical } from 'lucide-react'
-import {
-  DndContext, closestCenter, KeyboardSensor, PointerSensor,
-  useSensor, useSensors, type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  arrayMove, SortableContext, sortableKeyboardCoordinates,
-  useSortable, verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
+import { DndContext, closestCenter } from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import Modal from '../Modal'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import ListRow from '../ui/ListRow'
+import InlineRenameInput, { INLINE_RENAME_HEIGHT_PX } from '../ui/InlineRenameInput'
 import { ICON_SIZE } from '../../lib/icons'
+import { commitTrimmedRename } from '../../lib/rename'
+import { useDragReorder } from '../../hooks/useDragReorder'
 import { useT } from '../../i18n'
 import type { RouteCategory } from '../../services/api'
 
@@ -34,6 +31,8 @@ interface RouteCategoryManagerDialogProps {
 // 400 from the API.
 const DEFAULT_CATEGORY_ID = 'default'
 
+const getCategoryId = (c: RouteCategory) => c.id
+
 export default function RouteCategoryManagerDialog(props: RouteCategoryManagerDialogProps) {
   const t = useT()
   const { open, onClose, categories, defaultColor } = props
@@ -44,9 +43,10 @@ export default function RouteCategoryManagerDialog(props: RouteCategoryManagerDi
   const [editingName, setEditingName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<RouteCategory | null>(null)
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  const { sensors, handleDragEnd } = useDragReorder(
+    categories,
+    getCategoryId,
+    props.onReorder,
   )
 
   const handleCreate = useCallback(async () => {
@@ -57,22 +57,10 @@ export default function RouteCategoryManagerDialog(props: RouteCategoryManagerDi
     setNewColor(defaultColor)
   }, [newName, newColor, props, defaultColor])
 
-  const commitRename = useCallback(async (id: string, currentName: string) => {
-    const next = editingName.trim()
+  const commitRename = useCallback((id: string, currentName: string) => {
     setEditingId(null)
-    if (!next || next === currentName) return
-    await props.onRename(id, next)
+    commitTrimmedRename(editingName, currentName, (next) => props.onRename(id, next))
   }, [editingName, props])
-
-  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    const oldIndex = categories.findIndex((c) => c.id === active.id)
-    const newIndex = categories.findIndex((c) => c.id === over.id)
-    if (oldIndex < 0 || newIndex < 0) return
-    const next = arrayMove([...categories], oldIndex, newIndex)
-    await props.onReorder(next.map((c) => c.id))
-  }, [categories, props])
 
   return (
     <>
@@ -151,6 +139,10 @@ export default function RouteCategoryManagerDialog(props: RouteCategoryManagerDi
 }
 
 // ── Sortable row ─────────────────────────────────────
+// Not SortableHandleRow: the preset "default" row needs a disabled
+// (greyed, non-draggable) handle, and the color swatch + rename/delete
+// buttons live outside the row body — the DOM differs from the shared
+// panel wrapper, and CSS depends on these exact classNames.
 interface SortableCategoryRowProps {
   category: RouteCategory
   isEditing: boolean
@@ -203,19 +195,13 @@ function SortableCategoryRow(props: SortableCategoryRowProps) {
           density="compact"
           title={
             isEditing ? (
-              <input
-                autoFocus
-                type="text"
-                className="search-input w-full"
+              <InlineRenameInput
                 value={editingName}
-                onChange={(e) => onEditChange(e.target.value)}
-                onBlur={onEditCommit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) onEditCommit()
-                  else if (e.key === 'Escape') onEditCancel()
-                }}
-                onClick={(e) => e.stopPropagation()}
-                style={{ paddingLeft: 8, height: 28 }}
+                onChange={onEditChange}
+                onCommit={onEditCommit}
+                onCancel={onEditCancel}
+                className="search-input w-full"
+                style={{ height: INLINE_RENAME_HEIGHT_PX }}
               />
             ) : (
               <span className="truncate">{category.name}</span>

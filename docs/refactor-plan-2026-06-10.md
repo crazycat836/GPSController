@@ -201,14 +201,14 @@ All verified dead by project-wide grep including dynamic-key patterns.
 
 ### 4C DRY consolidation (do alongside the modules being touched)
 
-- [ ] **4C.1** Backend movement handlers: shared `fetch_route_coords` / `emit_route_path` /
+- [x] **4C.1** Backend movement handlers: shared `fetch_route_coords` / `emit_route_path` /
       `finish_mode` helpers; `osrm_profile_for(mode)` (4 copies);
       `pause_with_countdown(engine, duration, source)` (3 copies); a per-leg runner for
       multi_stop/random_walk/route_loop; `stop_task(...)` helper for main.py lifespan.
-- [ ] **4C.2** Backend stores: shared `reorder_by_ids` (3 copies) and a `JsonModelStore`
+- [x] **4C.2** Backend stores: shared `reorder_by_ids` (3 copies) and a `JsonModelStore`
       base (load/migrate/presets/quarantine/persist/locking) — bookmarks gains the
       quarantine protection saved_routes already has.
-- [ ] **4C.3** Frontend library UI: generic `ItemManagerDialog` (PlaceManager/TagManager
+- [x] **4C.3** Frontend library UI: generic `ItemManagerDialog` (PlaceManager/TagManager
       ~300-line clones); `SortableHandleRow` + `useDragReorder` (5 dnd-kit copies);
       `InlineRenameInput` + `commitTrimmedRename` (5 copies, IME guard);
       `useSelectionSet` / `useReorderMode` shared by Bookmarks/Routes panels.

@@ -16,16 +16,15 @@ import ConfirmDialog from '../ui/ConfirmDialog'
 import SearchField from '../ui/SearchField'
 import ChipFilterBar, { type Chip } from '../ui/ChipFilterBar'
 import RouteCategoryManagerDialog from './RouteCategoryManagerDialog'
+import InlineRenameInput, { INLINE_RENAME_HEIGHT_PX } from '../ui/InlineRenameInput'
+import SortableHandleRow from '../ui/SortableHandleRow'
+import { commitTrimmedRename } from '../../lib/rename'
+import { useDragReorder } from '../../hooks/useDragReorder'
+import { useReorderMode } from '../../hooks/useReorderMode'
+import { useSelectionSet } from '../../hooks/useSelectionSet'
 import type { SavedRoute } from '../../services/api'
-import {
-  DndContext, closestCenter, KeyboardSensor, PointerSensor,
-  useSensor, useSensors, type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  arrayMove, SortableContext, sortableKeyboardCoordinates,
-  useSortable, verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { DndContext, closestCenter } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 
 interface RoutesPanelProps {
   onRouteLoaded: () => void
@@ -38,6 +37,8 @@ const DEFAULT_CATEGORY_COLOR = '#6c8cff'
 // Visible category chips before overflow folds into a "More" popover.
 // Mirrors BookmarksPanel's place-chips cap so the two drawers feel the same.
 const CATEGORY_CHIPS_VISIBLE_CAP = 5
+
+const getRouteId = (r: SavedRoute) => r.id
 
 export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   const t = useT()
@@ -77,41 +78,30 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   const [search, setSearch] = useState('')
   const [activeCategoryId, setActiveCategoryId] = useState<string>(ALL_ID)
   const [sortMode, setSortMode] = useState<SortMode>('default')
-  // While reorder mode is on, sort is locked to "default" so the drag
-  // sequence the user manipulates is the same one persisted on drop.
-  // The previous selection is restored when reorder mode exits.
-  const [reorderMode, setReorderMode] = useState(false)
-  const [previousSort, setPreviousSort] = useState<SortMode>('default')
-  // Reorder mode operates on the full route list — dragging within a
-  // filtered subset would silently leave hidden routes' sort_order
-  // intact and confuse the user. Snapshot the active chip so we can
-  // restore it on exit.
-  const [previousCategoryId, setPreviousCategoryId] = useState<string>(ALL_ID)
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const {
+    selectionMode, selectedIds, toggleSelected,
+    enterSelection: enterSelectionMode, exitSelection,
+  } = useSelectionSet()
 
   // Dialogs
   const [categoryMgrOpen, setCategoryMgrOpen] = useState(false)
 
   // ─── Reorder-mode bookkeeping ─────────────────────────
-  // Snapshot the user's chosen sort when reorder-mode flips on and
-  // restore it on exit; while reorder-mode is on, the visual order
-  // must equal the persisted sort_order so drag deltas are meaningful.
-  const enterReorderMode = useCallback(() => {
-    setPreviousSort(sortMode)
-    setPreviousCategoryId(activeCategoryId)
-    setSortMode('default')
-    setActiveCategoryId(ALL_ID)
-    setReorderMode(true)
-    setSelectionMode(false)
-    setSelectedIds(new Set())
-  }, [sortMode, activeCategoryId])
-
-  const exitReorderMode = useCallback(() => {
-    setReorderMode(false)
-    setSortMode(previousSort)
-    setActiveCategoryId(previousCategoryId)
-  }, [previousSort, previousCategoryId])
+  // While reorder mode is on, sort is locked to "default" and the
+  // category chip to "All" so the drag sequence the user manipulates is
+  // the same one persisted on drop; the snapshot is restored on exit.
+  const { reorderMode, enterReorderMode, exitReorderMode, cancelReorderMode } = useReorderMode({
+    takeSnapshot: () => ({ sort: sortMode, categoryId: activeCategoryId }),
+    onEnter: () => {
+      setSortMode('default')
+      setActiveCategoryId(ALL_ID)
+      exitSelection()
+    },
+    restore: (snapshot) => {
+      setSortMode(snapshot.sort)
+      setActiveCategoryId(snapshot.categoryId)
+    },
+  })
 
   // ─── Filter + sort pipeline ───────────────────────────
   const filtered = useMemo(() => {
@@ -221,45 +211,25 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   }, [routeLib, setWaypoints, onRouteLoaded, selectionMode, reorderMode])
 
   const commitRename = useCallback((routeId: string, currentName: string) => {
-    const next = editingRouteName.trim()
-    if (next && next !== currentName) {
-      void routeLib.handleRouteRename(routeId, next)
-    }
+    commitTrimmedRename(editingRouteName, currentName, (next) =>
+      routeLib.handleRouteRename(routeId, next))
     setEditingRouteId(null)
   }, [editingRouteName, routeLib])
 
   // ─── Selection mode ───────────────────────────────────
-  const toggleSelected = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }, [])
-  const exitSelection = useCallback(() => {
-    setSelectionMode(false); setSelectedIds(new Set())
-  }, [])
+  // Selection and reorder share the leading row slot, so entering
+  // selection turns reorder off (without restoring its snapshot).
   const enterSelection = useCallback(() => {
-    setSelectionMode(true)
-    setReorderMode(false)
-  }, [])
+    enterSelectionMode()
+    cancelReorderMode()
+  }, [enterSelectionMode, cancelReorderMode])
 
   // ─── Reorder via dnd-kit ──────────────────────────────
-  // Activation distance of 8px prevents accidental drag on a tap.
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  const { sensors, handleDragEnd } = useDragReorder(
+    sorted,
+    getRouteId,
+    routeLib.handleRoutesReorder,
   )
-
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    const oldIndex = sorted.findIndex((r) => r.id === active.id)
-    const newIndex = sorted.findIndex((r) => r.id === over.id)
-    if (oldIndex < 0 || newIndex < 0) return
-    const next = arrayMove(sorted, oldIndex, newIndex)
-    void routeLib.handleRoutesReorder(next.map((r) => r.id))
-  }, [sorted, routeLib])
 
   // ─── Header kebab — bulk + selection + reorder toggles ─
   const headerMenuItems: KebabMenuItem[] = useMemo(() => [
@@ -482,11 +452,25 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
           <SortableContext items={sorted.map((r) => r.id)} strategy={verticalListSortingStrategy}>
             <div className="flex flex-col gap-1.5">
               {sorted.map((route) => (
-                <SortableRouteRow
-                  key={route.id}
-                  route={route}
-                  pointsLabel={t('route.pts_count', { n: route.waypoints.length })}
-                />
+                <SortableHandleRow key={route.id} id={route.id}>
+                  <ListRow
+                    density="compact"
+                    title={<span className="truncate">{route.name}</span>}
+                    aria-label={route.name}
+                    leading={
+                      <RouteIcon
+                        width={ICON_SIZE.md}
+                        height={ICON_SIZE.md}
+                        className="text-[var(--color-accent)]"
+                      />
+                    }
+                    meta={
+                      <span className="font-mono opacity-75">
+                        {t('route.pts_count', { n: route.waypoints.length })}
+                      </span>
+                    }
+                  />
+                </SortableHandleRow>
               ))}
             </div>
           </SortableContext>
@@ -497,19 +481,13 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
             const isEditing = editingRouteId === route.id
             const isSelected = selectedIds.has(route.id)
             const titleNode = isEditing ? (
-              <input
-                autoFocus
-                type="text"
-                className="search-input w-full"
+              <InlineRenameInput
                 value={editingRouteName}
-                onChange={(e) => setEditingRouteName(e.target.value)}
-                onBlur={() => commitRename(route.id, route.name)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitRename(route.id, route.name)
-                  else if (e.key === 'Escape') setEditingRouteId(null)
-                }}
-                onClick={(e) => e.stopPropagation()}
-                style={{ paddingLeft: 8, height: 28 }}
+                onChange={setEditingRouteName}
+                onCommit={() => commitRename(route.id, route.name)}
+                onCancel={() => setEditingRouteId(null)}
+                className="search-input w-full"
+                style={{ height: INLINE_RENAME_HEIGHT_PX }}
               />
             ) : (
               <span className="truncate">{route.name}</span>
@@ -623,52 +601,6 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
         onDelete={(id) => routeLib.handleRouteCategoryDelete(id)}
         onReorder={(ids) => routeLib.handleRouteCategoriesReorder(ids)}
       />
-    </div>
-  )
-}
-
-// ── Sortable row (reorder-mode only) ─────────────────────
-// Lives alongside RoutesPanel so the dnd-kit imports don't leak into
-// the non-reorder render path, but kept small enough that it doesn't
-// warrant its own file yet (single use site).
-interface SortableRouteRowProps {
-  route: SavedRoute
-  pointsLabel: string
-}
-
-function SortableRouteRow({ route, pointsLabel }: SortableRouteRowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: route.id })
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.55 : 1,
-  }
-  return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-1.5">
-      <button
-        type="button"
-        className="cursor-grab active:cursor-grabbing px-1 text-[var(--color-text-3)] hover:text-[var(--color-text-1)] focus:outline-none"
-        aria-label="drag handle"
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical width={ICON_SIZE.sm} height={ICON_SIZE.sm} />
-      </button>
-      <div className="flex-1 min-w-0">
-        <ListRow
-          density="compact"
-          title={<span className="truncate">{route.name}</span>}
-          aria-label={route.name}
-          leading={
-            <RouteIcon
-              width={ICON_SIZE.md}
-              height={ICON_SIZE.md}
-              className="text-[var(--color-accent)]"
-            />
-          }
-          meta={<span className="font-mono opacity-75">{pointsLabel}</span>}
-        />
-      </div>
     </div>
   )
 }
