@@ -23,6 +23,11 @@ Lifted out of ``main.py`` so the entrypoint stays focused on app
 construction. The function takes ``app_state`` explicitly instead of
 reaching for a module global, which keeps the watchdog independently
 testable.
+
+Layering: part of the **connection-orchestration group** (see
+``tools/check_layers.py``) — a runtime loop that may depend on both
+``core/`` and ``services/``. It deliberately does NOT import
+``context.ctx``; ``app_state`` arrives as a parameter from the lifespan.
 """
 
 from __future__ import annotations

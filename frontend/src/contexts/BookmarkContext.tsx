@@ -77,10 +77,10 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [bm, showToast, t])
 
-  // Keys on bm (rebuilt every render). See useSerializedReorder for the
-  // in-flight/queue rationale.
+  // Stable handler; latest bm.refresh is picked up via the hook's internal
+  // ref. See useSerializedReorder for the in-flight/queue rationale.
   const handleBookmarksReorder = useSerializedReorder(
-    api.reorderBookmarks, bm.refresh, 'reorderBookmarks failed', [bm],
+    api.reorderBookmarks, bm.refresh, 'reorderBookmarks failed',
   )
 
   const handleBookmarkExport = useCallback(async () => {

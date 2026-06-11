@@ -182,10 +182,10 @@ export function RouteLibraryProvider({ children }: { children: React.ReactNode }
     }
   }, [refreshRoutes, showToast, t])
 
-  // Keys on refreshRoutes (stable). See useSerializedReorder for the
-  // in-flight/queue rationale.
+  // Stable handler; latest refreshRoutes is picked up via the hook's
+  // internal ref. See useSerializedReorder for the in-flight/queue rationale.
   const handleRoutesReorder = useSerializedReorder(
-    api.reorderRoutes, refreshRoutes, 'reorderRoutes failed', [refreshRoutes],
+    api.reorderRoutes, refreshRoutes, 'reorderRoutes failed',
   )
 
   // ── Route categories ────────────────────────────────────

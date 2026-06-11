@@ -20,6 +20,12 @@ Design notes:
     the phone's real GPS (an engine only has a ``current_position`` after the
     user explicitly teleported / navigated this session).
   - Cooperative stop via an ``asyncio.Event`` mirrors ``tunnel_liveness``.
+
+Layering: part of the **connection-orchestration group** (see
+``tools/check_layers.py``) — a runtime loop that may depend on both
+``core/`` and ``services/``. ``main.py``'s lifespan passes ``app_state``
+in explicitly at task creation; the lazy ``context.ctx`` fallback exists
+only for tests that patch ``context.ctx`` instead of passing one.
 """
 
 import asyncio
@@ -33,15 +39,23 @@ logger = logging.getLogger(__name__)
 KEEPALIVE_INTERVAL_S = 20.0
 
 
-async def wifi_keepalive_loop(stop: asyncio.Event) -> None:
+async def wifi_keepalive_loop(stop: asyncio.Event, app_state=None) -> None:
     """Re-assert idle engines' virtual locations until ``stop`` is set.
 
     No-op on every tick while keep-alive is disabled, so the loop is cheap
     to leave running for the whole process lifetime.
+
+    ``app_state`` is passed in by ``main.py``'s lifespan at task-creation
+    time. When omitted it falls back to ``context.ctx`` — that fallback is
+    load-bearing for the unit tests, which patch ``context.ctx`` and start
+    the loop without arguments.
     """
-    from context import ctx
     from models.schemas import SimulationState
     from services.location_service import DeviceLostError
+
+    if app_state is None:
+        from context import ctx
+        app_state = getattr(ctx, "app_state", None)
 
     logger.info("WiFi keep-alive loop started (interval=%.1fs)", KEEPALIVE_INTERVAL_S)
 
@@ -53,7 +67,6 @@ async def wifi_keepalive_loop(stop: asyncio.Event) -> None:
             except asyncio.TimeoutError:
                 pass
 
-            app_state = ctx.app_state
             if app_state is None or not app_state.get_wifi_keepalive():
                 continue
 

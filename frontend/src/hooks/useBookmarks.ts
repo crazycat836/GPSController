@@ -1,41 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import * as api from '../services/api'
 import { devLog } from '../lib/dev-log'
+import type { Bookmark, BookmarkPlace, BookmarkTag } from '../types/bookmarks'
 
-// Dual-axis model:
-//   place_id — single "where" (富士山, 寺廟, default)
-//   tags     — multi "what"  (掃描器, 菇, 花)
-export interface Bookmark {
-  id: string
-  name: string
-  lat: number
-  lng: number
-  place_id: string
-  tags: string[]
-  note?: string
-  created_at?: string
-  last_used_at?: string
-  // Auto-filled by the backend on create/update via reverse geocoding.
-  // Empty string for legacy rows until /backfill-flags runs.
-  country_code?: string
-  country?: string
-  // Explicit drag-reorder position; back-fills to 0 on legacy rows.
-  sort_order?: number
-}
-
-export interface BookmarkPlace {
-  id: string
-  name: string
-  color?: string
-  sort_order?: number
-}
-
-export interface BookmarkTag {
-  id: string
-  name: string
-  color?: string
-  sort_order?: number
-}
+// Domain models live in types/bookmarks.ts (neutral module shared with the
+// services layer); re-exported here so existing consumer imports keep working.
+export type { Bookmark, BookmarkPlace, BookmarkTag } from '../types/bookmarks'
 
 export function useBookmarks() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])

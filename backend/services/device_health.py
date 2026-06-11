@@ -28,6 +28,13 @@ a non-blocking two-layer check —
 
 Every probe is fail-open: anything we can't check safely is reported
 alive, because a false positive flaps the device pill for no reason.
+
+Layering: part of the **connection-orchestration group** (see
+``tools/check_layers.py``) — it may depend on both ``core/`` and
+``services/`` and on ``context.ctx``. The ``ctx`` import is kept (rather
+than threading ``AppState`` parameters through) because the entry point
+:func:`schedule_probes` is fire-and-forget from ``api/websocket.py`` with
+only a UDID list, and the tests monkeypatch ``ctx.app_state`` directly.
 """
 
 from __future__ import annotations

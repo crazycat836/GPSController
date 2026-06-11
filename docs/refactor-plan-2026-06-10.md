@@ -170,7 +170,7 @@ All verified dead by project-wide grep including dynamic-key patterns.
 - [x] **4A.4** Split `BookmarkContext`: extract `RouteLibraryContext` (savedRoutes,
       routeCategories, handleRoute*/handleGpx*, import/export) — the halves share no
       state, only `showToast`/`t`.
-- [ ] **4A.5** Break the services↔hooks type cycle: move `Bookmark`/`BookmarkPlace`/
+- [x] **4A.5** Break the services↔hooks type cycle: move `Bookmark`/`BookmarkPlace`/
       `BookmarkTag`/`DeviceInfo` into `src/types/`; split `api.ts` into
       `services/http.ts` (transport, ApiError) + per-domain modules with a barrel
       re-export. Fix `useSerializedReorder`'s caller-supplied deps
@@ -193,7 +193,7 @@ All verified dead by project-wide grep including dynamic-key patterns.
 - [x] **4B.4** `SimulationSnapshot.replay_on(engine)` to replace the hand-spelled 4-way
       kwargs dispatch in `state.py:368-417`; extract `_sync_new_device_to_primary` into
       its own module; extract a `SettingsStore` from AppState.
-- [ ] **4B.5** Decide and document the real core↔services arrow; pass AppState/engine
+- [x] **4B.5** Decide and document the real core↔services arrow; pass AppState/engine
       registry into tunnel_liveness/wifi_keepalive loops as parameters instead of `ctx`
       imports; extend `tools/check_layers.py` to enforce the chosen direction. Replace
       `reconnect_usb_over_wifi`'s private `_collect_metadata` + hand-rolled double

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { devLog } from '../lib/dev-log'
 
 /**
@@ -10,25 +10,31 @@ import { devLog } from '../lib/dev-log'
  * so a burst of N drags collapses into one in-flight call plus one tail call
  * carrying the final order.
  *
- * `deps` is forwarded to the handler's `useCallback` so each caller keeps its
- * own memo profile: routes key on `refreshRoutes` (stable), bookmarks key on
- * `bm` (which `useBookmarks` rebuilds every render).
+ * The returned handler is unconditionally stable: `post` / `refresh` /
+ * `label` are held in a render-updated ref and read fresh at the start of
+ * each run, so callers can pass inline or per-render functions without
+ * worrying about memoization — and the queued tail call always uses the
+ * latest inputs.
  */
 export function useSerializedReorder(
   post: (orderedIds: string[]) => Promise<unknown>,
   refresh: () => Promise<unknown>,
   label: string,
-  deps: React.DependencyList,
 ): (orderedIds: string[]) => Promise<void> {
   const inflightRef = useRef(false)
   const pendingRef = useRef<string[] | null>(null)
-  const handlerRef = useRef<((orderedIds: string[]) => Promise<void>) | null>(null)
-  const handler = useCallback(async (orderedIds: string[]) => {
+  // Latest-inputs ref, updated via effect (same pattern as the old
+  // handlerRef): each run — including the queued tail run — reads the
+  // current post/refresh/label instead of a stale closure.
+  const ioRef = useRef({ post, refresh, label })
+  useEffect(() => { ioRef.current = { post, refresh, label } })
+  return useCallback(async function run(orderedIds: string[]): Promise<void> {
     if (inflightRef.current) {
       pendingRef.current = orderedIds
       return
     }
     inflightRef.current = true
+    const { post, refresh, label } = ioRef.current
     try {
       await post(orderedIds)
     } catch (err) {
@@ -38,12 +44,9 @@ export function useSerializedReorder(
       inflightRef.current = false
       const queued = pendingRef.current
       pendingRef.current = null
-      if (queued) void handlerRef.current?.(queued)
+      // Named function expression: the tail call re-enters `run` itself,
+      // which re-reads ioRef for the freshest post/refresh.
+      if (queued) void run(queued)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
-  // Self-ref lets the finally block re-enter without a forward reference;
-  // updated in an effect so the latest handler is always called.
-  useEffect(() => { handlerRef.current = handler }, [handler])
-  return handler
+  }, [])
 }

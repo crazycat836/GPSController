@@ -10,6 +10,12 @@ the frontend keeps showing the device as "connected" indefinitely because
 The probe is poll-driven; the existing watchdog stays event-driven. They
 co-exist safely because the cleanup helper they share
 (``cleanup_wifi_connections``) is idempotent on an empty UDID list.
+
+Layering: part of the **connection-orchestration group** (see
+``tools/check_layers.py``) — a runtime loop that may depend on both
+``core/`` and ``services/``. ``main.py``'s lifespan passes ``app_state``
+in explicitly at task creation; the lazy ``context.ctx`` fallback exists
+only for tests that monkeypatch ``ctx.app_state`` instead of passing one.
 """
 
 import asyncio
@@ -25,7 +31,7 @@ PROBE_TIMEOUT_S = 2.0
 MISS_THRESHOLD = 3
 
 
-async def tunnel_liveness_loop(stop: asyncio.Event) -> None:
+async def tunnel_liveness_loop(stop: asyncio.Event, app_state=None) -> None:
     """Probe the active WiFi tunnel's RSD endpoint until ``stop`` is set.
 
     Tears down WiFi connections + the tunnel itself once the endpoint has
@@ -33,13 +39,21 @@ async def tunnel_liveness_loop(stop: asyncio.Event) -> None:
     Safe to run concurrently with ``_tunnel_watchdog`` — both ultimately
     route through ``cleanup_wifi_connections``, which short-circuits when
     there are no Network devices left to disconnect.
+
+    ``app_state`` is passed in by ``main.py``'s lifespan at task-creation
+    time. When omitted it falls back to ``context.ctx`` — that fallback is
+    load-bearing for the unit tests, which monkeypatch ``ctx.app_state``
+    and start the loop without arguments.
     """
-    from context import ctx
     from services.wifi_tunnel_service import (
         _tcp_probe,
         cleanup_wifi_connections,
         tunnel,
     )
+
+    if app_state is None:
+        from context import ctx
+        app_state = ctx.app_state
 
     miss_count = 0
     logger.info(
@@ -88,7 +102,7 @@ async def tunnel_liveness_loop(stop: asyncio.Event) -> None:
             # Skip probing when no Network device currently consumes the
             # tunnel — there's nothing to falsely advertise as "connected"
             # and the user may still be mid-handshake on a fresh tunnel.
-            dm = ctx.app_state.device_manager
+            dm = app_state.device_manager
             if not dm.udids_by_connection_type("Network"):
                 miss_count = 0
                 continue

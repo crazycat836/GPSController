@@ -138,14 +138,18 @@ async def lifespan(application: FastAPI):
     # Mac wakes from sleep with a dead tunnel).
     from core.tunnel_liveness import tunnel_liveness_loop
     liveness_stop = asyncio.Event()
-    liveness_task = asyncio.create_task(tunnel_liveness_loop(liveness_stop))
+    liveness_task = asyncio.create_task(
+        tunnel_liveness_loop(liveness_stop, app_state),
+    )
 
     # WiFi keep-alive — opt-in (Settings toggle). When enabled, periodically
     # re-asserts idle engines' virtual locations so the DVT channel stays warm
     # and the tunnel survives the iPhone screen dimming. No-ops while disabled.
     from core.wifi_keepalive import wifi_keepalive_loop
     keepalive_stop = asyncio.Event()
-    keepalive_task = asyncio.create_task(wifi_keepalive_loop(keepalive_stop))
+    keepalive_task = asyncio.create_task(
+        wifi_keepalive_loop(keepalive_stop, app_state),
+    )
 
     yield
 

@@ -279,6 +279,37 @@ async def announce_connected(
     )
 
 
+async def reannounce_connected(
+    dm,
+    udid: str,
+    *,
+    cause: str,
+    disconnect_cause: str,
+) -> None:
+    """Re-announce *udid* as CONNECTED after its transport was swapped
+    out from under it (today: USB → WiFi-tunnel fallback).
+
+    The old transport is truly gone, so this drives the store through
+    DISCONNECTED first and then back to CONNECTED with freshly collected
+    metadata. A straight CONNECTED→CONNECTED would be a no-op
+    (:meth:`ConnectionStateStore.transition` returns False) and the
+    renderer would never repaint the pill for the new transport.
+
+    ``disconnect_cause`` labels the intermediate DISCONNECTED hop (it
+    reaches the ``device_disconnected`` WS payload); ``cause`` labels the
+    final CONNECTED announce. This is the public face of the transition
+    pair — callers must not drive :data:`store` (or
+    :func:`_collect_metadata`) directly.
+    """
+    metadata = await _collect_metadata(dm, udid)
+    await store.transition(
+        udid, DeviceState.DISCONNECTED, cause=disconnect_cause,
+    )
+    await store.transition(
+        udid, DeviceState.CONNECTED, cause=cause, metadata=metadata,
+    )
+
+
 async def disconnect_device(dm, udid: str, *, cause: str) -> None:
     """Disconnect *udid* through *dm* and announce the state change.
 

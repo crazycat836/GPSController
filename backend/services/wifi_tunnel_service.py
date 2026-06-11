@@ -18,8 +18,18 @@ reach back up into ``api/``:
     terminate its engine, and emit ``device_disconnected`` so the UI
     re-renders before the next user action errors out.
 
-Architectural intent (matches main.py layout): ``api/ -> core/ -> services/``.
-A pre-commit lint (``tools/check_layers.py``) enforces it.
+Layering
+--------
+This module is part of the **connection-orchestration group** (see
+``tools/check_layers.py``): runtime loops/coordinators that may depend on
+both ``core/`` and ``services/`` and on the ``context.ctx`` app-state
+singleton. Concretely it is the one ``services/`` module allowed to
+import ``core/`` (``core.wifi_tunnel.TunnelRunner`` — the runner singleton
+must live below ``api/`` so both the router and the liveness probe share
+it). The ``ctx`` import stays because the entry points here are invoked
+from many sites (api/tunnel routes, the usbmux watchdog, the liveness
+loop) that don't carry an ``AppState`` handle, and the unit tests
+monkeypatch ``ctx.app_state`` directly.
 """
 
 from __future__ import annotations
@@ -192,17 +202,12 @@ async def reconnect_usb_over_wifi(udid: str) -> bool:
         return False
 
     # Re-announce as CONNECTED over Network. The USB transport is truly
-    # gone, so transition through DISCONNECTED first — a straight
-    # CONNECTED→CONNECTED is a no-op (transition() returns False) and the
-    # renderer would never repaint the pill from USB to WiFi.
-    metadata = await connection_state._collect_metadata(dm, udid)
-    await connection_state.store.transition(
-        udid, connection_state.DeviceState.DISCONNECTED,
-        cause="usb_removed_pre_wifi_fallback",
-    )
-    await connection_state.store.transition(
-        udid, connection_state.DeviceState.CONNECTED,
-        cause="usb_to_wifi_fallback", metadata=metadata,
+    # gone, so the SSoT transitions through DISCONNECTED first — see
+    # ``connection_state.reannounce_connected`` for the rationale.
+    await connection_state.reannounce_connected(
+        dm, udid,
+        cause="usb_to_wifi_fallback",
+        disconnect_cause="usb_removed_pre_wifi_fallback",
     )
     logger.info("USB→WiFi fallback succeeded for %s (now Network)", udid)
     return True
