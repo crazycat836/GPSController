@@ -238,6 +238,45 @@
   color: white;
 }
 
+/* ── Top-center stacking manager ─────────────────────────────
+   A single fixed column that owns the top-center status region so the
+   connection / device / DDI banners, the pause + cooldown pills, and the
+   transient toast stack deterministically (flex gap) instead of fighting
+   over hardcoded top-* offsets and overlapping. Its `top` is set inline and
+   gates on whether the ETA pill is live, so the column never collides with
+   it. `pointer-events: none` on the column keeps the map interactive in the
+   gaps; each pill re-enables them. */
+.top-center-stack {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+.top-center-stack > * { pointer-events: auto; }
+
+/* In-stack variants drop each pill's own fixed positioning + bespoke
+   enter animation so the flex column can lay them out in one column. */
+.toast-pill.is-stacked,
+.conn-banner.is-stacked {
+  position: static;
+  left: auto;
+  top: auto;
+  transform: none;
+  z-index: auto;
+  animation: tcs-pill-enter 200ms var(--ease-out-expo) both;
+}
+@keyframes tcs-pill-enter {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Utility classes ────────────────────────────────────────── */
 .flex-1 { flex: 1; }
 .font-mono { font-family: var(--font-mono); }

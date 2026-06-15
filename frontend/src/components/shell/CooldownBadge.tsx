@@ -1,8 +1,10 @@
 import { Timer } from 'lucide-react'
 import { useSimSettings } from '../../contexts/SimSettingsContext'
 import { useT } from '../../i18n'
-import Toast from './Toast'
 
+// Cooldown countdown pill. Rendered as a flow child of TopCenterStack, so it
+// stacks with the other status pills (e.g. a 429 COOLDOWN_ACTIVE error toast)
+// instead of overlapping them.
 export default function CooldownBadge() {
   const { cooldown, cooldownEnabled } = useSimSettings()
   const t = useT()
@@ -19,17 +21,9 @@ export default function CooldownBadge() {
     : `${mins}:${secs.toString().padStart(2, '0')}`
 
   return (
-    // Sits one row below the default toast slot (top-16) so the cooldown pill
-    // and a command toast (e.g. the 429 COOLDOWN_ACTIVE error you get when
-    // retrying a teleport mid-cooldown) stack instead of overlapping.
-    <Toast
-      visible
-      variant="warning"
-      top="top-28"
-      icon={<Timer className="w-4 h-4" />}
-      dataFc="map.toast.cooldown"
-    >
-      {t('status.cooldown_badge', { t: display })}
-    </Toast>
+    <div className="toast-pill toast-pill-warning is-stacked" role="status" aria-live="polite" data-fc="map.toast.cooldown">
+      <Timer className="w-4 h-4" />
+      <span>{t('status.cooldown_badge', { t: display })}</span>
+    </div>
   )
 }

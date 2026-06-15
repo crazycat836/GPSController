@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import type L from 'leaflet'
 import { useT } from './i18n'
 import type { StringKey } from './i18n/strings'
@@ -22,7 +21,7 @@ import { AvatarProvider } from './contexts/AvatarContext'
 
 // Components
 import MapView from './components/MapView'
-import EtaBar, { isEtaBarLive } from './components/EtaBar'
+import EtaBar from './components/EtaBar'
 import UpdateChecker from './components/UpdateChecker'
 // Shell components
 import TopBar from './components/shell/TopBar'
@@ -33,11 +32,7 @@ import BottomDock from './components/shell/BottomDock'
 import MiniStatusBar from './components/shell/MiniStatusBar'
 import TopBarActions from './components/shell/TopBarActions'
 import SettingsMenu from './components/shell/SettingsMenu'
-import CooldownBadge from './components/shell/CooldownBadge'
-import ConnectionStatusBanner from './components/shell/ConnectionStatusBanner'
-import DeviceLostBanner from './components/shell/DeviceLostBanner'
-import DdiFailedBanner from './components/shell/DdiFailedBanner'
-import Toast from './components/shell/Toast'
+import TopCenterStack from './components/shell/TopCenterStack'
 
 // Contexts consumed inside AppShell
 import { useConnectionHealth } from './contexts/ConnectionHealthContext'
@@ -113,27 +108,6 @@ function App() {
   )
 }
 
-// Auto-dismissing error banner (5s timeout, click to dismiss immediately)
-function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {
-  useEffect(() => {
-    const timer = setTimeout(onDismiss, 5000)
-    return () => clearTimeout(timer)
-  }, [message, onDismiss])
-
-  return createPortal(
-    <div
-      className="toast-pill toast-pill-danger top-3"
-      onClick={onDismiss}
-      role="alert"
-      style={{ cursor: 'pointer' }}
-    >
-      <span>{message}</span>
-      <span style={{ opacity: 0.7, fontSize: 11, flexShrink: 0 }} aria-hidden>✕</span>
-    </div>,
-    document.body,
-  )
-}
-
 // Resolve the effective km/h used for preview ETA. Matches the precedence
 // the backend applies: custom speed > random range midpoint > mode preset.
 function resolveSpeedKmh(
@@ -161,7 +135,7 @@ function AppShell() {
   const simSettings = useSimSettings()
   const bm = useBookmarkContext()
   const health = useConnectionHealth()
-  const { handlePause, handleResume, setMode, clearError, clearDdiMounting } = simActions
+  const { handlePause, handleResume, setMode, clearDdiMounting } = simActions
 
   // Track the last-used Route sub-mode so switching back to "Route"
   // resumes the same sub-tab (Loop / Multi-Stop / Random). Persisted so the
@@ -431,21 +405,6 @@ function AppShell() {
           </div>
         )}
 
-        {/* Pause countdown */}
-        <Toast
-          visible={sim.pauseRemaining != null && sim.pauseRemaining > 0}
-          variant="warning"
-          top="top-28"
-          icon={
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="4" width="4" height="16" rx="1" />
-              <rect x="14" y="4" width="4" height="16" rx="1" />
-            </svg>
-          }
-        >
-          {t('toast.pause_countdown', { n: Math.round(sim.pauseRemaining ?? 0) })}
-        </Toast>
-
         <MapView
           currentPosition={simCurrentPos}
           currentPositionUnsynced={!!simCurrentPos && !sim.backendPositionSynced}
@@ -500,10 +459,6 @@ function AppShell() {
           }}
         />
 
-        {sim.error && (
-          <ErrorBanner message={sim.error} onDismiss={clearError} />
-        )}
-
         {/* The bottom-left device chip was removed in the design-handoff
             phase 3: device info lives in the top-right status pair
             (MiniStatusBar) and the DeviceDrawer trigger lives in the
@@ -519,28 +474,16 @@ function AppShell() {
           plannedDistanceM={plannedDistanceM}
           plannedEtaSeconds={plannedEtaSeconds}
         />
-        <CooldownBadge />
         <UpdateChecker />
-
-        {/* Anchored under the top-bar search pill (top-3 + 44px + 12px gap ≈ top-16).
-            When the ETA pill is live it occupies that same band (top-[76px]),
-            so drop the toast below it (top-36) to avoid overlapping. */}
-        <Toast
-          key={toast.toastMsg ?? ''}
-          visible={!!toast.toastMsg}
-          top={isEtaBarLive(sim.status?.state ?? 'idle', sim.runtimes) ? 'top-36' : 'top-16'}
-        >
-          {toast.toastMsg}
-        </Toast>
       </div>
 
       {/* Floating overlay components — siblings of the map container so
           they read as shell chrome, not map content. */}
       <MiniStatusBar />
 
-      <ConnectionStatusBanner />
-      <DeviceLostBanner onOpenDevices={openDevicesPanel} />
-      <DdiFailedBanner />
+      {/* Single owner of the top-center status region (error / connection /
+          device / DDI banners + pause + cooldown + transient toast). */}
+      <TopCenterStack onOpenDevices={openDevicesPanel} />
 
       <TopBar
         leftContent={<Brand />}

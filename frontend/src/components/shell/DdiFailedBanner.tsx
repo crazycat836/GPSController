@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { TriangleAlert, X } from 'lucide-react'
 import { useSimState } from '../../contexts/SimContext'
 import { useT } from '../../i18n'
@@ -29,11 +28,11 @@ export default function DdiFailedBanner() {
 
   if (!visible) return null
 
-  return createPortal(
+  return (
     <div
       role="alert"
       aria-live="assertive"
-      className="conn-banner"
+      className="conn-banner is-stacked"
       data-variant="offline"
       style={{
         height: 'auto',
@@ -55,7 +54,6 @@ export default function DdiFailedBanner() {
       >
         <X className="w-3 h-3" strokeWidth={2.5} />
       </button>
-    </div>,
-    document.body,
+    </div>
   )
 }

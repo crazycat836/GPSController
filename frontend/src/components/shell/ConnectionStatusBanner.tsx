@@ -1,15 +1,15 @@
-import { createPortal } from 'react-dom'
 import { Loader2, WifiOff } from 'lucide-react'
 import { useConnectionHealth } from '../../contexts/ConnectionHealthContext'
 import { useT } from '../../i18n'
 
-// Persistent top banner surfaced whenever the backend WebSocket is down.
-// Unlike the transient ErrorBanner (sim.error), this one stays visible
-// until `ws === 'open'` again, because the user needs to know that
-// *any* device-state shown elsewhere on screen may be stale.
+// Persistent banner surfaced whenever the backend WebSocket is down. Unlike
+// the transient error pill (sim.error), this stays visible until
+// `ws === 'open'` again, because the user needs to know that *any*
+// device-state shown elsewhere may be stale.
 //
-// Rendered via a portal so it floats above the map and all overlays,
-// but below the z-toast tier used by command-failure banners.
+// Rendered as a flow child of TopCenterStack (the single top-center manager),
+// so it stacks deterministically with the other status pills instead of
+// positioning itself.
 export default function ConnectionStatusBanner() {
   const { hint } = useConnectionHealth()
   const t = useT()
@@ -17,14 +17,13 @@ export default function ConnectionStatusBanner() {
   if (hint !== 'ws_reconnecting' && hint !== 'ws_offline') return null
 
   const isOffline = hint === 'ws_offline'
-  return createPortal(
+  return (
     <div
       // Offline is a blocking outage — escalate to assertive so screen
       // readers interrupt. Reconnecting is transient; polite is fine.
       role={isOffline ? 'alert' : 'status'}
       aria-live={isOffline ? 'assertive' : 'polite'}
-      className="conn-banner"
-      // z just under toast so a command-failure banner can still appear above.
+      className="conn-banner is-stacked"
       data-variant={isOffline ? 'offline' : 'reconnecting'}
     >
       {isOffline ? (
@@ -36,7 +35,6 @@ export default function ConnectionStatusBanner() {
       {isOffline && (
         <span className="opacity-75 hidden sm:inline">· {t('conn.ws_offline_hint')}</span>
       )}
-    </div>,
-    document.body,
+    </div>
   )
 }
