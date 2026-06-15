@@ -45,6 +45,9 @@ interface BookmarkContextValue {
   // Bookmark import/export
   handleBookmarkImport: (file: File) => Promise<void>
   handleBookmarkExport: () => Promise<void>
+  /** True while an import round-trip is in flight (drives the busy/disabled
+   *  state on the Import button). */
+  importingBookmarks: boolean
 
   // Reorder
   handleBookmarksReorder: (orderedIds: string[]) => Promise<void>
@@ -58,22 +61,30 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
   const bm = useBookmarks()
 
   const [addBmDialog, setAddBmDialog] = useState<AddBmDialog | null>(null)
+  const [importingBookmarks, setImportingBookmarks] = useState(false)
 
   const handleAddBookmark = useCallback((lat: number, lng: number) => {
     setAddBmDialog({ lat, lng })
   }, [])
 
   const handleBookmarkImport = useCallback(async (file: File) => {
+    setImportingBookmarks(true)
     try {
       const text = await file.text()
       const data = JSON.parse(text)
       validateBookmarkImport(data)
       const res = await api.importBookmarks(data)
       await bm.refresh()
-      showToast(t('bm.import_success', { n: res.imported }))
+      // 0 imported is a no-op, not a failure — say so neutrally instead of
+      // "Imported 0 entries", which reads like something went wrong.
+      showToast(res.imported > 0
+        ? t('bm.import_success', { n: res.imported })
+        : t('bm.import_none'))
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown'
       showToast(t('bm.import_failed', { error: message }))
+    } finally {
+      setImportingBookmarks(false)
     }
   }, [bm, showToast, t])
 
@@ -162,6 +173,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
 
     handleBookmarkImport,
     handleBookmarkExport,
+    importingBookmarks,
 
     handleBookmarksReorder,
   }), [
@@ -172,7 +184,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     bm.createTag, bm.updateTag, bm.deleteTag, bm.reorderTags, bm.refresh,
     createBookmarksBulk,
     addBmDialog, setAddBmDialog, handleAddBookmark,
-    handleBookmarkImport, handleBookmarkExport,
+    handleBookmarkImport, handleBookmarkExport, importingBookmarks,
     handleBookmarksReorder,
   ])
 

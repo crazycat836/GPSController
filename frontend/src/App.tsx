@@ -22,7 +22,7 @@ import { AvatarProvider } from './contexts/AvatarContext'
 
 // Components
 import MapView from './components/MapView'
-import EtaBar from './components/EtaBar'
+import EtaBar, { isEtaBarLive } from './components/EtaBar'
 import UpdateChecker from './components/UpdateChecker'
 // Shell components
 import TopBar from './components/shell/TopBar'
@@ -35,6 +35,8 @@ import TopBarActions from './components/shell/TopBarActions'
 import SettingsMenu from './components/shell/SettingsMenu'
 import CooldownBadge from './components/shell/CooldownBadge'
 import ConnectionStatusBanner from './components/shell/ConnectionStatusBanner'
+import DeviceLostBanner from './components/shell/DeviceLostBanner'
+import DdiFailedBanner from './components/shell/DdiFailedBanner'
 import Toast from './components/shell/Toast'
 
 // Contexts consumed inside AppShell
@@ -71,6 +73,12 @@ const DEVICE_LOST_TOAST_KEYS: Record<DeviceLostCause, StringKey> = {
 // `simulation:<mode>` (backend api/location/_helpers.py `spawn`). The map
 // localizes the mode label in the toast; unknown modes fall back to the
 // raw stage suffix.
+// DDI mount overlay safety windows. After "taking long" the overlay reveals
+// an elapsed hint + a Cancel escape hatch; after the hard timeout it clears
+// itself (so a lost terminating WS frame can't leave the user stuck).
+const DDI_TAKING_LONG_MS = 20_000
+const DDI_SAFETY_TIMEOUT_MS = 60_000
+
 const SIM_CRASH_STAGE_PREFIX = 'simulation:'
 const SIM_CRASH_MODE_KEYS: Record<string, StringKey> = {
   navigate: 'mode.navigate',
@@ -153,14 +161,36 @@ function AppShell() {
   const simSettings = useSimSettings()
   const bm = useBookmarkContext()
   const health = useConnectionHealth()
-  const { handlePause, handleResume, setMode, clearError } = simActions
+  const { handlePause, handleResume, setMode, clearError, clearDdiMounting } = simActions
 
   // Track the last-used Route sub-mode so switching back to "Route"
-  // resumes the same sub-tab (Loop / Multi-Stop / Random).
-  const [lastRouteSubMode, setLastRouteSubMode] = useState(SimMode.Loop)
+  // resumes the same sub-tab (Loop / Multi-Stop / Random). Persisted so the
+  // user's preferred sub-mode survives relaunch instead of resetting to Loop.
+  const [lastRouteSubMode, setLastRouteSubMode] = useState<SimMode>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.lastRouteSubMode) as SimMode | null
+      return saved && isRouteSubMode(saved) ? saved : SimMode.Loop
+    } catch {
+      return SimMode.Loop
+    }
+  })
   useEffect(() => {
-    if (isRouteSubMode(sim.mode)) setLastRouteSubMode(sim.mode)
+    if (isRouteSubMode(sim.mode)) {
+      setLastRouteSubMode(sim.mode)
+      try { localStorage.setItem(STORAGE_KEYS.lastRouteSubMode, sim.mode) } catch {}
+    }
   }, [sim.mode])
+
+  // Mode switching out of the Route family discards the staged waypoints
+  // (see useSimulation.setMode). Warn with a toast when that throws away a
+  // non-empty route so the loss is never silent. Switching *within* the Route
+  // family (Loop / MultiStop / Random) preserves the chain — no warning there.
+  const handleModeChange = useCallback((next: SimMode) => {
+    if (isRouteSubMode(sim.mode) && !isRouteSubMode(next) && sim.waypoints.length > 0) {
+      toast.showToast(t('toast.route_cleared'))
+    }
+    setMode(next)
+  }, [sim.mode, sim.waypoints.length, setMode, toast, t])
 
   const mapWaypoints = useMemo(
     () => sim.waypoints.map((w: LatLng, i: number) => ({ ...w, index: i })),
@@ -198,11 +228,14 @@ function AppShell() {
   // Other modes keep instant teleport.
   const handleTeleportOrStage = useCallback((lat: number, lng: number) => {
     if (sim.mode === SimMode.Teleport) {
+      // Staging is silent and easy to miss (attention is on the search box,
+      // not the dock's Move button) — confirm it and point at the next step.
       simActions.handleSetTeleportDest(lat, lng)
+      toast.showToast(t('toast.teleport_staged'))
     } else {
       simActions.handleTeleport(lat, lng)
     }
-  }, [sim.mode, simActions])
+  }, [sim.mode, simActions, toast, t])
 
   // Map right-click "Teleport here" always teleports immediately, in every
   // mode (including Teleport) — the context-menu action is an explicit
@@ -216,6 +249,14 @@ function AppShell() {
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [saveRouteOpen, setSaveRouteOpen] = useState(false)
+
+  // Open the devices popover from places that don't own the trigger button
+  // (the device-lost banner, the map context-menu "no device" row). Anchors
+  // to the top-bar device button so the popover positions consistently.
+  const openDevicesPanel = useCallback(() => {
+    const btn = document.querySelector<HTMLElement>('[data-device-trigger]')
+    if (btn) setDevicesPopoverAnchor(btn.getBoundingClientRect())
+  }, [])
 
   // Leaflet instance is owned by MapView; we hold a ref here so features
   // like "Locate PC" can pan the camera without teleporting.
@@ -284,6 +325,34 @@ function AppShell() {
     toast.showToast(t('toast.device_error'), 4000)
   }, [device.lastDeviceError, toast, t])
 
+  // DDI mount overlay robustness. The full-screen "Preparing device" overlay
+  // is driven purely by the `ddi_mounting` WS frame and is only cleared by a
+  // terminating frame. If that frame is lost (backend crash / mid-mount
+  // disconnect) the overlay would block the whole UI forever. Guard it:
+  //   1. after a grace window, reveal an elapsed hint + Cancel button;
+  //   2. after a hard timeout, clear it and surface a timeout toast;
+  //   3. clear immediately if the WS transport goes offline (the offline
+  //      banner then explains the real problem).
+  const [ddiTakingLong, setDdiTakingLong] = useState(false)
+  useEffect(() => {
+    if (!sim.ddiMounting) {
+      setDdiTakingLong(false)
+      return
+    }
+    const graceTimer = setTimeout(() => setDdiTakingLong(true), DDI_TAKING_LONG_MS)
+    const safetyTimer = setTimeout(() => {
+      clearDdiMounting()
+      toast.showToast(t('toast.ddi_timeout'), 6000)
+    }, DDI_SAFETY_TIMEOUT_MS)
+    return () => {
+      clearTimeout(graceTimer)
+      clearTimeout(safetyTimer)
+    }
+  }, [sim.ddiMounting, clearDdiMounting, toast, t])
+  useEffect(() => {
+    if (sim.ddiMounting && health.ws === 'offline') clearDdiMounting()
+  }, [sim.ddiMounting, health.ws, clearDdiMounting])
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -298,7 +367,7 @@ function AppShell() {
       }
       if (!isInput && e.key >= '1' && e.key <= '4') {
         const modeForKey: SimMode[] = [SimMode.Teleport, SimMode.Navigate, lastRouteSubMode, SimMode.Joystick]
-        setMode(modeForKey[parseInt(e.key) - 1])
+        handleModeChange(modeForKey[parseInt(e.key) - 1])
         return
       }
       if (!isInput && e.key === ' ' && sim.status.running) {
@@ -311,7 +380,7 @@ function AppShell() {
     return () => window.removeEventListener('keydown', handler)
     // Deps are stable actions + the two run-state booleans — the listener
     // re-subscribes when the run/pause state flips, not on position ticks.
-  }, [libraryOpen, setMode, sim.status.running, sim.status.paused, handlePause, handleResume, lastRouteSubMode])
+  }, [libraryOpen, handleModeChange, sim.status.running, sim.status.paused, handlePause, handleResume, lastRouteSubMode])
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
@@ -343,6 +412,21 @@ function AppShell() {
               <div className="text-xs text-[var(--color-text-2)] leading-relaxed">
                 {t('ddi.mounting_hint')}
               </div>
+              {ddiTakingLong && (
+                <>
+                  <div className="text-xs text-[var(--color-text-3)] leading-relaxed mt-2.5">
+                    {t('ddi.taking_long')}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearDdiMounting}
+                    className="mt-3 inline-flex items-center justify-center h-8 px-4 rounded-lg text-[12px] font-medium text-[var(--color-text-2)] hover:text-[var(--color-text-1)] cursor-pointer transition-colors"
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)' }}
+                  >
+                    {t('ddi.cancel')}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -382,6 +466,7 @@ function AppShell() {
           onSaveRoute={() => setSaveRouteOpen(true)}
           showSaveRouteOption={sim.waypoints.length > 0}
           deviceConnected={device.connectedDevice !== null}
+          onOpenDevices={openDevicesPanel}
           onShowToast={toast.showToast}
           layerKey={layerKey}
           onMapReady={handleMapReady}
@@ -437,8 +522,14 @@ function AppShell() {
         <CooldownBadge />
         <UpdateChecker />
 
-        {/* Anchored under the top-bar search pill (top-3 + 44px + 12px gap ≈ top-16). */}
-        <Toast key={toast.toastMsg ?? ''} visible={!!toast.toastMsg} top="top-16">
+        {/* Anchored under the top-bar search pill (top-3 + 44px + 12px gap ≈ top-16).
+            When the ETA pill is live it occupies that same band (top-[76px]),
+            so drop the toast below it (top-36) to avoid overlapping. */}
+        <Toast
+          key={toast.toastMsg ?? ''}
+          visible={!!toast.toastMsg}
+          top={isEtaBarLive(sim.status?.state ?? 'idle', sim.runtimes) ? 'top-36' : 'top-16'}
+        >
           {toast.toastMsg}
         </Toast>
       </div>
@@ -448,6 +539,8 @@ function AppShell() {
       <MiniStatusBar />
 
       <ConnectionStatusBanner />
+      <DeviceLostBanner onOpenDevices={openDevicesPanel} />
+      <DdiFailedBanner />
 
       <TopBar
         leftContent={<Brand />}
@@ -471,7 +564,7 @@ function AppShell() {
 
       <BottomDock />
 
-      <BottomModeBar activeMode={sim.mode} onModeChange={setMode} lastRouteSubMode={lastRouteSubMode} />
+      <BottomModeBar activeMode={sim.mode} onModeChange={handleModeChange} lastRouteSubMode={lastRouteSubMode} />
       <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} layerKey={layerKey} onLayerChange={handleLayerChange} />
       <DevicesPopover
         anchor={devicesPopoverAnchor}

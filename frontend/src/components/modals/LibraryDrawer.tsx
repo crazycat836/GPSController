@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { BookOpen, Upload, Download, FileUp } from 'lucide-react'
+import { BookOpen, Upload, Download, FileUp, Loader2 } from 'lucide-react'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
 import { useRouteLibrary } from '../../contexts/RouteLibraryContext'
 import { useSimActions, useSimState } from '../../contexts/SimContext'
@@ -48,11 +48,14 @@ function LibraryDrawer({ open, onClose }: LibraryDrawerProps) {
         <>
           <GlassIconButton
             label={t('bm.import')}
+            disabled={bm.importingBookmarks}
             onClick={async () => {
               const f = await pickFile('application/json,.json')
               if (f) void bm.handleBookmarkImport(f)
             }}
-            icon={<Upload width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
+            icon={bm.importingBookmarks
+              ? <Loader2 width={ICON_SIZE.sm} height={ICON_SIZE.sm} className="animate-spin" />
+              : <Upload width={ICON_SIZE.sm} height={ICON_SIZE.sm} />}
           />
           <GlassIconButton
             label={t('bm.export')}

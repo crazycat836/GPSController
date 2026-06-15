@@ -209,13 +209,24 @@
   --control-lg: 44px;
 
   /* ── Z-Index Scale ──────────────────────────────────────────
-     Structured elevation layers. Never use ad-hoc z values. */
+     Structured elevation layers. Never use ad-hoc z values.
+
+     Map chrome (ETA pill, zoom controls) only has to beat the Leaflet map
+     subtree, which is self-contained (a transform on the map-pane forms its
+     own stacking context). So these sit BELOW app chrome / drawers / modals
+     rather than above everything — otherwise the ETA pill and zoom buttons
+     float over an open drawer and the search dropdown.
+       --z-eta     (390): below the top bar (so the search dropdown wins) but
+                          above the map.
+       --z-map-ui  (650): above the bottom dock / mode bar (so zoom controls
+                          stay usable) but below drawer / overlay / modal. */
   --z-base: 0;
-  --z-map-ui: 1000;
   --z-bar: 200;
+  --z-eta: 390;
   --z-ui: 400;
   --z-float: 500;
   --z-dropdown: 600;
+  --z-map-ui: 650;
   --z-drawer: 700;
   --z-overlay: 800;
   --z-modal: 900;

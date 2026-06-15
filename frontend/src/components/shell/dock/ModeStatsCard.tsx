@@ -210,14 +210,6 @@ function formatEta(distM: number, speedKmh: number, laps: number | null): string
   return m === 0 ? `${h} h` : `${h} h ${m} m`
 }
 
-function formatRadius(m: number): string {
-  if (m >= KM_THRESHOLD_M) {
-    const km = m / KM_THRESHOLD_M
-    return m % KM_THRESHOLD_M === 0 ? `${km} km` : `${km.toFixed(1)} km`
-  }
-  return `${m} m`
-}
-
 // ── Per-mode card content ─────────────────────────────────────────────
 
 function useTotalWaypointDist(loop: boolean): number {
@@ -358,8 +350,12 @@ function LoopCard() {
 
 function MultiStopCard() {
   const t = useT()
-  const { waypoints } = useSimState()
+  const { waypoints, pauseMultiStop } = useSimState()
+  const { setPauseMultiStop } = useSimActions()
   const totalDist = useTotalWaypointDist(false)
+  const speedKmh = useActiveSpeedKmh()
+  // Multi-stop is a single pass through the stops (laps = 1), unlike Loop.
+  const eta = formatEta(totalDist, speedKmh, 1)
   return (
     <CardShell>
       <div className="grid grid-cols-2 relative">
@@ -369,18 +365,29 @@ function MultiStopCard() {
         />
         <StatCell
           label={t('dock.est_time')}
-          value="--"
+          value={eta}
           accent
           divider
         />
         <RowDivider />
       </div>
       <div className="grid grid-cols-2">
+        {/* Pause toggle is now wired to the real, backend-honoured
+            pauseMultiStop setting (was a dead toggle with internal-only
+            local state). */}
         <ControlCell label={t('dock.pause_toggle')}>
-          <ToggleSwitch checked={true} />
+          <ToggleSwitch
+            checked={pauseMultiStop.enabled}
+            onChange={(on) => setPauseMultiStop({ ...pauseMultiStop, enabled: on })}
+          />
         </ControlCell>
+        {/* Stops is a read-out, not a control — the count is driven by the
+            waypoints placed on the map. Rendered as a value (was an inert
+            Stepper whose +/- did nothing). */}
         <ControlCell label={t('dock.stops')} divider>
-          <Stepper value={String(waypoints.length)} />
+          <span className="font-mono text-[13px] font-semibold text-[var(--color-text-1)] tabular-nums min-w-[28px] text-center">
+            {waypoints.length}
+          </span>
         </ControlCell>
       </div>
     </CardShell>
@@ -392,66 +399,51 @@ function MultiStopCard() {
 function RandomWalkCard() {
   const t = useT()
   const { randomWalkRadius, setRandomWalkRadius } = useSimSettings()
+  // Single radius picker. The old second column labelled "Waypoints" but
+  // actually re-printed the radius (a label/value mismatch that read like a
+  // bug); random walk has no fixed waypoint count, so it's dropped.
   return (
     <CardShell>
-      <div className="grid grid-cols-2 relative">
-        {/* Radius with preset chips */}
-        <div className="flex flex-col gap-2 p-4 hover:bg-white/[0.025] transition-colors">
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.10em] text-[var(--color-text-3)]">
-            <span
-              className="w-1 h-1 rounded-full bg-[var(--color-accent)] shadow-[0_0_6px_var(--color-accent)] opacity-70"
-              aria-hidden="true"
-            />
-            {t('dock.radius')}
-          </span>
-          <div className="flex gap-1 flex-wrap">
-            {RADIUS_PRESETS.map((r) => {
-              const active = r === randomWalkRadius
-              const label =
-                r >= KM_THRESHOLD_M ? `${r / KM_THRESHOLD_M}km` : `${r}m`
-              return (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRandomWalkRadius(r)}
-                  aria-pressed={active}
-                  className={[
-                    'h-7 px-2.5 rounded-[7px] font-mono text-[12px] font-medium',
-                    'transition-colors duration-120 cursor-pointer',
-                    active
-                      ? 'text-[var(--color-accent-strong)]'
-                      : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
-                  ].join(' ')}
-                  style={
-                    active
-                      ? {
-                          background: 'var(--color-accent-dim)',
-                          boxShadow:
-                            'var(--shadow-avatar-ring-subtle)',
-                        }
-                      : undefined
-                  }
-                >
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Waypoints stepper */}
-        <div className="flex flex-col gap-2 p-4 hover:bg-white/[0.025] transition-colors relative">
-          <ColDivider />
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.10em] text-[var(--color-text-3)]">
-            <span
-              className="w-1 h-1 rounded-full bg-[var(--color-accent)] shadow-[0_0_6px_var(--color-accent)] opacity-70"
-              aria-hidden="true"
-            />
-            {t('dock.waypoints')}
-          </span>
-          <span className="font-mono text-[24px] font-semibold text-[var(--color-accent-strong)] tabular-nums leading-none tracking-[-0.02em]">
-            {formatRadius(randomWalkRadius)}
-          </span>
+      <div className="flex flex-col gap-2 p-4">
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.10em] text-[var(--color-text-3)]">
+          <span
+            className="w-1 h-1 rounded-full bg-[var(--color-accent)] shadow-[0_0_6px_var(--color-accent)] opacity-70"
+            aria-hidden="true"
+          />
+          {t('dock.radius')}
+        </span>
+        <div className="flex gap-1 flex-wrap">
+          {RADIUS_PRESETS.map((r) => {
+            const active = r === randomWalkRadius
+            const label =
+              r >= KM_THRESHOLD_M ? `${r / KM_THRESHOLD_M}km` : `${r}m`
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRandomWalkRadius(r)}
+                aria-pressed={active}
+                className={[
+                  'h-7 px-2.5 rounded-[7px] font-mono text-[12px] font-medium',
+                  'transition-colors duration-120 cursor-pointer',
+                  active
+                    ? 'text-[var(--color-accent-strong)]'
+                    : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
+                ].join(' ')}
+                style={
+                  active
+                    ? {
+                        background: 'var(--color-accent-dim)',
+                        boxShadow:
+                          'var(--shadow-avatar-ring-subtle)',
+                      }
+                    : undefined
+                }
+              >
+                {label}
+              </button>
+            )
+          })}
         </div>
       </div>
     </CardShell>

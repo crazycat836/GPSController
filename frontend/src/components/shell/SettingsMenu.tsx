@@ -11,6 +11,7 @@ import { useSimSettings } from '../../contexts/SimSettingsContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
 import { useAvatarContext } from '../../contexts/AvatarContext'
 import { useToastContext } from '../../contexts/ToastContext'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { useI18n, useT, type Lang } from '../../i18n'
 import AvatarPicker from './AvatarPicker'
 import SetInitialPositionDialog from './SetInitialPositionDialog'
@@ -23,6 +24,10 @@ import { AVATAR_PRESETS } from '../../lib/avatars'
 import pkg from '../../../package.json'
 
 const APP_VERSION = pkg.version
+
+// Matches the selector in useFocusTrap — used to move initial focus inside.
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 function formatCooldown(seconds: number): string {
   const m = Math.floor(seconds / 60)
@@ -162,6 +167,24 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
     }
   }, [open, onClose])
 
+  // Keyboard accessibility: trap Tab focus inside the popover, move focus in
+  // on open, and restore it to the trigger on close. The trap releases while
+  // the avatar picker (a separate anchored portal) is open so the picker can
+  // own focus.
+  useFocusTrap(popoverRef, open && !avatarPickerAnchor)
+  const restoreFocusRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    restoreFocusRef.current = document.activeElement as HTMLElement | null
+    const tid = setTimeout(() => {
+      popoverRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus()
+    }, 0)
+    return () => {
+      clearTimeout(tid)
+      restoreFocusRef.current?.focus?.()
+    }
+  }, [open])
+
   if (!open && !initialOpen && !goldDittoOpen) return null
 
   return (
@@ -171,6 +194,9 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
         <div
           data-fc="popover.settings"
           ref={popoverRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('settings.title')}
           className={[
             'surface-popup',
             'fixed top-16 right-3 w-[300px] z-[var(--z-dropdown)] overflow-hidden',

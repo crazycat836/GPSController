@@ -37,11 +37,12 @@ export default function TopBarActions({
         label={t('device.add_device')}
         onClick={(e) => onDeviceClick?.(e.currentTarget)}
         disabled={addDeviceDisabled}
+        data-device-trigger
       />
       <ActionButton
         icon={Bookmark}
         label={t('panel.library')}
-        shortcut="\u2318B"
+        shortcut="⌘B"
         onClick={onLibraryClick}
       />
       <ActionButton

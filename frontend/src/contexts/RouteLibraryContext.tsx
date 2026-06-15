@@ -20,7 +20,11 @@ interface RouteLibraryContextValue {
   // Saved routes
   savedRoutes: readonly SavedRoute[]
   refreshRoutes: () => Promise<void>
-  handleRouteLoad: (id: string) => { lat: number; lng: number }[] | null
+  handleRouteLoad: (id: string) => {
+    waypoints: { lat: number; lng: number }[]
+    profile?: string
+    name: string
+  } | null
   handleRouteSave: (
     name: string,
     waypoints: { lat: number; lng: number }[],
@@ -66,13 +70,24 @@ export function RouteLibraryProvider({ children }: { children: React.ReactNode }
     api.getRouteCategories().then(setRouteCategories).catch((err) => devLog('Failed to load route categories', err))
   }, [])
 
-  const handleRouteLoad = useCallback((id: string): { lat: number; lng: number }[] | null => {
+  const handleRouteLoad = useCallback((id: string): {
+    waypoints: { lat: number; lng: number }[]
+    profile?: string
+    name: string
+  } | null => {
     const route = savedRoutes.find((r) => r.id === id)
     if (!route || !Array.isArray(route.waypoints)) return null
-    return (route.waypoints as { lat: number; lng: number }[]).map((w) => ({
-      lat: w.lat,
-      lng: w.lng,
-    }))
+    // Return the saved move profile too so the caller can restore the
+    // walking/driving speed the route was built with — previously dropped,
+    // so a "driving" route replayed at the current (often walking) speed.
+    return {
+      waypoints: (route.waypoints as { lat: number; lng: number }[]).map((w) => ({
+        lat: w.lat,
+        lng: w.lng,
+      })),
+      profile: route.profile,
+      name: route.name,
+    }
   }, [savedRoutes])
 
   // Re-fetch the saved-route list and push it through state. Every

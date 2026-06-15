@@ -39,6 +39,20 @@ export enum SimMode {
   RandomWalk = 'randomwalk',
 }
 
+/** Loop / MultiStop / RandomWalk are the three "Route" sub-modes: they live
+ *  behind the single "Route" tab in the mode bar and share one staged
+ *  waypoint chain. Defined next to SimMode (not in a component) so both the
+ *  UI and `setMode`'s guard can reference one definition. */
+export const ROUTE_SUB_MODES: ReadonlySet<SimMode> = new Set([
+  SimMode.Loop,
+  SimMode.MultiStop,
+  SimMode.RandomWalk,
+])
+
+export function isRouteSubMode(mode: SimMode): boolean {
+  return ROUTE_SUB_MODES.has(mode)
+}
+
 // Explicit speed selection used to hot-swap a running route's speed without
 // reading hook state. Passing the values explicitly (rather than relying on
 // the `applySpeed` closure) avoids a stale-closure bug: a caller that does
@@ -253,16 +267,28 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
 
   const clearError = useCallback(() => setError(null), [])
 
+  // Force-clear the DDI mount overlay. Used by App's client-side safety
+  // timeout / WS-offline guard / user Cancel so the full-screen overlay
+  // can't get stuck if the terminating WS frame is lost (backend crash or
+  // mid-mount disconnect).
+  const clearDdiMounting = useCallback(() => setDdiMounting(false), [])
+
   // Public mode setter: clears the destination marker + route path when the
   // user switches mode tabs. Internal handlers (teleport/navigate/loop/...)
   // still use _setMode directly so they can set destination in the same tick.
   const setMode = useCallback((next: SimMode) => {
     _setMode((prev) => {
-      if (prev !== next) {
-        setDestination(null)
-        setWaypoints([])
-        patchPrimaryRuntime({ routePath: [], progress: 0, eta: null })
-      }
+      if (prev === next) return prev
+      // Switching among the Route sub-modes (Loop / MultiStop / RandomWalk)
+      // keeps the staged waypoints — they share one chain, so flipping
+      // Loop↔MultiStop↔Random must NOT discard the user's hand-placed points.
+      // Any other transition clears the staged destination + route so stale
+      // setup doesn't leak across unrelated modes. (Callers that want to warn
+      // the user about a non-empty discard do so before calling setMode.)
+      if (isRouteSubMode(prev) && isRouteSubMode(next)) return next
+      setDestination(null)
+      setWaypoints([])
+      patchPrimaryRuntime({ routePath: [], progress: 0, eta: null })
       return next
     })
   }, [patchPrimaryRuntime])
@@ -642,6 +668,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     applySpeed,
     error,
     clearError,
+    clearDdiMounting,
     teleport,
     stop,
     navigate,

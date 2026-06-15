@@ -19,9 +19,13 @@ export default function CooldownBadge() {
     : `${mins}:${secs.toString().padStart(2, '0')}`
 
   return (
+    // Sits one row below the default toast slot (top-16) so the cooldown pill
+    // and a command toast (e.g. the 429 COOLDOWN_ACTIVE error you get when
+    // retrying a teleport mid-cooldown) stack instead of overlapping.
     <Toast
       visible
       variant="warning"
+      top="top-28"
       icon={<Timer className="w-4 h-4" />}
       dataFc="map.toast.cooldown"
     >

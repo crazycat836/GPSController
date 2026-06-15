@@ -22,6 +22,16 @@ interface EtaBarProps {
 // so hiding it on pause would trap the user with no visible way to resume.
 const ACTIVE_STATES = ['navigating', 'looping', 'multi_stop', 'random_walk', 'paused']
 
+// Single source of truth for "is the ETA pill on screen". Mirrors the
+// visibility gate below so callers (e.g. App.tsx, which stacks the toast
+// underneath the bar) can react without duplicating the runtime logic.
+export function isEtaBarLive(state: string, runtimes?: RuntimesMap): boolean {
+  const activeCount = runtimes
+    ? Object.values(runtimes).filter((r) => ACTIVE_STATES.includes(r.state)).length
+    : 0
+  return activeCount >= 2 || ACTIVE_STATES.includes(state)
+}
+
 // Format ETA as HH:MM:SS to match the redesign/Home treatment
 // (mono, accent-coloured, always 2-digit HH prefix even for < 1h).
 function formatClock(totalSeconds: number): string {
@@ -58,11 +68,10 @@ function EtaBar({
     ? Object.values(runtimes).filter((r) => ACTIVE_STATES.includes(r.state))
     : []
   const isGroup = activeRuntimes.length >= 2
-  const isLive = isGroup || ACTIVE_STATES.includes(state)
 
   // Design pins the bar on-screen only while something is running;
   // before start the dock panel already carries planned distance/ETA.
-  if (!isLive) return null
+  if (!isEtaBarLive(state, runtimes)) return null
 
   const aggProgress = isGroup
     ? activeRuntimes.reduce((s, r) => s + (r.progress || 0), 0) / activeRuntimes.length
@@ -88,16 +97,17 @@ function EtaBar({
         // the pill off-canvas. The `eta-bar-enter` keyframe bakes the
         // horizontal translate into every frame (with fill-mode `both`),
         // so it's centred before / during / after the animation.
-        // `--z-map-ui` (1000) sits above every Leaflet pane (map-pane 400,
-        // marker-pane 600, popup-pane 700). `--z-bar` (200) loses to
-        // map-pane in the cascade so the pill renders behind tiles and
-        // only flickers into view while Leaflet is mid-zoom.
+        // `--z-eta` (390) sits above the self-contained Leaflet map subtree
+        // but BELOW the top bar (--z-ui 400), so the search dropdown and the
+        // connection banners render over the pill instead of being hidden
+        // under it. It stays above `--z-bar` (200) so it doesn't flicker
+        // behind tiles mid-zoom.
         // `glass-pill-medium` = 0.82 alpha / blur 20 / shadow-md — the
         // dense-alpha pill variant from redesign/Home `.eta` spec. Shares
         // the dock's 0.82 tone for visual consistency but keeps the
         // lighter blur + shadow appropriate for a pill.
         'glass-pill-medium',
-        'fixed top-[76px] left-1/2 z-[var(--z-map-ui)]',
+        'fixed top-[76px] left-1/2 z-[var(--z-eta)]',
         'pl-5 pr-4 py-2.5 flex items-center gap-[18px]',
         'eta-bar-enter',
       ].join(' ')}

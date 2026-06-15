@@ -1,14 +1,14 @@
 import { Crosshair, Navigation, SquareCheckBig, Gamepad2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { SimMode } from '../../hooks/useSimulation'
+import { useCallback, useRef } from 'react'
+import { SimMode, isRouteSubMode } from '../../hooks/useSimulation'
 import { useT } from '../../i18n'
 import type { StringKey } from '../../i18n'
 
-const ROUTE_SUB_MODES = new Set([SimMode.Loop, SimMode.MultiStop, SimMode.RandomWalk])
-
-export function isRouteSubMode(mode: SimMode): boolean {
-  return ROUTE_SUB_MODES.has(mode)
-}
+// Re-export so existing importers (App.tsx) keep their import path working.
+// The canonical definition now lives in hooks/useSimulation so the sim
+// layer's `setMode` guard can share it.
+export { isRouteSubMode }
 
 interface DockModeEntry {
   id: string
@@ -62,6 +62,33 @@ interface BottomModeBarProps {
 
 export default function BottomModeBar({ activeMode, onModeChange, lastRouteSubMode }: BottomModeBarProps) {
   const t = useT()
+  const refs = useRef<(HTMLButtonElement | null)[]>([])
+
+  const activeIndex = Math.max(0, dockModes.findIndex((m) => m.isActive(activeMode)))
+
+  const selectAt = useCallback((i: number) => {
+    const n = (i + dockModes.length) % dockModes.length
+    const entry = dockModes[n]
+    refs.current[n]?.focus()
+    onModeChange(entry.onSelect(activeMode, lastRouteSubMode))
+  }, [activeMode, lastRouteSubMode, onModeChange])
+
+  // ARIA tablist roving navigation: a single tab stop (the active tab),
+  // arrow keys move focus + activate, Home/End jump to the ends.
+  const onKey = useCallback((e: React.KeyboardEvent, i: number) => {
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+        e.preventDefault(); selectAt(i + 1); break
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        e.preventDefault(); selectAt(i - 1); break
+      case 'Home':
+        e.preventDefault(); selectAt(0); break
+      case 'End':
+        e.preventDefault(); selectAt(dockModes.length - 1); break
+    }
+  }, [selectAt])
 
   return (
     <nav
@@ -70,21 +97,27 @@ export default function BottomModeBar({ activeMode, onModeChange, lastRouteSubMo
       className={[
         'glass-pill-strong fixed bottom-3 left-1/2 -translate-x-1/2 z-[var(--z-ui)]',
         'flex items-center gap-1.5 p-2',
-        'w-[min(920px,calc(100vw-48px))] overflow-x-auto scrollbar-none',
+        // Reserve a wider side gutter than the dock (128px vs 48px) so the
+        // centered bar never slides under the bottom-right zoom controls at
+        // the minimum window width.
+        'w-[min(920px,calc(100vw-128px))] overflow-x-auto scrollbar-none',
       ].join(' ')}
       role="tablist"
     >
-      {dockModes.map(({ id, icon: Icon, labelKey, kbd, isActive, onSelect }) => {
+      {dockModes.map(({ id, icon: Icon, labelKey, kbd, isActive, onSelect }, i) => {
         const active = isActive(activeMode)
         return (
           <button
             key={id}
+            ref={(el) => { refs.current[i] = el }}
             type="button"
             role="tab"
             aria-selected={active}
             aria-label={t(labelKey)}
+            tabIndex={i === activeIndex ? 0 : -1}
             title={`${t(labelKey)} (${kbd})`}
             onClick={() => onModeChange(onSelect(activeMode, lastRouteSubMode))}
+            onKeyDown={(e) => onKey(e, i)}
             className={[
               'flex-1 inline-flex items-center justify-center gap-2 h-11 px-4 rounded-full',
               'text-[13px] font-medium whitespace-nowrap',

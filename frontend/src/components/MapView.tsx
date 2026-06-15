@@ -34,6 +34,8 @@ interface MapViewProps {
   onSaveRoute?: () => void;
   showSaveRouteOption?: boolean;
   deviceConnected?: boolean;
+  /** Open the device panel from the context menu's "no device" row. */
+  onOpenDevices?: () => void;
   onShowToast?: (msg: string) => void;
   layerKey?: string;
   /** Fires once after Leaflet initializes so parents can drive imperative
@@ -63,6 +65,7 @@ function MapView({
   onSaveRoute,
   showSaveRouteOption,
   deviceConnected = true,
+  onOpenDevices,
   onShowToast,
   layerKey = 'osm',
   onMapReady,
@@ -229,6 +232,7 @@ function MapView({
         onSaveRoute={onSaveRoute}
         showSaveRouteOption={showSaveRouteOption}
         deviceConnected={deviceConnected}
+        onOpenDevices={onOpenDevices}
         onShowToast={onShowToast}
       />
     </div>

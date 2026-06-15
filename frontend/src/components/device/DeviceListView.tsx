@@ -3,6 +3,7 @@ import {
   Check, Loader2, Plus, Scan, Settings as SettingsIcon, XCircle,
 } from 'lucide-react'
 import { useDeviceContext } from '../../contexts/DeviceContext'
+import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
 import { DeviceAvatar, DeviceInfoColumn, getDeviceMeta } from './deviceRowParts'
 
@@ -23,12 +24,33 @@ export interface DeviceListViewProps {
 export default function DeviceListView({ onClose, onManage, onAdd }: DeviceListViewProps) {
   const t = useT()
   const device = useDeviceContext()
+  const { showToast } = useToastContext()
 
   const [scanning, setScanning] = useState(false)
   const [scanResult, setScanResult] = useState<number | null>(null)
   const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // UDID currently being connected — drives the per-row spinner and keeps the
+  // popover open until connect resolves (was fire-and-forget + instant close,
+  // which gave the user no progress / success / failure feedback).
+  const [connectingUdid, setConnectingUdid] = useState<string | null>(null)
 
   useEffect(() => () => { if (scanTimer.current) clearTimeout(scanTimer.current) }, [])
+
+  const handleConnect = useCallback(async (udid: string) => {
+    if (connectingUdid) return
+    setConnectingUdid(udid)
+    try {
+      await device.connect(udid)
+      onClose() // success — close so the applied connection is visible
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : ''
+      // Connect pairs the device, which surfaces the on-device Trust prompt;
+      // the most common failure is the user not having tapped Trust yet.
+      showToast(msg || t('toast.connect_failed_trust'))
+    } finally {
+      setConnectingUdid(null)
+    }
+  }, [connectingUdid, device, onClose, showToast, t])
 
   const handleScan = useCallback(async () => {
     if (scanTimer.current) clearTimeout(scanTimer.current)
@@ -101,6 +123,7 @@ export default function DeviceListView({ onClose, onManage, onAdd }: DeviceListV
             const meta = getDeviceMeta(d, idx, selectedUdid)
             const { unsupported, isSelected } = meta
             const isLost = device.lostUdids.has(d.udid) && !d.is_connected
+            const isConnecting = connectingUdid === d.udid
             const statusLabel = unsupported
               ? t('device.status_unsupported')
               : isLost
@@ -117,41 +140,47 @@ export default function DeviceListView({ onClose, onManage, onAdd }: DeviceListV
               <button
                 key={d.udid}
                 type="button"
-                disabled={unsupported}
+                disabled={unsupported || isConnecting}
                 onClick={() => {
                   if (unsupported) return
-                  void device.connect(d.udid)
-                  onClose()
+                  void handleConnect(d.udid)
                 }}
                 className={[
                   'grid items-center gap-3 w-full text-left',
                   'px-2.5 py-2.5 rounded-[10px] transition-colors duration-150',
                   isSelected ? 'bg-[var(--color-accent-dim)]' : 'hover:bg-white/[0.04]',
-                  unsupported ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+                  unsupported ? 'opacity-50 cursor-not-allowed' : isConnecting ? 'cursor-wait' : 'cursor-pointer',
                 ].join(' ')}
                 style={{ gridTemplateColumns: '36px 1fr auto' }}
               >
                 <DeviceAvatar meta={meta} />
                 <DeviceInfoColumn device={d} meta={meta} />
-                <span
-                  className="inline-flex items-center gap-1.5 font-mono text-[10px] shrink-0"
-                  style={{ color: statusColor }}
-                >
+                {isConnecting ? (
+                  <span className="inline-flex items-center gap-1.5 font-mono text-[10px] shrink-0 text-[var(--color-text-2)]">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    {t('device.connecting')}
+                  </span>
+                ) : (
                   <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{
-                      background: unsupported || isLost
-                        ? 'var(--color-danger)'
-                        : isSelected
-                          ? 'var(--color-success-text)'
-                          : 'rgba(255,255,255,0.35)',
-                      boxShadow: isSelected && !unsupported && !isLost
-                        ? '0 0 6px var(--color-success-text)'
-                        : 'none',
-                    }}
-                  />
-                  {statusLabel}
-                </span>
+                    className="inline-flex items-center gap-1.5 font-mono text-[10px] shrink-0"
+                    style={{ color: statusColor }}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{
+                        background: unsupported || isLost
+                          ? 'var(--color-danger)'
+                          : isSelected
+                            ? 'var(--color-success-text)'
+                            : 'rgba(255,255,255,0.35)',
+                        boxShadow: isSelected && !unsupported && !isLost
+                          ? '0 0 6px var(--color-success-text)'
+                          : 'none',
+                      }}
+                    />
+                    {statusLabel}
+                  </span>
+                )}
               </button>
             )
           })

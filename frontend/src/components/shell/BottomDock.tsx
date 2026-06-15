@@ -5,12 +5,13 @@ import type { ChainPoint } from '../WaypointChain'
 import { useSimActions, useSimState } from '../../contexts/SimContext'
 import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useSimSettings } from '../../contexts/SimSettingsContext'
-import { SimMode } from '../../hooks/useSimulation'
+import { SimMode, isRouteSubMode } from '../../hooks/useSimulation'
 import { useT } from '../../i18n'
 import { RADIUS_PRESETS } from '../../lib/constants'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
 import GlassIconButton from '../ui/GlassIconButton'
 import DockRouteCard from './dock/DockRouteCard'
+import RouteSubModeBar from './dock/RouteSubModeBar'
 import WaypointList from './dock/WaypointList'
 import JoyPreview from './dock/JoyPreview'
 import ModeStatsCard, { CardShell } from './dock/ModeStatsCard'
@@ -34,10 +35,20 @@ const DOCK_BODY_HEIGHT = 280
 const DOCK_BODY_GAP = 12
 const DOCK_COLLAPSE_MS = 240
 
-// Read the persisted collapse preference; default to expanded.
+// Minimum viewport height below which the dock starts collapsed when the user
+// has no saved preference — otherwise the expanded dock (~376px) plus the top
+// chrome squeezes the map to a sliver on short windows.
+const SHORT_VIEWPORT_PX = 720
+
+// Read the persisted collapse preference. With no saved value, default to
+// collapsed on short viewports and expanded otherwise. An explicit user
+// choice ('1' / '0') always wins.
 function readDockCollapsed(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEYS.dockCollapsed) === '1'
+    const v = localStorage.getItem(STORAGE_KEYS.dockCollapsed)
+    if (v === '1') return true
+    if (v === '0') return false
+    return typeof window !== 'undefined' && window.innerHeight < SHORT_VIEWPORT_PX
   } catch {
     return false
   }
@@ -45,7 +56,7 @@ function readDockCollapsed(): boolean {
 
 export default function BottomDock() {
   const t = useT()
-  const { handleRemoveWaypoint, handleGenerateRandomWaypoints } = useSimActions()
+  const { handleRemoveWaypoint, handleGenerateRandomWaypoints, setWaypoints } = useSimActions()
   const { mode, waypoints } = useSimState()
   const { currentPos, destPos } = useSimDerived()
   const [showRandomConfig, setShowRandomConfig] = useState(false)
@@ -73,6 +84,22 @@ export default function BottomDock() {
     handleGenerateRandomWaypoints()
     setShowRandomConfig(false)
   }
+
+  // Reorder the in-progress stops (index >= 1). The start (index 0, the
+  // current position) stays fixed. Stop ids are 'wp-<originalIndex>'.
+  const handleReorderStops = useCallback((orderedStopIds: string[]) => {
+    setWaypoints((prev) => {
+      if (prev.length <= 2) return prev
+      const startPt = prev[0]
+      const stops: typeof prev = []
+      for (const id of orderedStopIds) {
+        const i = parseInt(id.replace('wp-', ''), 10)
+        if (!Number.isNaN(i) && prev[i]) stops.push(prev[i])
+      }
+      if (stops.length !== prev.length - 1) return prev
+      return [startPt, ...stops]
+    })
+  }, [setWaypoints])
 
   return (
     <div
@@ -126,6 +153,15 @@ export default function BottomDock() {
           />
         </div>
 
+        {/* Route sub-mode switcher — outside the collapsible body so the three
+            Route modes stay reachable even when the dock is collapsed. Only
+            shown while a Route sub-mode is active. */}
+        {isRouteSubMode(mode) && (
+          <div className="mt-3">
+            <RouteSubModeBar />
+          </div>
+        )}
+
         {/* Collapsible main row — height animates between a fixed px and 0
             so the panel never jumps between modes and folds away cleanly.
             `inert` keeps the hidden controls out of the tab order. */}
@@ -153,6 +189,7 @@ export default function BottomDock() {
                 loop={ctx.loop}
                 onRemoveWaypoint={handleRemoveWaypoint}
                 onGenerateRandom={() => setShowRandomConfig(true)}
+                onReorder={handleReorderStops}
               />
             </div>
 
@@ -186,9 +223,10 @@ interface LeftColumnProps {
   loop: boolean
   onRemoveWaypoint: (index: number) => void
   onGenerateRandom: () => void
+  onReorder: (orderedStopIds: string[]) => void
 }
 
-function LeftColumn({ mode, chainPoints, loop, onRemoveWaypoint, onGenerateRandom }: LeftColumnProps) {
+function LeftColumn({ mode, chainPoints, loop, onRemoveWaypoint, onGenerateRandom, onReorder }: LeftColumnProps) {
   switch (mode) {
     case SimMode.Teleport:
     case SimMode.Navigate:
@@ -203,8 +241,8 @@ function LeftColumn({ mode, chainPoints, loop, onRemoveWaypoint, onGenerateRando
             const i = parseInt(id.replace('wp-', ''), 10)
             if (!Number.isNaN(i)) onRemoveWaypoint(i)
           }}
-          onAdd={() => { /* map right-click */ }}
           onRandom={onGenerateRandom}
+          onReorder={onReorder}
         />
       )
     case SimMode.RandomWalk:

@@ -140,7 +140,7 @@ export const STRINGS = {
 
   // ── Map ──────────────────────────────────────
   'map.recenter': { zh: '定位到目前位置', en: 'Recenter on current position' },
-  'map.device_disconnected': { zh: 'USB 已斷開,請重新插入', en: 'USB disconnected, please reconnect' },
+  'map.device_disconnected': { zh: '未連線裝置,點此開啟裝置面板', en: 'No device connected — open the device panel' },
   'map.teleport_here': { zh: '瞬移到這裡', en: 'Teleport here' },
   'map.navigate_here': { zh: '導航到這裡', en: 'Navigate here' },
   'map.add_waypoint': { zh: '添加路徑點', en: 'Add waypoint' },
@@ -586,6 +586,37 @@ export const STRINGS = {
   'settings.lng_placeholder': { zh: '經度', en: 'Lng' },
   'settings.cooldown_label': { zh: 'GPS 冷卻', en: 'GPS cooldown' },
   'settings.toggle_cooldown_aria': { zh: '切換 GPS 冷卻', en: 'Toggle GPS cooldown' },
+
+  // ── Route sub-mode switcher + mode-switch guard (UX fixes) ──
+  'route.sub_aria': { zh: '路線類型', en: 'Route type' },
+  'route.sub_loop': { zh: '巡迴', en: 'Loop' },
+  'route.sub_multi': { zh: '多點', en: 'Multi-stop' },
+  'route.sub_random': { zh: '隨機', en: 'Random' },
+  'toast.route_cleared': { zh: '切換模式已清除目前的路徑點', en: 'Switching mode cleared the staged waypoints' },
+  'toast.route_loaded': { zh: '已載入路線「{name}」', en: 'Route "{name}" loaded' },
+  'chain.add_hint': { zh: '點地圖,或右鍵選「添加路徑點」來新增停靠點', en: 'Click the map, or right-click → Add waypoint, to add stops' },
+  'chain.reorder_aria': { zh: '拖曳重新排序停靠點', en: 'Drag to reorder stops' },
+
+  // ── Device connect / DDI feedback (UX fixes) ──
+  'device.connecting': { zh: '連線中…', en: 'Connecting…' },
+  'toast.connect_failed_trust': { zh: '連線失敗,請在 iPhone 上點「信任這台電腦」後再試', en: 'Connection failed — tap "Trust This Computer" on the iPhone, then retry' },
+  'ddi.taking_long': { zh: '比預期久,可能是網路較慢。可繼續等待,或取消。', en: 'Taking longer than usual — possibly a slow network. Keep waiting, or cancel.' },
+  'ddi.cancel': { zh: '取消並關閉', en: 'Cancel' },
+  'toast.ddi_timeout': { zh: 'DDI 掛載逾時,請重新連線裝置', en: 'DDI mount timed out. Please reconnect the device.' },
+
+  // ── Persistent device-lost banner (UX fix) ──
+  'conn.device_lost_title': { zh: '裝置連線中斷', en: 'Device disconnected' },
+  'conn.open_devices': { zh: '開啟裝置面板', en: 'Open devices' },
+  'conn.dismiss': { zh: '關閉', en: 'Dismiss' },
+
+  // ── Teleport staging feedback (UX fix) ──
+  'toast.teleport_staged': { zh: '目的地已暫存,按「瞬移」送出', en: 'Destination staged — press Teleport to send' },
+
+  // ── Bookmark import (UX fix) ──
+  'bm.import_none': { zh: '沒有匯入新收藏', en: 'No new bookmarks imported' },
+
+  // ── Search results a11y (UX fix) ──
+  'search.results_aria': { zh: '搜尋結果', en: 'Search results' },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

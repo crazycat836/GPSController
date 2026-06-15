@@ -125,7 +125,9 @@ export interface SimActionsValue extends Pick<Sim,
   | 'setSpeedMinKmh'
   | 'setSpeedMaxKmh'
   | 'setLoopLapCount'
+  | 'setPauseMultiStop'
   | 'clearError'
+  | 'clearDdiMounting'
 > {
   handleTeleport: (lat: number, lng: number) => void
   handleNavigate: (lat: number, lng: number) => void
@@ -168,8 +170,10 @@ export interface SimStateValue extends Pick<Sim,
   | 'runtimes'
   | 'pauseRemaining'
   | 'ddiMounting'
+  | 'ddiMissing'
   | 'waypointProgress'
   | 'loopLapCount'
+  | 'pauseMultiStop'
   | 'lapProgress'
   | 'effectiveSpeed'
   | 'error'
@@ -316,18 +320,18 @@ export function SimProvider({ children }: SimProviderProps) {
     pendingSyncRef.current = null
     setSyncPrompt(null)
   }, [])
-  // Surface a user-facing hint when the backend reports a DDI mount
-  // failure. `ts` on the signal dedupes repeat failures across
-  // re-renders; reason + stage go to the console only in dev.
+  // Log DDI mount failures for diagnostics. The user-facing surface is now
+  // App's persistent, dismissible DdiFailedBanner (a transient toast got
+  // overwritten by unrelated toasts before the user could read it). `ts`
+  // dedupes repeat failures across re-renders.
   const lastDdiMissingTs = React.useRef<number>(0)
   useEffect(() => {
     const m = sim.ddiMissing
     if (!m) return
     if (m.ts === lastDdiMissingTs.current) return
     lastDdiMissingTs.current = m.ts
-    devWarn('[ddi_mount_missing]', m.stage ?? '?', m.reason)
-    showToast(t('ddi.missing_hint'), 10000)
-  }, [sim.ddiMissing, showToast, t])
+    devWarn('[ddi_mount_failed]', m.stage ?? '?', m.reason)
+  }, [sim.ddiMissing])
 
   // --- Handlers ---
   // All read live state through `latest` (see above) so their useCallback
@@ -713,7 +717,9 @@ export function SimProvider({ children }: SimProviderProps) {
     setSpeedMinKmh: sim.setSpeedMinKmh,
     setSpeedMaxKmh: sim.setSpeedMaxKmh,
     setLoopLapCount: sim.setLoopLapCount,
+    setPauseMultiStop: sim.setPauseMultiStop,
     clearError: sim.clearError,
+    clearDdiMounting: sim.clearDdiMounting,
   }), [
     handleSetTeleportDest,
     handleClearTeleportDest,
@@ -739,7 +745,9 @@ export function SimProvider({ children }: SimProviderProps) {
     sim.setSpeedMinKmh,
     sim.setSpeedMaxKmh,
     sim.setLoopLapCount,
+    sim.setPauseMultiStop,
     sim.clearError,
+    sim.clearDdiMounting,
   ])
 
   // Ticking state value — invalidates whenever any live field changes
@@ -763,8 +771,10 @@ export function SimProvider({ children }: SimProviderProps) {
     runtimes: sim.runtimes,
     pauseRemaining: sim.pauseRemaining,
     ddiMounting: sim.ddiMounting,
+    ddiMissing: sim.ddiMissing,
     waypointProgress: sim.waypointProgress,
     loopLapCount: sim.loopLapCount,
+    pauseMultiStop: sim.pauseMultiStop,
     lapProgress: sim.lapProgress,
     effectiveSpeed: sim.effectiveSpeed,
     error: sim.error,
@@ -786,8 +796,10 @@ export function SimProvider({ children }: SimProviderProps) {
     sim.runtimes,
     sim.pauseRemaining,
     sim.ddiMounting,
+    sim.ddiMissing,
     sim.waypointProgress,
     sim.loopLapCount,
+    sim.pauseMultiStop,
     sim.lapProgress,
     sim.effectiveSpeed,
     sim.error,

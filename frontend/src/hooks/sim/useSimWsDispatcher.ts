@@ -354,14 +354,22 @@ export function useSimWsDispatcher(
           s.setDdiMounting(true)
           break
         }
-        case 'ddi_mounted':
-        case 'ddi_mount_failed': {
+        case 'ddi_mounted': {
           s.setDdiMounting(false)
           break
         }
+        case 'ddi_mount_failed': {
+          // Mount attempt failed outright. Was previously silent (only
+          // cleared the overlay); now emits the same missing signal so the
+          // persistent DDI-failed banner surfaces a manual-mount hint.
+          s.setDdiMounting(false)
+          s.setDdiMissing({ reason: 'mount_failed', ts: Date.now() })
+          break
+        }
         case 'ddi_mount_missing': {
-          // Auto-mount failed. The SimContext observer will surface a
-          // single hint toast so the user knows what to do next.
+          // Auto-mount failed. App surfaces a persistent, dismissible banner
+          // (not a transient toast) so the hint isn't overwritten by an
+          // unrelated toast.
           s.setDdiMounting(false)
           const d = parseDdiMountMissing(wsMessage.data)
           s.setDdiMissing({

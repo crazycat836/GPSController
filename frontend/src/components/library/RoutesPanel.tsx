@@ -4,7 +4,7 @@ import {
   Folder, FolderInput, GripVertical, ListTree, X,
 } from 'lucide-react'
 import { useRouteLibrary } from '../../contexts/RouteLibraryContext'
-import { useSimActions, useSimState } from '../../contexts/SimContext'
+import { MoveMode, useSimActions, useSimState } from '../../contexts/SimContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
@@ -40,6 +40,12 @@ const CATEGORY_CHIPS_VISIBLE_CAP = 5
 
 const getRouteId = (r: SavedRoute) => r.id
 
+// Valid saved-route move profiles — guards the restore on load so a malformed
+// stored profile can't be pushed into setMoveMode.
+const VALID_MOVE_MODES: ReadonlySet<string> = new Set([
+  MoveMode.Walking, MoveMode.Running, MoveMode.Driving,
+])
+
 export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   const t = useT()
   const routeLib = useRouteLibrary()
@@ -47,7 +53,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   // (never on position ticks), so callbacks below can depend on them
   // directly; `setWaypoints` is a stable action.
   const { waypoints: simWaypoints, moveMode: simMoveMode } = useSimState()
-  const { setWaypoints } = useSimActions()
+  const { setWaypoints, setMoveMode } = useSimActions()
   const { showToast } = useToastContext()
 
   const savedRoutes = routeLib.savedRoutes
@@ -203,12 +209,19 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
 
   const handleLoad = useCallback((id: string) => {
     if (selectionMode || reorderMode) return
-    const waypoints = routeLib.handleRouteLoad(id)
-    if (waypoints) {
-      setWaypoints(waypoints)
+    const loaded = routeLib.handleRouteLoad(id)
+    if (loaded) {
+      setWaypoints(loaded.waypoints)
+      // Restore the move profile the route was saved with so its speed
+      // replays correctly (was silently dropped).
+      if (loaded.profile && VALID_MOVE_MODES.has(loaded.profile)) {
+        setMoveMode(loaded.profile as MoveMode)
+      }
+      // Load had no success feedback (every other route action toasts).
+      showToast(t('toast.route_loaded', { name: loaded.name }))
       onRouteLoaded()
     }
-  }, [routeLib, setWaypoints, onRouteLoaded, selectionMode, reorderMode])
+  }, [routeLib, setWaypoints, setMoveMode, showToast, t, onRouteLoaded, selectionMode, reorderMode])
 
   const commitRename = useCallback((routeId: string, currentName: string) => {
     commitTrimmedRename(editingRouteName, currentName, (next) =>

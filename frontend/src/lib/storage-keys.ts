@@ -15,6 +15,10 @@ export const STORAGE_KEYS = {
   // Whether the bottom simulation dock is collapsed to its header only.
   // Persisted so the panel stays out of the way of the map across reloads.
   dockCollapsed: 'gpscontroller.dock_collapsed',
+  // Last-selected Route sub-mode (Loop / MultiStop / RandomWalk). Persisted
+  // so the single "Route" tab resumes the user's preferred sub-mode across
+  // launches instead of always defaulting to Loop.
+  lastRouteSubMode: 'gpscontroller.last_route_sub_mode',
   // Gold Ditto (拉金盆) anchor — user's real-world coordinate. JSON-
   // serialised ``{lat, lng}`` so absent / malformed entries decode to
   // null cleanly and the UI re-prompts.

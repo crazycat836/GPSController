@@ -714,7 +714,9 @@ const TABLE: TableRow[] = [
   { name: 'lap_complete', type: 'lap_complete', data: { lap: 1 }, fires: ['setLapProgress'] },
   { name: 'ddi_mounting', type: 'ddi_mounting', data: {}, fires: ['setDdiMounting'] },
   { name: 'ddi_mounted', type: 'ddi_mounted', data: {}, fires: ['setDdiMounting'] },
-  { name: 'ddi_mount_failed', type: 'ddi_mount_failed', data: {}, fires: ['setDdiMounting'] },
+  // ddi_mount_failed now also emits the missing signal so the persistent
+  // DDI-failed banner surfaces a manual-mount hint (was previously silent).
+  { name: 'ddi_mount_failed', type: 'ddi_mount_failed', data: {}, fires: ['setDdiMissing', 'setDdiMounting'] },
   {
     name: 'ddi_mount_missing',
     type: 'ddi_mount_missing',

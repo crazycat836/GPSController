@@ -33,6 +33,9 @@ interface MapContextMenuProps {
   /** Show the "Save route" item — true only when there's a route to save. */
   showSaveRouteOption?: boolean;
   deviceConnected: boolean;
+  /** Open the device panel — used by the "no device" row so it's an
+   *  actionable shortcut instead of a dead, USB-specific label. */
+  onOpenDevices?: () => void;
   onShowToast?: (msg: string) => void;
 }
 
@@ -54,6 +57,7 @@ function MapContextMenu({
   onSaveRoute,
   showSaveRouteOption,
   deviceConnected,
+  onOpenDevices,
   onShowToast,
 }: MapContextMenuProps) {
   const t = useT();
@@ -260,7 +264,13 @@ function MapContextMenu({
         </>
       ) : (
         <div
-          style={{ ...contextMenuItemStyle, color: 'var(--color-danger-text)', cursor: 'not-allowed', opacity: 0.75 }}
+          className="context-menu-item"
+          style={{ ...contextMenuItemStyle, color: 'var(--color-danger-text)', cursor: onOpenDevices ? 'pointer' : 'default' }}
+          onClick={() => {
+            if (!onOpenDevices) return;
+            onOpenDevices();
+            onClose();
+          }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
             <circle cx="12" cy="12" r="10" />

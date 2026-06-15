@@ -7,7 +7,7 @@
  * install behaves the same on both sides.
  */
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
 import { DEFAULT_PAUSE } from '../../lib/constants'
 
@@ -50,9 +50,14 @@ export function usePauseSettings(): UsePauseSettingsValue {
   const [pauseMultiStop, setPauseMultiStopRaw] = useState<PauseSetting>(() => loadPause(STORAGE_KEYS.pauseMultiStop))
   const [pauseRandomWalk, setPauseRandomWalkRaw] = useState<PauseSetting>(() => loadPause(STORAGE_KEYS.pauseRandomWalk))
 
-  const setPauseLoop = (v: PauseSetting) => { setPauseLoopRaw(v); savePause(STORAGE_KEYS.pauseLoop, v) }
-  const setPauseMultiStop = (v: PauseSetting) => { setPauseMultiStopRaw(v); savePause(STORAGE_KEYS.pauseMultiStop, v) }
-  const setPauseRandomWalk = (v: PauseSetting) => { setPauseRandomWalkRaw(v); savePause(STORAGE_KEYS.pauseRandomWalk, v) }
+  // useCallback so the setter identities stay stable across renders — they
+  // are surfaced through SimContext's *stable* actions slice, which must not
+  // invalidate on every provider render (that would re-render action-only
+  // consumers on position ticks). The raw setters + module-level savePause
+  // are all stable, so [] deps are correct.
+  const setPauseLoop = useCallback((v: PauseSetting) => { setPauseLoopRaw(v); savePause(STORAGE_KEYS.pauseLoop, v) }, [])
+  const setPauseMultiStop = useCallback((v: PauseSetting) => { setPauseMultiStopRaw(v); savePause(STORAGE_KEYS.pauseMultiStop, v) }, [])
+  const setPauseRandomWalk = useCallback((v: PauseSetting) => { setPauseRandomWalkRaw(v); savePause(STORAGE_KEYS.pauseRandomWalk, v) }, [])
 
   return { pauseLoop, pauseMultiStop, pauseRandomWalk, setPauseLoop, setPauseMultiStop, setPauseRandomWalk }
 }

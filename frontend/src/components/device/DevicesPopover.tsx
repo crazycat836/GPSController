@@ -2,9 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft } from 'lucide-react'
 import { useT } from '../../i18n'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import DeviceListView from './DeviceListView'
 import DeviceManageView from './DeviceManageView'
 import DeviceAddView from './DeviceAddView'
+
+// Matches the selector in useFocusTrap — used to move initial focus inside.
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 interface DevicesPopoverProps {
   // Null hides the popover. A DOMRect positions it beneath the trigger
@@ -45,6 +50,26 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
   // open, so the orchestrator can suppress its outside-click + ESC handler
   // (otherwise the dialog overlay would close the popover too).
   const [manageModalOpen, setManageModalOpen] = useState(false)
+
+  // Keyboard accessibility: trap Tab focus inside the popover (connecting a
+  // device is a primary task and the whole flow lives here), and restore
+  // focus to the trigger on close. The custom ESC/back logic below stays.
+  useFocusTrap(panelRef, !!anchor)
+  const restoreFocusRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    if (!anchor) return
+    restoreFocusRef.current = document.activeElement as HTMLElement | null
+    return () => { restoreFocusRef.current?.focus?.() }
+  }, [!!anchor])
+  // Move focus into the panel on open and on view switch so keyboard users
+  // land inside it; the focus trap then keeps Tab contained.
+  useEffect(() => {
+    if (!anchor) return
+    const tid = setTimeout(() => {
+      panelRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus()
+    }, 0)
+    return () => clearTimeout(tid)
+  }, [!!anchor, view])
 
   useEffect(() => {
     if (!anchor) return
@@ -103,6 +128,7 @@ export default function DevicesPopover({ anchor, onClose }: DevicesPopoverProps)
       data-fc="popover.devices"
       ref={panelRef}
       role="dialog"
+      aria-modal="true"
       aria-label={t('device.popover_aria')}
       className={['surface-popup', 'fixed z-[var(--z-dropdown)] overflow-hidden rounded-2xl', 'anim-scale-in-tl'].join(' ')}
       style={{ width: POPOVER_WIDTH, left, top, transformOrigin: 'top right' }}
