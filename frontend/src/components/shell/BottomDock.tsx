@@ -5,13 +5,13 @@ import type { ChainPoint } from '../WaypointChain'
 import { useSimActions, useSimState } from '../../contexts/SimContext'
 import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useSimSettings } from '../../contexts/SimSettingsContext'
-import { SimMode, isRouteSubMode } from '../../hooks/useSimulation'
+import { SimMode } from '../../hooks/useSimulation'
 import { useT } from '../../i18n'
 import { RADIUS_PRESETS } from '../../lib/constants'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
+import { readLS, writeLS } from '../../lib/local-storage'
 import GlassIconButton from '../ui/GlassIconButton'
 import DockRouteCard from './dock/DockRouteCard'
-import RouteSubModeBar from './dock/RouteSubModeBar'
 import WaypointList from './dock/WaypointList'
 import JoyPreview from './dock/JoyPreview'
 import ModeStatsCard, { CardShell } from './dock/ModeStatsCard'
@@ -44,14 +44,10 @@ const SHORT_VIEWPORT_PX = 720
 // collapsed on short viewports and expanded otherwise. An explicit user
 // choice ('1' / '0') always wins.
 function readDockCollapsed(): boolean {
-  try {
-    const v = localStorage.getItem(STORAGE_KEYS.dockCollapsed)
-    if (v === '1') return true
-    if (v === '0') return false
-    return typeof window !== 'undefined' && window.innerHeight < SHORT_VIEWPORT_PX
-  } catch {
-    return false
-  }
+  const v = readLS(STORAGE_KEYS.dockCollapsed)
+  if (v === '1') return true
+  if (v === '0') return false
+  return typeof window !== 'undefined' && window.innerHeight < SHORT_VIEWPORT_PX
 }
 
 export default function BottomDock() {
@@ -67,7 +63,7 @@ export default function BottomDock() {
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
       const next = !prev
-      try { localStorage.setItem(STORAGE_KEYS.dockCollapsed, next ? '1' : '0') } catch {}
+      writeLS(STORAGE_KEYS.dockCollapsed, next ? '1' : '0')
       return next
     })
   }, [])
@@ -152,15 +148,6 @@ export default function BottomDock() {
             }
           />
         </div>
-
-        {/* Route sub-mode switcher — outside the collapsible body so the three
-            Route modes stay reachable even when the dock is collapsed. Only
-            shown while a Route sub-mode is active. */}
-        {isRouteSubMode(mode) && (
-          <div className="mt-3">
-            <RouteSubModeBar />
-          </div>
-        )}
 
         {/* Collapsible main row — height animates between a fixed px and 0
             so the panel never jumps between modes and folds away cleanly.

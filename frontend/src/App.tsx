@@ -5,6 +5,7 @@ import type { StringKey } from './i18n/strings'
 import { SimMode, type LatLng } from './hooks/useSimulation'
 import type { DeviceLostCause } from './hooks/useDevice'
 import { STORAGE_KEYS } from './lib/storage-keys'
+import { readLS, writeLS } from './lib/local-storage'
 import { haversineM, polylineDistanceM } from './lib/geo'
 
 // Context providers
@@ -137,24 +138,6 @@ function AppShell() {
   const health = useConnectionHealth()
   const { handlePause, handleResume, setMode, clearDdiMounting } = simActions
 
-  // Track the last-used Route sub-mode so switching back to "Route"
-  // resumes the same sub-tab (Loop / Multi-Stop / Random). Persisted so the
-  // user's preferred sub-mode survives relaunch instead of resetting to Loop.
-  const [lastRouteSubMode, setLastRouteSubMode] = useState<SimMode>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.lastRouteSubMode) as SimMode | null
-      return saved && isRouteSubMode(saved) ? saved : SimMode.Loop
-    } catch {
-      return SimMode.Loop
-    }
-  })
-  useEffect(() => {
-    if (isRouteSubMode(sim.mode)) {
-      setLastRouteSubMode(sim.mode)
-      try { localStorage.setItem(STORAGE_KEYS.lastRouteSubMode, sim.mode) } catch {}
-    }
-  }, [sim.mode])
-
   // Mode switching out of the Route family discards the staged waypoints
   // (see useSimulation.setMode). Warn with a toast when that throws away a
   // non-empty route so the loss is never silent. Switching *within* the Route
@@ -246,12 +229,10 @@ function AppShell() {
   // Physical PC coordinate pin — surfaced on the map after the user fires
   // a fly/teleport action from LocatePcButton; cleared on Refresh.
   const [pcMarkerCoord, setPcMarkerCoord] = useState<{ lat: number; lng: number } | null>(null)
-  const [layerKey, setLayerKey] = useState(() => {
-    try { return localStorage.getItem(STORAGE_KEYS.tileLayer) || 'osm' } catch { return 'osm' }
-  })
+  const [layerKey, setLayerKey] = useState(() => readLS(STORAGE_KEYS.tileLayer) || 'osm')
   const handleLayerChange = useCallback((key: string) => {
     setLayerKey(key)
-    try { localStorage.setItem(STORAGE_KEYS.tileLayer, key) } catch {}
+    writeLS(STORAGE_KEYS.tileLayer, key)
   }, [])
 
   // No auto-scan on WebSocket connect. The backend's _send_initial_state
@@ -340,7 +321,7 @@ function AppShell() {
         return
       }
       if (!isInput && e.key >= '1' && e.key <= '4') {
-        const modeForKey: SimMode[] = [SimMode.Teleport, SimMode.Navigate, lastRouteSubMode, SimMode.Joystick]
+        const modeForKey: SimMode[] = [SimMode.Teleport, SimMode.Navigate, SimMode.Loop, SimMode.Joystick]
         handleModeChange(modeForKey[parseInt(e.key) - 1])
         return
       }
@@ -354,7 +335,7 @@ function AppShell() {
     return () => window.removeEventListener('keydown', handler)
     // Deps are stable actions + the two run-state booleans — the listener
     // re-subscribes when the run/pause state flips, not on position ticks.
-  }, [libraryOpen, handleModeChange, sim.status.running, sim.status.paused, handlePause, handleResume, lastRouteSubMode])
+  }, [libraryOpen, handleModeChange, sim.status.running, sim.status.paused, handlePause, handleResume])
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
@@ -507,7 +488,7 @@ function AppShell() {
 
       <BottomDock />
 
-      <BottomModeBar activeMode={sim.mode} onModeChange={handleModeChange} lastRouteSubMode={lastRouteSubMode} />
+      <BottomModeBar activeMode={sim.mode} onModeChange={handleModeChange} />
       <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} layerKey={layerKey} onLayerChange={handleLayerChange} />
       <DevicesPopover
         anchor={devicesPopoverAnchor}

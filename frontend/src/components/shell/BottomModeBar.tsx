@@ -16,7 +16,7 @@ interface DockModeEntry {
   labelKey: StringKey
   kbd: string
   isActive: (mode: SimMode) => boolean
-  onSelect: (current: SimMode, lastRouteSub: SimMode) => SimMode
+  onSelect: (current: SimMode) => SimMode
 }
 
 const dockModes: DockModeEntry[] = [
@@ -42,7 +42,9 @@ const dockModes: DockModeEntry[] = [
     labelKey: 'mode.route',
     kbd: '3',
     isActive: (m) => isRouteSubMode(m),
-    onSelect: (_cur, lastRouteSub) => lastRouteSub,
+    // Only the Loop sub-mode is exposed in the UI now; Multi-Stop / Random
+    // Walk remain in the engine but are no longer reachable from the dock.
+    onSelect: () => SimMode.Loop,
   },
   {
     id: 'joystick',
@@ -57,10 +59,9 @@ const dockModes: DockModeEntry[] = [
 interface BottomModeBarProps {
   activeMode: SimMode
   onModeChange: (mode: SimMode) => void
-  lastRouteSubMode: SimMode
 }
 
-export default function BottomModeBar({ activeMode, onModeChange, lastRouteSubMode }: BottomModeBarProps) {
+export default function BottomModeBar({ activeMode, onModeChange }: BottomModeBarProps) {
   const t = useT()
   const refs = useRef<(HTMLButtonElement | null)[]>([])
 
@@ -70,8 +71,8 @@ export default function BottomModeBar({ activeMode, onModeChange, lastRouteSubMo
     const n = (i + dockModes.length) % dockModes.length
     const entry = dockModes[n]
     refs.current[n]?.focus()
-    onModeChange(entry.onSelect(activeMode, lastRouteSubMode))
-  }, [activeMode, lastRouteSubMode, onModeChange])
+    onModeChange(entry.onSelect(activeMode))
+  }, [activeMode, onModeChange])
 
   // ARIA tablist roving navigation: a single tab stop (the active tab),
   // arrow keys move focus + activate, Home/End jump to the ends.
@@ -116,7 +117,7 @@ export default function BottomModeBar({ activeMode, onModeChange, lastRouteSubMo
             aria-label={t(labelKey)}
             tabIndex={i === activeIndex ? 0 : -1}
             title={`${t(labelKey)} (${kbd})`}
-            onClick={() => onModeChange(onSelect(activeMode, lastRouteSubMode))}
+            onClick={() => onModeChange(onSelect(activeMode))}
             onKeyDown={(e) => onKey(e, i)}
             className={[
               'flex-1 inline-flex items-center justify-center gap-2 h-11 px-4 rounded-full',
