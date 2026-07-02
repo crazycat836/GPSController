@@ -19,7 +19,14 @@ FRONTEND = os.path.join(ROOT, "frontend")
 
 # 共用 box-drawing helpers (與 build.py 共用) + port 清理 helper (與 stop.py 共用)
 sys.path.insert(0, ROOT)
-from tools.terminal_ui import box_line, box_border  # noqa: E402
+from tools.terminal_ui import (  # noqa: E402
+    box_line,
+    box_border,
+    bold,
+    dim,
+    green,
+    cyan,
+)
 from tools.ports import kill_port  # noqa: E402
 
 # Single source of truth for the backend bind port lives in backend/config.py;
@@ -87,14 +94,40 @@ BOX_WIDTH = 46
 def print_banner():
     print()
     print(box_border("╔", "═", "╗", BOX_WIDTH))
-    print(box_line(f"   GPSController — iOS 虛擬定位模擬器 v{APP_VERSION}", BOX_WIDTH))
+    print(box_line("   " + bold("GPSController") + dim("  ·  iOS 虛擬定位模擬器"), BOX_WIDTH))
+    print(box_line("   " + dim(f"一鍵啟動器  v{APP_VERSION}"), BOX_WIDTH))
     print(box_border("╚", "═", "╝", BOX_WIDTH))
     print()
 
 
+def _tool_version(name: str) -> str:
+    """Best-effort `<tool> --version`, normalised to a short string.
+
+    Returns "" when the tool can't report a version so the caller can
+    still render the found/not-found line without a dangling label.
+    """
+    try:
+        out = subprocess.run(
+            [name, "--version"],
+            capture_output=True, text=True, timeout=5,
+            shell=(os.name == "nt"),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    raw = (out.stdout or out.stderr).strip().splitlines()
+    if not raw:
+        return ""
+    # `python --version` prints "Python 3.12.1"; node/npm print "v26.3.0" /
+    # "11.16.0". Keep just the version token, prefixing "v" when bare.
+    token = raw[0].replace("Python", "").strip()
+    return token if token.startswith("v") or not token[:1].isdigit() else f"v{token}"
+
+
 def check_tool(name, hint):
     if shutil.which(name):
-        print(f"  [✓] 已找到 {name}")
+        version = _tool_version(name)
+        suffix = "  " + dim(version) if version else ""
+        print(f"  [{green('✓')}] 已找到 {bold(name)}{suffix}")
         return True
     else:
         print(f"  [✗] 找不到 {name}，請先安裝：{hint}")
@@ -364,15 +397,20 @@ def main():
     if _should_open_browser():
         webbrowser.open(url)
 
-    print(box_border("╔", "═", "╗", BOX_WIDTH))
-    print(box_line("          GPSController 已就緒！", BOX_WIDTH))
-    print(box_border("╠", "═", "╣", BOX_WIDTH))
-    print(box_line(f"  前端畫面:  http://localhost:{FRONTEND_PORT}", BOX_WIDTH))
-    print(box_line(f"  後端 API:  http://localhost:{BACKEND_PORT}", BOX_WIDTH))
-    print(box_line(f"  API 文件:  http://localhost:{BACKEND_PORT}/docs", BOX_WIDTH))
-    print(box_border("╠", "═", "╣", BOX_WIDTH))
-    print(box_line("  按 Enter 停止所有服務", BOX_WIDTH))
-    print(box_border("╚", "═", "╝", BOX_WIDTH))
+    # Tint the side bars green too so the whole frame reads as one green box;
+    # content keeps its own colour (each ║ wrap resets before the content).
+    def ready_line(content: str) -> str:
+        return box_line(content, BOX_WIDTH).replace("║", green("║"))
+
+    print(green(box_border("╔", "═", "╗", BOX_WIDTH)))
+    print(ready_line("          " + green(bold("GPSController 已就緒！"))))
+    print(green(box_border("╠", "═", "╣", BOX_WIDTH)))
+    print(ready_line(f"  前端畫面:  {cyan(f'http://localhost:{FRONTEND_PORT}')}"))
+    print(ready_line(f"  後端 API:  {cyan(f'http://localhost:{BACKEND_PORT}')}"))
+    print(ready_line(f"  API 文件:  {cyan(f'http://localhost:{BACKEND_PORT}/docs')}"))
+    print(green(box_border("╠", "═", "╣", BOX_WIDTH)))
+    print(ready_line("  " + dim("按 Enter 停止所有服務")))
+    print(green(box_border("╚", "═", "╝", BOX_WIDTH)))
     print()
 
     try:
