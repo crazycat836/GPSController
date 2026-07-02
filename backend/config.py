@@ -130,9 +130,9 @@ DVT_RECONNECT_DELAYS = [0.5, 1.5, 3.0, 4.0, 6.0]
 def clamp_pause_range(pause_min: float, pause_max: float) -> tuple[float, float]:
     """Sort + lower-bound a (min, max) pause range to non-negative seconds.
 
-    Used by every movement mode that supports inter-leg / inter-lap pauses
-    (loop, multi-stop, random walk). Each caller still applies its own
-    "skip if hi <= 0" rule and its own RNG choice afterwards — this helper
+    Movement modes consume this via
+    ``core.handler_common.random_pause_seconds``, which layers the
+    "skip if hi <= 0" rule and the uniform draw on top — this helper
     just collapses the shared sort + negative-guard.
     """
     lo, hi = sorted((float(pause_min), float(pause_max)))

@@ -14,6 +14,7 @@
 
 import { useState, useEffect } from 'react'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
+import { readJSON, writeJSON } from '../../lib/local-storage'
 
 export enum MoveMode {
   Walking = 'walking',
@@ -44,23 +45,18 @@ function numOrNull(v: unknown): number | null {
 }
 
 function loadSpeedPrefs(): SpeedPrefs {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.speedPrefs)
-    if (!raw) return DEFAULT_SPEED_PREFS
-    const p = JSON.parse(raw) as Record<string, unknown>
-    return {
-      moveMode: isMoveMode(p.moveMode) ? p.moveMode : DEFAULT_SPEED_PREFS.moveMode,
-      customSpeedKmh: numOrNull(p.customSpeedKmh),
-      speedMinKmh: numOrNull(p.speedMinKmh),
-      speedMaxKmh: numOrNull(p.speedMaxKmh),
-    }
-  } catch {
-    return DEFAULT_SPEED_PREFS
+  const p = readJSON(STORAGE_KEYS.speedPrefs) as Record<string, unknown> | null
+  if (p == null) return DEFAULT_SPEED_PREFS
+  return {
+    moveMode: isMoveMode(p.moveMode) ? p.moveMode : DEFAULT_SPEED_PREFS.moveMode,
+    customSpeedKmh: numOrNull(p.customSpeedKmh),
+    speedMinKmh: numOrNull(p.speedMinKmh),
+    speedMaxKmh: numOrNull(p.speedMaxKmh),
   }
 }
 
 function saveSpeedPrefs(p: SpeedPrefs): void {
-  try { localStorage.setItem(STORAGE_KEYS.speedPrefs, JSON.stringify(p)) } catch { /* ignore */ }
+  writeJSON(STORAGE_KEYS.speedPrefs, p)
 }
 
 export interface UseSpeedPrefsValue {

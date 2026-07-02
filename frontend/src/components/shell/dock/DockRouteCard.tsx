@@ -3,6 +3,7 @@ import { useSimDerived } from '../../../contexts/SimDerivedContext'
 import { useBookmarkContext } from '../../../contexts/BookmarkContext'
 import { SimMode } from '../../../hooks/useSimulation'
 import { useT } from '../../../i18n'
+import { formatCoordCardinal } from '../../../lib/format'
 
 type LatLng = { lat: number; lng: number }
 
@@ -105,7 +106,7 @@ function DockRoutePoint({ tone, label, coord, placeholder, onBookmark }: DockRou
         >
           {empty
             ? placeholder
-            : `${coord.lat.toFixed(5)}°N · ${coord.lng.toFixed(5)}°E`}
+            : formatCoordCardinal(coord)}
         </div>
       </div>
 

@@ -28,6 +28,7 @@
  */
 
 import { useEffect, useRef } from 'react'
+import { asNumber, asObject, asString } from '../../lib/ws-guards'
 import type { LatLng } from './types'
 import type { DeviceRuntime, RuntimesMap } from './useSimRuntimes'
 import type { WsMessage } from '../useWebSocket'
@@ -75,20 +76,6 @@ interface PauseCountdownPayload {
 interface DdiMountMissingPayload {
   reason?: string
   stage?: string
-}
-
-// ── Type guards ────────────────────────────────────────────────────────
-
-function asObject(v: unknown): Record<string, unknown> | null {
-  return typeof v === 'object' && v != null ? v as Record<string, unknown> : null
-}
-
-function asString(v: unknown): string | undefined {
-  return typeof v === 'string' ? v : undefined
-}
-
-function asNumber(v: unknown): number | undefined {
-  return typeof v === 'number' ? v : undefined
 }
 
 function parsePositionUpdate(data: unknown): PositionUpdatePayload | null {

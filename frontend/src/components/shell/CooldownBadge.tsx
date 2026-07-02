@@ -1,6 +1,7 @@
 import { Timer } from 'lucide-react'
 import { useSimSettings } from '../../contexts/SimSettingsContext'
 import { useT } from '../../i18n'
+import { formatCountdown } from '../../lib/format'
 
 // Cooldown countdown pill. Rendered as a flow child of TopCenterStack, so it
 // stacks with the other status pills (e.g. a 429 COOLDOWN_ACTIVE error toast)
@@ -11,14 +12,7 @@ export default function CooldownBadge() {
 
   if (!cooldownEnabled || cooldown <= 0) return null
 
-  const total = Math.round(cooldown)
-  const hrs = Math.floor(total / 3600)
-  const mins = Math.floor((total % 3600) / 60)
-  const secs = total % 60
-
-  const display = hrs > 0
-    ? `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-    : `${mins}:${secs.toString().padStart(2, '0')}`
+  const display = formatCountdown(cooldown)
 
   return (
     <div className="toast-pill toast-pill-warning is-stacked" role="status" aria-live="polite" data-fc="map.toast.cooldown">

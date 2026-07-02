@@ -6,6 +6,7 @@ import { useT } from '../../i18n'
 import { wifiTunnelDiscover } from '../../services/api'
 import { ICON_SIZE } from '../../lib/icons'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
+import { readLS, writeLS } from '../../lib/local-storage'
 import { DEFAULT_TUNNEL_PORT } from '../../lib/constants'
 import { discoveredDisplayName, findUsbDeviceName } from '../../lib/usbDeviceMatch'
 
@@ -27,9 +28,9 @@ export default function DeviceAddView({ onConnected }: DeviceAddViewProps) {
   const device = useDeviceContext()
   const { showToast } = useToastContext()
 
-  const [tunnelIp, setTunnelIp] = useState(() => localStorage.getItem(STORAGE_KEYS.tunnelIp) || '')
+  const [tunnelIp, setTunnelIp] = useState(() => readLS(STORAGE_KEYS.tunnelIp) || '')
   const [tunnelPort, setTunnelPort] = useState(
-    () => localStorage.getItem(STORAGE_KEYS.tunnelPort) || String(DEFAULT_TUNNEL_PORT),
+    () => readLS(STORAGE_KEYS.tunnelPort) || String(DEFAULT_TUNNEL_PORT),
   )
   const [tunnelConnecting, setTunnelConnecting] = useState(false)
   const [tunnelError, setTunnelError] = useState<string | null>(null)
@@ -84,8 +85,8 @@ export default function DeviceAddView({ onConnected }: DeviceAddViewProps) {
     setTunnelError(null)
     try {
       const result = await device.startWifiTunnel(tunnelIp.trim(), parseInt(tunnelPort) || DEFAULT_TUNNEL_PORT)
-      localStorage.setItem(STORAGE_KEYS.tunnelIp, tunnelIp.trim())
-      localStorage.setItem(STORAGE_KEYS.tunnelPort, tunnelPort || String(DEFAULT_TUNNEL_PORT))
+      writeLS(STORAGE_KEYS.tunnelIp, tunnelIp.trim())
+      writeLS(STORAGE_KEYS.tunnelPort, tunnelPort || String(DEFAULT_TUNNEL_PORT))
       showToast(
         result.alreadyConnected
           ? t('device.tunnel_already_connected')

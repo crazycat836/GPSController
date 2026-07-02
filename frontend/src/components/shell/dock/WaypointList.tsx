@@ -1,11 +1,12 @@
 import React from 'react'
 import { Crosshair, MapPin, X, Star, Dices, Repeat, GripVertical } from 'lucide-react'
-import { DndContext, closestCenter } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { haversineM } from '../../../lib/geo'
+import { formatCoordCardinal, formatDistanceM } from '../../../lib/format'
 import { useDragReorder } from '../../../hooks/useDragReorder'
 import { useT } from '../../../i18n'
+import ReorderableList from '../../ui/ReorderableList'
 import type { ChainPoint } from '../../WaypointChain'
 
 interface WaypointListProps {
@@ -65,8 +66,7 @@ export default function WaypointList({
             )}
 
             {canReorder ? (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={stops.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+              <ReorderableList sensors={sensors} onDragEnd={handleDragEnd} items={stops.map((s) => s.id)}>
                   {stops.map((pt, j) => (
                     <SortableStopRow
                       key={pt.id}
@@ -77,8 +77,7 @@ export default function WaypointList({
                       t={t}
                     />
                   ))}
-                </SortableContext>
-              </DndContext>
+              </ReorderableList>
             ) : (
               stops.map((pt, j) => (
                 <StopRow
@@ -177,9 +176,7 @@ function StopRow({ pt, label, isStart, onRemove, onBookmark, dragHandle, setNode
           {label}
         </span>
         <span className="font-mono text-[12px] text-[var(--color-text-1)]">
-          {pt.position
-            ? `${pt.position.lat.toFixed(4)}°N · ${pt.position.lng.toFixed(4)}°E`
-            : '—'}
+          {pt.position ? formatCoordCardinal(pt.position, 4) : '—'}
         </span>
       </div>
 
@@ -260,9 +257,5 @@ function stopLabel(points: readonly ChainPoint[], idx: number): string {
   const distM = nextPt?.position && cur?.position
     ? haversineM(cur.position, nextPt.position)
     : null
-  return distM != null ? `Stop ${idx} · ${formatDist(distM)} next` : `Stop ${idx}`
-}
-
-function formatDist(m: number): string {
-  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`
+  return distM != null ? `Stop ${idx} · ${formatDistanceM(distM, 1)} next` : `Stop ${idx}`
 }

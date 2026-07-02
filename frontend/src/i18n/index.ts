@@ -10,16 +10,13 @@ interface I18nContextValue {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 import { STORAGE_KEYS } from '../lib/storage-keys';
+import { readLS, writeLS } from '../lib/local-storage';
 
 const STORAGE_KEY = STORAGE_KEYS.lang;
 
 function detectInitialLang(): Lang {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY) as Lang | null;
-    if (saved === 'zh' || saved === 'en') return saved;
-  } catch {
-    /* ignore */
-  }
+  const saved = readLS(STORAGE_KEY) as Lang | null;
+  if (saved === 'zh' || saved === 'en') return saved;
   const nav = typeof navigator !== 'undefined' ? navigator.language : 'zh';
   return nav && nav.toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
@@ -34,11 +31,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
-    try {
-      localStorage.setItem(STORAGE_KEY, l);
-    } catch {
-      /* ignore */
-    }
+    writeLS(STORAGE_KEY, l);
   }, []);
 
   const t = useCallback(

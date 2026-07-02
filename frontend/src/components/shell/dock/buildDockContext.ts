@@ -1,9 +1,9 @@
 import { type ChainPoint } from '../../WaypointChain'
 import { haversineM, polylineDistanceM } from '../../../lib/geo'
+import { formatCoordCardinal, formatDistanceM } from '../../../lib/format'
 import { SimMode } from '../../../hooks/useSimulation'
 import type { useT } from '../../../i18n'
 
-const KM_THRESHOLD_M = 1000
 const MIN_PTS_FOR_DIST = 2
 
 type LatLng = { lat: number; lng: number }
@@ -38,7 +38,7 @@ export function buildDockContext(
     case SimMode.Teleport:
       return {
         title: destPos
-          ? `${destPos.lat.toFixed(5)}°N · ${destPos.lng.toFixed(5)}°E`
+          ? formatCoordCardinal(destPos)
           : t('teleport.add_destination'),
         subtitle: t('panel.teleport_hint'),
         chainPoints: [], loop: false,
@@ -52,7 +52,7 @@ export function buildDockContext(
         }
       }
       const distM = currentPos ? haversineM(currentPos, destPos) : 0
-      const distLabel = formatNavDist(distM)
+      const distLabel = formatDistanceM(distM)
       return {
         title: `${t('teleport.destination')} · ${distLabel}`,
         subtitle: t('panel.navigate_hint'),
@@ -100,15 +100,7 @@ export function buildDockContext(
   }
 }
 
-function formatNavDist(distM: number): string {
-  return distM >= KM_THRESHOLD_M
-    ? `${(distM / KM_THRESHOLD_M).toFixed(2)} km`
-    : `${Math.round(distM)} m`
-}
-
 function formatChainDist(distM: number): string {
   if (distM <= 0) return ''
-  return distM >= KM_THRESHOLD_M
-    ? ` · ${(distM / KM_THRESHOLD_M).toFixed(1)} km`
-    : ` · ${Math.round(distM)} m`
+  return ` · ${formatDistanceM(distM, 1)}`
 }

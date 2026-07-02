@@ -293,6 +293,14 @@ class DvtLocationService(LocationService):
             else:
                 await broadcast("tunnel_recovered", {})
 
+        async def _reconnect_once(log_msg: str, *log_args: object) -> None:
+            """One DVT recreate attempt — installs the provider on success."""
+            new_dvt = DvtProvider(self._lockdown)
+            await new_dvt.__aenter__()
+            self._dvt = new_dvt
+            logger.info(log_msg, *log_args)
+            await _emit_recovered()
+
         async with self._reconnect_lock:
             await _emit_degraded()
 
@@ -325,11 +333,9 @@ class DvtLocationService(LocationService):
             bail_early = False
             for attempt, delay in enumerate(DVT_RECONNECT_DELAYS, start=1):
                 try:
-                    new_dvt = DvtProvider(self._lockdown)
-                    await new_dvt.__aenter__()
-                    self._dvt = new_dvt
-                    logger.info("DVT provider reconnected on attempt %d", attempt)
-                    await _emit_recovered()
+                    await _reconnect_once(
+                        "DVT provider reconnected on attempt %d", attempt,
+                    )
                     return
                 except TimeoutError as exc:
                     last_exc = exc
@@ -359,11 +365,7 @@ class DvtLocationService(LocationService):
             # straight to the outer hard-reset.
             if not bail_early:
                 try:
-                    new_dvt = DvtProvider(self._lockdown)
-                    await new_dvt.__aenter__()
-                    self._dvt = new_dvt
-                    logger.info("DVT provider reconnected on final attempt")
-                    await _emit_recovered()
+                    await _reconnect_once("DVT provider reconnected on final attempt")
                     return
                 except Exception as exc:
                     last_exc = exc

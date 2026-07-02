@@ -2,17 +2,14 @@ import { useState, useCallback } from 'react'
 import { KeyRound, Eye, EyeOff, ExternalLink } from 'lucide-react'
 import { useT } from '../../i18n'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
+import { readLS, writeLS, removeLS } from '../../lib/local-storage'
 import { openExternalOrDefault } from '../../lib/open-external'
 
 const GET_KEY_URL =
   'https://developers.google.com/maps/documentation/places/web-service/get-api-key'
 
 function readKey(): string {
-  try {
-    return localStorage.getItem(STORAGE_KEYS.googlePlacesKey) ?? ''
-  } catch {
-    return ''
-  }
+  return readLS(STORAGE_KEYS.googlePlacesKey) ?? ''
 }
 
 /**
@@ -29,15 +26,12 @@ export default function GooglePlacesKeyRow() {
 
   const persist = useCallback((next: string) => {
     setValue(next)
-    try {
-      if (next.trim()) {
-        localStorage.setItem(STORAGE_KEYS.googlePlacesKey, next.trim())
-      } else {
-        localStorage.removeItem(STORAGE_KEYS.googlePlacesKey)
-      }
-    } catch {
-      // localStorage unavailable (Electron sandbox edge case) — the field
-      // still works for the current session, it just won't persist.
+    // localStorage unavailable (Electron sandbox edge case) — the field
+    // still works for the current session, it just won't persist.
+    if (next.trim()) {
+      writeLS(STORAGE_KEYS.googlePlacesKey, next.trim())
+    } else {
+      removeLS(STORAGE_KEYS.googlePlacesKey)
     }
   }, [])
 

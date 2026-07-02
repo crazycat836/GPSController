@@ -13,6 +13,7 @@
 
 import type { WsMessage } from '../useWebSocket'
 import type { DeviceInfo } from '../../types/device'
+import { asObject, asString, asStringArray } from '../../lib/ws-guards'
 
 // DeviceInfo lives in types/device.ts (neutral module shared with the
 // services layer); re-exported here so existing consumer imports keep working.
@@ -63,20 +64,6 @@ export interface DeviceSnapshotEntry {
 
 export interface DeviceSnapshotPayload {
   devices: readonly DeviceSnapshotEntry[]
-}
-
-function asObject(v: unknown): Record<string, unknown> | null {
-  return typeof v === 'object' && v != null ? v as Record<string, unknown> : null
-}
-
-function asString(v: unknown): string | undefined {
-  return typeof v === 'string' ? v : undefined
-}
-
-function asStringArray(v: unknown): readonly string[] | undefined {
-  if (!Array.isArray(v)) return undefined
-  if (v.every((x): x is string => typeof x === 'string')) return v
-  return undefined
 }
 
 export function parseDeviceConnected(data: unknown): DeviceConnectedPayload | null {

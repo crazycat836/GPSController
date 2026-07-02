@@ -11,6 +11,7 @@ import WeatherChip from './WeatherChip'
 import { DEVICE_COLORS, DEVICE_LETTERS } from '../../lib/constants'
 import type { DeviceInfo } from '../../hooks/useDevice'
 import { copyToClipboard } from '../../lib/clipboard'
+import { formatCoord } from '../../lib/format'
 
 export default function MiniStatusBar() {
   const t = useT()
@@ -99,7 +100,7 @@ function DevicePill({ dev, letter, color, coord, stale, degraded }: DevicePillPr
         </span>
         {coord && (
           <span className="font-mono text-[10px] text-[var(--color-text-3)]">
-            {coord.lat.toFixed(4)}, {coord.lng.toFixed(4)}
+            {formatCoord(coord, 4)}
           </span>
         )}
       </div>
@@ -170,7 +171,7 @@ function LivePosCard({
 
   const handleCopy = useCallback(() => {
     if (!currentPos) return
-    const txt = `${currentPos.lat.toFixed(6)}, ${currentPos.lng.toFixed(6)}`
+    const txt = formatCoord(currentPos)
     void copyToClipboard(txt).then((ok) => {
       if (!ok) return
       setCopied(true)

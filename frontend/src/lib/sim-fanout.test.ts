@@ -1,8 +1,8 @@
-// Characterization tests for the group fan-out helpers in SimContext.
+// Characterization tests for the group fan-out helpers used by SimContext.
 // These pin CURRENT behavior — they describe what the code does today,
 // not necessarily what it should do.
 import { describe, expect, test, vi } from 'vitest'
-import { toastForFanout, runWithFanout } from './SimContext'
+import { toastForFanout, runWithFanout } from './sim-fanout'
 import type { FanoutOutcome } from '../hooks/useSimulation'
 import type { StringKey } from '../i18n'
 

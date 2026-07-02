@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSimulation, SimMode, MoveMode, type SpeedSelection } from '../hooks/useSimulation'
-import type { FanoutOutcome, SimErrorCode } from '../hooks/useSimulation'
+import type { SimErrorCode } from '../hooks/useSimulation'
 import { useJoystick } from '../hooks/useJoystick'
 import * as api from '../services/api'
 import {
@@ -12,6 +12,9 @@ import {
   SPEED_MAP,
 } from '../lib/constants'
 import { devWarn } from '../lib/dev-log'
+import { formatCoord } from '../lib/format'
+import { clampLat, normalizeLng } from '../lib/geo'
+import { FANOUT_MIN_DEVICES, runWithFanout, toastForFanout } from '../lib/sim-fanout'
 import { generateRandomTour } from '../lib/waypoint_gen'
 import { useDeviceContext } from './DeviceContext'
 import { useToastContext } from './ToastContext'
@@ -32,73 +35,6 @@ const SIM_ERROR_KEYS: Record<SimErrorCode, StringKey> = {
 export { SimMode, MoveMode }
 export type { SpeedSelection }
 
-
-// Pure coordinate helpers — module-level so they're allocated once.
-const normalizeLng = (lng: number): number => {
-  const n = ((lng + 180) % 360 + 360) % 360 - 180
-  return lng === 180 ? 180 : n
-}
-const clampLat = (lat: number): number => Math.max(-90, Math.min(90, lat))
-
-// Summarise a group fan-out result into a single toast string.
-export function toastForFanout<T>(
-  t: (k: StringKey, v?: Record<string, string | number>) => string,
-  action: string,
-  outcome: FanoutOutcome<T>,
-  devices: { udid: string }[],
-): string {
-  const total = outcome.ok.length + outcome.failed.length
-  if (total === 0) return action
-  if (outcome.failed.length === 0) return t('group.action_all_success', { action })
-  if (outcome.ok.length === 0) return t('group.action_all_failed', { action })
-  const statusFor = (udid: string) =>
-    outcome.ok.some((o) => o.udid === udid) ? 'OK'
-      : outcome.failed.find((f) => f.udid === udid)?.reason ?? 'error'
-  return t('group.action_partial', {
-    action,
-    aStatus: devices[0] ? statusFor(devices[0].udid) : '-',
-    bStatus: devices[1] ? statusFor(devices[1].udid) : '-',
-  })
-}
-
-// Threshold at which a list of connected devices switches the action
-// from "single device call" to "fan-out across all devices". Kept here
-// (rather than as a magic `>= 2` in every handler) so the rule has one
-// definition.
-const FANOUT_MIN_DEVICES = 2
-
-// Most "do an action" handlers in this file share the same shape:
-//   if 2+ devices → await sim.xAll(udids, …) → showToast(toastForFanout(…))
-//   else          → sim.x(…)  (sometimes async, sometimes sync)
-//
-// `runWithFanout` collapses that branch into one call site. Callers
-// supply the resolved udids/devices, the toast label, and two thunks:
-// `single` for the 1-device path and `multi` for the fan-out. Anything
-// outside that shape (optimistic writes, pre-gates like
-// `confirmStartFromCached`, success toasts on the single path, custom
-// outcome handling) stays in the caller — that's intentional, the
-// helper exists for the common case, not to be a do-everything wrapper.
-export async function runWithFanout<T>(params: {
-  udids: string[]
-  devices: { udid: string }[]
-  action: string
-  // `single` may be sync (e.g. `sim.pause()`) or async (e.g.
-  // `sim.teleport(...)` which returns `Promise<StatusResponse>`). The
-  // return value is intentionally ignored — the helper only cares that
-  // the call has finished before resolving.
-  single: () => unknown
-  multi: (udids: string[]) => Promise<FanoutOutcome<T>>
-  t: (k: StringKey, v?: Record<string, string | number>) => string
-  showToast: (msg: string) => void
-}): Promise<void> {
-  const { udids, devices, action, single, multi, t, showToast } = params
-  if (udids.length >= FANOUT_MIN_DEVICES) {
-    const outcome = await multi(udids)
-    showToast(toastForFanout(t, action, outcome, devices))
-  } else {
-    await single()
-  }
-}
 
 // Re-export `SPEED_MAP` so existing consumers (`App.tsx`) keep importing
 // it through `contexts/SimContext`. The canonical definition lives in
@@ -816,7 +752,7 @@ export function SimProvider({ children }: SimProviderProps) {
           open={syncPrompt != null}
           title={t('sync.confirm.title')}
           description={syncPrompt ? t('sync.confirm.body', {
-            coord: `${syncPrompt.position.lat.toFixed(5)}, ${syncPrompt.position.lng.toFixed(5)}`,
+            coord: formatCoord(syncPrompt.position, 5),
           }) : ''}
           confirmLabel={t('sync.confirm.ok')}
           cancelLabel={t('sync.confirm.cancel')}

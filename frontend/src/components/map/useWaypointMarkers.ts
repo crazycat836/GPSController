@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import L from 'leaflet';
 import { MARKER_HEX } from '../../lib/constants';
+import { coordKey } from '../../lib/format';
 import type { StringKey } from '../../i18n';
 import type { Waypoint } from './types';
 
@@ -26,7 +27,7 @@ export function useWaypointMarkers(
     const map = mapRef.current;
     if (!map) return;
 
-    const sig = waypoints.map((w) => `${w.lat.toFixed(7)},${w.lng.toFixed(7)}`).join('|');
+    const sig = waypoints.map((w) => coordKey(w)).join('|');
     if (sig === sigRef.current) return;
     sigRef.current = sig;
 

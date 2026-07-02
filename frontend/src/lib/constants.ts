@@ -155,3 +155,10 @@ export const RESTORE_MIN_DISPLAY_MS = 1200
  * teleport before the next command arrives. See `useSimulation.preSyncStart`.
  */
 export const PRE_SYNC_SETTLE_MS = 150
+
+/**
+ * Visible filter chips (route categories / bookmark places) before the
+ * bar collapses into a "+N" / "More" overflow. Shared so the two library
+ * drawers feel the same.
+ */
+export const LIBRARY_CHIPS_VISIBLE_CAP = 5

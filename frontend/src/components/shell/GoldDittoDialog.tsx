@@ -5,6 +5,7 @@ import { useT } from '../../i18n'
 import { useToastContext } from '../../contexts/ToastContext'
 import { useSimState } from '../../contexts/SimContext'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
+import { readJSON, writeJSON } from '../../lib/local-storage'
 import * as api from '../../services/api'
 
 interface GoldDittoDialogProps {
@@ -23,29 +24,20 @@ interface StoredAnchor {
  * Electron sandbox occasionally throws on first launch).
  */
 function loadAnchor(): StoredAnchor | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.goldDittoAnchor)
-    if (!raw) return null
-    const parsed: unknown = JSON.parse(raw)
-    if (
-      parsed && typeof parsed === 'object'
-      && typeof (parsed as Record<string, unknown>).lat === 'number'
-      && typeof (parsed as Record<string, unknown>).lng === 'number'
-    ) {
-      return { lat: (parsed as StoredAnchor).lat, lng: (parsed as StoredAnchor).lng }
-    }
-  } catch {
-    // ignore — fall through to null
+  const parsed = readJSON(STORAGE_KEYS.goldDittoAnchor)
+  if (
+    parsed && typeof parsed === 'object'
+    && typeof (parsed as Record<string, unknown>).lat === 'number'
+    && typeof (parsed as Record<string, unknown>).lng === 'number'
+  ) {
+    return { lat: (parsed as StoredAnchor).lat, lng: (parsed as StoredAnchor).lng }
   }
   return null
 }
 
 function saveAnchor(anchor: StoredAnchor): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.goldDittoAnchor, JSON.stringify(anchor))
-  } catch {
-    // best-effort; the dialog still works for a single session
-  }
+  // best-effort; the dialog still works for a single session
+  writeJSON(STORAGE_KEYS.goldDittoAnchor, anchor)
 }
 
 /**

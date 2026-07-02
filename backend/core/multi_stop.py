@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import random
 from typing import TYPE_CHECKING
 
 from models.schemas import Coordinate, MovementMode, SimulationState, osrm_profile_for
@@ -14,9 +13,13 @@ from config import (
     DEFAULT_PAUSE_ENABLED,
     DEFAULT_PAUSE_MAX,
     DEFAULT_PAUSE_MIN,
-    clamp_pause_range,
 )
-from core.handler_common import fetch_route_coords, finish_mode, pause_with_countdown
+from core.handler_common import (
+    fetch_route_coords,
+    finish_mode,
+    pause_with_countdown,
+    random_pause_seconds,
+)
 from core.lap_limit import record_lap_and_check_limit
 from utils.geo import haversine_m
 
@@ -45,8 +48,7 @@ def _resolve_pause_seconds(
         return float(stop_duration)
     if not pause_enabled:
         return 0.0
-    lo, hi = clamp_pause_range(pause_min, pause_max)
-    return random.uniform(lo, hi) if hi > 0 else 0.0
+    return random_pause_seconds(pause_min, pause_max)
 
 
 class MultiStopNavigator:

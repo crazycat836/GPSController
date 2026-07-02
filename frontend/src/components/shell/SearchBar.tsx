@@ -3,6 +3,7 @@ import { Search, MapPin } from 'lucide-react'
 import { searchAddress } from '../../services/api'
 import { useT, useI18n, type Lang } from '../../i18n'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
+import { formatCoord, coordKey } from '../../lib/format'
 
 // Mirror the reverse-geocode hook's language chain so result names come back
 // in the UI language. Traditional-Chinese lists `zh-Hant`/`zh-TW` ahead of
@@ -220,7 +221,7 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
                   {t('search.coord_detected')}
                 </div>
                 <div className="text-[12px] font-mono text-[var(--color-text-3)]">
-                  {validCoord.lat.toFixed(6)}, {validCoord.lng.toFixed(6)}
+                  {formatCoord(validCoord)}
                 </div>
               </div>
             </button>
@@ -238,7 +239,7 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
             const idx = resultIndexOffset + i
             return (
               <button
-                key={`${r.lat.toFixed(6)}_${r.lng.toFixed(6)}_${r.name}`}
+                key={`${coordKey(r, 6)}_${r.name}`}
                 id={`search-opt-${i}`}
                 role="option"
                 aria-selected={activeIndex === idx}

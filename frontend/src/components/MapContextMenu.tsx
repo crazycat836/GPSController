@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { useT } from '../i18n';
 import { reverseGeocode } from '../services/api';
 import { copyToClipboard } from '../lib/clipboard';
+import { formatCoord } from '../lib/format';
 
 export interface ContextMenuState {
   visible: boolean;
@@ -206,7 +207,7 @@ function MapContextMenu({
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
           <circle cx="12" cy="10" r="3" />
         </svg>
-        <span>{state.lat.toFixed(6)}, {state.lng.toFixed(6)}</span>
+        <span>{formatCoord(state)}</span>
       </button>
       {whatsHere.loading && (
         <div style={{ padding: '0 16px 6px', fontSize: 11, opacity: 0.7, fontStyle: 'italic' }}>
@@ -285,7 +286,7 @@ function MapContextMenu({
         className="context-menu-item"
         style={contextMenuItemStyle}
         onClick={async () => {
-          const txt = `${state.lat.toFixed(6)}, ${state.lng.toFixed(6)}`;
+          const txt = formatCoord(state);
           await copyToClipboard(txt);
           if (onShowToast) onShowToast(tRef.current('map.coords_copied'));
           onClose();

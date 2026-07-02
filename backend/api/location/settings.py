@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from api._deps import get_app_state, get_coord_formatter
 from api._errors import ErrorCode, http_err
-from models.schemas import CoordFormatRequest
+from models.schemas import CoordFormatRequest, Latitude, Longitude
 from utils.geo import validate_coords
 
 router = APIRouter()
@@ -46,8 +46,8 @@ async def set_coord_format(req: CoordFormatRequest):
 
 
 class _InitialPosRequest(BaseModel):
-    lat: float | None = Field(default=None, ge=-90.0, le=90.0)
-    lng: float | None = Field(default=None, ge=-180.0, le=180.0)
+    lat: Latitude | None = None
+    lng: Longitude | None = None
 
 
 @router.get("/settings/initial-position", tags=["settings"])

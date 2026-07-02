@@ -1,6 +1,7 @@
 import React from 'react'
 import { Plus, X, Repeat, Dices } from 'lucide-react'
 import { haversineM } from '../lib/geo'
+import { formatCoordDegrees, formatDistanceM } from '../lib/format'
 import { useT } from '../i18n'
 
 export interface ChainPoint {
@@ -155,7 +156,7 @@ function Chip({ point, index, kind, onRemove, onSelect, removable }: ChipProps) 
         </span>
         {point.position && (
           <span className="font-mono text-[9.5px] text-[var(--color-text-3)] truncate leading-tight">
-            {point.position.lat.toFixed(4)}°, {point.position.lng.toFixed(4)}°
+            {formatCoordDegrees(point.position, 4)}
           </span>
         )}
       </span>
@@ -180,11 +181,7 @@ function Chip({ point, index, kind, onRemove, onSelect, removable }: ChipProps) 
 }
 
 function Connector({ distM }: { distM: number | null }) {
-  const label = distM == null
-    ? ''
-    : distM >= 1000
-      ? `${(distM / 1000).toFixed(1)} km`
-      : `${Math.round(distM)} m`
+  const label = distM == null ? '' : formatDistanceM(distM, 1)
   return (
     <span
       className="shrink-0 inline-flex items-center text-[var(--color-text-3)] px-1 font-mono text-[10px]"
@@ -200,11 +197,7 @@ function Connector({ distM }: { distM: number | null }) {
 function LoopIndicator({ distM }: { distM: number | null }) {
   const t = useT()
   const loopLabel = t('chain.loop')
-  const label = distM == null
-    ? loopLabel
-    : distM >= 1000
-      ? `${loopLabel} · ${(distM / 1000).toFixed(1)} km`
-      : `${loopLabel} · ${Math.round(distM)} m`
+  const label = distM == null ? loopLabel : `${loopLabel} · ${formatDistanceM(distM, 1)}`
   return (
     <span
       className="shrink-0 inline-flex items-center gap-1.5 h-[34px] px-2.5 rounded-[10px] font-mono text-[10px] font-medium uppercase tracking-[0.04em]"

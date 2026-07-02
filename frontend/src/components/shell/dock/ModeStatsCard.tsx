@@ -8,7 +8,8 @@ import {
 } from '../../../contexts/SimSettingsContext'
 import { SimMode } from '../../../hooks/useSimulation'
 import { useT } from '../../../i18n'
-import { haversineM } from '../../../lib/geo'
+import { haversineM, polylineDistanceM } from '../../../lib/geo'
+import { KM_THRESHOLD_M, formatDistanceM } from '../../../lib/format'
 import { RADIUS_PRESETS, SPEED_MAP, cooldownForDistM, type SpeedPresetMode } from '../../../lib/constants'
 
 // ── Shared visual primitives ──────────────────────────────────────────
@@ -184,13 +185,6 @@ export function CardShell({ children }: { children: React.ReactNode }) {
 
 // ── Formatting helpers ────────────────────────────────────────────────
 
-const KM_THRESHOLD_M = 1000
-
-function formatDist(m: number): string {
-  if (m >= KM_THRESHOLD_M) return `${(m / KM_THRESHOLD_M).toFixed(2)} km`
-  return `${Math.round(m)} m`
-}
-
 function useActiveSpeedKmh(): number {
   const { customSpeedKmh, moveMode } = useSimState()
   if (customSpeedKmh != null) return customSpeedKmh
@@ -216,15 +210,9 @@ function useTotalWaypointDist(loop: boolean): number {
   const { waypoints } = useSimState()
   return useMemo(() => {
     if (waypoints.length < 2) return 0
-    let d = 0
-    for (let i = 1; i < waypoints.length; i++) {
-      d += haversineM(waypoints[i - 1], waypoints[i])
-    }
-    if (loop && waypoints.length >= 2) {
-      d += haversineM(
-        waypoints[waypoints.length - 1],
-        waypoints[0],
-      )
+    let d = polylineDistanceM(waypoints)
+    if (loop) {
+      d += haversineM(waypoints[waypoints.length - 1], waypoints[0])
     }
     return d
   }, [waypoints, loop])
@@ -259,7 +247,7 @@ function TeleportCard() {
   return (
     <CardShell>
       <div className="grid grid-cols-2 relative">
-        <StatCell label={t('dock.distance')} value={formatDist(distM)} />
+        <StatCell label={t('dock.distance')} value={formatDistanceM(distM)} />
         <StatCell
           label={t('dock.cooldown')}
           value={cdDisplay}
@@ -285,7 +273,7 @@ function NavigateCard() {
   return (
     <CardShell>
       <div className="grid grid-cols-2 relative">
-        <StatCell label={t('dock.distance')} value={formatDist(distM)} />
+        <StatCell label={t('dock.distance')} value={formatDistanceM(distM)} />
         <StatCell
           label={t('dock.est_time')}
           value={eta}
@@ -325,7 +313,7 @@ function LoopCard() {
   return (
     <CardShell>
       <div className="grid grid-cols-2 relative">
-        <StatCell label={t('dock.distance')} value={formatDist(totalDist)} />
+        <StatCell label={t('dock.distance')} value={formatDistanceM(totalDist)} />
         <StatCell
           label={t('dock.est_time')}
           value={eta}
@@ -361,7 +349,7 @@ function MultiStopCard() {
       <div className="grid grid-cols-2 relative">
         <StatCell
           label={t('dock.total_distance')}
-          value={formatDist(totalDist)}
+          value={formatDistanceM(totalDist)}
         />
         <StatCell
           label={t('dock.est_time')}

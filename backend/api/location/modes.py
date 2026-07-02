@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from api._deps import get_app_state, get_cooldown_timer
 from api._errors import ErrorCode, http_err
@@ -25,6 +25,8 @@ from api.location._helpers import (
 from models.schemas import (
     Coordinate,
     JoystickStartRequest,
+    Latitude,
+    Longitude,
     LoopRequest,
     MultiStopRequest,
     NavigateRequest,
@@ -164,8 +166,8 @@ class _GoldDittoRequest(BaseModel):
     "A coordinate"). The handler pushes simulated GPS to this anchor
     then immediately restores real GPS — the apparent jump back from
     the gold-flower spot is what Pikmin Bloom registers as a swipe."""
-    lat: float = Field(ge=-90.0, le=90.0)
-    lng: float = Field(ge=-180.0, le=180.0)
+    lat: Latitude
+    lng: Longitude
     udid: str | None = None
 
 

@@ -4,8 +4,10 @@ import {
   Sun, ChevronRight, UserCircle2, Wand2, Search, Wifi,
 } from 'lucide-react'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
+import { readLS, writeLS } from '../../lib/local-storage'
 import { getWifiKeepalive, setWifiKeepalive } from '../../services/api'
 import { devWarn } from '../../lib/dev-log'
+import { formatCountdown } from '../../lib/format'
 import { useSimActions, useSimState } from '../../contexts/SimContext'
 import { useSimSettings } from '../../contexts/SimSettingsContext'
 import { useDeviceContext } from '../../contexts/DeviceContext'
@@ -29,12 +31,6 @@ const APP_VERSION = pkg.version
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-function formatCooldown(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
 const LAYER_OPTIONS = [
   { key: 'osm', label: 'OSM' },
   { key: 'carto', label: 'Carto' },
@@ -53,10 +49,8 @@ const SEARCH_PROVIDERS = [
 const DEFAULT_SEARCH_PROVIDER = 'photon'
 
 function readSearchProvider(): string {
-  try {
-    const v = localStorage.getItem(STORAGE_KEYS.searchProvider)
-    if (v === 'nominatim' || v === 'photon' || v === 'google') return v
-  } catch { /* ignore */ }
+  const v = readLS(STORAGE_KEYS.searchProvider)
+  if (v === 'nominatim' || v === 'photon' || v === 'google') return v
   return DEFAULT_SEARCH_PROVIDER
 }
 
@@ -89,7 +83,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
   const [searchProvider, setSearchProvider] = useState<string>(readSearchProvider)
   const persistSearchProvider = (p: string) => {
     setSearchProvider(p)
-    try { localStorage.setItem(STORAGE_KEYS.searchProvider, p) } catch { /* ignore */ }
+    writeLS(STORAGE_KEYS.searchProvider, p)
   }
 
   // WiFi keep-alive lives server-side (the background loop reads it), so the
@@ -238,7 +232,7 @@ export default function SettingsMenu({ open, onClose, layerKey, onLayerChange }:
                 <div className="flex items-center gap-2">
                   {cooldown > 0 && (
                     <span className="text-[10px] font-semibold text-[var(--color-amber-text)] bg-[var(--color-amber-dim)] px-1.5 py-0.5 rounded-full font-mono">
-                      {formatCooldown(cooldown)}
+                      {formatCountdown(cooldown)}
                     </span>
                   )}
                   <Toggle

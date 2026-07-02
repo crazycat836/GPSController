@@ -1,8 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Tag as TagIcon } from 'lucide-react'
-import { DndContext, closestCenter } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import type { BookmarkTag } from '../../hooks/useBookmarks'
 import { ICON_SIZE } from '../../lib/icons'
 import { getTagColor } from '../../lib/bookmarks'
@@ -13,6 +11,7 @@ import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { useOptimisticOrder } from '../../hooks/useOptimisticOrder'
 import ConfirmDialog from '../ui/ConfirmDialog'
+import ReorderableList from '../ui/ReorderableList'
 import SortableNameRow from './SortableNameRow'
 
 interface TagManagerDialogProps {
@@ -99,8 +98,7 @@ export default function TagManagerDialog({
         </div>
 
         <div className="flex flex-col gap-1.5 mt-2 max-h-[320px] overflow-y-auto scrollbar-thin">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={orderedTags.map((tg) => tg.id)} strategy={verticalListSortingStrategy}>
+          <ReorderableList sensors={sensors} onDragEnd={handleDragEnd} items={orderedTags.map((tg) => tg.id)}>
               {orderedTags.map((tg) => {
                 const deletable = !!onDelete && !PRESET_TAG_IDS.has(tg.id)
                 return (
@@ -124,8 +122,7 @@ export default function TagManagerDialog({
                   </SortableNameRow>
                 )
               })}
-            </SortableContext>
-          </DndContext>
+          </ReorderableList>
         </div>
 
         <div className="modal-actions">

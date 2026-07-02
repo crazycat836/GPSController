@@ -14,13 +14,13 @@ from core.handler_common import (
     fetch_route_coords,
     finish_mode,
     pause_with_countdown,
+    random_pause_seconds,
 )
 from services.interpolator import RouteInterpolator
 from config import (
     DEFAULT_PAUSE_ENABLED,
     DEFAULT_PAUSE_MAX,
     DEFAULT_PAUSE_MIN,
-    clamp_pause_range,
 )
 
 logger = logging.getLogger(__name__)
@@ -323,9 +323,8 @@ class RandomWalkHandler:
         """
         if not pause_enabled:
             return False
-        lo, hi = clamp_pause_range(pause_min, pause_max)
-        if hi <= 0:
+        pause_duration = random_pause_seconds(pause_min, pause_max, rng)
+        if pause_duration <= 0:
             return False
-        pause_duration = (rng or random).uniform(lo, hi)
         logger.info("Random walk pausing for %.1fs before next leg", pause_duration)
         return await pause_with_countdown(self.engine, pause_duration, "random_walk")

@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+# Shared coordinate bounds. Annotated metadata merges with any extra
+# Field() a call site adds (e.g. description, default).
+Latitude = Annotated[float, Field(ge=-90.0, le=90.0)]
+Longitude = Annotated[float, Field(ge=-180.0, le=180.0)]
+
 
 class Coordinate(BaseModel):
-    lat: float = Field(ge=-90.0, le=90.0, description="Latitude in degrees")
-    lng: float = Field(ge=-180.0, le=180.0, description="Longitude in degrees")
+    lat: Latitude = Field(description="Latitude in degrees")
+    lng: Longitude = Field(description="Longitude in degrees")
 
 
 class SimulationState(str, Enum):
@@ -70,8 +75,8 @@ class DeviceInfo(BaseModel):
 
 # ── Location requests ────────────────────────────────────
 class TeleportRequest(BaseModel):
-    lat: float = Field(ge=-90.0, le=90.0)
-    lng: float = Field(ge=-180.0, le=180.0)
+    lat: Latitude
+    lng: Longitude
     udid: str | None = None
     # When true, start idle GPS jitter around the teleported point so a
     # stationary virtual position mimics natural GPS noise.
@@ -90,8 +95,8 @@ _MAX_STOP_DURATION = 86_400  # 24 h
 
 
 class NavigateRequest(BaseModel):
-    lat: float = Field(ge=-90.0, le=90.0)
-    lng: float = Field(ge=-180.0, le=180.0)
+    lat: Latitude
+    lng: Longitude
     mode: MovementMode = MovementMode.WALKING
     speed_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
     speed_min_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
@@ -288,8 +293,8 @@ class BookmarkTag(BaseModel):
 class Bookmark(BaseModel):
     id: str = ""
     name: str = Field(max_length=512)
-    lat: float = Field(ge=-90.0, le=90.0)
-    lng: float = Field(ge=-180.0, le=180.0)
+    lat: Latitude
+    lng: Longitude
     address: str = Field(default="", max_length=1024)
     place_id: str = "default"
     tags: list[str] = Field(default_factory=list, max_length=64)

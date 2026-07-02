@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import L from 'leaflet';
+import { formatCoord } from '../../lib/format';
 import type { Position } from './types';
 
 /**
@@ -27,7 +28,7 @@ export function usePcMarker(
     }
 
     const latlng: L.LatLngExpression = [pcPosition.lat, pcPosition.lng];
-    const tooltip = `${pcPosition.lat.toFixed(6)}, ${pcPosition.lng.toFixed(6)}`;
+    const tooltip = formatCoord(pcPosition);
 
     if (markerRef.current) {
       markerRef.current.setLatLng(latlng);

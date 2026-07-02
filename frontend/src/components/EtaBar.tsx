@@ -1,5 +1,6 @@
 import { Pause, Play } from 'lucide-react'
 import { useT } from '../i18n'
+import { formatDistanceM } from '../lib/format'
 import { useSimActions } from '../contexts/SimContext'
 import { useSimDerived } from '../contexts/SimDerivedContext'
 import type { RuntimesMap } from '../hooks/useSimulation'
@@ -41,11 +42,6 @@ function formatClock(totalSeconds: number): string {
   const sec = s % 60
   const pad = (n: number) => n.toString().padStart(2, '0')
   return `${pad(h)}:${pad(m)}:${pad(sec)}`
-}
-
-function formatDistance(meters: number): string {
-  if (meters >= 1000) return `${(meters / 1000).toFixed(2)} km`
-  return `${Math.round(meters)} m`
 }
 
 // Top-centre ETA pill — mirrors `.eta` from redesign/Home exactly:
@@ -131,7 +127,7 @@ function EtaBar({
         />
       </div>
 
-      <Stat label={t('eta.remaining')} value={formatDistance(aggRemaining)} />
+      <Stat label={t('eta.remaining')} value={formatDistanceM(aggRemaining)} />
 
       <Sep />
 

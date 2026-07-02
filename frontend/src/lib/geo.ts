@@ -3,6 +3,17 @@ interface LatLng {
   lng: number
 }
 
+/** Wrap a longitude into [-180, 180] (keeps +180 as +180, not -180). */
+export function normalizeLng(lng: number): number {
+  const n = ((lng + 180) % 360 + 360) % 360 - 180
+  return lng === 180 ? 180 : n
+}
+
+/** Clamp a latitude to [-90, 90]. */
+export function clampLat(lat: number): number {
+  return Math.max(-90, Math.min(90, lat))
+}
+
 /** Great-circle distance in metres (Haversine formula). */
 export function haversineM(a: LatLng, b: LatLng): number {
   const R = 6371000

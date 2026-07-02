@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { AVATAR_PRESETS, DEFAULT_AVATAR_KEY, type AvatarPresetKey } from '../lib/avatars'
 import { STORAGE_KEYS } from '../lib/storage-keys'
+import { readLS, writeLS, removeLS, readJSON, writeJSON } from '../lib/local-storage'
 
 export type AvatarKind = { kind: 'preset'; key: AvatarPresetKey } | { kind: 'custom' }
 
@@ -23,24 +24,16 @@ const LS_KEY_CUSTOM = STORAGE_KEYS.avatarCustom
 const CUSTOM_MAX_BYTES = 512 * 1024 // guard against storing multi-MB PNGs
 
 function loadSelection(): AvatarKind {
-  try {
-    const raw = localStorage.getItem(LS_KEY_SELECTION)
-    if (!raw) return { kind: 'preset', key: DEFAULT_AVATAR_KEY }
-    const parsed = JSON.parse(raw) as AvatarKind
+  const parsed = readJSON(LS_KEY_SELECTION) as AvatarKind | null
+  if (parsed != null) {
     if (parsed.kind === 'custom') return parsed
     if (parsed.kind === 'preset' && AVATAR_PRESETS.some((p) => p.key === parsed.key)) return parsed
-  } catch {
-    // Fall through to default
   }
   return { kind: 'preset', key: DEFAULT_AVATAR_KEY }
 }
 
 function loadCustom(): string {
-  try {
-    return localStorage.getItem(LS_KEY_CUSTOM) ?? ''
-  } catch {
-    return ''
-  }
+  return readLS(LS_KEY_CUSTOM) ?? ''
 }
 
 export function AvatarProvider({ children }: { children: React.ReactNode }) {
@@ -57,11 +50,8 @@ export function AvatarProvider({ children }: { children: React.ReactNode }) {
   }, [current.kind, customDataUrl])
 
   const persist = useCallback((next: AvatarKind) => {
-    try {
-      localStorage.setItem(LS_KEY_SELECTION, JSON.stringify(next))
-    } catch {
-      // Storage may be full / disabled — the in-memory state still works.
-    }
+    // Storage may be full / disabled — the in-memory state still works.
+    writeJSON(LS_KEY_SELECTION, next)
   }, [])
 
   const applyPreset = useCallback((key: AvatarPresetKey) => {
@@ -94,20 +84,13 @@ export function AvatarProvider({ children }: { children: React.ReactNode }) {
       reader.readAsDataURL(file)
     })
     setCustomDataUrl(dataUrl)
-    try {
-      localStorage.setItem(LS_KEY_CUSTOM, dataUrl)
-    } catch {
-      // Persisted in-memory only. Reloading the page will drop the upload.
-    }
+    // Persisted in-memory only. Reloading the page will drop the upload.
+    writeLS(LS_KEY_CUSTOM, dataUrl)
   }, [])
 
   const clearCustom = useCallback(() => {
     setCustomDataUrl('')
-    try {
-      localStorage.removeItem(LS_KEY_CUSTOM)
-    } catch {
-      // ignore
-    }
+    removeLS(LS_KEY_CUSTOM)
     if (current.kind === 'custom') {
       const next: AvatarKind = { kind: 'preset', key: DEFAULT_AVATAR_KEY }
       setCurrent(next)

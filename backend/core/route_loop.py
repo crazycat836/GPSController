@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import logging
-import random
 
 from models.schemas import Coordinate, MovementMode, SimulationState, osrm_profile_for
 from config import (
     DEFAULT_PAUSE_ENABLED,
     DEFAULT_PAUSE_MAX,
     DEFAULT_PAUSE_MIN,
-    clamp_pause_range,
 )
 from core.handler_common import (
     emit_route_path,
     finish_mode,
     pause_with_countdown,
+    random_pause_seconds,
     route_coords,
 )
 from core.lap_limit import record_lap_and_check_limit
@@ -124,9 +123,8 @@ class RouteLooper:
 
             # Optional random pause between laps
             if pause_enabled:
-                lo, hi = clamp_pause_range(pause_min, pause_max)
-                if hi > 0:
-                    lap_pause = random.uniform(lo, hi)
+                lap_pause = random_pause_seconds(pause_min, pause_max)
+                if lap_pause > 0:
                     logger.info("Loop: pausing %.1fs before next lap", lap_pause)
                     if await pause_with_countdown(engine, lap_pause, "loop"):
                         break

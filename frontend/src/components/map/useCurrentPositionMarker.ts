@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import L from 'leaflet';
 import { haversineM } from '../../lib/geo';
+import { formatCoord } from '../../lib/format';
 import type { Position } from './types';
 
 /**
@@ -54,19 +55,17 @@ export function useCurrentPositionMarker(
     if (markerRef.current) {
       markerRef.current.setLatLng(latlng);
       markerRef.current.setIcon(icon);
-      markerRef.current.setTooltipContent(
-        `${currentPosition.lat.toFixed(6)}, ${currentPosition.lng.toFixed(6)}`
-      );
+      markerRef.current.setTooltipContent(formatCoord(currentPosition));
     } else {
       const marker = L.marker(latlng, {
         icon,
         zIndexOffset: 1000,
       }).addTo(map);
 
-      marker.bindTooltip(
-        `${currentPosition.lat.toFixed(6)}, ${currentPosition.lng.toFixed(6)}`,
-        { direction: 'top', offset: [0, -20] }
-      );
+      marker.bindTooltip(formatCoord(currentPosition), {
+        direction: 'top',
+        offset: [0, -20],
+      });
 
       markerRef.current = marker;
     }

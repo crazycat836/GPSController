@@ -1,5 +1,6 @@
 /** Geocoding endpoints (`/api/geocode/*`): forward search + reverse lookup. */
 import { STORAGE_KEYS } from '../lib/storage-keys'
+import { readLS } from '../lib/local-storage'
 import { request } from './http'
 
 export interface AddressSearchResult {
@@ -31,10 +32,8 @@ export interface ReverseGeocodeResult {
  * from here. (A missing key makes the backend degrade Google to Photon.)
  */
 export const searchAddress = (q: string, lang?: string) => {
-  let googleKey = ''
-  let provider = ''
-  try { googleKey = localStorage.getItem(STORAGE_KEYS.googlePlacesKey)?.trim() || '' } catch { /* ignore */ }
-  try { provider = localStorage.getItem(STORAGE_KEYS.searchProvider)?.trim() || '' } catch { /* ignore */ }
+  const googleKey = readLS(STORAGE_KEYS.googlePlacesKey)?.trim() || ''
+  const provider = readLS(STORAGE_KEYS.searchProvider)?.trim() || ''
   const params = new URLSearchParams({ q })
   if (lang) params.set('lang', lang)
   if (provider) params.set('provider', provider)

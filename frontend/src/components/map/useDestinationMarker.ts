@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import L from 'leaflet';
 import { ACCENT_HEX } from '../../lib/constants';
+import { coordKey } from '../../lib/format';
 import type { Position } from './types';
 
 /**
@@ -25,7 +26,7 @@ export function useDestinationMarker(
     const map = mapRef.current;
     if (!map) return;
 
-    const sig = destination ? `${destination.lat.toFixed(7)},${destination.lng.toFixed(7)}` : null;
+    const sig = destination ? coordKey(destination) : null;
     if (sig === sigRef.current) return;
     sigRef.current = sig;
 

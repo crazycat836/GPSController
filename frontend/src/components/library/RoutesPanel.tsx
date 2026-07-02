@@ -18,13 +18,13 @@ import ChipFilterBar, { type Chip } from '../ui/ChipFilterBar'
 import RouteCategoryManagerDialog from './RouteCategoryManagerDialog'
 import InlineRenameInput, { INLINE_RENAME_HEIGHT_PX } from '../ui/InlineRenameInput'
 import SortableHandleRow from '../ui/SortableHandleRow'
+import ReorderableList from '../ui/ReorderableList'
 import { commitTrimmedRename } from '../../lib/rename'
 import { useDragReorder } from '../../hooks/useDragReorder'
 import { useReorderMode } from '../../hooks/useReorderMode'
 import { useSelectionSet } from '../../hooks/useSelectionSet'
 import type { SavedRoute } from '../../services/api'
-import { DndContext, closestCenter } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { LIBRARY_CHIPS_VISIBLE_CAP } from '../../lib/constants'
 
 interface RoutesPanelProps {
   onRouteLoaded: () => void
@@ -34,9 +34,6 @@ type SortMode = 'default' | 'name' | 'created' | 'updated'
 
 const ALL_ID = '__all__' as const
 const DEFAULT_CATEGORY_COLOR = '#6c8cff'
-// Visible category chips before overflow folds into a "More" popover.
-// Mirrors BookmarksPanel's place-chips cap so the two drawers feel the same.
-const CATEGORY_CHIPS_VISIBLE_CAP = 5
 
 const getRouteId = (r: SavedRoute) => r.id
 
@@ -403,7 +400,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
           chips={categoryChips}
           activeId={activeCategoryId}
           onChange={setActiveCategoryId}
-          visibleCap={CATEGORY_CHIPS_VISIBLE_CAP}
+          visibleCap={LIBRARY_CHIPS_VISIBLE_CAP}
           ariaLabel={t('panel.route_category_manage')}
           moreLabel={t('generic.confirm')}
         />
@@ -461,8 +458,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
         />
       ) : reorderMode ? (
         // Reorder mode: dnd-kit Sortable with explicit drag handles.
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={sorted.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+        <ReorderableList sensors={sensors} onDragEnd={handleDragEnd} items={sorted.map((r) => r.id)}>
             <div className="flex flex-col gap-1.5">
               {sorted.map((route) => (
                 <SortableHandleRow key={route.id} id={route.id}>
@@ -486,8 +482,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
                 </SortableHandleRow>
               ))}
             </div>
-          </SortableContext>
-        </DndContext>
+        </ReorderableList>
       ) : (
         <div className="flex flex-col gap-1.5">
           {sorted.map((route) => {

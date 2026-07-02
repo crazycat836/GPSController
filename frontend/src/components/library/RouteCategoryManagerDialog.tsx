@@ -1,12 +1,12 @@
 import { useCallback, useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X, GripVertical } from 'lucide-react'
-import { DndContext, closestCenter } from '@dnd-kit/core'
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import Modal from '../Modal'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import ListRow from '../ui/ListRow'
 import InlineRenameInput, { INLINE_RENAME_HEIGHT_PX } from '../ui/InlineRenameInput'
+import ReorderableList from '../ui/ReorderableList'
 import { ICON_SIZE } from '../../lib/icons'
 import { commitTrimmedRename } from '../../lib/rename'
 import { useDragReorder } from '../../hooks/useDragReorder'
@@ -98,8 +98,7 @@ export default function RouteCategoryManagerDialog(props: RouteCategoryManagerDi
           {/* Category list with drag-reorder. The preset "default" row
               participates in the visual list (so users see what's there)
               but its rename / delete / drag controls are disabled. */}
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={categories.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+          <ReorderableList sensors={sensors} onDragEnd={handleDragEnd} items={categories.map((c) => c.id)}>
               <div className="flex flex-col gap-1.5 max-h-[340px] overflow-auto">
                 {categories.map((cat) => (
                   <SortableCategoryRow
@@ -116,8 +115,7 @@ export default function RouteCategoryManagerDialog(props: RouteCategoryManagerDi
                   />
                 ))}
               </div>
-            </SortableContext>
-          </DndContext>
+          </ReorderableList>
         </div>
       </Modal>
 

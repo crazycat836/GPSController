@@ -7,6 +7,7 @@ random_walk / multi_stop / route_loop:
 * ``route_path`` polyline emission
 * end-of-run IDLE transition (``<mode>_complete`` + ``state_change``)
 * stoppable pause-with-countdown between legs / laps
+* random pause-duration draw from a clamped range
 
 Behavior parity note: event payloads, ordering, and await positions are
 characterized by ``tests/test_movement_loop.py`` and
@@ -16,13 +17,31 @@ characterized by ``tests/test_movement_loop.py`` and
 from __future__ import annotations
 
 import asyncio
+import random
 from typing import TYPE_CHECKING
 
+from config import clamp_pause_range
 from models.schemas import Coordinate, SimulationState
 
 if TYPE_CHECKING:
     from core.simulation_engine import SimulationEngine
     from services.route_service import RouteService
+
+
+def random_pause_seconds(
+    pause_min: float,
+    pause_max: float,
+    rng: random.Random | None = None,
+) -> float:
+    """Clamp the configured pause range and draw a uniform duration.
+
+    Returns 0.0 when the clamped range is empty, which callers treat as
+    "no pause".
+    """
+    lo, hi = clamp_pause_range(pause_min, pause_max)
+    if hi <= 0:
+        return 0.0
+    return (rng or random).uniform(lo, hi)
 
 
 def route_coords(route_data: dict) -> list[Coordinate]:

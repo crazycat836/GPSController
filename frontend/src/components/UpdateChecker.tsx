@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import pkg from '../../package.json';
 import { useT } from '../i18n';
 import { STORAGE_KEYS } from '../lib/storage-keys';
+import { readJSON, writeJSON } from '../lib/local-storage';
 import { openExternalOrDefault } from '../lib/open-external';
 
 const CURRENT = pkg.version;
@@ -27,24 +28,17 @@ interface LastCheckCache {
 }
 
 function readLastCheck(): LastCheckCache | null {
-  try {
-    const raw = localStorage.getItem(LAST_CHECK_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { at?: unknown; latest?: unknown };
-    if (typeof parsed.at !== 'number') return null;
-    if (parsed.latest !== null && typeof parsed.latest !== 'string') return null;
-    return { at: parsed.at, latest: parsed.latest };
-  } catch {
-    return null;
-  }
+  const parsed = readJSON(LAST_CHECK_KEY) as { at?: unknown; latest?: unknown } | null;
+  if (parsed == null) return null;
+  if (typeof parsed.at !== 'number') return null;
+  if (parsed.latest !== null && typeof parsed.latest !== 'string') return null;
+  return { at: parsed.at, latest: parsed.latest };
 }
 
 function writeLastCheck(latest: string | null): void {
-  try {
-    localStorage.setItem(LAST_CHECK_KEY, JSON.stringify({
-      at: Date.now(), latest,
-    } satisfies LastCheckCache));
-  } catch { /* storage disabled */ }
+  writeJSON(LAST_CHECK_KEY, {
+    at: Date.now(), latest,
+  } satisfies LastCheckCache);
 }
 
 function parseVer(s: string): number[] {
@@ -78,16 +72,12 @@ export default function UpdateChecker() {
     let cancelled = false;
     (async () => {
       let dismissedVersion: string | null = null;
-      try {
-        const raw = localStorage.getItem(DISMISS_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as { version?: unknown; at?: unknown };
-          if (typeof parsed.version === 'string' && typeof parsed.at === 'number' &&
-              Date.now() - parsed.at < COOLDOWN_MS) {
-            dismissedVersion = parsed.version;
-          }
-        }
-      } catch { /* malformed cache — treat as not-dismissed */ }
+      // Malformed cache — treat as not-dismissed.
+      const parsed = readJSON(DISMISS_KEY) as { version?: unknown; at?: unknown } | null;
+      if (parsed != null && typeof parsed.version === 'string' && typeof parsed.at === 'number' &&
+          Date.now() - parsed.at < COOLDOWN_MS) {
+        dismissedVersion = parsed.version;
+      }
 
       // Reuse a recent check (incl. the "no update" outcome) instead of
       // re-hitting the GitHub API on every component mount.
@@ -140,11 +130,7 @@ export default function UpdateChecker() {
   if (!latest) return null;
 
   const dismiss = () => {
-    try {
-      localStorage.setItem(DISMISS_KEY, JSON.stringify({
-        version: latest, at: Date.now(),
-      }));
-    } catch { /* storage disabled */ }
+    writeJSON(DISMISS_KEY, { version: latest, at: Date.now() });
     setLatest(null);
   };
 

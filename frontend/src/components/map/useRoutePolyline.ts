@@ -1,13 +1,14 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import L from 'leaflet';
 import { ACCENT_HEX } from '../../lib/constants';
+import { coordKey } from '../../lib/format';
 import type { Position } from './types';
 
 function pathSig(path: Position[]): string {
   if (path.length === 0) return '';
   const first = path[0];
   const last = path[path.length - 1];
-  return `${path.length}:${first.lat.toFixed(7)},${first.lng.toFixed(7)}:${last.lat.toFixed(7)},${last.lng.toFixed(7)}`;
+  return `${path.length}:${coordKey(first)}:${coordKey(last)}`;
 }
 
 /**

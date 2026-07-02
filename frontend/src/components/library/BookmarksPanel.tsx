@@ -3,15 +3,15 @@ import {
   Plus, Bookmark as BookmarkIcon, Pencil, Trash2, Copy,
   FolderInput, ClipboardList, ClipboardPaste, GripVertical,
 } from 'lucide-react'
-import { DndContext, closestCenter } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useBookmarkContext } from '../../contexts/BookmarkContext'
+import { LIBRARY_CHIPS_VISIBLE_CAP } from '../../lib/constants'
 import { useToastContext } from '../../contexts/ToastContext'
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
 import { isDefaultPlace } from '../../lib/bookmarks'
 import { copyToClipboard } from '../../lib/clipboard'
+import { formatCoord } from '../../lib/format'
 import { commitTrimmedRename } from '../../lib/rename'
 import { toggleInSet } from '../../lib/sets'
 import { useDragReorder } from '../../hooks/useDragReorder'
@@ -23,6 +23,7 @@ import EmptyState from '../ui/EmptyState'
 import SectionHeader from '../ui/SectionHeader'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import SortableHandleRow from '../ui/SortableHandleRow'
+import ReorderableList from '../ui/ReorderableList'
 import BookmarkEditDialog, { type BookmarkEditValues } from './BookmarkEditDialog'
 import PlaceManagerDialog from './PlaceManagerDialog'
 import TagManagerDialog from './TagManagerDialog'
@@ -45,9 +46,6 @@ const BOOKMARK_MATCH_EPSILON = 1e-5
 
 /** "Copied" toast/icon flash duration (ms) after the copy-coords action. */
 const COPIED_FLASH_MS = 1200
-
-/** Number of place chips kept visible before the bar collapses into a "+N" overflow. */
-const PLACE_CHIPS_VISIBLE_CAP = 5
 
 const getBookmarkId = (b: Bookmark) => b.id
 
@@ -119,7 +117,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
       if (searching) {
         const name = (b.name ?? '').toLowerCase()
         const placeLower = placeName.toLowerCase()
-        const coord = `${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}`
+        const coord = formatCoord(b, 5)
         const tagHit = (b.tags ?? []).some((id) => {
           const tg = tagMap.get(id)
           return tg ? tg.name.toLowerCase().includes(q) : false
@@ -238,7 +236,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   )
 
   const handleCopy = useCallback(async (b: Bookmark) => {
-    const text = `${b.name} ${b.lat.toFixed(6)}, ${b.lng.toFixed(6)}`
+    const text = `${b.name} ${formatCoord(b)}`
     await copyToClipboard(text)
     setCopiedId(b.id)
     setTimeout(() => setCopiedId((prev) => (prev === b.id ? null : prev)), COPIED_FLASH_MS)
@@ -427,7 +425,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         placeChips={placeChips}
         activePlaceId={activePlaceId}
         onActivePlaceChange={setActivePlaceId}
-        placeChipsVisibleCap={PLACE_CHIPS_VISIBLE_CAP}
+        placeChipsVisibleCap={LIBRARY_CHIPS_VISIBLE_CAP}
         hasPlaces={places.length > 0}
         tags={tags}
         activeTagIds={activeTagIds}
@@ -456,8 +454,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
           title={anyFilter ? t('bm.search_no_results') : t('bm.blank')}
         />
       ) : reorderList ? (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={reorderList.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+        <ReorderableList sensors={sensors} onDragEnd={handleDragEnd} items={reorderList.map((b) => b.id)}>
             <div className="flex flex-col gap-1.5">
               {reorderList.map((b) => (
                 <SortableHandleRow key={b.id} id={b.id}>
@@ -465,8 +462,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
                 </SortableHandleRow>
               ))}
             </div>
-          </SortableContext>
-        </DndContext>
+        </ReorderableList>
       ) : sections ? (
         <div className="flex flex-col gap-4">
           {sections.map((section) => (

@@ -5,6 +5,7 @@ import {
 import type { Bookmark, BookmarkPlace, BookmarkTag } from '../../hooks/useBookmarks'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
+import { formatCoordDegrees } from '../../lib/format'
 import ListRow from '../ui/ListRow'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
 import InlineRenameInput, { INLINE_RENAME_HEIGHT_PX } from '../ui/InlineRenameInput'
@@ -140,7 +141,7 @@ function BookmarkRowImpl({
         </span>
       ))}
       <span className="font-mono truncate">
-        {b.lat.toFixed(6)}°, {b.lng.toFixed(6)}°
+        {formatCoordDegrees(b)}
       </span>
       {b.country_code && (
         <>

@@ -21,7 +21,7 @@ import re
 from fastapi import APIRouter, Header, Query
 
 from api._errors import ErrorCode, http_err
-from models.schemas import GeocodingResult
+from models.schemas import GeocodingResult, Latitude, Longitude
 from services.geocoding import GeocodingService
 
 logger = logging.getLogger(__name__)
@@ -86,8 +86,8 @@ async def search_address(
 
 @router.get("/reverse", response_model=GeocodingResult | None)
 async def reverse_geocode(
-    lat: float = Query(ge=-90.0, le=90.0),
-    lng: float = Query(ge=-180.0, le=180.0),
+    lat: Latitude,
+    lng: Longitude,
     lang: str | None = Query(default=None, max_length=64),
 ):
     if lang is not None and not _LANG_RE.fullmatch(lang):
