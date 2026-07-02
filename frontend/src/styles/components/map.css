@@ -13,6 +13,15 @@
   width: 100%;
   height: 100%;
   background: #0f1117;
+  /* Trap the whole Leaflet subtree in one stacking context. Leaflet's
+     panes carry their own z-indexes (overlay 400, marker 600, popup 700)
+     and its controls go higher still; without isolation those leak into
+     the root stacking context and paint OVER the ETA pill (--z-eta 390),
+     hiding it behind the map. `isolation: isolate` makes the map subtree
+     self-contained — exactly the assumption EtaBar's z-order relies on —
+     so the linear app z-scale (eta 390 < ui 400 < dropdown 600 < …) wins
+     cleanly over every map layer. */
+  isolation: isolate;
 }
 
 /* ═══════════════════════════════════════════════════════════════
