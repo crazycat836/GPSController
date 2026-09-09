@@ -73,6 +73,7 @@ class ErrorCode(StrEnum):
     # Movement / location
     NO_POSITION = "no_position"
     NO_ACTIVE_ROUTE = "no_active_route"
+    ROUTE_UNAVAILABLE = "route_unavailable"
     TELEPORT_FAILED = "teleport_failed"
     JOYSTICK_START_FAILED = "joystick_start_failed"
     COOLDOWN_ACTIVE = "cooldown_active"

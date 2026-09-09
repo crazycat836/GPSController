@@ -37,6 +37,9 @@ export interface DeviceLastError {
   readonly udid: string | null
   readonly stage: string
   readonly error: string
+  // Machine-readable tag for errors with a dedicated toast
+  // (currently only 'route_unavailable'); undefined for generic crashes.
+  readonly code?: string
   // Wall-clock ms — same one-shot-toast trigger discipline as
   // DeviceLastDisconnect.ts.
   readonly ts: number
@@ -244,6 +247,7 @@ export function useDeviceWs(
             udid: payload.udid ?? null,
             stage: payload.stage ?? 'unknown',
             error: payload.error ?? '',
+            code: payload.code,
             ts: Date.now(),
           })
         }

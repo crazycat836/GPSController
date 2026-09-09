@@ -16,6 +16,9 @@ interface BookmarkContextValue {
   bookmarks: Bookmark[]
   places: BookmarkPlace[]
   tags: BookmarkTag[]
+  /** True while a bookmark-store fetch is in flight (initial load + refreshes).
+   *  Panels use it to show a loading state instead of a premature "empty". */
+  loading: boolean
   createBookmark: (bm: Omit<Bookmark, 'id'>) => Promise<Bookmark>
   createBookmarksBulk: (
     items: Array<{ lat: number; lng: number; name?: string }>,
@@ -149,6 +152,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
     bookmarks: bm.bookmarks,
     places: bm.places,
     tags: bm.tags,
+    loading: bm.loading,
     createBookmark: bm.createBookmark,
     createBookmarksBulk,
     updateBookmark: bm.updateBookmark,
@@ -177,7 +181,7 @@ export function BookmarkProvider({ children }: { children: React.ReactNode }) {
 
     handleBookmarksReorder,
   }), [
-    bm.bookmarks, bm.places, bm.tags,
+    bm.bookmarks, bm.places, bm.tags, bm.loading,
     bm.createBookmark, bm.updateBookmark, bm.touchBookmark, bm.deleteBookmark,
     bm.deleteBookmarksBatch, bm.moveBookmarks, bm.tagBookmarks,
     bm.createPlace, bm.updatePlace, bm.deletePlace, bm.reorderPlaces,

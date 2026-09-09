@@ -10,6 +10,7 @@ import {
   RANDOM_GEN_RADIUS_MIN_M,
   RESTORE_MIN_DISPLAY_MS,
   SPEED_MAP,
+  MIN_WAYPOINTS_FOR_OPTIMIZE,
 } from '../lib/constants'
 import { devWarn } from '../lib/dev-log'
 import { formatCoord } from '../lib/format'
@@ -55,6 +56,7 @@ type Sim = ReturnType<typeof useSimulation>
 // position ticks.
 export interface SimActionsValue extends Pick<Sim,
   | 'setMode'
+  | 'loadRouteWaypoints'
   | 'setWaypoints'
   | 'setMoveMode'
   | 'setCustomSpeedKmh'
@@ -77,6 +79,7 @@ export interface SimActionsValue extends Pick<Sim,
   handleClearWaypoints: () => void
   handleRemoveWaypoint: (index: number) => void
   handleGenerateRandomWaypoints: () => void
+  handleOptimizeWaypoints: () => Promise<void>
   handleGenerateAllRandom: () => void
   handleOpenLog: () => void
   handleSetTeleportDest: (lat: number, lng: number) => void
@@ -324,6 +327,31 @@ export function SimProvider({ children }: SimProviderProps) {
     setWpGenCount(count)
     generateWaypoints(radius, count)
   }, [generateWaypoints, setWpGenRadius, setWpGenCount])
+
+  // Reorder the staged waypoints to minimise travel time (backend
+  // /api/route/optimize: OSRM duration matrix + nearest-neighbor + 2-opt).
+  // Loop mode optimises the round trip back to the first point. Only the
+  // staged points change — a saved route keeps its stored order, so
+  // reloading it undoes an unwanted optimisation.
+  const handleOptimizeWaypoints = useCallback(async () => {
+    const { sim, t, showToast } = latest.current
+    if (sim.waypoints.length < MIN_WAYPOINTS_FOR_OPTIMIZE) return
+    try {
+      const res = await api.optimizeRoute(
+        sim.waypoints, sim.moveMode, sim.mode === SimMode.Loop,
+      )
+      const isUnchanged = res.order.every((v, i) => v === i)
+      if (isUnchanged) {
+        showToast(t('toast.route_order_already_optimal'))
+        return
+      }
+      sim.setWaypoints(res.waypoints)
+      showToast(t('toast.route_order_optimized'))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      showToast(t('toast.route_optimize_failed', { msg: message }))
+    }
+  }, [])
 
   const handleMapClick = useCallback((lat: number, lng: number) => {
     const { sim } = latest.current
@@ -643,10 +671,12 @@ export function SimProvider({ children }: SimProviderProps) {
     handleClearWaypoints,
     handleRemoveWaypoint,
     handleGenerateRandomWaypoints,
+    handleOptimizeWaypoints,
     handleGenerateAllRandom,
     handleOpenLog,
     handleMapClick,
     setMode: sim.setMode,
+    loadRouteWaypoints: sim.loadRouteWaypoints,
     setWaypoints: sim.setWaypoints,
     setMoveMode: sim.setMoveMode,
     setCustomSpeedKmh: sim.setCustomSpeedKmh,
@@ -671,10 +701,12 @@ export function SimProvider({ children }: SimProviderProps) {
     handleClearWaypoints,
     handleRemoveWaypoint,
     handleGenerateRandomWaypoints,
+    handleOptimizeWaypoints,
     handleGenerateAllRandom,
     handleOpenLog,
     handleMapClick,
     sim.setMode,
+    sim.loadRouteWaypoints,
     sim.setWaypoints,
     sim.setMoveMode,
     sim.setCustomSpeedKmh,

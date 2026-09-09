@@ -51,10 +51,15 @@ class DeviceSnapshotEvent(BaseModel):
 
 class DeviceErrorEvent(BaseModel):
     """Recoverable device-side error — e.g. USB fallback engine creation
-    failed, AMFI service unavailable. Frontend surfaces as a toast."""
+    failed, AMFI service unavailable. Frontend surfaces as a toast.
+
+    ``code`` is a stable machine-readable tag for errors that deserve a
+    specific toast; currently only ``"route_unavailable"`` (route-planning
+    abort). Absent for generic crashes."""
     udid: str
     stage: str
     error: str
+    code: str | None = None
 
 
 class DualSyncStartEvent(BaseModel):

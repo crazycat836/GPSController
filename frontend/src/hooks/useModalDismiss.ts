@@ -10,19 +10,39 @@ interface UseModalDismissOptions {
   busy?: boolean
 }
 
+// Stack of currently-open layers, oldest first. Only the most recently
+// opened layer responds to Escape, so a nested dialog (e.g. a delete
+// confirm inside the Library drawer) doesn't dismiss its parent surface
+// with the same keypress.
+let openLayers: readonly symbol[] = []
+
+function pushLayer(layer: symbol): void {
+  openLayers = [...openLayers, layer]
+}
+
+function removeLayer(layer: symbol): void {
+  openLayers = openLayers.filter((l) => l !== layer)
+}
+
+function isTopLayer(layer: symbol): boolean {
+  return openLayers[openLayers.length - 1] === layer
+}
+
 /**
  * Shared keyboard-dismiss + focus-restore plumbing for modal-shaped
  * surfaces (drawers, dialogs).
  *
  * - Captures the `document.activeElement` on open so focus returns
  *   to the previous control on close.
- * - Binds Escape → `onDismiss` while open.
+ * - Binds Escape → `onDismiss` while open — only for the topmost open
+ *   layer, so stacked surfaces dismiss one at a time.
  *
  * Focus placement inside the dialog is *not* handled here — callers
  * decide where to move focus (first tab, textarea, confirm button).
  */
 export function useModalDismiss({ open, onDismiss, busy = false }: UseModalDismissOptions): void {
   const previousFocusRef = useRef<HTMLElement | null>(null)
+  const layerRef = useRef<symbol | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -32,13 +52,28 @@ export function useModalDismiss({ open, onDismiss, busy = false }: UseModalDismi
     }
   }, [open])
 
+  // Track this surface on the layer stack for the whole time it is open.
+  // Kept separate from the keydown effect so `busy` / `onDismiss` identity
+  // changes don't re-push the layer (which would wrongly move it to the top).
+  useEffect(() => {
+    if (!open) return
+    const layer = Symbol('modal-dismiss-layer')
+    layerRef.current = layer
+    pushLayer(layer)
+    return () => {
+      removeLayer(layer)
+      layerRef.current = null
+    }
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) {
-        e.preventDefault()
-        onDismiss()
-      }
+      if (e.key !== 'Escape' || busy) return
+      const layer = layerRef.current
+      if (layer == null || !isTopLayer(layer)) return
+      e.preventDefault()
+      onDismiss()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)

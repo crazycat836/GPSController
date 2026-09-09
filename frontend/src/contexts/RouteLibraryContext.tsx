@@ -19,6 +19,9 @@ export type { SaveRouteResult }
 interface RouteLibraryContextValue {
   // Saved routes
   savedRoutes: readonly SavedRoute[]
+  /** True until the initial saved-routes fetch settles — panels use it to
+   *  show a loading state instead of a premature "empty". */
+  routesLoading: boolean
   refreshRoutes: () => Promise<void>
   handleRouteLoad: (id: string) => {
     waypoints: { lat: number; lng: number }[]
@@ -64,10 +67,20 @@ export function RouteLibraryProvider({ children }: { children: React.ReactNode }
 
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([])
   const [routeCategories, setRouteCategories] = useState<RouteCategory[]>([])
+  const [routesLoading, setRoutesLoading] = useState(true)
 
+  // Initial fetch — mount-only by design (re-fetching on language change,
+  // which would re-create `t`, isn't wanted).
   useEffect(() => {
-    api.getSavedRoutes().then(setSavedRoutes).catch((err) => devLog('Failed to load saved routes', err))
+    api.getSavedRoutes()
+      .then(setSavedRoutes)
+      .catch((err) => {
+        devLog('Failed to load saved routes', err)
+        showToast(t('toast.routes_load_failed'))
+      })
+      .finally(() => setRoutesLoading(false))
     api.getRouteCategories().then(setRouteCategories).catch((err) => devLog('Failed to load route categories', err))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleRouteLoad = useCallback((id: string): {
@@ -331,6 +344,7 @@ export function RouteLibraryProvider({ children }: { children: React.ReactNode }
   // identity only changes when something real does.
   const value: RouteLibraryContextValue = useMemo(() => ({
     savedRoutes,
+    routesLoading,
     refreshRoutes,
     handleRouteLoad,
     handleRouteSave,
@@ -352,7 +366,7 @@ export function RouteLibraryProvider({ children }: { children: React.ReactNode }
     handleRoutesImportAll,
     handleRoutesExportAll,
   }), [
-    savedRoutes, refreshRoutes, handleRouteLoad, handleRouteSave,
+    savedRoutes, routesLoading, refreshRoutes, handleRouteLoad, handleRouteSave,
     handleRouteRename, handleRouteDelete, handleRoutesBatchDelete,
     handleRoutesMoveToCategory, handleRoutesReorder,
     routeCategories, handleRouteCategoryCreate, handleRouteCategoryUpdate,

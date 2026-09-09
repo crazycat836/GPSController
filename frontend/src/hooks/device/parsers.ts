@@ -93,6 +93,7 @@ export interface DeviceErrorPayload {
   udid?: string
   stage?: string
   error?: string
+  code?: string
 }
 
 export function parseDeviceError(data: unknown): DeviceErrorPayload | null {
@@ -102,6 +103,7 @@ export function parseDeviceError(data: unknown): DeviceErrorPayload | null {
     udid: asString(obj.udid),
     stage: asString(obj.stage),
     error: asString(obj.error),
+    code: asString(obj.code),
   }
 }
 

@@ -17,6 +17,9 @@ export const STRINGS = {
   'generic.pause': { zh: '暫停', en: 'Pause' },
   'generic.resume': { zh: '繼續', en: 'Resume' },
   'generic.add': { zh: '加入', en: 'Add' },
+  'generic.loading': { zh: '載入中…', en: 'Loading…' },
+  'generic.drag_handle': { zh: '拖曳把手', en: 'Drag handle' },
+  'generic.color': { zh: '顏色', en: 'Color' },
 
   // ── Status bar ───────────────────────────────
   'status.cooldown_tooltip': { zh: '關閉後瞬移將不觸發冷卻', en: 'When off, teleports skip the cooldown' },
@@ -65,6 +68,9 @@ export const STRINGS = {
   // (see backend api/location/_helpers.py spawn). {mode} is the localized
   // movement-mode label.
   'toast.simulation_crashed': { zh: '模擬移動異常中止({mode}),請重新開始', en: 'Simulation stopped unexpectedly ({mode}); please start it again.' },
+  // Route-planning abort (device_error with code 'route_unavailable') —
+  // {msg} is the backend detail naming the failing leg / unreachable service.
+  'toast.route_unavailable': { zh: '路線規劃失敗:{msg}', en: 'Route planning failed: {msg}' },
 
   // ── Connection health (banner + stale visuals) ───────────
   'conn.ws_reconnecting': { zh: '與背景服務連線中…', en: 'Reconnecting to backend…' },
@@ -102,9 +108,9 @@ export const STRINGS = {
   'panel.route_gpx_import': { zh: '匯入 GPX', en: 'Import GPX' },
   'panel.routes_export_all': { zh: '全部匯出', en: 'Export all' },
   'panel.routes_import_all': { zh: '全部匯入', en: 'Import all' },
-  'toast.routes_imported': { zh: '已匯入 {n} 條路線', en: 'Imported {n} routes' },
+  'toast.routes_imported': { zh: '已匯入 {n} 條路線', en: 'Routes imported: {n}' },
   'toast.routes_import_failed': { zh: '匯入失敗:{msg}', en: 'Import failed: {msg}' },
-  'toast.bookmarks_bulk_ok': { zh: '已匯入 {n} 筆座標收藏', en: 'Imported {n} bookmarks' },
+  'toast.bookmarks_bulk_ok': { zh: '已匯入 {n} 筆座標收藏', en: 'Bookmarks imported: {n}' },
   'toast.bookmarks_bulk_partial': { zh: '{n} 筆匯入失敗', en: '{n} failed' },
   'panel.route_delete_confirm': { zh: '刪除路線「{name}」?', en: 'Delete route "{name}"?' },
 
@@ -193,9 +199,11 @@ export const STRINGS = {
   'toast.route_need_waypoint': { zh: '請先加入至少一個路徑點', en: 'Add at least one waypoint first' },
   'toast.route_deleted': { zh: '已刪除路線', en: 'Route deleted' },
   'toast.route_delete_failed': { zh: '刪除失敗', en: 'Delete failed' },
-  'toast.routes_batch_deleted': { zh: '已刪除 {n} 條路線', en: 'Deleted {n} routes' },
+  'toast.routes_load_failed': { zh: '載入路線失敗', en: 'Failed to load routes' },
+  'toast.bookmark_delete_failed': { zh: '刪除書籤失敗', en: 'Failed to delete bookmark' },
+  'toast.routes_batch_deleted': { zh: '已刪除 {n} 條路線', en: 'Routes deleted: {n}' },
   'toast.routes_batch_delete_failed': { zh: '批次刪除失敗: {msg}', en: 'Batch delete failed: {msg}' },
-  'toast.routes_moved': { zh: '已搬移 {n} 條路線', en: 'Moved {n} routes' },
+  'toast.routes_moved': { zh: '已搬移 {n} 條路線', en: 'Routes moved: {n}' },
   'toast.routes_move_failed': { zh: '搬移失敗: {msg}', en: 'Move failed: {msg}' },
   // Drag-reorder persist failure (routes / categories / places / tags) —
   // the optimistic order rolls back to the server order.
@@ -214,13 +222,13 @@ export const STRINGS = {
   'panel.route_category_delete_title': { zh: '刪除分類', en: 'Delete category' },
   'panel.route_category_delete_confirm': { zh: '刪除分類「{name}」？分類下的路線會自動移回「預設」分類。', en: 'Delete category "{name}"? Routes will return to "Default".' },
   'panel.route_move_to': { zh: '搬移到…', en: 'Move to…' },
-  'panel.route_batch_delete_confirm': { zh: '刪除 {n} 條路線？', en: 'Delete {n} routes?' },
+  'panel.route_batch_delete_confirm': { zh: '刪除 {n} 條路線？', en: 'Delete {n} route(s)?' },
   'panel.route_overwrite_title': { zh: '同名路線已存在', en: 'Route name already exists' },
   'panel.route_overwrite_body': { zh: '「{name}」已存在 (建立於 {created})。要覆蓋舊路線還是另存新檔？', en: '"{name}" already exists (created {created}). Overwrite or save as new?' },
   'panel.route_overwrite_btn': { zh: '覆蓋', en: 'Overwrite' },
   'panel.route_save_new_btn': { zh: '另存新檔', en: 'Save as new' },
   'toast.rename_failed': { zh: '重新命名失敗', en: 'Rename failed' },
-  'toast.gpx_imported': { zh: '已匯入 {n} 個路徑點', en: 'Imported {n} waypoints' },
+  'toast.gpx_imported': { zh: '已匯入 {n} 個路徑點', en: 'Waypoints imported: {n}' },
   'toast.gpx_import_failed': { zh: '匯入失敗: {msg}', en: 'Import failed: {msg}' },
   'toast.export_failed': { zh: '匯出失敗: {msg}', en: 'Export failed: {msg}' },
 
@@ -275,6 +283,7 @@ export const STRINGS = {
   'err.tunnel_no_rsd': { zh: 'Tunnel 已啟動但找不到 RSD 資訊', en: 'Tunnel started but RSD info missing' },
   // Movement / AMFI / logs
   'err.no_active_route': { zh: '目前沒有進行中的路線', en: 'No active route' },
+  'err.route_unavailable': { zh: '路線規劃服務暫時無法使用,請稍後再試', en: 'Route planning service unavailable; try again shortly' },
   'err.joystick_start_failed': { zh: '搖桿啟動失敗', en: 'Failed to start joystick' },
   'err.amfi_unavailable': { zh: 'AMFI 服務無法使用', en: 'AMFI service unavailable' },
   'err.amfi_reveal_failed': { zh: '顯示開發者模式失敗', en: 'Failed to reveal Developer Mode' },
@@ -383,8 +392,8 @@ export const STRINGS = {
   },
   'bulk.textarea_aria': { zh: '貼上多筆座標', en: 'Paste multiple coordinates' },
   'bulk.summary_valid': { zh: '{n} 筆可匯入', en: '{n} valid' },
-  'bulk.summary_errors_show': { zh: '{n} 筆錯誤(展開)', en: '{n} errors (show)' },
-  'bulk.summary_errors_hide': { zh: '{n} 筆錯誤(收合)', en: '{n} errors (hide)' },
+  'bulk.summary_errors_show': { zh: '{n} 筆錯誤(展開)', en: '{n} error(s) (show)' },
+  'bulk.summary_errors_hide': { zh: '{n} 筆錯誤(收合)', en: '{n} error(s) (hide)' },
   'bulk.errors_truncated': { zh: '… 還有 {n} 筆', en: '… and {n} more' },
   'bulk.import_with_count': { zh: '匯入 {n} 筆', en: 'Import {n}' },
   'bulk.importing': { zh: '匯入中…', en: 'Importing…' },
@@ -395,7 +404,7 @@ export const STRINGS = {
   'bm.latlng_placeholder': { zh: '緯度,或貼上「緯度, 經度」', en: 'Latitude (or paste "lat, lng")' },
   'bm.export': { zh: '匯出', en: 'Export' },
   'bm.import': { zh: '匯入', en: 'Import' },
-  'bm.import_success': { zh: '匯入成功:共 {n} 筆', en: 'Imported {n} entries' },
+  'bm.import_success': { zh: '匯入成功:共 {n} 筆', en: 'Entries imported: {n}' },
   'bm.import_failed': { zh: '匯入失敗:{error}', en: 'Import failed: {error}' },
   'bm.copy': { zh: '複製名稱與座標', en: 'Copy name & coords' },
   'bm.name_placeholder': { zh: '收藏名稱', en: 'Bookmark name' },
@@ -439,7 +448,7 @@ export const STRINGS = {
   'bm.selected_count': { zh: '已選 {n} 筆', en: '{n} selected' },
   'bm.clear_selection': { zh: '清除選取', en: 'Clear' },
   'bm.selection_toolbar': { zh: '多選工具列', en: 'Selection toolbar' },
-  'bm.confirm_batch_delete': { zh: '確定刪除已選的 {n} 筆收藏?', en: 'Delete {n} selected bookmarks?' },
+  'bm.confirm_batch_delete': { zh: '確定刪除已選的 {n} 筆收藏?', en: 'Delete {n} selected bookmark(s)?' },
   'bm.confirm_delete': { zh: '確定刪除「{name}」?', en: 'Delete "{name}"?' },
   'bm.note': { zh: '備註', en: 'Note' },
   'bm.has_note': { zh: '有備註', en: 'Has note' },
@@ -489,6 +498,11 @@ export const STRINGS = {
   'chain.aria_label': { zh: '路徑點列表', en: 'Waypoint chain' },
   'chain.add_stop': { zh: '加入停靠點', en: 'Add stop' },
   'chain.random_stop': { zh: '隨機停靠點', en: 'Random stop' },
+  'chain.optimize_order': { zh: '優化順序', en: 'Optimize order' },
+  'chain.optimize_hint': { zh: '重排路徑點順序以縮短總路程,減少來回走', en: 'Reorder waypoints to shorten the route and remove back-and-forth legs' },
+  'toast.route_order_optimized': { zh: '已優化路徑點順序', en: 'Waypoint order optimized' },
+  'toast.route_order_already_optimal': { zh: '目前順序已是最佳', en: 'Order is already optimal' },
+  'toast.route_optimize_failed': { zh: '優化失敗:{msg}', en: 'Optimize failed: {msg}' },
   'chain.loop': { zh: '循環', en: 'Loop' },
   'chain.loop_back_tooltip': { zh: '返回起點形成循環', en: 'Loops back to start' },
   'chain.remove': { zh: '移除', en: 'Remove' },
@@ -508,6 +522,9 @@ export const STRINGS = {
   'dock.waypoints': { zh: '路徑點', en: 'Waypoints' },
   'dock.generate_waypoints': { zh: '產生路徑點', en: 'Generate waypoints' },
   'action.cancel': { zh: '取消', en: 'Cancel' },
+  'action.disabled_no_device': { zh: '尚未連接裝置', en: 'No device connected' },
+  'action.disabled_no_destination': { zh: '尚未設定目的地', en: 'No destination set' },
+  'action.disabled_min_waypoints': { zh: '至少需要 2 個路徑點', en: 'Need at least 2 waypoints' },
   'dock.speed': { zh: '速度', en: 'Speed' },
   'dock.heading': { zh: '方向', en: 'Heading' },
   'dock.sensitivity': { zh: '靈敏度', en: 'Sensitivity' },
@@ -519,9 +536,9 @@ export const STRINGS = {
 
   // ── Bookmarks (new) ────────────────────────────
   'bm.uncategorized': { zh: '未分類', en: 'Uncategorized' },
-  'bm.places_count': { zh: '{n} 個場所', en: '{n} places' },
-  'bm.tags_count': { zh: '{n} 個標籤', en: '{n} tags' },
-  'bm.bookmarks_count_label': { zh: '{n} 筆收藏', en: '{n} bookmarks' },
+  'bm.places_count': { zh: '{n} 個場所', en: '{n} place(s)' },
+  'bm.tags_count': { zh: '{n} 個標籤', en: '{n} tag(s)' },
+  'bm.bookmarks_count_label': { zh: '{n} 筆收藏', en: '{n} bookmark(s)' },
   'bm.place_filter_aria': { zh: '場所篩選', en: 'Filter by place' },
   'bm.tag_filter_aria': { zh: '標籤篩選', en: 'Filter by tag' },
   'bm.delete_title': { zh: '刪除收藏', en: 'Delete bookmark' },
@@ -544,7 +561,7 @@ export const STRINGS = {
   'route.gpx_export': { zh: '匯出為 GPX', en: 'Export as GPX' },
   'route.actions_aria': { zh: '路線批次動作', en: 'Route bulk actions' },
   'route.row_actions_aria': { zh: '此路線動作', en: 'Actions for this route' },
-  'route.pts_count': { zh: '{n} 個點', en: '{n} pts' },
+  'route.pts_count': { zh: '{n} 個點', en: '{n} pt(s)' },
 
   // ── Device drawer (new) ────────────────────────
   'device.popover_manage_label': { zh: '管理', en: 'Manage' },

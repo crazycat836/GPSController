@@ -273,6 +273,14 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   // mid-mount disconnect).
   const clearDdiMounting = useCallback(() => setDdiMounting(false), [])
 
+  // Drop the staged destination + rendered route so stale setup doesn't
+  // leak across mode switches / route loads. Waypoints are handled by the
+  // caller (setMode clears them, loadRouteWaypoints replaces them).
+  const clearStagedRoute = useCallback(() => {
+    setDestination(null)
+    patchPrimaryRuntime({ routePath: [], progress: 0, eta: null })
+  }, [patchPrimaryRuntime])
+
   // Public mode setter: clears the destination marker + route path when the
   // user switches mode tabs. Internal handlers (teleport/navigate/loop/...)
   // still use _setMode directly so they can set destination in the same tick.
@@ -286,12 +294,22 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
       // setup doesn't leak across unrelated modes. (Callers that want to warn
       // the user about a non-empty discard do so before calling setMode.)
       if (isRouteSubMode(prev) && isRouteSubMode(next)) return next
-      setDestination(null)
+      clearStagedRoute()
       setWaypoints([])
-      patchPrimaryRuntime({ routePath: [], progress: 0, eta: null })
       return next
     })
-  }, [patchPrimaryRuntime])
+  }, [clearStagedRoute])
+
+  // Load a saved route into the Route (Loop) editor. Uses the raw mode
+  // setter (like the internal start-handlers): combining setMode with
+  // setWaypoints is ordering-sensitive (points staged before the mode
+  // switch get wiped by setMode's clear), so route-load gets one explicit
+  // action that can't be broken by call order.
+  const loadRouteWaypoints = useCallback((wps: LatLng[]) => {
+    _setMode(SimMode.Loop)
+    clearStagedRoute()
+    setWaypoints(wps)
+  }, [clearStagedRoute])
 
   const teleport = useCallback(async (lat: number, lng: number, autoJitter?: boolean) => {
     // Mode is owned by the user's explicit tab choice; the backend
@@ -629,6 +647,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     joystickStopAll,
     mode,
     setMode,
+    loadRouteWaypoints,
     moveMode,
     setMoveMode,
     status,

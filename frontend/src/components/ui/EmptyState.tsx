@@ -1,8 +1,14 @@
 import React from 'react'
+import { Loader2 } from 'lucide-react'
+import { ICON_SIZE } from '../../lib/icons'
+import { useT } from '../../i18n'
 
 interface EmptyStateProps {
   icon?: React.ReactNode
-  title: React.ReactNode
+  title?: React.ReactNode
+  /** Initial fetch still in flight — render the shared spinner + copy
+   *  instead of flashing the real "empty" state. */
+  loading?: boolean
   help?: React.ReactNode
   action?: React.ReactNode
   className?: string
@@ -16,7 +22,13 @@ export default function EmptyState({
   help,
   action,
   className,
+  loading,
 }: EmptyStateProps) {
+  const t = useT()
+  if (loading) {
+    icon = <Loader2 width={ICON_SIZE.lg} height={ICON_SIZE.lg} className="animate-spin" />
+    title = t('generic.loading')
+  }
   return (
     <div className={['empty-state', className].filter(Boolean).join(' ')}>
       {icon && <div className="empty-state-icon">{icon}</div>}

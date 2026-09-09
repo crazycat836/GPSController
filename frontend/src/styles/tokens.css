@@ -229,6 +229,11 @@
   --z-map-ui: 650;
   --z-drawer: 700;
   --z-overlay: 800;
+  /* Body-portaled popup menus (KebabMenu) must paint above the drawer
+     that hosts their trigger — at --z-dropdown (600) they open invisibly
+     BEHIND the Library drawer (700) — but below modals so an open
+     ConfirmDialog still covers them. */
+  --z-popover: 850;
   --z-modal: 900;
   --z-toast: 950;
 

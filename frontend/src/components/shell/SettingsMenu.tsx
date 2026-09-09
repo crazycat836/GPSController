@@ -24,12 +24,9 @@ import Toggle from '../ui/Toggle'
 import KebabMenu, { type KebabMenuItem } from '../ui/KebabMenu'
 import { AVATAR_PRESETS } from '../../lib/avatars'
 import pkg from '../../../package.json'
+import { FOCUSABLE_SELECTOR } from '../../hooks/useFocusTrap'
 
 const APP_VERSION = pkg.version
-
-// Matches the selector in useFocusTrap — used to move initial focus inside.
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 const LAYER_OPTIONS = [
   { key: 'osm', label: 'OSM' },

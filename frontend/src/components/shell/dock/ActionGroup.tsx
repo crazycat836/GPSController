@@ -2,16 +2,18 @@ import React from 'react'
 import { Play, Square, Pause, ArrowRight } from 'lucide-react'
 import { useSimActions, useSimState } from '../../../contexts/SimContext'
 import { useSimDerived } from '../../../contexts/SimDerivedContext'
+import { useConnectionHealth } from '../../../contexts/ConnectionHealthContext'
 import { SimMode } from '../../../hooks/useSimulation'
 import { useT } from '../../../i18n'
+import type { StringKey } from '../../../i18n/strings'
 
 const MIN_WAYPOINTS_FOR_PATH = 2
 
 // Start / Stop / Pause / Resume / Move action cluster on the right of
 // the dock. Layout flips with mode + run-state:
-//   * Teleport — single "Move" (disabled without dest).
+//   * Teleport — single "Move" (disabled without dest, or no device).
 //   * Running  — Pause/Resume + Stop.
-//   * Idle     — single "Start" (disabled until setup is valid).
+//   * Idle     — single "Start" (disabled until setup is valid, or no device).
 export default function ActionGroup({ fullWidth }: { fullWidth?: boolean } = {}) {
   const t = useT()
   const {
@@ -19,14 +21,17 @@ export default function ActionGroup({ fullWidth }: { fullWidth?: boolean } = {})
   } = useSimActions()
   const { mode, waypoints } = useSimState()
   const { isRunning, isPaused, destPos } = useSimDerived()
+  const { canOperate } = useConnectionHealth()
   const waypointCount = waypoints.length
+  const reason = blockReason(mode, destPos, waypointCount, canOperate)
 
   if (mode === SimMode.Teleport) {
     return (
       <div className={fullWidth ? 'flex flex-col gap-1.5' : 'flex gap-1.5'}>
         <ActionBtn
           tone="accent"
-          disabled={!destPos}
+          disabled={reason != null}
+          title={reason ? t(reason) : undefined}
           onClick={() => { if (destPos) handleTeleport(destPos.lat, destPos.lng) }}
           fullWidth={fullWidth}
         >
@@ -59,11 +64,16 @@ export default function ActionGroup({ fullWidth }: { fullWidth?: boolean } = {})
     )
   }
 
-  // Idle — Start (disabled until setup is valid).
-  const disabled = isStartDisabled(mode, destPos, waypointCount)
+  // Idle — Start (disabled until setup is valid, or no device).
   return (
     <div className={fullWidth ? 'flex flex-col gap-1.5' : 'flex gap-1.5'}>
-      <ActionBtn tone="accent" disabled={disabled} onClick={handleStart} fullWidth={fullWidth}>
+      <ActionBtn
+        tone="accent"
+        disabled={reason != null}
+        title={reason ? t(reason) : undefined}
+        onClick={handleStart}
+        fullWidth={fullWidth}
+      >
         <Play className="w-3 h-3" fill="currentColor" />
         {t('generic.start')}
       </ActionBtn>
@@ -71,27 +81,34 @@ export default function ActionGroup({ fullWidth }: { fullWidth?: boolean } = {})
   )
 }
 
-function isStartDisabled(
+// Most-urgent-first: no device beats an incomplete setup, since fixing the
+// setup wouldn't help until a device is connected anyway.
+function blockReason(
   mode: SimMode,
   destPos: { lat: number; lng: number } | null,
   waypointCount: number,
-): boolean {
-  if (mode === SimMode.Navigate) return !destPos
-  if (mode === SimMode.Loop || mode === SimMode.MultiStop) {
-    return waypointCount < MIN_WAYPOINTS_FOR_PATH
+  canOperate: boolean,
+): StringKey | null {
+  if (!canOperate) return 'action.disabled_no_device'
+  if (mode === SimMode.Navigate || mode === SimMode.Teleport) {
+    return destPos ? null : 'action.disabled_no_destination'
   }
-  return false
+  if (mode === SimMode.Loop || mode === SimMode.MultiStop) {
+    return waypointCount < MIN_WAYPOINTS_FOR_PATH ? 'action.disabled_min_waypoints' : null
+  }
+  return null
 }
 
 interface ActionBtnProps {
   tone: 'accent' | 'danger' | 'ghost'
   onClick: () => void
   disabled?: boolean
+  title?: string
   fullWidth?: boolean
   children: React.ReactNode
 }
 
-function ActionBtn({ tone, onClick, disabled, fullWidth, children }: ActionBtnProps) {
+function ActionBtn({ tone, onClick, disabled, title, fullWidth, children }: ActionBtnProps) {
   const palette = tone === 'danger'
     ? { bg: 'var(--color-danger-dim)', border: '1px solid rgba(255,71,87,0.35)', color: 'var(--color-danger-text)', hover: 'rgba(255,71,87,0.22)' }
     : tone === 'ghost'
@@ -106,6 +123,7 @@ function ActionBtn({ tone, onClick, disabled, fullWidth, children }: ActionBtnPr
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={[
         'dock-action-btn',
         fullWidth ? 'w-full' : '',

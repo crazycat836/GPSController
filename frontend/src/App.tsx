@@ -75,6 +75,13 @@ const DEVICE_LOST_TOAST_KEYS: Record<DeviceLostCause, StringKey> = {
 const DDI_TAKING_LONG_MS = 20_000
 const DDI_SAFETY_TIMEOUT_MS = 60_000
 
+// device_error events carrying a stable `code` (backend exceptions that
+// expose `.code`, forwarded by api/location/_helpers.py) get a specific
+// toast; `{msg}` receives the backend's detail (e.g. the failing leg).
+const DEVICE_ERROR_CODE_TOASTS: Record<string, StringKey> = {
+  route_unavailable: 'toast.route_unavailable',
+}
+
 const SIM_CRASH_STAGE_PREFIX = 'simulation:'
 const SIM_CRASH_MODE_KEYS: Record<string, StringKey> = {
   navigate: 'mode.navigate',
@@ -266,6 +273,11 @@ function AppShell() {
     if (!le) return
     if (le.ts <= prevLastDeviceErrorTs.current) return
     prevLastDeviceErrorTs.current = le.ts
+    const codedKey = le.code ? DEVICE_ERROR_CODE_TOASTS[le.code] : undefined
+    if (codedKey) {
+      toast.showToast(t(codedKey, { msg: le.error }), 6000)
+      return
+    }
     if (le.stage.startsWith(SIM_CRASH_STAGE_PREFIX)) {
       // Movement task crashed mid-run — the engine already dropped to
       // idle; explain why instead of showing the generic setup-failure copy.
@@ -402,7 +414,7 @@ function AppShell() {
           onNavigate={simActions.handleNavigate}
           onAddBookmark={bm.handleAddBookmark}
           onAddWaypoint={simActions.handleAddWaypoint}
-          showWaypointOption={sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop || sim.mode === SimMode.Navigate}
+          showWaypointOption={sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop}
           onSaveRoute={() => setSaveRouteOpen(true)}
           showSaveRouteOption={sim.waypoints.length > 0}
           deviceConnected={device.connectedDevice !== null}

@@ -212,18 +212,20 @@ class MultiStopNavigator:
         """
         engine = self.engine
         all_wp_tuples = [(wp.lat, wp.lng) for wp in waypoints]
+        # Planning failures (RouteUnavailableError) propagate: if the full
+        # route can't be planned the legs will fail the same way, so abort
+        # the start instead of limping. Only the preview broadcast is
+        # best-effort.
+        full_route = await engine.route_service.get_multi_route(
+            all_wp_tuples, profile=osrm_profile, force_straight=straight_line,
+        )
         try:
-            full_route = await engine.route_service.get_multi_route(
-                all_wp_tuples, profile=osrm_profile,
-                force_straight=straight_line,
-            )
             await engine._emit("route_path", {
                 "coords": [{"lat": pt[0], "lng": pt[1]} for pt in full_route["coords"]],
             })
-            return float(full_route.get("distance") or 0.0)
         except Exception:
-            logger.warning("Failed to pre-calculate full multi-stop route for display")
-            return 0.0
+            logger.warning("Failed to broadcast full multi-stop route preview")
+        return float(full_route.get("distance") or 0.0)
 
     async def _navigate_to_first_waypoint(
         self,

@@ -51,6 +51,33 @@ def test_crashed_movement_task_broadcasts_device_error(monkeypatch):
     })
 
 
+def test_route_unavailable_crash_carries_error_code(monkeypatch):
+    """RouteUnavailableError aborts tag the broadcast with a stable code so
+    the frontend can show a route-planning-specific toast instead of the
+    generic simulation-crashed copy."""
+    from services.route_service import RouteUnavailableError
+
+    bcast = AsyncMock()
+    monkeypatch.setattr(helpers, "broadcast", bcast)
+
+    async def scenario():
+        async def boom():
+            raise RouteUnavailableError("No road route for leg 2 (waypoint 2 → 3)")
+
+        task = helpers.spawn(boom(), label="loop", udid="udid-1")
+        await asyncio.gather(task, return_exceptions=True)
+        await _drain_followups()
+
+    asyncio.run(scenario())
+
+    bcast.assert_awaited_once_with("device_error", {
+        "udid": "udid-1",
+        "stage": "simulation:loop",
+        "error": "No road route for leg 2 (waypoint 2 → 3)",
+        "code": "route_unavailable",
+    })
+
+
 def test_crash_without_label_or_udid_still_broadcasts(monkeypatch):
     bcast = AsyncMock()
     monkeypatch.setattr(helpers, "broadcast", bcast)

@@ -28,6 +28,29 @@ _PROFILE_MAP = {
 _TIMEOUT = httpx.Timeout(8.0, connect=4.0)
 
 
+class RouteUnavailableError(RuntimeError):
+    """OSRM could not produce a road route.
+
+    Raised after transport retries and (for multi-via requests) the
+    per-leg fallback are exhausted. Callers abort the run and surface
+    the message — routes must never silently degrade to straight lines;
+    only the user's explicit ``force_straight`` toggle does that.
+
+    ``code`` is the stable machine-readable tag the API layer forwards to
+    the frontend (mirrors ``api._errors.ErrorCode.ROUTE_UNAVAILABLE``;
+    kept as a plain string so services stay independent of the API layer).
+    """
+
+    code = "route_unavailable"
+
+
+class _OsrmRejected(Exception):
+    """OSRM was reachable but refused this specific request (HTTP 4xx or
+    a logical error such as ``NoRoute``/``NoSegment`` in a 200 body).
+    Internal signal — multi-via callers retry leg-by-leg before giving up.
+    """
+
+
 # Lifespan-scoped HTTP client. Reusing the connection pool avoids the
 # TCP+TLS handshake on every OSRM call — multi-stop with 10+ legs would
 # otherwise pay it once per leg. Closed on FastAPI shutdown.
@@ -77,6 +100,8 @@ class RouteService:
 
     _REGION_TTL_SECONDS = 600.0  # re-probe a region every 10 minutes
     _PROBE_TIMEOUT = httpx.Timeout(2.5, connect=2.0)
+    _TRANSPORT_RETRIES = 1  # extra attempts after a transport failure
+    _RETRY_DELAY_S = 0.5
 
     def __init__(self) -> None:
         # Per-region OSRM coverage cache. Keyed by 1°×1° grid cell (≈110 km
@@ -181,53 +206,138 @@ class RouteService:
         if osrm_profile is None:
             raise ValueError(f"Unknown profile: {profile!r}")
 
-        # OSRM coordinate pairs are lon,lat (not lat,lon)
-        coords_str = ";".join(
-            f"{lng},{lat}" for lat, lng in waypoints
-        )
+        try:
+            return await self._request_route(waypoints, osrm_profile)
+        except _OsrmRejected as e:
+            if len(waypoints) == 2:
+                raise RouteUnavailableError(
+                    f"No road route between the two points ({e})"
+                ) from e
+            # A multi-via request can be refused as a whole while every
+            # individual leg is routable — retry leg-by-leg and stitch.
+            logger.info(
+                "Multi-via OSRM request rejected (%s); retrying leg-by-leg", e,
+            )
+            return await self._fetch_route_per_leg(waypoints, osrm_profile)
 
+    async def _request_route(
+        self,
+        waypoints: list[tuple[float, float]],
+        osrm_profile: str,
+    ) -> dict:
+        """Single OSRM request with transport retries.
+
+        Raises :class:`_OsrmRejected` when OSRM refuses the request
+        (HTTP 4xx or a non-``Ok`` body) and :class:`RouteUnavailableError`
+        when OSRM is unreachable (transport failure / 5xx after retries,
+        which also marks the region down, or a region already marked down).
+        """
+        # Per-region reachability gate: cache OSRM availability by 1°x1°
+        # cell keyed off the first waypoint. Only TRANSPORT failures mark a
+        # region down (a rejected request says nothing about reachability);
+        # while down, fail fast instead of hammering a dead endpoint.
+        key = self._region_key(*waypoints[0])
+        cached = await self._region_state(key)
+        if cached == "down":
+            raise RouteUnavailableError(
+                "Route planning service unreachable; retrying in a few minutes"
+            )
+        timeout = _TIMEOUT if cached == "ok" else self._PROBE_TIMEOUT
+
+        # OSRM coordinate pairs are lon,lat (not lat,lon).
+        coords_str = ";".join(f"{lng},{lat}" for lat, lng in waypoints)
+
+        # continue_straight=false lets OSRM make a U-turn at intermediate
+        # waypoints. The default (continue_straight at vias) makes the demo
+        # server return NoRoute for the WHOLE request whenever a route
+        # doubles back through a waypoint — common in hand-tapped
+        # sightseeing routes.
         url = (
             f"{OSRM_BASE_URL}/route/v1/{osrm_profile}/{coords_str}"
             "?overview=full&geometries=geojson&steps=true"
-            "&annotations=duration,distance"
+            "&annotations=duration,distance&continue_straight=false"
         )
-
         logger.debug("OSRM request: %s", url)
 
-        # Per-region coverage gate: cache OSRM availability by 1°x1° cell
-        # keyed off the first waypoint. If we previously confirmed this
-        # region is unreachable (no map data / blocked) within TTL, skip
-        # OSRM entirely and serve a straight line instantly. New regions
-        # get a short-timeout probe; on success we use the existing data
-        # and mark 'ok'; on failure we mark 'down' and fall back.
-        first_lat, first_lng = waypoints[0]
-        key = self._region_key(first_lat, first_lng)
-        cached = await self._region_state(key)
-        if cached == "down":
-            return _straight_line_fallback(waypoints)
+        last_exc: Exception | None = None
+        for attempt in range(1 + self._TRANSPORT_RETRIES):
+            try:
+                client = await _get_client()
+                resp = await client.get(url, timeout=timeout)
+                if resp.status_code >= 500:
+                    # Server-side trouble: same treatment as unreachable.
+                    raise httpx.HTTPStatusError(
+                        f"HTTP {resp.status_code}", request=resp.request, response=resp,
+                    )
+            except httpx.HTTPError as e:
+                last_exc = e
+                if attempt < self._TRANSPORT_RETRIES:
+                    await asyncio.sleep(self._RETRY_DELAY_S)
+                continue
 
-        timeout = _TIMEOUT if cached == "ok" else self._PROBE_TIMEOUT
-
-        try:
-            client = await _get_client()
-            resp = await client.get(url, timeout=timeout)
-            resp.raise_for_status()
-            data = resp.json()
-            if data.get("code") != "Ok":
-                msg = data.get("message", "Unknown OSRM error")
-                raise RuntimeError(f"OSRM error: {msg}")
-        except (httpx.HTTPError, httpx.TimeoutException, RuntimeError) as e:
-            await self._mark_region(key, "down")
-            logger.warning(
-                "OSRM failed for region %s (%s); marking down, using straight-line",
-                key, type(e).__name__,
+            # OSRM answers 4xx with the same {code, message} body shape as
+            # a 200 NoRoute, so one parse covers both rejection paths.
+            try:
+                data = resp.json()
+            except ValueError:
+                data = {}
+            if resp.status_code < 400 and data.get("code") == "Ok":
+                if cached != "ok":
+                    await self._mark_region(key, "ok")
+                    logger.info("OSRM region %s confirmed ok", key)
+                return self._parse_route(data)
+            raise _OsrmRejected(
+                data.get("message") or data.get("code") or f"HTTP {resp.status_code}"
             )
-            return _straight_line_fallback(waypoints)
-        else:
-            if cached != "ok":
-                await self._mark_region(key, "ok")
-                logger.info("OSRM region %s confirmed ok", key)
 
+        await self._mark_region(key, "down")
+        logger.warning(
+            "OSRM unreachable for region %s (%s)",
+            key, type(last_exc).__name__ if last_exc else "unknown",
+        )
+        raise RouteUnavailableError(
+            "Route planning service unreachable"
+        ) from last_exc
+
+    async def _fetch_route_per_leg(
+        self,
+        waypoints: list[tuple[float, float]],
+        osrm_profile: str,
+    ) -> dict:
+        """Fetch each consecutive waypoint pair separately and stitch.
+
+        Raises :class:`RouteUnavailableError` naming the first leg OSRM
+        refuses, so the user knows which segment of the route is broken.
+        """
+        coords: list[list[float]] = []
+        total_duration = 0.0
+        total_distance = 0.0
+        leg_durations: list[float] = []
+        for i in range(len(waypoints) - 1):
+            try:
+                leg = await self._request_route(
+                    [waypoints[i], waypoints[i + 1]], osrm_profile,
+                )
+            except _OsrmRejected as e:
+                raise RouteUnavailableError(
+                    f"No road route for leg {i + 1} "
+                    f"(waypoint {i + 1} → {i + 2}: {e})"
+                ) from e
+            # The first point of each subsequent leg duplicates the
+            # previous leg's snapped endpoint — drop it when stitching.
+            coords.extend(leg["coords"] if not coords else leg["coords"][1:])
+            total_duration += leg["duration"]
+            total_distance += leg["distance"]
+            leg_durations.append(leg["duration"])
+        return {
+            "coords": coords,
+            "duration": total_duration,
+            "distance": total_distance,
+            "leg_durations": leg_durations,
+        }
+
+    @staticmethod
+    def _parse_route(data: dict) -> dict:
         route = data["routes"][0]
         geometry = route["geometry"]  # GeoJSON LineString
 

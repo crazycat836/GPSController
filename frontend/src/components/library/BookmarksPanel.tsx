@@ -53,7 +53,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   const t = useT()
   const bm = useBookmarkContext()
   const { showToast } = useToastContext()
-  const { bookmarks, places, tags } = bm
+  const { bookmarks, places, tags, loading } = bm
 
   const [search, setSearch] = useState('')
   const [activePlaceId, setActivePlaceId] = useState<string>(ALL_ID)
@@ -67,6 +67,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
   const [placeMgrOpen, setPlaceMgrOpen] = useState(false)
   const [tagMgrOpen, setTagMgrOpen] = useState(false)
   const [confirm, setConfirm] = useState<null | { kind: 'single'; id: string; name: string } | { kind: 'batch'; ids: string[] }>(null)
+  const [confirmBusy, setConfirmBusy] = useState(false)
   const [inlineEditId, setInlineEditId] = useState<string | null>(null)
   const [inlineEditName, setInlineEditName] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -250,16 +251,26 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
     setConfirm({ kind: 'batch', ids: Array.from(selectedIds) })
   }, [selectedIds])
 
+  // Failure keeps the dialog open (so the user can retry or cancel) and
+  // toasts, mirroring RouteLibraryContext.handleRouteDelete.
   const runConfirm = useCallback(async () => {
     if (!confirm) return
-    if (confirm.kind === 'single') {
-      await bm.deleteBookmark(confirm.id)
-    } else {
-      await bm.deleteBookmarksBatch(confirm.ids)
-      exitSelection()
+    setConfirmBusy(true)
+    try {
+      if (confirm.kind === 'single') {
+        await bm.deleteBookmark(confirm.id)
+      } else {
+        await bm.deleteBookmarksBatch(confirm.ids)
+        exitSelection()
+      }
+      setConfirm(null)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('toast.bookmark_delete_failed')
+      showToast(message)
+    } finally {
+      setConfirmBusy(false)
     }
-    setConfirm(null)
-  }, [confirm, bm, exitSelection])
+  }, [confirm, bm, exitSelection, showToast, t])
 
   const commitInlineRename = useCallback((id: string) => {
     const current = bookmarks.find((b) => b.id === id)
@@ -442,7 +453,10 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         headerMenuItems={headerMenuItems}
       />
 
-      {bookmarks.length === 0 ? (
+      {bookmarks.length === 0 && loading ? (
+        // `loading` flips on every refresh here, so keep the length guard.
+        <EmptyState loading />
+      ) : bookmarks.length === 0 ? (
         <EmptyState
           icon={<BookmarkIcon width={ICON_SIZE.lg} height={ICON_SIZE.lg} />}
           title={t('bm.empty')}
@@ -566,6 +580,7 @@ export default function BookmarksPanel({ onBookmarkClick, currentPosition }: Boo
         confirmLabel={t('generic.delete')}
         cancelLabel={t('generic.cancel')}
         tone="danger"
+        busy={confirmBusy}
         onConfirm={runConfirm}
         onCancel={() => setConfirm(null)}
       />

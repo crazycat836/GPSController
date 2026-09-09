@@ -93,12 +93,16 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
   }, [doSearch])
 
   const handleSelect = useCallback((lat: number, lng: number) => {
+    // Result buttons are disabled without a device, but keyboard Enter
+    // reaches here directly — gate it the same way so the connection
+    // requirement can't be bypassed.
+    if (!deviceConnected) return
     onTeleport(lat, lng)
     setQuery('')
     setResults([])
     setOpen(false)
     inputRef.current?.blur()
-  }, [onTeleport])
+  }, [onTeleport, deviceConnected])
 
   const handleSubmit = useCallback(() => {
     if (validCoord) {
@@ -210,8 +214,10 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
               onMouseEnter={() => setActiveIndex(0)}
               onClick={() => handleSelect(validCoord.lat, validCoord.lng)}
               disabled={!deviceConnected}
+              title={!deviceConnected ? t('action.disabled_no_device') : undefined}
               className={[
                 'w-full flex items-center gap-3 px-4 py-3 text-left transition-colors cursor-pointer',
+                'disabled:opacity-40 disabled:cursor-not-allowed',
                 activeIndex === 0 ? 'bg-[var(--color-surface-hover)]' : 'hover:bg-[var(--color-surface-hover)]',
               ].join(' ')}
             >
@@ -245,8 +251,11 @@ export default function SearchBar({ onTeleport, deviceConnected }: SearchBarProp
                 aria-selected={activeIndex === idx}
                 onMouseEnter={() => setActiveIndex(idx)}
                 onClick={() => handleSelect(r.lat, r.lng)}
+                disabled={!deviceConnected}
+                title={!deviceConnected ? t('action.disabled_no_device') : undefined}
                 className={[
                   'w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer',
+                  'disabled:opacity-40 disabled:cursor-not-allowed',
                   activeIndex === idx ? 'bg-[var(--color-surface-hover)]' : 'hover:bg-[var(--color-surface-hover)]',
                 ].join(' ')}
               >

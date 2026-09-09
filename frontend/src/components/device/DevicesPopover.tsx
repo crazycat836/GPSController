@@ -6,10 +6,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap'
 import DeviceListView from './DeviceListView'
 import DeviceManageView from './DeviceManageView'
 import DeviceAddView from './DeviceAddView'
-
-// Matches the selector in useFocusTrap — used to move initial focus inside.
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+import { FOCUSABLE_SELECTOR } from '../../hooks/useFocusTrap'
 
 interface DevicesPopoverProps {
   // Null hides the popover. A DOMRect positions it beneath the trigger

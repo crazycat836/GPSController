@@ -104,7 +104,7 @@ function BookmarkRowImpl({
   )
 
   const subtitleNode = (
-    <span className="inline-flex items-center gap-1.5 min-w-0 flex-wrap">
+    <span className="inline-flex items-center gap-1.5 min-w-0">
       {place && (
         <span
           className="inline-block uppercase"

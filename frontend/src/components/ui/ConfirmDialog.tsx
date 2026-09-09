@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useId, useRef } from 'react'
+import React, { useCallback, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import { useInitialFocus } from '../../hooks/useInitialFocus'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -32,16 +33,15 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   const descId = useId()
   const confirmRef = useRef<HTMLButtonElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
 
   useModalDismiss({ open, onDismiss: onCancel, busy })
   useFocusTrap(dialogRef, open)
 
-  useEffect(() => {
-    if (!open) return
-    const t = setTimeout(() => confirmRef.current?.focus(), 50)
-    return () => clearTimeout(t)
-  }, [open])
+  // Danger dialogs focus Cancel so a reflexive Enter can't trigger the
+  // destructive action; the default tone keeps Confirm as the target.
+  useInitialFocus(open, dialogRef, tone === 'danger' ? cancelRef : confirmRef)
 
   const handleConfirm = useCallback(() => {
     void onConfirm()
@@ -70,6 +70,7 @@ export default function ConfirmDialog({
         )}
         <div className="modal-actions">
           <button
+            ref={cancelRef}
             type="button"
             className="action-btn"
             onClick={onCancel}

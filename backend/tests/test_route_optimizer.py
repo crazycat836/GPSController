@@ -185,3 +185,77 @@ def test_optimize_order_prefers_osrm_when_available():
     order, total = asyncio.run(_run())
     assert order == [0, 1, 2]
     assert total == 80.0  # 50 (0→1) + 30 (1→2)
+
+
+# ── 2-opt improvement + closed tours ─────────────────────────────────
+
+def test_two_opt_uncrosses_a_crossing_closed_tour():
+    """A closed tour visiting square corners in crossing order is fixed
+    by the 2-opt pass to the perimeter tour."""
+    from services.route_optimizer import _total_seconds, _two_opt
+
+    # Square corners: 0=(0,0) 1=(1,1) 2=(1,0) 3=(0,1) — unit distances on
+    # sides, sqrt(2) on diagonals.
+    s2 = 2 ** 0.5
+    matrix = [
+        [0.0, s2, 1.0, 1.0],
+        [s2, 0.0, 1.0, 1.0],
+        [1.0, 1.0, 0.0, s2],
+        [1.0, 1.0, s2, 0.0],
+    ]
+    crossing = [0, 1, 2, 3]  # 0→1 and 2→3 are both diagonals
+    order, total = _two_opt(matrix, crossing, closed=True)
+
+    assert order[0] == 0  # anchor untouched
+    assert total == pytest.approx(4.0)  # perimeter, no diagonals
+    assert total < _total_seconds(matrix, crossing, closed=True)
+
+
+def test_total_seconds_closed_adds_return_leg():
+    from services.route_optimizer import _total_seconds
+
+    matrix = [
+        [0.0, 1.0, 4.0],
+        [1.0, 0.0, 2.0],
+        [4.0, 2.0, 0.0],
+    ]
+    order = [0, 1, 2]
+    assert _total_seconds(matrix, order) == 3.0
+    assert _total_seconds(matrix, order, closed=True) == 7.0  # + 2→0
+
+
+def test_optimize_order_closed_total_includes_return_leg():
+    from services.route_optimizer import optimize_order
+
+    osrm_matrix = [
+        [0.0, 10.0, 20.0],
+        [10.0, 0.0, 15.0],
+        [20.0, 15.0, 0.0],
+    ]
+
+    async def _run(closed: bool):
+        with patch("services.route_optimizer._osrm_table", new_callable=AsyncMock) as mock_osrm:
+            mock_osrm.return_value = osrm_matrix
+            return await optimize_order(
+                [(0.0, 0.0), (0.0, 1.0), (0.0, 2.0)], profile="walking", closed=closed,
+            )
+
+    open_order, open_total = asyncio.run(_run(False))
+    closed_order, closed_total = asyncio.run(_run(True))
+    assert open_order[0] == 0 and closed_order[0] == 0
+    # The closed tour pays the leg back to the anchor.
+    assert closed_total > open_total
+
+
+def test_optimize_order_accepts_running_profile():
+    """`running` (a frontend MoveMode) must map to OSRM `foot` instead of
+    raising Unknown profile."""
+    from services.route_optimizer import optimize_order
+
+    async def _run():
+        with patch("services.route_optimizer._osrm_table", new_callable=AsyncMock) as mock_osrm:
+            mock_osrm.return_value = None
+            return await optimize_order([(0.0, 0.0), (0.0, 1.0)], profile="running")
+
+    order, _total = asyncio.run(_run())
+    assert order == [0, 1]

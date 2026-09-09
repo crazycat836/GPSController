@@ -180,7 +180,7 @@ export default function KebabMenu({
             position: 'fixed',
             left: pos?.left ?? -9999,
             top: pos?.top ?? -9999,
-            zIndex: 'var(--z-dropdown)',
+            zIndex: 'var(--z-popover)',
             borderRadius: 'var(--radius-md)',
             padding: '4px 0',
             minWidth: 180,

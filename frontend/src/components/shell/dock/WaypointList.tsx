@@ -1,18 +1,27 @@
 import React from 'react'
-import { Crosshair, MapPin, X, Star, Dices, Repeat, GripVertical } from 'lucide-react'
+import { Crosshair, MapPin, X, Star, Dices, Repeat, GripVertical, Wand2 } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { haversineM } from '../../../lib/geo'
 import { formatCoordCardinal, formatDistanceM } from '../../../lib/format'
 import { useDragReorder } from '../../../hooks/useDragReorder'
+import { MIN_WAYPOINTS_FOR_OPTIMIZE } from '../../../lib/constants'
 import { useT } from '../../../i18n'
 import ReorderableList from '../../ui/ReorderableList'
 import type { ChainPoint } from '../../WaypointChain'
+
+const FOOTER_BTN_CLASS =
+  'flex-1 h-8 rounded-lg inline-flex items-center justify-center gap-1.5 text-[12px] font-medium bg-white/[0.04] border border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-white/[0.08] hover:text-[var(--color-text-1)] transition-colors cursor-pointer'
 
 interface WaypointListProps {
   points: readonly ChainPoint[]
   loop?: boolean
   onRandom?: () => void
+  /** Reorder the staged points to minimise travel time (backend
+   *  /api/route/optimize). Rendered only with MIN_WAYPOINTS_FOR_OPTIMIZE+
+   *  points — with fewer
+   *  there is nothing to reorder. */
+  onOptimize?: () => void
   onRemove?: (id: string) => void
   onBookmark?: (id: string) => void
   /** Reorder the stops (index >= 1; the start stays fixed). Receives the new
@@ -25,10 +34,12 @@ export default function WaypointList({
   points,
   loop,
   onRandom,
+  onOptimize,
   onRemove,
   onBookmark,
   onReorder,
 }: WaypointListProps) {
+  const showOptimize = onOptimize != null && points.length >= MIN_WAYPOINTS_FOR_OPTIMIZE
   const t = useT()
   const start = points[0]
   const stops = points.slice(1)
@@ -115,16 +126,29 @@ export default function WaypointList({
         )}
       </div>
 
-      {onRandom && (
+      {(onRandom || showOptimize) && (
         <div className="flex gap-2 px-3.5 py-2.5 border-t border-[var(--color-border-subtle)] bg-white/[0.015]">
-          <button
-            type="button"
-            onClick={onRandom}
-            className="flex-1 h-8 rounded-lg inline-flex items-center justify-center gap-1.5 text-[12px] font-medium bg-white/[0.04] border border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-white/[0.08] hover:text-[var(--color-text-1)] transition-colors cursor-pointer"
-          >
-            <Dices className="w-[11px] h-[11px]" />
-            {t('chain.random_stop')}
-          </button>
+          {onRandom && (
+            <button
+              type="button"
+              onClick={onRandom}
+              className={FOOTER_BTN_CLASS}
+            >
+              <Dices className="w-[11px] h-[11px]" />
+              {t('chain.random_stop')}
+            </button>
+          )}
+          {showOptimize && (
+            <button
+              type="button"
+              onClick={onOptimize}
+              title={t('chain.optimize_hint')}
+              className={FOOTER_BTN_CLASS}
+            >
+              <Wand2 className="w-[11px] h-[11px]" />
+              {t('chain.optimize_order')}
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -52,7 +52,7 @@ function readDockCollapsed(): boolean {
 
 export default function BottomDock() {
   const t = useT()
-  const { handleRemoveWaypoint, handleGenerateRandomWaypoints, setWaypoints } = useSimActions()
+  const { handleRemoveWaypoint, handleGenerateRandomWaypoints, handleOptimizeWaypoints, setWaypoints } = useSimActions()
   const { mode, waypoints } = useSimState()
   const { currentPos, destPos } = useSimDerived()
   const [showRandomConfig, setShowRandomConfig] = useState(false)
@@ -104,7 +104,10 @@ export default function BottomDock() {
       className={[
         'glass-panel-strong',
         'fixed bottom-[84px] left-1/2 z-[var(--z-ui)]',
-        'w-[min(920px,calc(100vw-48px))]',
+        // Reserve room on the right for the floating MapControls column
+        // (right-3 margin + ~40px toolbar) so the two panels never overlap
+        // at the app's 900px minimum window width.
+        'w-[min(920px,calc(100vw-104px))]',
         'flex flex-col',
         'overflow-hidden',
         'anim-fade-slide-up-centered',
@@ -176,6 +179,7 @@ export default function BottomDock() {
                 loop={ctx.loop}
                 onRemoveWaypoint={handleRemoveWaypoint}
                 onGenerateRandom={() => setShowRandomConfig(true)}
+                onOptimize={handleOptimizeWaypoints}
                 onReorder={handleReorderStops}
               />
             </div>
@@ -210,10 +214,11 @@ interface LeftColumnProps {
   loop: boolean
   onRemoveWaypoint: (index: number) => void
   onGenerateRandom: () => void
+  onOptimize: () => void
   onReorder: (orderedStopIds: string[]) => void
 }
 
-function LeftColumn({ mode, chainPoints, loop, onRemoveWaypoint, onGenerateRandom, onReorder }: LeftColumnProps) {
+function LeftColumn({ mode, chainPoints, loop, onRemoveWaypoint, onGenerateRandom, onOptimize, onReorder }: LeftColumnProps) {
   switch (mode) {
     case SimMode.Teleport:
     case SimMode.Navigate:
@@ -229,6 +234,7 @@ function LeftColumn({ mode, chainPoints, loop, onRemoveWaypoint, onGenerateRando
             if (!Number.isNaN(i)) onRemoveWaypoint(i)
           }}
           onRandom={onGenerateRandom}
+          onOptimize={onOptimize}
           onReorder={onReorder}
         />
       )

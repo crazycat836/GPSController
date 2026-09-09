@@ -36,6 +36,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from api._errors import ErrorCode
+from services.route_service import RouteUnavailableError
 
 logger = logging.getLogger("gpscontroller")
 
@@ -101,6 +102,15 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
         error = {"code": f"http_{exc.status_code}", "message": message}
     # Use plain JSONResponse so we don't recurse through the auto-wrap.
     return JSONResponse(_error_envelope(error), status_code=exc.status_code, headers=exc.headers)
+
+
+async def route_unavailable_handler(
+    _request: Request, exc: RouteUnavailableError
+) -> JSONResponse:
+    """Map a route-planning failure to 503 ``route_unavailable`` once, for
+    every endpoint that calls into RouteService (plan / optimize / …)."""
+    error = {"code": ErrorCode.ROUTE_UNAVAILABLE.value, "message": str(exc)}
+    return JSONResponse(_error_envelope(error), status_code=503)
 
 
 async def validation_exception_handler(

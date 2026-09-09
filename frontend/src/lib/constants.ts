@@ -41,6 +41,8 @@ export const DEFAULT_TUNNEL_PORT = 49152
 /** Simulation defaults. */
 export const DEFAULT_PAUSE = { enabled: true, min: 5, max: 20 } as const
 export const DEFAULT_RANDOM_WALK_RADIUS = 500
+// Fewer staged points than this and there is no order to optimise.
+export const MIN_WAYPOINTS_FOR_OPTIMIZE = 3
 export const DEFAULT_WP_GEN_RADIUS = 300
 export const DEFAULT_WP_GEN_COUNT = 5
 

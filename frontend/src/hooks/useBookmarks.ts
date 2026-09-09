@@ -11,7 +11,9 @@ export function useBookmarks() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [places, setPlaces] = useState<BookmarkPlace[]>([])
   const [tags, setTags] = useState<BookmarkTag[]>([])
-  const [loading, setLoading] = useState(false)
+  // Starts true so the pre-first-fetch render reads as "loading", not
+  // "loaded and empty" — the mount effect kicks off refresh() right away.
+  const [loading, setLoading] = useState(true)
   const mountedRef = useRef(true)
 
   const refresh = useCallback(async () => {

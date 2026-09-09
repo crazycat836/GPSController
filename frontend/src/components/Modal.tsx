@@ -1,6 +1,7 @@
 import { useCallback, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useInitialFocus } from '../hooks/useInitialFocus'
 import { useModalDismiss } from '../hooks/useModalDismiss'
 
 export type ModalSize = 'sm' | 'md' | 'lg'
@@ -87,6 +88,7 @@ export default function Modal({
     busy: busy || !closeOnEsc,
   })
   useFocusTrap(dialogRef, open && focusTrap)
+  useInitialFocus(open, dialogRef)
 
   if (!open) return null
 
@@ -108,6 +110,7 @@ export default function Modal({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
         aria-label={resolvedAriaLabel}
         aria-labelledby={ariaLabelledBy}
         className={mergedDialogClass}

@@ -3,6 +3,7 @@ import { GripVertical } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { ICON_SIZE } from '../../lib/icons'
+import { useT } from '../../i18n'
 
 interface SortableHandleRowProps {
   id: string
@@ -15,6 +16,7 @@ interface SortableHandleRowProps {
  * row content beside it. Drag activates only from the handle.
  */
 export default function SortableHandleRow({ id, children }: SortableHandleRowProps) {
+  const t = useT()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -26,7 +28,7 @@ export default function SortableHandleRow({ id, children }: SortableHandleRowPro
       <button
         type="button"
         className="cursor-grab active:cursor-grabbing px-1 text-[var(--color-text-3)] hover:text-[var(--color-text-1)] focus:outline-none"
-        aria-label="drag handle"
+        aria-label={t('generic.drag_handle')}
         {...attributes}
         {...listeners}
       >

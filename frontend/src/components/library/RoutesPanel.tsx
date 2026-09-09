@@ -4,7 +4,7 @@ import {
   Folder, FolderInput, GripVertical, ListTree, X,
 } from 'lucide-react'
 import { useRouteLibrary } from '../../contexts/RouteLibraryContext'
-import { MoveMode, useSimActions, useSimState } from '../../contexts/SimContext'
+import { useSimActions, useSimState } from '../../contexts/SimContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
 import { ICON_SIZE } from '../../lib/icons'
@@ -37,12 +37,6 @@ const DEFAULT_CATEGORY_COLOR = '#6c8cff'
 
 const getRouteId = (r: SavedRoute) => r.id
 
-// Valid saved-route move profiles — guards the restore on load so a malformed
-// stored profile can't be pushed into setMoveMode.
-const VALID_MOVE_MODES: ReadonlySet<string> = new Set([
-  MoveMode.Walking, MoveMode.Running, MoveMode.Driving,
-])
-
 export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   const t = useT()
   const routeLib = useRouteLibrary()
@@ -50,7 +44,7 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
   // (never on position ticks), so callbacks below can depend on them
   // directly; `setWaypoints` is a stable action.
   const { waypoints: simWaypoints, moveMode: simMoveMode } = useSimState()
-  const { setWaypoints, setMoveMode } = useSimActions()
+  const { loadRouteWaypoints } = useSimActions()
   const { showToast } = useToastContext()
 
   const savedRoutes = routeLib.savedRoutes
@@ -208,17 +202,17 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
     if (selectionMode || reorderMode) return
     const loaded = routeLib.handleRouteLoad(id)
     if (loaded) {
-      setWaypoints(loaded.waypoints)
-      // Restore the move profile the route was saved with so its speed
-      // replays correctly (was silently dropped).
-      if (loaded.profile && VALID_MOVE_MODES.has(loaded.profile)) {
-        setMoveMode(loaded.profile as MoveMode)
-      }
+      // Stage into the Route (Loop) editor: switching the mode is what
+      // makes the loaded route immediately startable — the app previously
+      // stayed in Teleport with the waypoints invisible. The saved move
+      // profile is deliberately NOT restored: the user's current speed
+      // selection wins over whatever mode the route was saved under.
+      loadRouteWaypoints(loaded.waypoints)
       // Load had no success feedback (every other route action toasts).
       showToast(t('toast.route_loaded', { name: loaded.name }))
       onRouteLoaded()
     }
-  }, [routeLib, setWaypoints, setMoveMode, showToast, t, onRouteLoaded, selectionMode, reorderMode])
+  }, [routeLib, loadRouteWaypoints, showToast, t, onRouteLoaded, selectionMode, reorderMode])
 
   const commitRename = useCallback((routeId: string, currentName: string) => {
     commitTrimmedRename(editingRouteName, currentName, (next) =>
@@ -451,7 +445,9 @@ export default function RoutesPanel({ onRouteLoaded }: RoutesPanelProps) {
       )}
 
       {/* Route list */}
-      {sorted.length === 0 ? (
+      {routeLib.routesLoading ? (
+        <EmptyState loading />
+      ) : sorted.length === 0 ? (
         <EmptyState
           icon={<RouteIcon width={ICON_SIZE.lg} height={ICON_SIZE.lg} />}
           title={t('panel.route_empty')}

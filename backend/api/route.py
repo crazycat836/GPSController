@@ -58,8 +58,11 @@ _GPX_ALLOWED_CONTENT_TYPES = frozenset({
 @router.post("/plan")
 async def plan_route(req: RoutePlanRequest):
     route_service = get_route_service()
-    result = await route_service.get_route(req.start.lat, req.start.lng, req.end.lat, req.end.lng, req.profile)
-    return result
+    # RouteUnavailableError → 503 is mapped once by the app-level handler
+    # registered in main.py, so every route-service caller gets it for free.
+    return await route_service.get_route(
+        req.start.lat, req.start.lng, req.end.lat, req.end.lng, req.profile,
+    )
 
 
 class _OptimizeOrderRequest(BaseModel):
@@ -69,6 +72,9 @@ class _OptimizeOrderRequest(BaseModel):
     :mod:`backend.services.route_optimizer` for the solver."""
     waypoints: list[Coordinate] = Field(min_length=2, max_length=64)
     profile: str = Field(default="walking", max_length=32)
+    # True optimises a round trip back to the first waypoint (Loop mode);
+    # False (default) optimises an open path (multi-stop).
+    closed: bool = False
 
 
 class _OptimizeOrderResponse(BaseModel):
@@ -84,7 +90,7 @@ async def optimize_route_order(req: _OptimizeOrderRequest):
     replaces its local waypoints array with ``response.waypoints``."""
     points: list[tuple[float, float]] = [(c.lat, c.lng) for c in req.waypoints]
     try:
-        order, total = await optimize_order(points, req.profile)
+        order, total = await optimize_order(points, req.profile, closed=req.closed)
     except ValueError as exc:
         raise http_err(400, ErrorCode.VALIDATION_FAILED, str(exc))
     reordered = [req.waypoints[i] for i in order]

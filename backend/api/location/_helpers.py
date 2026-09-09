@@ -150,12 +150,20 @@ async def _broadcast_task_crash(
     UI only sees the engine's bare ``state_change: idle`` and the crash
     is silent.
     """
+    payload = {
+        "udid": udid or "",
+        "stage": f"simulation:{label or 'movement'}",
+        "error": str(exc),
+    }
+    # Coded aborts (e.g. RouteUnavailableError.code) let the frontend pick
+    # a specific toast — with the failing-leg detail — instead of the
+    # generic simulation-crashed copy. Any exception exposing ``code``
+    # flows through without this helper learning about it.
+    code = getattr(exc, "code", None)
+    if code:
+        payload["code"] = code
     try:
-        await broadcast("device_error", {
-            "udid": udid or "",
-            "stage": f"simulation:{label or 'movement'}",
-            "error": str(exc),
-        })
+        await broadcast("device_error", payload)
     except Exception:
         logger.exception("simulation-crash broadcast failed (mode=%s)", label)
 

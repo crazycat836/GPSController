@@ -83,7 +83,7 @@ export default function RouteCategoryManagerDialog(props: RouteCategoryManagerDi
               className="w-8 h-8 rounded border border-[var(--color-border)] cursor-pointer"
               value={newColor}
               onChange={(e) => setNewColor(e.target.value)}
-              aria-label="color"
+              aria-label={t('generic.color')}
             />
             <button
               type="button"
@@ -158,6 +158,7 @@ function SortableCategoryRow(props: SortableCategoryRowProps) {
     category, isEditing, editingName, onEditStart, onEditChange,
     onEditCommit, onEditCancel, onRecolor, onDeleteRequest,
   } = props
+  const t = useT()
   const isDefault = category.id === DEFAULT_CATEGORY_ID
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: category.id,
@@ -175,7 +176,7 @@ function SortableCategoryRow(props: SortableCategoryRowProps) {
         type="button"
         className="cursor-grab active:cursor-grabbing px-1 text-[var(--color-text-3)] hover:text-[var(--color-text-1)] disabled:opacity-30 disabled:cursor-not-allowed"
         disabled={isDefault}
-        aria-label="drag handle"
+        aria-label={t('generic.drag_handle')}
         {...(isDefault ? {} : attributes)}
         {...(isDefault ? {} : listeners)}
       >
@@ -186,7 +187,7 @@ function SortableCategoryRow(props: SortableCategoryRowProps) {
         className="w-6 h-6 rounded border border-[var(--color-border)] cursor-pointer"
         value={category.color}
         onChange={(e) => onRecolor(e.target.value)}
-        aria-label="color"
+        aria-label={t('generic.color')}
       />
       <div className="flex-1 min-w-0">
         <ListRow
@@ -213,7 +214,7 @@ function SortableCategoryRow(props: SortableCategoryRowProps) {
         className="action-btn text-[11px]"
         onClick={isEditing ? onEditCommit : onEditStart}
         disabled={isDefault}
-        aria-label="rename"
+        aria-label={t('generic.rename')}
       >
         {isEditing ? (
           <Check width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
@@ -226,7 +227,7 @@ function SortableCategoryRow(props: SortableCategoryRowProps) {
         className="action-btn danger text-[11px]"
         onClick={onDeleteRequest}
         disabled={isDefault}
-        aria-label="delete"
+        aria-label={t('generic.delete')}
       >
         <Trash2 width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
       </button>
@@ -235,7 +236,7 @@ function SortableCategoryRow(props: SortableCategoryRowProps) {
           type="button"
           className="action-btn text-[11px]"
           onClick={onEditCancel}
-          aria-label="cancel"
+          aria-label={t('generic.cancel')}
         >
           <X width={ICON_SIZE.xs} height={ICON_SIZE.xs} />
         </button>

@@ -16,7 +16,7 @@ from models.schemas import (
     SimulationStatus,
 )
 from services.location_service import DeviceLostError, LocationService, unwrap_device_lost
-from services.route_service import RouteService
+from services.route_service import RouteService, RouteUnavailableError
 from config import (
     SpeedProfile,
     DEFAULT_PAUSE_ENABLED,
@@ -247,7 +247,10 @@ class SimulationEngine:
         notifies the frontend, preventing UI desync after a crash / drop.
         DeviceLostError is re-raised (after cleanup) so api.location._spawn()
         can translate it into a device_disconnected broadcast — otherwise
-        the frontend never learns the tunnel died."""
+        the frontend never learns the tunnel died. RouteUnavailableError is
+        re-raised for the same reason: spawn() broadcasts it as a
+        ``device_error`` toast, so the user learns WHY the run aborted
+        instead of watching it silently snap back to idle."""
         # A real simulation supersedes idle auto-jitter — stop it so the
         # two don't fight over position pushes.
         if self._jitter_task is not None and not self._jitter_task.done():
@@ -255,19 +258,20 @@ class SimulationEngine:
             self._jitter_task = None
             self._jitter_anchor = None
         self._active_task = asyncio.create_task(coro)
-        device_lost: DeviceLostError | None = None
+        # Aborts the frontend must hear about are re-raised after cleanup.
+        passthrough: Exception | None = None
         try:
             await self._active_task
         except asyncio.CancelledError:
             logger.info("%s cancelled", label)
-        except DeviceLostError as exc:
-            logger.warning("%s aborted: device lost (%s)", label, exc)
-            device_lost = exc
+        except (DeviceLostError, RouteUnavailableError) as exc:
+            logger.warning("%s aborted: %s", label, exc)
+            passthrough = exc
         except Exception as exc:
             logger.exception("%s failed unexpectedly", label)
             # DeviceLostError is often re-raised wrapped (e.g. from
             # pymobiledevice3 timeouts) — walk the __cause__ chain.
-            device_lost = unwrap_device_lost(exc)
+            passthrough = unwrap_device_lost(exc)
         finally:
             self._active_task = None
             # Force state back to IDLE if a handler crashed / was cancelled
@@ -278,8 +282,8 @@ class SimulationEngine:
                     await self._emit("state_change", {"state": self.state.value})
                 except Exception:
                     logger.exception("Failed to emit idle state_change after %s", label)
-        if device_lost is not None:
-            raise device_lost
+        if passthrough is not None:
+            raise passthrough
 
     async def navigate(
         self, dest: Coordinate, mode: MovementMode,

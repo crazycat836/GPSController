@@ -60,6 +60,17 @@ export const updateRouteCategory = (id: string, patch: { name?: string; color?: 
 export const deleteRouteCategory = (id: string) =>
   request<StatusResponse>('DELETE', `/api/route/saved/categories/${id}`)
 
+// Waypoint-order optimization (OSRM /table + nearest-neighbor + 2-opt).
+// `closed` optimises a round trip back to waypoint 0 (Loop mode).
+export const optimizeRoute = (
+  waypoints: { lat: number; lng: number }[],
+  profile: string,
+  closed: boolean,
+) =>
+  request<{ order: number[]; waypoints: { lat: number; lng: number }[]; total_seconds: number }>(
+    'POST', '/api/route/optimize', { waypoints, profile, closed },
+  )
+
 // Drag-reorder
 export const reorderRoutes = (orderedIds: string[]) =>
   request<{ reordered: number }>('POST', '/api/route/saved/reorder', { ordered_ids: orderedIds })

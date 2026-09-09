@@ -41,6 +41,7 @@ _get_client, close_client = make_async_client_singleton(_TIMEOUT)
 # change in one path doesn't accidentally retune the other.
 _PROFILE_MAP: dict[str, str] = {
     "walking": "foot",
+    "running": "foot",
     "cycling": "bike",
     "driving": "car",
     # Pass-through for callers that already speak OSRM's slug.
@@ -161,14 +162,58 @@ def _nearest_neighbor_order(
     return order
 
 
-def _total_seconds(matrix: list[list[float]], order: list[int]) -> float:
-    """Sum the leg durations for *order* against *matrix*."""
+def _total_seconds(
+    matrix: list[list[float]], order: list[int], *, closed: bool = False,
+) -> float:
+    """Sum the leg durations for *order* against *matrix*.
+
+    ``closed=True`` adds the return leg from the last stop back to the
+    first — the objective for Loop routes, which drive back to the start.
+    """
     total = 0.0
     for i in range(len(order) - 1):
         leg = matrix[order[i]][order[i + 1]]
         if math.isfinite(leg):
             total += leg
+    if closed and len(order) > 1:
+        back = matrix[order[-1]][order[0]]
+        if math.isfinite(back):
+            total += back
     return total
+
+
+def _two_opt(
+    matrix: list[list[float]],
+    order: list[int],
+    *,
+    closed: bool = False,
+    max_passes: int = 40,
+) -> tuple[list[int], float]:
+    """Segment-reversal improvement over a nearest-neighbor tour.
+
+    Nearest-neighbor routinely leaves crossing legs ("walk past a stop,
+    then double back"); reversing the segment between two crossing edges
+    removes them. Index 0 stays anchored. Candidate cost is evaluated
+    with :func:`_total_seconds` so asymmetric OSRM matrices are scored
+    correctly (a reversed segment's internal legs change cost too).
+    O(n²) candidates × O(n) scoring per pass — trivial at the ≤64
+    waypoints the API accepts.
+    """
+    best = list(order)
+    best_cost = _total_seconds(matrix, best, closed=closed)
+    n = len(best)
+    for _ in range(max_passes):
+        improved = False
+        for i in range(1, n - 1):
+            for j in range(i + 1, n):
+                candidate = best[:i] + best[i:j + 1][::-1] + best[j + 1:]
+                cost = _total_seconds(matrix, candidate, closed=closed)
+                if cost < best_cost - 1e-9:
+                    best, best_cost = candidate, cost
+                    improved = True
+        if not improved:
+            break
+    return best, best_cost
 
 
 async def optimize_order(
@@ -176,10 +221,14 @@ async def optimize_order(
     profile: str,
     *,
     anchor_first: bool = True,
+    closed: bool = False,
 ) -> tuple[list[int], float]:
     """Return ``(order, total_seconds)`` where *order* is a permutation
     of ``range(len(waypoints))`` and *total_seconds* is the heuristic's
     estimated travel time using whichever matrix succeeded.
+
+    ``closed=True`` optimises a round trip back to the anchor (Loop
+    routes); the default optimises an open path (multi-stop).
 
     Raises ``ValueError`` on unknown profile or fewer than 2 waypoints.
     """
@@ -204,4 +253,4 @@ async def optimize_order(
         ]
 
     order = _nearest_neighbor_order(matrix, anchor_first=anchor_first)
-    return order, _total_seconds(matrix, order)
+    return _two_opt(matrix, order, closed=closed)
