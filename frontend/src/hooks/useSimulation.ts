@@ -24,6 +24,17 @@ import {
   type FanoutOutcome,
 } from './sim/useSimGroupActions'
 
+/** One-shot DDI-failure signal. `hintKey` picks the banner text (backend
+ *  `hint_key`); `udid` lets the banner offer a per-device action such as
+ *  revealing the Developer Mode toggle. */
+export type DdiMissingSignal = {
+  reason: string
+  stage?: string
+  udid?: string
+  hintKey?: string
+  ts: number
+}
+
 // Re-export the public types so existing callers (DeviceChip, EtaBar,
 // SimContext, App.tsx, etc.) keep importing from `'../hooks/useSimulation'`
 // without churn.
@@ -166,9 +177,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   const [ddiMounting, setDdiMounting] = useState(false)
   // One-shot signal consumed by SimContext's toast observer. `ts`
   // deduplicates repeats of the same failure across re-renders.
-  const [ddiMissing, setDdiMissing] = useState<
-    { reason: string; stage?: string; ts: number } | null
-  >(null)
+  const [ddiMissing, setDdiMissing] = useState<DdiMissingSignal | null>(null)
   const [waypointProgress, setWaypointProgress] = useState<{ current: number; next: number; total: number } | null>(null)
   // Loop / MultiStop target lap count. null = unlimited (existing
   // behaviour). Positive = backend will auto-stop after N laps.

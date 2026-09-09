@@ -28,6 +28,7 @@
  */
 
 import { useEffect, useRef } from 'react'
+import type { DdiMissingSignal } from '../useSimulation'
 import { asNumber, asObject, asString } from '../../lib/ws-guards'
 import type { LatLng } from './types'
 import type { DeviceRuntime, RuntimesMap } from './useSimRuntimes'
@@ -76,6 +77,8 @@ interface PauseCountdownPayload {
 interface DdiMountMissingPayload {
   reason?: string
   stage?: string
+  udid?: string
+  hint_key?: string
 }
 
 function parsePositionUpdate(data: unknown): PositionUpdatePayload | null {
@@ -134,7 +137,12 @@ function parsePauseCountdown(data: unknown): PauseCountdownPayload | null {
 
 function parseDdiMountMissing(data: unknown): DdiMountMissingPayload {
   const o = asObject(data) ?? {}
-  return { reason: asString(o.reason), stage: asString(o.stage) }
+  return {
+    reason: asString(o.reason),
+    stage: asString(o.stage),
+    udid: asString(o.udid),
+    hint_key: asString(o.hint_key),
+  }
 }
 
 function extractUdid(data: unknown): string | undefined {
@@ -195,9 +203,7 @@ export interface SimWsSetters {
     React.SetStateAction<{ current: number; total: number | null } | null>
   >
   setDdiMounting: React.Dispatch<React.SetStateAction<boolean>>
-  setDdiMissing: React.Dispatch<
-    React.SetStateAction<{ reason: string; stage?: string; ts: number } | null>
-  >
+  setDdiMissing: React.Dispatch<React.SetStateAction<DdiMissingSignal | null>>
   setError: React.Dispatch<React.SetStateAction<string | null>>
   localizeError: (code: SimErrorCode) => string
 }
@@ -349,8 +355,19 @@ export function useSimWsDispatcher(
           // Mount attempt failed outright. Was previously silent (only
           // cleared the overlay); now emits the same missing signal so the
           // persistent DDI-failed banner surfaces a manual-mount hint.
+          // The backend sends this right after ddi_mount_missing with the
+          // same payload, so carry the structured fields through instead of
+          // overwriting a specific reason (e.g. Developer Mode off) with
+          // the generic one.
           s.setDdiMounting(false)
-          s.setDdiMissing({ reason: 'mount_failed', ts: Date.now() })
+          const d = parseDdiMountMissing(wsMessage.data)
+          s.setDdiMissing({
+            reason: d.reason ?? 'mount_failed',
+            stage: d.stage,
+            udid: d.udid,
+            hintKey: d.hint_key,
+            ts: Date.now(),
+          })
           break
         }
         case 'ddi_mount_missing': {
@@ -362,6 +379,8 @@ export function useSimWsDispatcher(
           s.setDdiMissing({
             reason: d.reason ?? 'unknown',
             stage: d.stage,
+            udid: d.udid,
+            hintKey: d.hint_key,
             ts: Date.now(),
           })
           break

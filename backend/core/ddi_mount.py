@@ -37,13 +37,23 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def broadcast_ddi_mount_failure(udid: str, stage: str, reason: str) -> None:
+# ``reason`` value the frontend keys on to swap the generic "mount DDI
+# manually" hint for the Developer-Mode-specific one (with a reveal button).
+REASON_DEVELOPER_MODE_DISABLED = "developer_mode_disabled"
+HINT_KEY_DEFAULT = "ddi.missing_hint"
+HINT_KEY_DEVELOPER_MODE = "ddi.developer_mode_disabled"
+
+
+async def broadcast_ddi_mount_failure(
+    udid: str, stage: str, reason: str, hint_key: str = HINT_KEY_DEFAULT,
+) -> None:
     """Emit the structured failure pair the frontend expects.
 
-    ``ddi_mount_missing`` drives the user-facing hint toast;
+    ``ddi_mount_missing`` drives the user-facing hint banner;
     ``ddi_mount_failed`` is the legacy event name retained for
     downstream consumers. Both carry the same fields so either can be
-    handled consistently.
+    handled consistently. ``hint_key`` selects which i18n string the
+    banner renders.
     """
     try:
         from services.ws_broadcaster import broadcast
@@ -51,7 +61,7 @@ async def broadcast_ddi_mount_failure(udid: str, stage: str, reason: str) -> Non
             "udid": udid,
             "stage": stage,
             "reason": reason,
-            "hint_key": "ddi.missing_hint",
+            "hint_key": hint_key,
         }
         await broadcast("ddi_mount_missing", payload)
         await broadcast("ddi_mount_failed", {**payload, "error": reason})
@@ -71,6 +81,7 @@ async def ensure_personalized_ddi_mounted(
     per-device signing (TSS) is handled internally by pymobiledevice3.
     """
     try:
+        from pymobiledevice3.exceptions import DeveloperModeIsNotEnabledError
         from pymobiledevice3.services.mobile_image_mounter import (
             MobileImageMounterService,
             auto_mount_personalized,
@@ -137,6 +148,22 @@ async def ensure_personalized_ddi_mounted(
             "TimeoutError: DDI download/mount timed out after 120s",
         )
         raise RuntimeError("DDI mount timed out — check network access to github.com")
+    except DeveloperModeIsNotEnabledError:
+        # Personalized DDI cannot mount while Developer Mode is off (a
+        # major iOS upgrade resets it). Mounting via Xcode / 3uTools
+        # will not help here, so send a dedicated hint instead of the
+        # generic "mount manually" one.
+        logger.error(
+            "Developer Mode is disabled on %s; cannot mount personalized DDI",
+            conn.udid,
+        )
+        conn.developer_mode_enabled = False
+        await broadcast_ddi_mount_failure(
+            conn.udid, "personalized",
+            REASON_DEVELOPER_MODE_DISABLED,
+            hint_key=HINT_KEY_DEVELOPER_MODE,
+        )
+        raise
     except Exception as exc:
         logger.exception("auto_mount_personalized failed for %s", conn.udid)
         await broadcast_ddi_mount_failure(

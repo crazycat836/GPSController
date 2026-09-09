@@ -46,7 +46,13 @@ interface GlobalState {
   waypointProgress: { current: number; next: number; total: number } | null
   lapProgress: { current: number; total: number | null } | null
   ddiMounting: boolean
-  ddiMissing: { reason: string; stage?: string; ts: number } | null
+  ddiMissing: {
+    reason: string
+    stage?: string
+    udid?: string
+    hintKey?: string
+    ts: number
+  } | null
   error: string | null
 }
 
@@ -573,6 +579,43 @@ describe('pause_countdown / ddi / tunnel_lost / device_disconnected', () => {
 
     h.send('ddi_mount_missing', { reason: 'no_image', stage: 'download' })
     expect(h.globals.ddiMissing).toEqual({ reason: 'no_image', stage: 'download', ts: 2_000_000 })
+  })
+
+  it('ddi_mount_missing carries udid and hint_key so the banner can pick a specific message', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2_000_000)
+    const h = createHarness()
+    h.send('ddi_mount_missing', {
+      udid: UDID_A,
+      reason: 'developer_mode_disabled',
+      stage: 'personalized',
+      hint_key: 'ddi.developer_mode_disabled',
+    })
+    expect(h.globals.ddiMissing).toEqual({
+      reason: 'developer_mode_disabled',
+      stage: 'personalized',
+      udid: UDID_A,
+      hintKey: 'ddi.developer_mode_disabled',
+      ts: 2_000_000,
+    })
+  })
+
+  it('ddi_mount_failed keeps the structured reason from its payload instead of overwriting it', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2_000_000)
+    const h = createHarness()
+    // Backend sends ddi_mount_missing then ddi_mount_failed with the same
+    // payload; the second must not downgrade a specific reason to the
+    // generic 'mount_failed'.
+    h.send('ddi_mount_failed', {
+      udid: UDID_A,
+      reason: 'developer_mode_disabled',
+      hint_key: 'ddi.developer_mode_disabled',
+      error: 'developer_mode_disabled',
+    })
+    expect(h.globals.ddiMissing?.reason).toBe('developer_mode_disabled')
+    expect(h.globals.ddiMissing?.hintKey).toBe('ddi.developer_mode_disabled')
+
+    h.send('ddi_mount_failed', {})
+    expect(h.globals.ddiMissing?.reason).toBe('mount_failed')
   })
 
   it('tunnel_lost routes through localizeError into setError', () => {

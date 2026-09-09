@@ -364,6 +364,12 @@ export const STRINGS = {
     zh: 'DDI 掛載失敗。請先透過 Xcode、3uTools 或 iMazing 手動掛載開發者磁碟一次,然後重新連線。',
     en: 'DDI mount failed. Mount the Developer Disk Image once via Xcode / 3uTools / iMazing, then reconnect.',
   },
+  // Developer Mode is off on the iPhone (a major iOS upgrade resets it).
+  // Mounting DDI manually cannot help; the toggle must be turned on first.
+  'ddi.developer_mode_disabled': {
+    zh: 'iPhone 的開發者模式已關閉,無法模擬定位。請到「設定 → 隱私權與安全性 → 開發者模式」開啟並重新開機,然後重新連線。',
+    en: 'Developer Mode is off on the iPhone, so location simulation cannot start. Enable it under Settings → Privacy & Security → Developer Mode, restart the phone, then reconnect.',
+  },
   'panel.pts_short': { zh: 'pts', en: 'pts' },
 
   // ── Toasts extra ─────────────────────────────
