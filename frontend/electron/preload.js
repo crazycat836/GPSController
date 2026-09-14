@@ -15,7 +15,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 //                      Used as the X-GPS-Token header for REST calls and
 //                      the first frame of every WebSocket connection.
 //
-// The previous auto-updater bridge (`gpscontrollerUpdater`) was never
+// The previous auto-updater bridge (`geomirageUpdater`) was never
 // wired to any `ipcMain` handler and no renderer code consumed it, so
 // it was removed to shrink the IPC attack surface. When a real auto-
 // updater is introduced, add a new handle here with matching
@@ -25,7 +25,7 @@ function readArg(prefix) {
   return hit ? hit.slice(prefix.length) : ''
 }
 
-contextBridge.exposeInMainWorld('gpsController', {
+contextBridge.exposeInMainWorld('geoMirage', {
   version: readArg('--gps-version='),
   getSessionToken: () => ipcRenderer.invoke('session:get-token'),
 })

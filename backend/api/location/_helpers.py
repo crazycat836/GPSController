@@ -29,7 +29,7 @@ from services.location_service import (
     unwrap_device_lost,
 )
 
-logger = logging.getLogger("gpscontroller")
+logger = logging.getLogger("geomirage")
 
 # Thin re-exports — the recovery ladder moved to services.engine_recovery;
 # these aliases keep historical import/patch sites working.
@@ -56,7 +56,7 @@ _DEVICE_LOST_MESSAGE: dict[DeviceLostCause, str] = {
     DeviceLostCause.USB_REMOVED: "USB cable disconnected; please reconnect USB",
     DeviceLostCause.WIFI_DROPPED: "WiFi tunnel lost; check that the iPhone is on the same WiFi network and try again",
     DeviceLostCause.PHONE_LOCKED: "iPhone is locked; unlock the device and try again",
-    DeviceLostCause.DDI_NOT_MOUNTED: "Developer Disk Image is not mounted; reconnect the device or restart GPSController",
+    DeviceLostCause.DDI_NOT_MOUNTED: "Developer Disk Image is not mounted; reconnect the device or restart GeoMirage",
 }
 
 

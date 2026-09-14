@@ -20,12 +20,14 @@ import os
 # Session auth token. Generated once per backend process by main's lifespan
 # and required on every /api/* request via the X-GPS-Token header; the
 # WebSocket auth frame validates against the same value. Stays "" when running
-# with GPSCONTROLLER_DEV_NOAUTH=1 for local dev convenience.
+# with GEOMIRAGE_DEV_NOAUTH=1 for local dev convenience.
 API_TOKEN: str = ""
 
 
 def _is_auth_disabled() -> bool:
-    return os.environ.get("GPSCONTROLLER_DEV_NOAUTH") == "1"
+    # GPSCONTROLLER_DEV_NOAUTH is the pre-rename name, still honoured.
+    flag = os.environ.get("GEOMIRAGE_DEV_NOAUTH", os.environ.get("GPSCONTROLLER_DEV_NOAUTH"))
+    return flag == "1"
 
 
 # Only expose the interactive docs / OpenAPI schema in dev mode (when the

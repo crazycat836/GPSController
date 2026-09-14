@@ -38,7 +38,7 @@ from fastapi.responses import JSONResponse
 from api._errors import ErrorCode
 from services.route_service import RouteUnavailableError
 
-logger = logging.getLogger("gpscontroller")
+logger = logging.getLogger("geomirage")
 
 
 def _is_already_enveloped(content: Any) -> bool:

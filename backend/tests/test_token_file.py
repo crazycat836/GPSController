@@ -1,7 +1,7 @@
 """Tests for the session-token file write path in ``main``.
 
 A previous ``sudo python3 start.py`` run could leave
-``~/.gpscontroller/token`` owned by root (mode 0600), so the NEXT
+``~/.geomirage/token`` owned by root (mode 0600), so the NEXT
 unprivileged run gets EACCES when truncating it in place and the
 renderer is locked out until the file is deleted by hand.
 ``_write_token_file`` must therefore:

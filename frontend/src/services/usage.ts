@@ -3,7 +3,7 @@
  *
  * Captures interaction events automatically — no per-component `track()`
  * calls — and batches them to `POST /api/usage/events`, which appends them
- * to `~/.gpscontroller/usage/usage-YYYY-MM.jsonl`. `tools/usage_report.py`
+ * to `~/.geomirage/usage/usage-YYYY-MM.jsonl`. `tools/usage_report.py`
  * turns that file into feature-usage / clicks-per-action / abandoned-dialog
  * tables.
  *

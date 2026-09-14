@@ -1,14 +1,14 @@
-# GPSController
+# GeoMirage
 
 在 macOS 或 Windows 上模擬 iPhone 的 GPS 位置。支援瞬移、沿道路導航、路線循環與搖桿操控，透過 USB 或 WiFi 連線。不修改 iPhone 的系統或使用者資料；清除虛擬定位或中斷連線後，iPhone 會回到真實 GPS。
 
 <p align="center">
-  <img src="frontend/build/icon.png" width="160" alt="GPSController">
+  <img src="frontend/build/icon.png" width="160" alt="GeoMirage">
 </p>
 
 <p align="center">
-  <a href="https://github.com/crazycat836/GPSController/releases/latest">
-    <img alt="最新版本" src="https://img.shields.io/github/v/release/crazycat836/GPSController?style=for-the-badge&color=2d3748">
+  <a href="https://github.com/crazycat836/GeoMirage/releases/latest">
+    <img alt="最新版本" src="https://img.shields.io/github/v/release/crazycat836/GeoMirage?style=for-the-badge&color=2d3748">
   </a>
   <a href="LICENSE">
     <img alt="License" src="https://img.shields.io/badge/license-MIT-2d3748?style=for-the-badge">
@@ -124,8 +124,8 @@
 ## 安裝與啟動
 
 ```bash
-git clone https://github.com/crazycat836/GPSController.git
-cd GPSController
+git clone https://github.com/crazycat836/GeoMirage.git
+cd GeoMirage
 
 # 安裝依賴（不要用 sudo）
 python3 -m pip install -r backend/requirements.txt
@@ -147,7 +147,7 @@ python start.py --open
 
 `start.py` 會啟動後端（`127.0.0.1:8777`）與前端（`http://127.0.0.1:5173`），`--open` 會自動開啟瀏覽器。停止時按 `Ctrl+C`，或執行 `python3 stop.py`。
 
-`.env.dev` 裡的 `GPSCONTROLLER_DEV_NOAUTH=1` 會關閉後端的 token 驗證，因為瀏覽器版前端無法取得 Electron 注入的 token。這台電腦上的任何瀏覽器分頁都能呼叫 API，不要在共用電腦上使用。
+`.env.dev` 裡的 `GEOMIRAGE_DEV_NOAUTH=1` 會關閉後端的 token 驗證，因為瀏覽器版前端無法取得 Electron 注入的 token。這台電腦上的任何瀏覽器分頁都能呼叫 API，不要在共用電腦上使用。
 
 ### 建置安裝檔
 
@@ -168,7 +168,7 @@ macOS 安裝檔沒有經過 Apple 公證，第一次開啟會被擋；到「系�
 
 1. **信任電腦**：用 USB 接上 iPhone，在 iPhone 上點「信任」並輸入密碼。
 2. **開啟開發者模式**（iOS 16 以上）：設定 → 隱私權與安全性 → 開發者模式 → 開啟，重新開機後確認。找不到這個選項時，用 USB 連線後在錯誤提示中按「顯示開發者模式」，或參考[附錄](#附錄開發者模式選項沒有出現)。
-3. **連線**：在 GPSController 右上角開啟裝置清單，對 iPhone 按「連線」。
+3. **連線**：在 GeoMirage 右上角開啟裝置清單，對 iPhone 按「連線」。
 4. **準備開發者映像檔**（iOS 17 以上）：連線時會自動處理，畫面會顯示目前的步驟：
    - **步驟 1/2 下載**：只有第一次使用或 pymobiledevice3 更新後才需要。後端啟動時會先在背景下載，所以多數時候會直接跳到掛載。
    - **步驟 2/2 掛載**：約 10～30 秒，過程中請保持 iPhone 解鎖。
@@ -178,7 +178,7 @@ macOS 安裝檔沒有經過 Apple 公證，第一次開啟會被擋；到「系�
 ### 使用 WiFi
 
 - iPhone 與電腦要在同一個網段，且 iPhone 必須先用 USB 完成信任。
-- iPhone 螢幕鎖定會中斷 Tunnel。長時間使用時，把「設定 → 螢幕顯示與亮度 → 自動鎖定」設為「永不」，或在 GPSController 設定中開啟「螢幕暗掉時維持 WiFi 連線」。
+- iPhone 螢幕鎖定會中斷 Tunnel。長時間使用時，把「設定 → 螢幕顯示與亮度 → 自動鎖定」設為「永不」，或在 GeoMirage 設定中開啟「螢幕暗掉時維持 WiFi 連線」。
 - WiFi Tunnel 無法啟動時，用 USB 接上後在裝置清單按「重新配對」。
 
 ---
@@ -197,20 +197,20 @@ macOS 安裝檔沒有經過 Apple 公證，第一次開啟會被擋；到「系�
 | WiFi Tunnel 連上後不久就斷線 | iPhone 螢幕鎖定會中斷 Tunnel，見[使用 WiFi](#使用-wifi) |
 | 導航或路線顯示「路線規劃失敗」 | 該路段 OSRM 規劃不出道路，換一個目的地或調整路徑點 |
 
-回報問題請[開 Issue](https://github.com/crazycat836/GPSController/issues)，並附上 `backend.log`（設定 → Log 資料夾）。
+回報問題請[開 Issue](https://github.com/crazycat836/GeoMirage/issues)，並附上 `backend.log`（設定 → Log 資料夾）。
 
 ### 附錄：開發者模式選項沒有出現
 
 iOS 16 以上的「開發者模式」選項，要在裝置曾連接開發工具後才會出現。依序嘗試：
 
-1. 用 USB 連線，在 GPSController 的錯誤提示中按「顯示開發者模式」，再到 iPhone 設定中找選項。
+1. 用 USB 連線，在 GeoMirage 的錯誤提示中按「顯示開發者模式」，再到 iPhone 設定中找選項。
 2. 仍然沒有出現時，用 [Sideloadly](https://sideloadly.io/) 側載任一個小型 IPA，再回到「設定 → 隱私權與安全性 → 開發者模式」。
 
 ---
 
 ## 資料與外部服務
 
-### 本機資料（`~/.gpscontroller/`）
+### 本機資料（`~/.geomirage/`）
 
 | 檔案 | 內容 |
 | --- | --- |
@@ -267,7 +267,7 @@ OSRM、Nominatim、Photon、Google Places 的網址可以用環境變數 `OSRM_B
 ### 專案結構
 
 ```
-GPSController/
+GeoMirage/
 ├── backend/          # FastAPI + pymobiledevice3（api/ → core/ → services/）
 ├── frontend/         # React 前端與 Electron 殼（src/、electron/）
 ├── tools/            # 分層檢查、WS 型別產生、使用紀錄報表
@@ -324,6 +324,6 @@ MIT License，見 [LICENSE](LICENSE)。
 - 地圖、路線與地址資料來自第三方服務，不保證正確或即時。
 - 使用者應遵守所在地法律，濫用或違法使用的責任由使用者自行承擔。
 
-GPSController 是個人維護的開源專案，不是商業產品，不保證能在所有裝置與系統設定下運作，也不保證持續維護。
+GeoMirage 是個人維護的開源專案，不是商業產品，不保證能在所有裝置與系統設定下運作，也不保證持續維護。
 
 **下載、安裝或執行本軟體，即表示你已閱讀並同意以上條款。**

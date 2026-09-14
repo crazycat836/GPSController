@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for GPSController backend (Python 3.13).
-# Build: py -3.13 -m PyInstaller backend/gpscontroller-backend.spec --noconfirm
+# PyInstaller spec for GeoMirage backend (Python 3.13).
+# Build: py -3.13 -m PyInstaller backend/geomirage-backend.spec --noconfirm
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
 
@@ -88,7 +88,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='gpscontroller-backend',
+    name='geomirage-backend',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -108,5 +108,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='gpscontroller-backend',
+    name='geomirage-backend',
 )

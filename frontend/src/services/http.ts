@@ -208,8 +208,8 @@ export async function unwrapEnvelope<T>(res: Response): Promise<T> {
  * is held by the main process and fetched once via the
  * `session:get-token` IPC handshake (see frontend/electron/preload.js
  * and frontend/electron/main.js). The bridge exposes it as the async
- * `window.gpsController.getSessionToken()`. In Vite dev mode the
- * backend is expected to run with GPSCONTROLLER_DEV_NOAUTH=1, so when
+ * `window.geoMirage.getSessionToken()`. In Vite dev mode the
+ * backend is expected to run with GEOMIRAGE_DEV_NOAUTH=1, so when
  * the bridge is absent we resolve to an empty string — empty token is
  * accepted by the dev backend.
  *
@@ -226,8 +226,8 @@ let authTokenPromise: Promise<string> | null = null
 function getAuthToken(): Promise<string> {
   if (authTokenPromise) return authTokenPromise
   const bridge = (globalThis as unknown as {
-    gpsController?: { getSessionToken?: () => Promise<unknown> }
-  }).gpsController
+    geoMirage?: { getSessionToken?: () => Promise<unknown> }
+  }).geoMirage
   if (!bridge || typeof bridge.getSessionToken !== 'function') {
     authTokenPromise = Promise.resolve('')
     return authTokenPromise

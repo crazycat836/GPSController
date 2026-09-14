@@ -1,5 +1,5 @@
 """
-GPSController DDI mount + location-service factory helpers.
+GeoMirage DDI mount + location-service factory helpers.
 
 Extracted from ``device_manager.py`` to keep that hub focused on
 connection lifecycle. This module owns:

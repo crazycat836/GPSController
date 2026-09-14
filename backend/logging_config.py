@@ -9,7 +9,7 @@ construction. Owns three concerns:
   - An access-log filter that drops OPTIONS preflights and a fixed
     list of noisy GET endpoints the frontend polls every few seconds
 
-Returns the canonical ``gpscontroller`` logger so callers can use it
+Returns the canonical ``geomirage`` logger so callers can use it
 immediately. Idempotent within a single process — calling more than
 once just re-attaches the same handlers, so unit tests that import
 the module repeatedly stay safe.
@@ -176,4 +176,4 @@ def setup_logging(log_dir: Path) -> logging.Logger:
     logging.basicConfig(level=logging.INFO, handlers=handlers, force=True)
     logging.getLogger("uvicorn.access").addFilter(_AccessNoiseFilter())
 
-    return logging.getLogger("gpscontroller")
+    return logging.getLogger("geomirage")

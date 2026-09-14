@@ -6,7 +6,7 @@ from typing import TypedDict
 from version import __version__
 
 # Paths
-DATA_DIR = Path.home() / ".gpscontroller"
+DATA_DIR = Path.home() / ".geomirage"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 BOOKMARKS_FILE = DATA_DIR / "bookmarks.json"
 ROUTES_FILE = DATA_DIR / "routes.json"
@@ -49,8 +49,8 @@ GOOGLE_PLACES_BASE_URL = os.environ.get(
 # Plain "ProductName/Version" UAs have been blocklisted in the past once
 # they generated enough traffic without a contact channel.
 NOMINATIM_USER_AGENT = (
-    f"GPSController/{__version__} "
-    "(+https://github.com/crazycat836/GPSController)"
+    f"GeoMirage/{__version__} "
+    "(+https://github.com/crazycat836/GeoMirage)"
 )
 
 

@@ -1,5 +1,5 @@
 """
-GPSController Device Manager
+GeoMirage Device Manager
 
 Handles iOS device detection, connection lifecycle, tunnel establishment,
 and location service creation.  Wraps pymobiledevice3 internals so the

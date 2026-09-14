@@ -5,7 +5,7 @@ HTTP wiring. Owns:
 
   - The DeviceManager + per-udid SimulationEngine registry
   - Persistent settings (``last_position`` / ``initial_map_position`` /
-    ``coord_format``) in ``~/.gpscontroller/settings.json``
+    ``coord_format``) in ``~/.geomirage/settings.json``
   - The CooldownTimer / BookmarkManager / CoordinateFormatter singletons
   - The RouteService / GpxService / SavedRoutesStore route singletons
   - Dual-device auto-sync (``_sync_new_device_to_primary``): when a
@@ -37,7 +37,7 @@ from services.saved_routes import SavedRoutesStore
 if TYPE_CHECKING:
     from core.simulation_engine import SimulationEngine
 
-logger = logging.getLogger("gpscontroller")
+logger = logging.getLogger("geomirage")
 
 
 class AppState:

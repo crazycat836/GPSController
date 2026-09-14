@@ -32,23 +32,27 @@ from services.json_safe import chown_back
 from state import AppState
 from version import __version__
 
-# Migrate legacy ~/.locwarp → ~/.gpscontroller if needed
-_old_data_dir = Path.home() / ".locwarp"
-_new_data_dir = Path.home() / ".gpscontroller"
-if _old_data_dir.exists() and not _new_data_dir.exists():
+# Move a data dir left by an earlier product name (~/.gpscontroller, then
+# the older ~/.locwarp) to ~/.geomirage. The first one found wins.
+_new_data_dir = Path.home() / ".geomirage"
+for _old_data_dir in (Path.home() / ".gpscontroller", Path.home() / ".locwarp"):
+    if _new_data_dir.exists():
+        break
+    if not _old_data_dir.exists():
+        continue
     try:
         _old_data_dir.rename(_new_data_dir)
     except OSError as exc:
         # cross-device or permission issue — ignore, will create fresh.
         # Log so a permissions bug doesn't silently lose persistent settings.
-        logging.getLogger("gpscontroller").debug(
+        logging.getLogger("geomirage").debug(
             "legacy data-dir rename failed (%s -> %s): %s",
             _old_data_dir, _new_data_dir, exc,
         )
 
 # Logging setup (formatters, rotating file handler, uvicorn access filter)
 # lives in `logging_config.py` so this entrypoint stays focused on app
-# wiring. Returns the canonical "gpscontroller" logger.
+# wiring. Returns the canonical "geomirage" logger.
 logger = setup_logging(_new_data_dir / "logs")
 
 
@@ -80,7 +84,7 @@ def _open_and_write_token(token: str) -> None:
 
 
 def _write_token_file(token: str) -> None:
-    """Write the session token to ~/.gpscontroller/token with mode 0600.
+    """Write the session token to ~/.geomirage/token with mode 0600.
 
     Recovers from a stale root-owned token: a previous `sudo python3
     start.py` run could leave the file owned by root, so the next
@@ -158,7 +162,7 @@ async def lifespan(application: FastAPI):
     connection_state.install_ws_observer()
 
     # ── Startup ──
-    # Create ~/.gpscontroller before anything tries to write inside it
+    # Create ~/.geomirage before anything tries to write inside it
     # (TOKEN_FILE below, settings/bookmarks/routes via API). Deferred from
     # config.py module load so tests that import config don't hit disk.
     ensure_data_dir()
@@ -174,7 +178,7 @@ async def lifespan(application: FastAPI):
         except OSError:
             logger.exception("Failed to remove stale token file")
         logger.warning(
-            "Auth DISABLED (GPSCONTROLLER_DEV_NOAUTH=1) — API reachable without X-GPS-Token",
+            "Auth DISABLED (GEOMIRAGE_DEV_NOAUTH=1) — API reachable without X-GPS-Token",
         )
     else:
         auth.API_TOKEN = secrets.token_urlsafe(32)
@@ -190,7 +194,7 @@ async def lifespan(application: FastAPI):
     # user had just removed. Devices are enumerated on demand via
     # /api/device/list (which never pairs) and the user connects one
     # explicitly from the UI.
-    logger.info("GPSController started — connect a device from the UI when ready")
+    logger.info("GeoMirage started — connect a device from the UI when ready")
 
     from services.device_watchdog import usbmux_presence_watchdog
     watchdog_task = asyncio.create_task(usbmux_presence_watchdog(app_state))
@@ -290,13 +294,13 @@ async def lifespan(application: FastAPI):
     except Exception:
         logger.exception("shutdown: close_optimizer_client failed")
 
-    logger.info("GPSController shut down")
+    logger.info("GeoMirage shut down")
 
 
 # ── FastAPI app ───────────────────────────────────────────
 
 app = FastAPI(
-    title="GPSController",
+    title="GeoMirage",
     version=__version__,
     description="iOS Virtual Location Simulator",
     lifespan=lifespan,
@@ -324,7 +328,7 @@ class _TokenAuthMiddleware(BaseHTTPMiddleware):
 
     Exempts a small set of health / docs paths so the Electron shell can
     probe the backend before it has read the token file. When
-    GPSCONTROLLER_DEV_NOAUTH=1 is set, or a WebSocket upgrade is being
+    GEOMIRAGE_DEV_NOAUTH=1 is set, or a WebSocket upgrade is being
     negotiated (auth is then enforced via the first WS frame — see
     api/websocket.py), the middleware short-circuits and lets the request
     through.
@@ -416,7 +420,7 @@ async def root():
     the tokened GET /api/location/settings/initial-position instead.
     """
     return {
-        "name": "GPSController",
+        "name": "GeoMirage",
         "version": __version__,
         "status": "running",
     }

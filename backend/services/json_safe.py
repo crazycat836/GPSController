@@ -1,4 +1,4 @@
-"""Safe JSON persistence helpers for ``~/.gpscontroller`` data files.
+"""Safe JSON persistence helpers for ``~/.geomirage`` data files.
 
 Invariants:
 

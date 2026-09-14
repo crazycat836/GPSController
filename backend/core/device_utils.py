@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class UnsupportedIosVersionError(RuntimeError):
     """Raised when a connecting device's iOS version is below the minimum
-    supported by GPSController (currently 16.0). Surfaces a structured error to
+    supported by GeoMirage (currently 16.0). Surfaces a structured error to
     the API layer so the frontend can show an actionable message rather
     than a stack trace."""
 

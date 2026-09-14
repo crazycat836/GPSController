@@ -63,7 +63,7 @@ class GpxService:
     @staticmethod
     def generate_gpx(
         coords: list[dict],
-        name: str = "GPSController Route",
+        name: str = "GeoMirage Route",
     ) -> str:
         """Generate a GPX XML string from a list of point dicts.
 

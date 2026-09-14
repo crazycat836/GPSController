@@ -1,8 +1,8 @@
-# GPSController Design System
+# GeoMirage Design System
 
 ## 1. Visual Theme & Atmosphere
 
-GPSController is a dark-mode-native desktop tool UI built for an Electron + React + Leaflet map application. The canvas is a near-black surface (`#0a0a0c`) designed to let the map take visual priority while floating control panels, toolbars, and status indicators sit on top as translucent overlays. The overall feel is a compact, tool-dense cockpit — closer to a desktop IDE sidebar than a marketing page.
+GeoMirage is a dark-mode-native desktop tool UI built for an Electron + React + Leaflet map application. The canvas is a near-black surface (`#0a0a0c`) designed to let the map take visual priority while floating control panels, toolbars, and status indicators sit on top as translucent overlays. The overall feel is a compact, tool-dense cockpit — closer to a desktop IDE sidebar than a marketing page.
 
 The design language draws from iOS-style segmented controls (`.seg-*` system) layered on dark surfaces, with solid high-alpha dark panels floating over the map. Information density is high: body text defaults to 13px, and most UI operates in the 11–13px range with weight shifts (500 → 600) providing hierarchy rather than size contrast.
 
@@ -483,7 +483,7 @@ This section captures how the design system maps to **WCAG 2.2 AA** and the **iO
 
 ## 9. Tailwind CSS Integration
 
-GPSController uses **Tailwind CSS v4** via the Vite plugin (`@tailwindcss/vite`). There is no `tailwind.config.js` — Tailwind v4 reads tokens directly from the `@theme` block in `index.css`.
+GeoMirage uses **Tailwind CSS v4** via the Vite plugin (`@tailwindcss/vite`). There is no `tailwind.config.js` — Tailwind v4 reads tokens directly from the `@theme` block in `index.css`.
 
 ### How It Works
 1. Design tokens are defined in `@theme { }` in `index.css`

@@ -1,4 +1,4 @@
-// Central string table for GPSController.
+// Central string table for GeoMirage.
 // Keys are dotted paths by area; missing translations fall back to the other locale.
 
 export type Lang = 'zh' | 'en';
@@ -125,7 +125,7 @@ export const STRINGS = {
   'wifi.repair_button': { zh: '重新配對', en: 'Re-pair' },
   'wifi.repair_tooltip': { zh: '用 USB 重建 RemotePairing 記錄,修復 WiFi Tunnel 無法啟動的問題', en: 'Rebuild the RemotePairing record via USB to fix WiFi Tunnel startup failures' },
   'wifi.repair_confirm_title': { zh: '重新配對 iPhone', en: 'Re-pair iPhone' },
-  'wifi.repair_confirm_body': { zh: '此動作會用 USB 重建 RemotePairing 記錄。過程中 iPhone 可能會跳「信任這台電腦」,請解鎖並按信任。GPSController 必須以系統管理員身分執行。\n\n確定要繼續嗎?', en: 'This rebuilds the RemotePairing record via USB. Your iPhone may show "Trust This Computer", unlock it and tap Trust. GPSController must be running as Administrator.\n\nContinue?' },
+  'wifi.repair_confirm_body': { zh: '此動作會用 USB 重建 RemotePairing 記錄。過程中 iPhone 可能會跳「信任這台電腦」,請解鎖並按信任。GeoMirage 必須以系統管理員身分執行。\n\n確定要繼續嗎?', en: 'This rebuilds the RemotePairing record via USB. Your iPhone may show "Trust This Computer", unlock it and tap Trust. GeoMirage must be running as Administrator.\n\nContinue?' },
   'wifi.repair_running': { zh: '配對中...請在 iPhone 上按「信任」', en: 'Pairing... tap Trust on the iPhone' },
   'wifi.repair_success': { zh: '配對成功!現在可以試 WiFi Tunnel 了', en: 'Paired! You can try WiFi Tunnel now' },
   'wifi.repair_failed': { zh: '配對失敗', en: 'Pairing failed' },
@@ -136,7 +136,7 @@ export const STRINGS = {
   'wifi.ip_placeholder': { zh: 'iPhone IP(例如 192.168.0.205)', en: 'iPhone IP (e.g. 192.168.0.205)' },
   'wifi.tunnel_establishing': { zh: '建立 tunnel 中...', en: 'Establishing tunnel...' },
   'wifi.tunnel_start': { zh: '啟動 WiFi Tunnel', en: 'Start Wi-Fi Tunnel' },
-  'wifi.tunnel_admin_hint': { zh: '請以系統管理員身分開啟 GPSController,且裝置必須先透過 USB 完成信任。', en: 'Run GPSController as Administrator. The device must be paired via USB first.' },
+  'wifi.tunnel_admin_hint': { zh: '請以系統管理員身分開啟 GeoMirage,且裝置必須先透過 USB 完成信任。', en: 'Run GeoMirage as Administrator. The device must be paired via USB first.' },
   'wifi.usb_paired_device': { zh: '目前 USB 配對裝置', en: 'USB-paired device' },
   'wifi.usb_paired_none': { zh: '尚未偵測到 USB 連接的裝置。首次建立 Wi-Fi Tunnel 前,請先用 USB 連接並信任該 iPhone。', en: 'No USB-connected device detected. Before establishing a Wi-Fi tunnel for the first time, connect and trust the iPhone over USB.' },
   'wifi.device_not_detected': { zh: '未偵測到裝置,請確認 iPhone 與電腦在同一 WiFi', en: 'Device not detected, ensure iPhone and computer are on the same Wi-Fi' },
@@ -250,10 +250,10 @@ export const STRINGS = {
   'err.repair_needs_usb': { zh: '重新配對需要 USB, 請先用線連接 iPhone', en: 'Re-pair needs USB, please connect the iPhone first' },
   'err.usbmux_unavailable': { zh: '無法列出 USB 裝置,請確認驅動與 Apple Mobile Device Service 是否正常', en: 'Cannot list USB devices, check iTunes/Apple Mobile Device Service' },
   'err.trust_failed': { zh: 'USB 信任失敗, 請在 iPhone 上點「信任」後再試', en: 'USB trust failed, tap Trust on the iPhone and retry' },
-  'err.remote_pair_failed': { zh: 'RemotePairing 記錄重建失敗, 請以系統管理員身分重啟 GPSController', en: 'RemotePairing record rebuild failed, restart GPSController as Administrator' },
+  'err.remote_pair_failed': { zh: 'RemotePairing 記錄重建失敗, 請以系統管理員身分重啟 GeoMirage', en: 'RemotePairing record rebuild failed, restart GeoMirage as Administrator' },
   'err.device_lost': { zh: '裝置連線中斷(USB 拔除或 Tunnel 死亡),請重新插上 USB 後再操作', en: 'Device connection lost (USB unplugged or tunnel died), please reconnect USB and try again' },
   'err.max_devices_reached': { zh: '已連接最多 2 台裝置', en: 'Maximum 2 devices connected' },
-  'err.ios_unsupported': { zh: '裝置 iOS 版本過舊,GPSController 僅支援 iOS 16 以上。請升級 iOS 後再試。', en: 'This device runs an unsupported iOS version. GPSController requires iOS 16 or later. Please update and try again.' },
+  'err.ios_unsupported': { zh: '裝置 iOS 版本過舊,GeoMirage 僅支援 iOS 16 以上。請升級 iOS 後再試。', en: 'This device runs an unsupported iOS version. GeoMirage requires iOS 16 or later. Please update and try again.' },
   'err.ios_version_unsupported': { zh: '此功能需要更新的 iOS 版本', en: 'This feature requires a newer iOS version' },
   // Bookmarks / places / tags / routes / devices — 404 / 400 surface
   'err.bookmark_not_found': { zh: '找不到此收藏', en: 'Bookmark not found' },

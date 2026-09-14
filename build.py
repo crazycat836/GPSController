@@ -1,9 +1,9 @@
 """
-GPSController one-shot installer builder (Windows + macOS).
+GeoMirage one-shot installer builder (Windows + macOS).
 
 Runs three stages:
   1. PyInstaller bundles the backend into a single folder under
-     ``dist-py/gpscontroller-backend/``.
+     ``dist-py/geomirage-backend/``.
   2. Vite builds the frontend into ``frontend/dist/``.
   3. electron-builder packages the installer for the current host OS
      into ``frontend/release/``.
@@ -110,21 +110,21 @@ def stage_codegen() -> None:
 
 
 def stage_backend() -> None:
-    if not (BACKEND / "gpscontroller-backend.spec").exists():
-        die("backend/gpscontroller-backend.spec 不存在")
+    if not (BACKEND / "geomirage-backend.spec").exists():
+        die("backend/geomirage-backend.spec 不存在")
     py = resolve_python()
     run(
         [
             *py, "-m", "PyInstaller",
-            "gpscontroller-backend.spec",
+            "geomirage-backend.spec",
             "--noconfirm",
             "--distpath", str(DIST_PY),
             "--workpath", str(BUILD_PY / "backend"),
         ],
         cwd=BACKEND,
     )
-    bin_name = "gpscontroller-backend.exe" if sys.platform == "win32" else "gpscontroller-backend"
-    bin_path = DIST_PY / "gpscontroller-backend" / bin_name
+    bin_name = "geomirage-backend.exe" if sys.platform == "win32" else "geomirage-backend"
+    bin_path = DIST_PY / "geomirage-backend" / bin_name
     if not bin_path.exists():
         die(f"PyInstaller 完成但找不到執行檔:{bin_path}")
     print(f"  [✓] backend → {bin_path}")
@@ -157,7 +157,7 @@ def stage_installer() -> None:
 # ── Main ─────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="GPSController installer builder")
+    parser = argparse.ArgumentParser(description="GeoMirage installer builder")
     parser.add_argument("--skip-backend", action="store_true", help="Skip PyInstaller stage")
     parser.add_argument("--skip-frontend", action="store_true", help="Skip Vite stage")
     parser.add_argument("--skip-installer", action="store_true", help="Skip electron-builder stage")
@@ -167,7 +167,7 @@ def main() -> None:
         die(f"目前只支援 Windows 與 macOS,偵測到的平台:{sys.platform}")
 
     os_label = "Windows" if sys.platform == "win32" else "macOS (arm64)"
-    print_banner(f"GPSController Build — {os_label}")
+    print_banner(f"GeoMirage Build — {os_label}")
 
     total = 4
     started = time.monotonic()

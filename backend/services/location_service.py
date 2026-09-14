@@ -1,5 +1,5 @@
 """
-GPSController Location Service
+GeoMirage Location Service
 
 Provides a unified interface for iOS location simulation across different
 iOS versions, wrapping pymobiledevice3's location simulation capabilities.

@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from core.simulation_engine import SimulationEngine, SimulationSnapshot
     from models.schemas import Coordinate
 
-logger = logging.getLogger("gpscontroller")
+logger = logging.getLogger("geomirage")
 
 
 async def _replay(

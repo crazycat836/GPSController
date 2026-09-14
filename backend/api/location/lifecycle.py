@@ -22,7 +22,7 @@ from api.location._helpers import (
 from config import resolve_speed_profile
 from models.schemas import MovementMode
 
-logger = logging.getLogger("gpscontroller")
+logger = logging.getLogger("geomirage")
 
 router = APIRouter()
 

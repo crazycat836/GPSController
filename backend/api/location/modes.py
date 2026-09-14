@@ -36,7 +36,7 @@ from models.schemas import (
     TeleportRequest,
 )
 
-logger = logging.getLogger("gpscontroller")
+logger = logging.getLogger("geomirage")
 
 router = APIRouter()
 
@@ -71,7 +71,7 @@ async def teleport(req: TeleportRequest):
         raise
     except Exception:
         logger.exception("Teleport failed")
-        raise http_err(500, ErrorCode.TELEPORT_FAILED, "Teleport failed; see ~/.gpscontroller/logs/backend.log")
+        raise http_err(500, ErrorCode.TELEPORT_FAILED, "Teleport failed; see ~/.geomirage/logs/backend.log")
 
     if old_pos and cooldown.enabled and not dual_mode:
         await cooldown.start(old_pos.lat, old_pos.lng, req.lat, req.lng)
@@ -191,7 +191,7 @@ async def joystick_start(req: JoystickStartRequest):
         raise
     except Exception:
         logger.exception("joystick_start failed")
-        raise http_err(500, ErrorCode.JOYSTICK_START_FAILED, "Joystick start failed; see ~/.gpscontroller/logs/backend.log")
+        raise http_err(500, ErrorCode.JOYSTICK_START_FAILED, "Joystick start failed; see ~/.geomirage/logs/backend.log")
     return {"status": "started", "mode": req.mode}
 
 

@@ -1,9 +1,9 @@
-// Electron preload exposes a `gpsController.openExternal` bridge so links
+// Electron preload exposes a `geoMirage.openExternal` bridge so links
 // open in the system browser rather than inside the webview. Web builds
 // don't define it; callers fall back to the native `<a target="_blank">`
 // navigation (hence the `e.preventDefault()` only on the bridge path).
 interface ElectronBridge {
-  gpsController?: { openExternal?: (url: string) => void }
+  geoMirage?: { openExternal?: (url: string) => void }
 }
 
 // Only ever hand http(s) URLs to the Electron shell. `shell.openExternal`
@@ -29,7 +29,7 @@ function isSafeExternalUrl(url: string): boolean {
  */
 export function openExternalOrDefault(url: string, e: React.MouseEvent): void {
   if (!isSafeExternalUrl(url)) return
-  const bridge = (window as unknown as ElectronBridge).gpsController
+  const bridge = (window as unknown as ElectronBridge).geoMirage
   if (bridge?.openExternal) {
     e.preventDefault()
     bridge.openExternal(url)

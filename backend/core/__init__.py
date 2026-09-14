@@ -1,4 +1,4 @@
-"""GPSController core simulation modules."""
+"""GeoMirage core simulation modules."""
 
 from core.simulation_engine import SimulationEngine, EtaTracker
 from core.teleport import TeleportHandler

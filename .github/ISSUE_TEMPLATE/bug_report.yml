@@ -4,9 +4,9 @@ title: "[Bug] "
 labels: ["bug"]
 body:
   - type: input
-    id: gpscontroller-version
+    id: geomirage-version
     attributes:
-      label: GPSController 版本
+      label: GeoMirage 版本
       placeholder: 例如 v0.1.16
     validations:
       required: true

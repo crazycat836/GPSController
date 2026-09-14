@@ -1,6 +1,6 @@
 """
-GPSController 一鍵啟動器
-雙擊此檔案即可啟動 GPSController
+GeoMirage 一鍵啟動器
+雙擊此檔案即可啟動 GeoMirage
 """
 
 import json
@@ -49,11 +49,24 @@ def _app_version() -> str:
 APP_VERSION = _app_version()
 
 
+def adopt_legacy_env() -> None:
+    """Accept the pre-rename ``GPSCONTROLLER_*`` variables.
+
+    An existing ``.env.dev`` or shell export may still use the old prefix;
+    copy those onto the ``GEOMIRAGE_*`` names unless the new name is set.
+    The backend inherits this environment.
+    """
+    for suffix in ("DEV_NOAUTH", "OPEN_BROWSER"):
+        legacy = os.environ.get(f"GPSCONTROLLER_{suffix}")
+        if legacy is not None:
+            os.environ.setdefault(f"GEOMIRAGE_{suffix}", legacy)
+
+
 def load_dotenv_dev() -> str | None:
     """Load `.env.dev` from the repo root into os.environ.
 
     Real env vars already exported by the user take precedence (dotenv
-    convention) so a one-off `GPSCONTROLLER_DEV_NOAUTH=0 python start.py`
+    convention) so a one-off `GEOMIRAGE_DEV_NOAUTH=0 python start.py`
     can still flip auth back on without editing the file. Returns the
     path that was loaded for the launcher banner, or None when no file
     is present. Kept tiny so we don't drag in python-dotenv just for
@@ -94,7 +107,7 @@ BOX_WIDTH = 46
 def print_banner():
     print()
     print(box_border("╔", "═", "╗", BOX_WIDTH))
-    print(box_line("   " + bold("GPSController") + dim("  ·  iOS 虛擬定位模擬器"), BOX_WIDTH))
+    print(box_line("   " + bold("GeoMirage") + dim("  ·  iOS 虛擬定位模擬器"), BOX_WIDTH))
     print(box_line("   " + dim(f"一鍵啟動器  v{APP_VERSION}"), BOX_WIDTH))
     print(box_border("╚", "═", "╝", BOX_WIDTH))
     print()
@@ -229,21 +242,21 @@ def start_backend():
         time.sleep(1)
 
     # Dev mode: leave the session token check on by default. The launcher
-    # used to silently set GPSCONTROLLER_DEV_NOAUTH=1 here so `vite dev`
+    # used to silently set GEOMIRAGE_DEV_NOAUTH=1 here so `vite dev`
     # on port 5173 (no Electron preload to inject the token) could reach
     # the backend; that is a footgun in shared/dev environments. Make the
     # opt-in explicit: surface a one-line hint when the flag is unset and
     # a warning when it's already exported.
     env = dict(os.environ)
-    if env.get("GPSCONTROLLER_DEV_NOAUTH") == "1":
+    if env.get("GEOMIRAGE_DEV_NOAUTH") == "1":
         print(
-            "      [!] GPSCONTROLLER_DEV_NOAUTH=1 detected — backend auth DISABLED. "
+            "      [!] GEOMIRAGE_DEV_NOAUTH=1 detected — backend auth DISABLED. "
             "Unset it to require X-GPS-Token."
         )
     else:
         print(
             "      [i] Backend auth ENABLED. To run the Vite dev server without "
-            "the Electron preload, export GPSCONTROLLER_DEV_NOAUTH=1 yourself."
+            "the Electron preload, export GEOMIRAGE_DEV_NOAUTH=1 yourself."
         )
 
     p = subprocess.Popen(
@@ -313,11 +326,11 @@ def _should_open_browser() -> bool:
 
     預設關閉，避免每次啟動都跳出新分頁。要開啟時擇一：
       • 執行時加上 `--open` 或 `-o`
-      • 設環境變數 `GPSCONTROLLER_OPEN_BROWSER=1`
+      • 設環境變數 `GEOMIRAGE_OPEN_BROWSER=1`
     """
     if "--open" in sys.argv or "-o" in sys.argv:
         return True
-    return os.environ.get("GPSCONTROLLER_OPEN_BROWSER", "") == "1"
+    return os.environ.get("GEOMIRAGE_OPEN_BROWSER", "") == "1"
 
 
 def check_admin():
@@ -334,10 +347,11 @@ def check_admin():
 
 def main():
     if os.name == "nt":
-        os.system("title GPSController")
+        os.system("title GeoMirage")
     print_banner()
 
     loaded_env = load_dotenv_dev()
+    adopt_legacy_env()
     if loaded_env:
         print(f"  [i] Loaded {os.path.relpath(loaded_env, ROOT)} (exported env still wins)")
         print()
@@ -393,7 +407,7 @@ def main():
     url = f"http://localhost:{FRONTEND_PORT}"
 
     # 預設不自動開瀏覽器。要自動開啟時：加上 --open / -o 旗標，
-    # 或設環境變數 GPSCONTROLLER_OPEN_BROWSER=1。
+    # 或設環境變數 GEOMIRAGE_OPEN_BROWSER=1。
     if _should_open_browser():
         webbrowser.open(url)
 
@@ -403,7 +417,7 @@ def main():
         return box_line(content, BOX_WIDTH).replace("║", green("║"))
 
     print(green(box_border("╔", "═", "╗", BOX_WIDTH)))
-    print(ready_line("          " + green(bold("GPSController 已就緒！"))))
+    print(ready_line("          " + green(bold("GeoMirage 已就緒！"))))
     print(green(box_border("╠", "═", "╣", BOX_WIDTH)))
     print(ready_line(f"  前端畫面:  {cyan(f'http://localhost:{FRONTEND_PORT}')}"))
     print(ready_line(f"  後端 API:  {cyan(f'http://localhost:{BACKEND_PORT}')}"))

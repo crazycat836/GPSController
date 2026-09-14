@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Summarise the local UI usage log into a Markdown UX report.
 
-Reads ``~/.gpscontroller/usage/usage-*.jsonl`` (written by
+Reads ``~/.geomirage/usage/usage-*.jsonl`` (written by
 ``backend/services/usage_log.py``, fed by ``frontend/src/services/usage.ts``)
 and prints:
 
@@ -37,7 +37,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 API_DIR = REPO_ROOT / "backend" / "api"
-DEFAULT_DIR = Path.home() / ".gpscontroller" / "usage"
+DEFAULT_DIR = Path.home() / ".geomirage" / "usage"
 
 # A click belongs to the next action only if the user didn't wander off.
 IDLE_RESET_MS = 120_000
@@ -121,7 +121,7 @@ def build_report(events: list[dict[str, Any]], routes: list[tuple[str, str]]) ->
         by_session[e.get("session", "?")].append(e)
 
     api_events = [e for e in events if e.get("type") == "api"]
-    lines: list[str] = ["# GPSController usage report", ""]
+    lines: list[str] = ["# GeoMirage usage report", ""]
     if events:
         span = (events[-1]["ts"] - events[0]["ts"]) / 86_400_000
         first = time.strftime("%Y-%m-%d", time.localtime(events[0]["ts"] / 1000))

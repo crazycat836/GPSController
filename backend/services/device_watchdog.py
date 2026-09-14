@@ -38,7 +38,7 @@ import logging
 from services import connection_state
 from services.location_service import DeviceLostCause
 
-logger = logging.getLogger("gpscontroller")
+logger = logging.getLogger("geomirage")
 
 
 # Tuning — tight enough to feel snappy on unplug, slack enough to absorb

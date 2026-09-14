@@ -70,8 +70,8 @@ export function useWebSocket() {
         // packaged mode the preload bridge resolves it via the
         // `session:get-token` IPC handshake (kept off `process.argv`).
         const bridge = (globalThis as unknown as {
-          gpsController?: { getSessionToken?: () => Promise<unknown> }
-        }).gpsController
+          geoMirage?: { getSessionToken?: () => Promise<unknown> }
+        }).geoMirage
         let token = ''
         if (bridge && typeof bridge.getSessionToken === 'function') {
           try {

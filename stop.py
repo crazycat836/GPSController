@@ -1,5 +1,5 @@
 """
-GPSController 一鍵停止
+GeoMirage 一鍵停止
 """
 
 import os
@@ -19,12 +19,12 @@ FRONTEND_PORT = 5173  # Vite dev-server default; not a backend concern
 
 
 def main():
-    print("  正在停止 GPSController...")
+    print("  正在停止 GeoMirage...")
 
     for port in (BACKEND_PORT, FRONTEND_PORT):
         kill_port(port)
 
-    print("  GPSController 已停止。")
+    print("  GeoMirage 已停止。")
 
 
 if __name__ == "__main__":

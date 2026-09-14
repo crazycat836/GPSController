@@ -7,7 +7,7 @@ import { readJSON, writeJSON } from '../lib/local-storage';
 import { openExternalOrDefault } from '../lib/open-external';
 
 const CURRENT = pkg.version;
-const REPO = 'crazycat836/GPSController';
+const REPO = 'crazycat836/GeoMirage';
 const RELEASES_URL = `https://github.com/${REPO}/releases`;
 const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
 const COOLDOWN_MS = 6 * 60 * 60 * 1000;

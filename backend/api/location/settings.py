@@ -21,7 +21,7 @@ def _settings_persist_error() -> HTTPException:
     ``AppState.save_settings``; the wire only carries the stable code."""
     return http_err(
         500, ErrorCode.SETTINGS_PERSIST_FAILED,
-        "Failed to persist settings; see ~/.gpscontroller/logs/backend.log",
+        "Failed to persist settings; see ~/.geomirage/logs/backend.log",
     )
 
 

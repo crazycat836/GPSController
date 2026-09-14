@@ -17,7 +17,7 @@ export default function Brand() {
         <MapPin className="w-[13px] h-[13px]" strokeWidth={2.5} />
       </div>
       <span className="text-[13px] font-semibold tracking-[-0.01em]">
-        GPSController
+        GeoMirage
       </span>
     </div>
   )

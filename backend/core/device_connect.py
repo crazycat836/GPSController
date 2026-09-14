@@ -81,7 +81,7 @@ async def connect_via_tunnel(
         )
         raise RuntimeError(
             f"Could not establish device tunnel (iOS {ios_version}). "
-            f"Please run GPSController as Administrator."
+            f"Please run GeoMirage as Administrator."
         )
 
 

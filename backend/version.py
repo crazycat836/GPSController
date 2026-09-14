@@ -48,7 +48,7 @@ def _resolve_version() -> str:
     if v:
         return v
     # Absolute fallback so logs/endpoints never crash on the lookup.
-    return os.environ.get("GPSCONTROLLER_VERSION", _BAKED_VERSION or "0.0.0")
+    return os.environ.get("GEOMIRAGE_VERSION", _BAKED_VERSION or "0.0.0")
 
 
 __version__ = _resolve_version()

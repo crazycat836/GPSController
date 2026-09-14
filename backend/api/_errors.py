@@ -144,7 +144,7 @@ def ios_unsupported_error(version: str) -> HTTPException:
         detail={
             "code": ErrorCode.IOS_UNSUPPORTED.value,
             "message": (
-                f"Detected iOS {version}; GPSController v0.1.49+ requires "
+                f"Detected iOS {version}; GeoMirage v0.1.49+ requires "
                 f"iOS {UnsupportedIosVersionError.MIN_VERSION} or newer. "
                 f"Please update to iOS {UnsupportedIosVersionError.MIN_VERSION}+ before connecting."
             ),

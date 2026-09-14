@@ -12,7 +12,7 @@ const APP_VERSION = require('../package.json').version
 // TOKEN_FILE and backend/main.py lifespan. We read it lazily (after the
 // backend is up) so the value we inject into the renderer is the fresh
 // one for this run, not a stale file from a previous crash.
-const TOKEN_FILE = path.join(os.homedir(), '.gpscontroller', 'token')
+const TOKEN_FILE = path.join(os.homedir(), '.geomirage', 'token')
 
 function readSessionToken() {
   try {
@@ -33,7 +33,7 @@ function readSessionToken() {
 let cachedSessionToken = ''
 ipcMain.handle('session:get-token', () => cachedSessionToken)
 
-// Strip the default "File Edit View Window Help" menubar — GPSController has its
+// Strip the default "File Edit View Window Help" menubar — GeoMirage has its
 // own in-window controls and the native menu only adds noise on Windows.
 Menu.setApplicationMenu(null)
 
@@ -48,8 +48,8 @@ function resolveBackendExe() {
   // runs `python start.py` (or similar) manually.
   if (!app.isPackaged) return null
   const binName = process.platform === 'win32'
-    ? 'gpscontroller-backend.exe'
-    : 'gpscontroller-backend'
+    ? 'geomirage-backend.exe'
+    : 'geomirage-backend'
   return path.join(process.resourcesPath, 'backend', binName)
 }
 
@@ -101,8 +101,8 @@ async function createWindow() {
         const u = new URL(details.url)
         if (OSM_HOSTS.includes(u.hostname)) {
           details.requestHeaders['User-Agent'] =
-            `GPSController/${APP_VERSION} (+https://github.com/crazycat836/GPSController)`
-          details.requestHeaders['Referer'] = 'https://github.com/crazycat836/GPSController'
+            `GeoMirage/${APP_VERSION} (+https://github.com/crazycat836/GeoMirage)`
+          details.requestHeaders['Referer'] = 'https://github.com/crazycat836/GeoMirage'
         }
       } catch {}
       cb({ requestHeaders: details.requestHeaders })
@@ -111,7 +111,7 @@ async function createWindow() {
 
   // Backend writes the token file before accepting any HTTP request. By
   // the time the renderer issues its first request the file is on disk;
-  // in dev mode it's empty (GPSCONTROLLER_DEV_NOAUTH=1).
+  // in dev mode it's empty (GEOMIRAGE_DEV_NOAUTH=1).
   cachedSessionToken = readSessionToken()
 
   mainWindow = new BrowserWindow({
@@ -119,7 +119,7 @@ async function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: 'GPSController',
+    title: 'GeoMirage',
     // Match the app's dark theme so the initial frame isn't white while
     // the renderer attaches — previously caused a jarring white flash.
     backgroundColor: '#0f1117',
@@ -179,6 +179,21 @@ async function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 }
+
+// Electron keeps localStorage under a per-product folder in appData, so the
+// rename to GeoMirage would otherwise start from empty settings. Copy the
+// folder from the previous product name once, before anything opens it.
+function adoptLegacyUserData() {
+  try {
+    const current = app.getPath('userData')
+    const legacy = path.join(app.getPath('appData'), 'GPSController')
+    if (legacy === current || fs.existsSync(current) || !fs.existsSync(legacy)) return
+    fs.cpSync(legacy, current, { recursive: true })
+  } catch (err) {
+    console.warn('[electron] legacy userData copy failed:', err)
+  }
+}
+adoptLegacyUserData()
 
 app.whenReady().then(createWindow)
 app.on('window-all-closed', () => {

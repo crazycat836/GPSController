@@ -21,7 +21,7 @@ from typing import Any, Awaitable, Callable
 from services import connection_state
 from services.location_service import DeviceLostError, unwrap_device_lost
 
-logger = logging.getLogger("gpscontroller")
+logger = logging.getLogger("geomirage")
 
 # Number of times to poll discover_devices when no UDID is known yet —
 # covers the brief window after `usbmuxd` learns a freshly-plugged iPhone.
@@ -31,7 +31,7 @@ _DISCOVER_RETRY_DELAY_S = 1.0
 NO_DEVICE_MESSAGE = "No iOS device connected; connect via USB first"
 ENGINE_UNRECOVERABLE_MESSAGE = (
     "Device connection invalid; try re-plugging USB or restarting "
-    "GPSController (see ~/.gpscontroller/logs/backend.log)"
+    "GeoMirage (see ~/.geomirage/logs/backend.log)"
 )
 
 

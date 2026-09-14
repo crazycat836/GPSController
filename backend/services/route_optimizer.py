@@ -16,7 +16,7 @@ Duration matrix source preference:
      time even if optimisation fell back.
 
 Solver: nearest-neighbor greedy. Empirically within ~25% of optimal on
-the n ≤ 10 case typical of GPSController multi-stop sessions; exact
+the n ≤ 10 case typical of GeoMirage multi-stop sessions; exact
 TSP would buy a few percent at best while complicating the code.
 """
 

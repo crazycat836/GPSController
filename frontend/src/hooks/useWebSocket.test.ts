@@ -18,7 +18,7 @@ import type { WsMessage } from './useWebSocket'
  *   at MAX_RECONNECT_INTERVAL (30000); a successful open resets it.
  * - On open, an auth frame `{type:'auth', token}` is sent first, with the
  *   token resolved from the Electron preload bridge
- *   `globalThis.gpsController.getSessionToken()` (empty string when the
+ *   `globalThis.geoMirage.getSessionToken()` (empty string when the
  *   bridge is absent or rejects), and never into a socket that closed
  *   while the token was being awaited.
  */
@@ -92,7 +92,7 @@ function parseFrames(ws: MockWebSocket): Array<Record<string, unknown>> {
 type SessionTokenBridge = { getSessionToken?: () => Promise<unknown> }
 
 function stubBridge(bridge: SessionTokenBridge | undefined): void {
-  vi.stubGlobal('gpsController', bridge)
+  vi.stubGlobal('geoMirage', bridge)
 }
 
 beforeEach(() => {

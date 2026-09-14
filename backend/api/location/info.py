@@ -18,7 +18,7 @@ async def debug_info():
 
     Token-protected like every other endpoint, but additionally gated
     behind the dev-mode flag so production builds don't expose engine
-    internals to a leaked token. Set ``GPSCONTROLLER_DEV_NOAUTH=1`` to
+    internals to a leaked token. Set ``GEOMIRAGE_DEV_NOAUTH=1`` to
     enable.
     """
     if not auth._is_auth_disabled():

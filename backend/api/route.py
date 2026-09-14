@@ -180,7 +180,7 @@ async def export_all_saved_routes():
     payload = {"routes": [r.model_dump(mode="json") for r in get_saved_routes_store().list()]}
     body = json.dumps(payload, ensure_ascii=False, indent=2)
     return Response(content=body, media_type="application/json",
-                    headers={"Content-Disposition": 'attachment; filename="gpscontroller-routes.json"'})
+                    headers={"Content-Disposition": 'attachment; filename="geomirage-routes.json"'})
 
 
 class _RouteImportBody(BaseModel):

@@ -1,5 +1,5 @@
 {
-  "name": "gps-controller",
+  "name": "geomirage",
   "version": "0.28.0",
   "description": "iOS Virtual Location Simulator",
   "author": "crazycat836",
@@ -48,8 +48,8 @@
     "tmp": ">=0.2.6"
   },
   "build": {
-    "appId": "com.gpscontroller.app",
-    "productName": "GPSController",
+    "appId": "com.geomirage.app",
+    "productName": "GeoMirage",
     "directories": {
       "output": "release"
     },
@@ -59,7 +59,7 @@
     ],
     "extraResources": [
       {
-        "from": "../dist-py/gpscontroller-backend",
+        "from": "../dist-py/geomirage-backend",
         "to": "backend",
         "filter": [
           "**/*"
@@ -84,7 +84,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "GPSController",
+      "shortcutName": "GeoMirage",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico"
@@ -109,7 +109,7 @@
       "darkModeSupport": true
     },
     "dmg": {
-      "title": "GPSController ${version}",
+      "title": "GeoMirage ${version}",
       "iconSize": 96
     }
   }

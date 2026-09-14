@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-<title>GPSController – 連線狀態更新流程</title>
+<title>GeoMirage – 連線狀態更新流程</title>
 <script type="module">
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs';
   mermaid.initialize({
@@ -269,11 +269,11 @@
 <header>
   <div class="container">
     <h1>
-      GPSController — 連線狀態流程圖
+      GeoMirage — 連線狀態流程圖
       <small>給第一次看這個專案的人 · 2026-05-19</small>
     </h1>
     <p class="lead">
-      本文件先解釋 GPSController 是什麼、為什麼需要追蹤「連線狀態」，
+      本文件先解釋 GeoMirage 是什麼、為什麼需要追蹤「連線狀態」，
       再介紹後端如何維護它、各種情境下會發生什麼事，最後給想看程式碼的人一條建議路徑。
     </p>
   </div>
@@ -301,7 +301,7 @@
 
   <div class="tldr">
     <h3>TL;DR</h3>
-    <p><strong>GPSController</strong> 是一個 macOS 桌面應用 (Electron + FastAPI)，可以連到 iPhone 並「假裝」它的 GPS 位置 —— 開發者可以在不動到實體裝置的情況下，測試 App 在不同地點的行為。</p>
+    <p><strong>GeoMirage</strong> 是一個 macOS 桌面應用 (Electron + FastAPI)，可以連到 iPhone 並「假裝」它的 GPS 位置 —— 開發者可以在不動到實體裝置的情況下，測試 App 在不同地點的行為。</p>
     <ul>
       <li>iPhone 可以透過 <strong>USB</strong> 或 <strong>Wi-Fi tunnel</strong> 與電腦連線</li>
       <li>後端會透過 Apple 內部 protocol (DVT) 注入 GPS 座標</li>
@@ -344,7 +344,7 @@
     </div>
     <div>
       <dt>DVT (Developer Disk Image)</dt>
-      <dd>Apple 內部的開發者通道。GPSController 透過 DVT 注入 GPS 座標。一旦這個 channel 掉了，就無法注入位置。</dd>
+      <dd>Apple 內部的開發者通道。GeoMirage 透過 DVT 注入 GPS 座標。一旦這個 channel 掉了，就無法注入位置。</dd>
     </div>
     <div>
       <dt>SSoT (Single Source of Truth)</dt>
@@ -641,7 +641,7 @@ sequenceDiagram
       <span class="tag tag-recover">RECOVER</span>
     </div>
     <div class="real-talk">
-      <strong>會發生什麼：</strong> 使用者正在用 GPSController 設定假位置，
+      <strong>會發生什麼：</strong> 使用者正在用 GeoMirage 設定假位置，
       但 iPhone 螢幕鎖了 / Wi-Fi 抖了 2 秒，導致 DVT channel 斷掉。
       這時 location service 會自動重連，期間狀態為 <code>DEGRADED</code>（UI 顯示「Reconnecting…」）。
     </div>
@@ -975,7 +975,7 @@ sequenceDiagram
 </div><!-- /container -->
 
 <footer>
-  Generated 2026-05-19 · GPSController · <code>docs/connection-state-flow.html</code><br/>
+  Generated 2026-05-19 · GeoMirage · <code>docs/connection-state-flow.html</code><br/>
   <small>本文件假設讀者第一次接觸此專案，所有專有名詞於 §2 已有解釋。</small>
 </footer>
 

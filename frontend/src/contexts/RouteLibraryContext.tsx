@@ -317,7 +317,7 @@ export function RouteLibraryProvider({ children }: { children: React.ReactNode }
 
   const handleRoutesExportAll = useCallback(async () => {
     try {
-      await api.downloadAllRoutes('gpscontroller-routes.json')
+      await api.downloadAllRoutes('geomirage-routes.json')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : ''
       showToast(t('toast.export_failed', { msg: message }))
