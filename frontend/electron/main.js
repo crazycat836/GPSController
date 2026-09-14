@@ -101,8 +101,8 @@ async function createWindow() {
         const u = new URL(details.url)
         if (OSM_HOSTS.includes(u.hostname)) {
           details.requestHeaders['User-Agent'] =
-            `GPSController/${APP_VERSION} (+https://github.com/keezxc1223/gpscontroller)`
-          details.requestHeaders['Referer'] = 'https://github.com/keezxc1223/gpscontroller'
+            `GPSController/${APP_VERSION} (+https://github.com/crazycat836/GPSController)`
+          details.requestHeaders['Referer'] = 'https://github.com/crazycat836/GPSController'
         }
       } catch {}
       cb({ requestHeaders: details.requestHeaders })
