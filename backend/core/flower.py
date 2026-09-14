@@ -290,6 +290,11 @@ class FlowerHandler:
         active task, which is this handler.
         """
         engine = self.engine
+        # A jump is a single push, so it would bypass the movement loop's
+        # pause check — honour a pause here instead.
+        await engine._pause_event.wait()
+        if engine._stop_event.is_set():
+            return True
         here = engine.current_position
         if here is not None and haversine_m(
             here.lat, here.lng, spot.lat, spot.lng,

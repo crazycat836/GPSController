@@ -430,3 +430,31 @@ def test_snapshot_replays_flower_on_secondary_engine():
         assert moves == [circle_path(s, 10.0, 6, 1.5) for s in _spots()]
 
     asyncio.run(scenario())
+
+
+def test_teleport_hop_waits_while_paused():
+    async def scenario():
+        engine, _service, recorder, _moves = _make_engine()
+        engine.current_position = _spots()[0]
+
+        def teleports() -> int:
+            return sum(1 for t, _ in recorder.events if t == "teleport")
+
+        task = asyncio.create_task(engine.flower(
+            _spots(), MovementMode.WALKING,
+            radius_m=10.0, segments=6, laps=1.0, rounds=1,
+            wait_after_s=0.05, transfer="teleport",
+        ))
+        # Pause during the wait after spot 1 (already there, no jump).
+        while not any(t == "pause_countdown" for t, _ in recorder.events):
+            await asyncio.sleep(0.002)
+        await engine.pause()
+        await asyncio.sleep(0.15)  # wait elapses while paused
+        assert teleports() == 0
+        await engine.resume()
+        await asyncio.wait_for(task, 2.0)
+
+        assert teleports() == 1
+        assert engine.state == SimulationState.IDLE
+
+    asyncio.run(scenario())
