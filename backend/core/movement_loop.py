@@ -360,6 +360,10 @@ async def move_along_route(
             "total": len(user_wps),
         })
 
+    if engine._pending_speed_profile is not None:
+        # apply_speed landed after the last point was pushed, too late to
+        # re-plan this leg. Keep it for the next one instead of dropping it.
+        engine._active_speed_profile = engine._pending_speed_profile
     engine._pending_speed_profile = None
     engine._active_route_coords = []
     engine._current_speed_mps = 0.0

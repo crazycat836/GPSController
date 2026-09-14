@@ -38,6 +38,14 @@ from core.restore import RestoreHandler
 from core.eta_tracker import EtaTracker
 from core.simulation_snapshot import SimulationSnapshot, SnapshotMode
 
+# Modes that run several ``_move_along_route`` legs with gaps in between, so a
+# speed change can arrive while no leg is active and still apply to the next.
+_MULTI_LEG_STATES = frozenset({
+    SimulationState.LOOPING,
+    SimulationState.MULTI_STOP,
+    SimulationState.RANDOM_WALK,
+})
+
 logger = logging.getLogger(__name__)
 
 
@@ -642,6 +650,10 @@ class SimulationEngine:
         * Joystick mode: swap the joystick handler's own speed_profile so
           the next tick computes distance with the new value.
 
+        * Between legs of a multi-leg mode (loop / multi-stop / random walk
+          waiting out a pause): store it as the active profile for the
+          next leg.
+
         Returns True if the change was queued/applied, False if nothing is
         running to apply it to.
 
@@ -660,7 +672,16 @@ class SimulationEngine:
                 self._speed_was_applied = True
                 return True
             if not self._active_route_coords:
-                return False
+                # Between legs — a pause countdown, a dwell at a stop, or the
+                # moment before the next leg is planned. Nothing to
+                # re-interpolate yet, but a multi-leg mode will read this via
+                # pick_speed_profile when its next leg starts.
+                running = self._paused_from if self.state == SimulationState.PAUSED else self.state
+                if running not in _MULTI_LEG_STATES:
+                    return False
+                self._active_speed_profile = dict(speed_profile)
+                self._speed_was_applied = True
+                return True
             self._pending_speed_profile = dict(speed_profile)
             self._speed_was_applied = True
             return True
