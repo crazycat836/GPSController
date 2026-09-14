@@ -87,3 +87,51 @@ async def resolve_hostname(ip: str, *, timeout: float = 2.0) -> str | None:
     if not name or name == ip:
         return None
     return name
+
+
+# RemotePairing listens on a port in the dynamic range (49152 by default,
+# but it can move, e.g. after the iPhone restarts). 62078 is lockdownd's
+# pairing port, never RemotePairing, so it's skipped.
+_REMOTEPAIRING_PORT_RANGE = range(49152, 65536)
+_LOCKDOWN_PORT = 62078
+_PORT_SCAN_CONCURRENCY = 256
+_PORT_SCAN_TIMEOUT_S = 0.3
+_PORT_SCAN_BUDGET_S = 15.0
+
+
+async def discover_remotepairing_ports(ip: str, *, exclude: set[int] | None = None) -> list[int]:
+    """Candidate RemotePairing ports on *ip*, best first.
+
+    Asks mDNS first (it advertises the real port); when that has nothing
+    for this IP, TCP-scans the dynamic port range on that one host within a
+    time budget. Ports in *exclude* (typically the one that just failed)
+    and lockdownd's 62078 are left out.
+    """
+    exclude = set(exclude or ())
+    exclude.add(_LOCKDOWN_PORT)
+
+    ports: list[int] = []
+    try:
+        from pymobiledevice3.bonjour import browse_remotepairing
+        for inst in await browse_remotepairing(timeout=3.0):
+            if any(a.ip == ip for a in (inst.addresses or [])) and inst.port not in exclude:
+                ports.append(inst.port)
+    except Exception:
+        logger.debug("mDNS browse during port recovery failed", exc_info=True)
+    if ports:
+        return sorted(set(ports))
+
+    sem = asyncio.Semaphore(_PORT_SCAN_CONCURRENCY)
+    candidates = [p for p in _REMOTEPAIRING_PORT_RANGE if p not in exclude]
+
+    async def _probe(port: int) -> int | None:
+        async with sem:
+            return port if await _tcp_probe(ip, port, _PORT_SCAN_TIMEOUT_S) else None
+
+    tasks = [asyncio.create_task(_probe(p)) for p in candidates]
+    done, pending = await asyncio.wait(tasks, timeout=_PORT_SCAN_BUDGET_S)
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+    return sorted(t.result() for t in done if not t.cancelled() and t.exception() is None and t.result())
+

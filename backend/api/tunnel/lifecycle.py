@@ -19,6 +19,7 @@ from api.tunnel._helpers import (
 )
 from config import MAX_DEVICES, REMOTE_PAIRING_PORT
 from services import connection_state
+from services.wifi_discovery import discover_remotepairing_ports
 from services.wifi_tunnel_service import (
     cancel_watchdog,
     cleanup_wifi_connections,
@@ -114,6 +115,52 @@ async def _tunnel_watchdog(task: asyncio.Task, gen: int) -> None:
         raise
 
 
+# Total time spent retrying other ports after the requested one fails.
+_PORT_RECOVERY_BUDGET_S = 45.0
+_PORT_RETRY_TIMEOUT_S = 10.0
+
+
+async def _start_with_port_recovery(tunnel, udid: str, ip: str, port: int) -> dict:
+    """Start the tunnel on *port*; if nothing usable answers there, find the
+    port RemotePairing actually listens on and retry.
+
+    The saved or default port goes stale when the iPhone restarts and
+    RemotePairing picks a new one. A pair-verify rejection means we did
+    reach RemotePairing, so it is re-raised as-is rather than retried.
+    Returns the tunnel info plus the ``port`` that worked, so the UI can
+    remember it.
+    """
+    try:
+        info = await tunnel.start(udid, ip, port, timeout=20.0)
+        return {**info, "port": port}
+    except ConnectionTerminatedError:
+        raise
+    except Exception as first_exc:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _PORT_RECOVERY_BUDGET_S
+        candidates = await discover_remotepairing_ports(ip, exclude={port})
+        _tunnel_logger.info(
+            "Tunnel start on %s:%d failed (%s); trying other ports %s",
+            ip, port, type(first_exc).__name__, candidates[:10],
+        )
+        for candidate in candidates:
+            remaining = deadline - loop.time()
+            if remaining < 3.0:
+                break
+            try:
+                info = await tunnel.start(
+                    udid, ip, candidate, timeout=min(_PORT_RETRY_TIMEOUT_S, remaining),
+                )
+            except ConnectionTerminatedError:
+                raise
+            except Exception:
+                _tunnel_logger.debug("Tunnel start on %s:%d failed", ip, candidate, exc_info=True)
+                continue
+            _tunnel_logger.info("Tunnel started on recovered port %s:%d", ip, candidate)
+            return {**info, "port": candidate}
+        raise first_exc
+
+
 async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
     """Start an in-process WiFi tunnel (requires admin). Used by the
     /wifi/tunnel/start-and-connect route."""
@@ -144,7 +191,7 @@ async def _do_tunnel_start(req: WifiTunnelStartRequest) -> dict:
         )
 
         try:
-            info = await tunnel.start(resolved_udid, req.ip, req.port, timeout=20.0)
+            info = await _start_with_port_recovery(tunnel, resolved_udid, req.ip, req.port)
         except asyncio.TimeoutError:
             raise http_err(500, ErrorCode.TUNNEL_TIMEOUT, "Tunnel startup timed out (20 s)")
         except ConnectionTerminatedError:
@@ -305,7 +352,10 @@ async def wifi_tunnel_start_and_connect(req: WifiTunnelStartRequest):
         # USB→Network and /api/device/list stops replaying the stale USB pill)
         # → create_engine sequence; merge the RSD info into the result.
         result = await connect_device_over_tunnel(rsd_address, rsd_port)
-        return {**result, "rsd_address": rsd_address, "rsd_port": rsd_port}
+        return {
+            **result, "rsd_address": rsd_address, "rsd_port": rsd_port,
+            "port": tunnel_result.get("port", req.port),
+        }
     except Exception:
         logger.exception(
             "Tunnel started but device connection failed",

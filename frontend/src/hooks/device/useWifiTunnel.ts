@@ -37,6 +37,10 @@ export interface StartWifiTunnelResult {
   // device is already connected over usbmux WiFi-sync (its own CoreDevice
   // tunnel). No manual tunnel is running in that case.
   alreadyConnected: boolean
+  // RemotePairing port the tunnel actually came up on. Differs from the
+  // requested one when the backend had to find the port again (it moves
+  // after the iPhone restarts); undefined when no tunnel was started.
+  port?: number
 }
 
 export interface WifiTunnelApi {
@@ -78,7 +82,7 @@ export function useWifiTunnel({ setDevices, setConnectedDevice }: WifiTunnelDeps
         if (!alreadyConnected) {
           setTunnelStatus({ running: true, rsd_address: res.rsd_address, rsd_port: res.rsd_port })
         }
-        return { device: info, alreadyConnected }
+        return { device: info, alreadyConnected, port: res.port }
       } catch (err) {
         devWarn('WiFi tunnel failed:', err)
         throw err

@@ -85,8 +85,12 @@ export default function DeviceAddView({ onConnected }: DeviceAddViewProps) {
     setTunnelError(null)
     try {
       const result = await device.startWifiTunnel(tunnelIp.trim(), parseInt(tunnelPort) || DEFAULT_TUNNEL_PORT)
+      // Remember the port that actually worked, not the one typed in, so a
+      // port the backend had to rediscover doesn't go stale again.
+      const workingPort = String(result.port ?? (tunnelPort || DEFAULT_TUNNEL_PORT))
       writeLS(STORAGE_KEYS.tunnelIp, tunnelIp.trim())
-      writeLS(STORAGE_KEYS.tunnelPort, tunnelPort || String(DEFAULT_TUNNEL_PORT))
+      writeLS(STORAGE_KEYS.tunnelPort, workingPort)
+      setTunnelPort(workingPort)
       showToast(
         result.alreadyConnected
           ? t('device.tunnel_already_connected')

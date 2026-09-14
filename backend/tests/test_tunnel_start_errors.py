@@ -45,7 +45,10 @@ def _run_start_with(exc: BaseException) -> HTTPException:
     )
 
     async def _run():
-        with patch.object(lifecycle, "get_tunnel_runner", return_value=runner):
+        # No other RemotePairing port turns up, so the original error is
+        # what gets mapped (and no real mDNS / port scan runs in tests).
+        with patch.object(lifecycle, "get_tunnel_runner", return_value=runner), \
+             patch.object(lifecycle, "discover_remotepairing_ports", AsyncMock(return_value=[])):
             await lifecycle._do_tunnel_start(req)
 
     with pytest.raises(HTTPException) as excinfo:
