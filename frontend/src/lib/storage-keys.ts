@@ -32,6 +32,9 @@ export const STORAGE_KEYS = {
   // speedMinKmh, speedMaxKmh}`. Persisted so the speed the user picked
   // is reused on the next launch instead of resetting to Walking.
   speedPrefs: 'gpscontroller.speed_prefs',
+  // Flower-mode settings: JSON `FlowerSettings` (lib/flower.ts). Decoded
+  // through `sanitizeFlowerSettings`, so stale / partial blobs are safe.
+  flowerSettings: 'gpscontroller.flower_settings',
 } as const
 
 // Legacy avatar keys (camelCase prefix + camelCase suffix) used before the

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Repeat, Route, Shuffle, Crosshair, Navigation, Gamepad2, SquareCheckBig, X, Check, ChevronDown } from 'lucide-react'
+import { Repeat, Route, Shuffle, Crosshair, Navigation, Gamepad2, SquareCheckBig, X, Check, ChevronDown, Flower } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ChainPoint } from '../WaypointChain'
 import { useSimActions, useSimState } from '../../contexts/SimContext'
 import { useSimDerived } from '../../contexts/SimDerivedContext'
 import { useSimSettings } from '../../contexts/SimSettingsContext'
-import { SimMode } from '../../hooks/useSimulation'
+import { SimMode, isRouteSubMode } from '../../hooks/useSimulation'
 import { useT } from '../../i18n'
-import { RADIUS_PRESETS } from '../../lib/constants'
+import { RADIUS_PRESETS, SPEED_MAP, type SpeedPresetMode } from '../../lib/constants'
 import { STORAGE_KEYS } from '../../lib/storage-keys'
 import { readLS, writeLS } from '../../lib/local-storage'
 import GlassIconButton from '../ui/GlassIconButton'
@@ -17,6 +17,7 @@ import JoyPreview from './dock/JoyPreview'
 import ModeStatsCard, { CardShell } from './dock/ModeStatsCard'
 import SpeedToggle from './dock/SpeedToggle'
 import ActionGroup from './dock/ActionGroup'
+import RouteSubModeToggle from './dock/RouteSubModeToggle'
 import { buildDockContext } from './dock/buildDockContext'
 
 const MODE_ICON: Record<string, LucideIcon> = {
@@ -25,6 +26,7 @@ const MODE_ICON: Record<string, LucideIcon> = {
   [SimMode.Loop]:       Repeat,
   [SimMode.MultiStop]:  Route,
   [SimMode.RandomWalk]: Shuffle,
+  [SimMode.Flower]:     Flower,
   [SimMode.Joystick]:   Gamepad2,
 }
 
@@ -53,8 +55,9 @@ function readDockCollapsed(): boolean {
 export default function BottomDock() {
   const t = useT()
   const { handleRemoveWaypoint, handleGenerateRandomWaypoints, handleOptimizeWaypoints, setWaypoints } = useSimActions()
-  const { mode, waypoints } = useSimState()
+  const { mode, waypoints, customSpeedKmh, speedMinKmh, speedMaxKmh, moveMode } = useSimState()
   const { currentPos, destPos } = useSimDerived()
+  const { flowerSettings } = useSimSettings()
   const [showRandomConfig, setShowRandomConfig] = useState(false)
   const [collapsed, setCollapsed] = useState(readDockCollapsed)
 
@@ -68,9 +71,16 @@ export default function BottomDock() {
     })
   }, [])
 
+  // Planning speed for the Flower estimate: custom > range midpoint > preset.
+  const planSpeedKmh = customSpeedKmh
+    ?? (speedMinKmh != null && speedMaxKmh != null ? (speedMinKmh + speedMaxKmh) / 2 : null)
+    ?? SPEED_MAP[moveMode as SpeedPresetMode]
   const ctx = useMemo(
-    () => buildDockContext(mode, waypoints, currentPos, destPos, t),
-    [mode, waypoints, currentPos, destPos, t],
+    () => buildDockContext(mode, waypoints, currentPos, destPos, t, {
+      settings: flowerSettings,
+      speedKmh: planSpeedKmh,
+    }),
+    [mode, waypoints, currentPos, destPos, t, flowerSettings, planSpeedKmh],
   )
 
   const speedToggleDisabled = mode === SimMode.Teleport || mode === SimMode.Joystick
@@ -137,6 +147,7 @@ export default function BottomDock() {
               {ctx.subtitle}
             </div>
           </div>
+          {isRouteSubMode(mode) && <RouteSubModeToggle />}
           <GlassIconButton
             className="shrink-0"
             label={collapsed ? t('shell.dock_expand') : t('shell.dock_collapse')}
@@ -225,6 +236,7 @@ function LeftColumn({ mode, chainPoints, loop, onRemoveWaypoint, onGenerateRando
       return <DockRouteCard mode={mode} />
     case SimMode.Loop:
     case SimMode.MultiStop:
+    case SimMode.Flower:
       return (
         <WaypointList
           points={chainPoints}

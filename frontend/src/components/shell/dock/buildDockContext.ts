@@ -1,6 +1,12 @@
 import { type ChainPoint } from '../../WaypointChain'
 import { haversineM, polylineDistanceM } from '../../../lib/geo'
-import { formatCoordCardinal, formatDistanceM } from '../../../lib/format'
+import { formatCoordCardinal, formatDistanceM, formatDurationS } from '../../../lib/format'
+import {
+  estimateFlowerPlan,
+  flowerPlanDistanceM,
+  flowerPlanSeconds,
+  type FlowerSettings,
+} from '../../../lib/flower'
 import { SimMode } from '../../../hooks/useSimulation'
 import type { useT } from '../../../i18n'
 
@@ -16,6 +22,12 @@ export interface DockCtx {
   loop: boolean
 }
 
+/** Inputs only the Flower summary needs. */
+export interface FlowerDockInput {
+  settings: FlowerSettings
+  speedKmh: number
+}
+
 // Build the per-mode meta (title, subtitle, optional waypoint chain)
 // rendered in the dock's `panel-meta` column. Pure derivation from
 // the staged waypoints + positions; no side effects.
@@ -25,6 +37,7 @@ export function buildDockContext(
   currentPos: LatLng | null,
   destPos: LatLng | null,
   t: Translator,
+  flower?: FlowerDockInput,
 ): DockCtx {
   const wp = waypoints
   const toChain = (pts: LatLng[]): ChainPoint[] =>
@@ -81,6 +94,27 @@ export function buildDockContext(
           ? t('panel.waypoints_none')
           : `${t('mode.multi_stop')} · ${count} ${t('panel.pts_short')}${formatChainDist(totalDist)}`,
         subtitle: count === 0 ? t('panel.waypoints_empty') : t('pause.multi_stop'),
+        chainPoints: toChain(wp),
+        loop: false,
+      }
+    }
+    case SimMode.Flower: {
+      const count = wp.length
+      if (count === 0 || !flower) {
+        return {
+          title: count === 0 ? t('panel.waypoints_none') : t('mode.flower'),
+          subtitle: count === 0 ? t('panel.waypoints_empty') : t('panel.flower_hint'),
+          chainPoints: toChain(wp),
+          loop: false,
+        }
+      }
+      const plan = estimateFlowerPlan(wp, flower.settings, currentPos)
+      const dist = flowerPlanDistanceM(plan)
+      const secs = flowerPlanSeconds(plan, flower.speedKmh)
+      const eta = secs == null ? t('dock.flower_forever') : formatDurationS(secs)
+      return {
+        title: `${t('mode.flower')} · ${count} ${t('panel.pts_short')}${dist == null ? '' : formatChainDist(dist)}`,
+        subtitle: `${t('dock.est_time')} ${eta} · ${t('panel.flower_hint')}`,
         chainPoints: toChain(wp),
         loop: false,
       }

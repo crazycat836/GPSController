@@ -87,6 +87,7 @@ export const STRINGS = {
   'mode.random_walk': { zh: '隨機漫步', en: 'Random Walk' },
   'mode.joystick': { zh: '搖桿操控', en: 'Joystick' },
   'mode.route': { zh: '路線', en: 'Route' },
+  'mode.flower': { zh: '種花', en: 'Flower' },
 
   // ── Move mode (speed presets) ────────────────
   'move.walking': { zh: '走路', en: 'Walking' },
@@ -554,11 +555,23 @@ export const STRINGS = {
   'action.disabled_no_device': { zh: '尚未連接裝置', en: 'No device connected' },
   'action.disabled_no_destination': { zh: '尚未設定目的地', en: 'No destination set' },
   'action.disabled_min_waypoints': { zh: '至少需要 2 個路徑點', en: 'Need at least 2 waypoints' },
+  'action.disabled_min_one_waypoint': { zh: '至少需要 1 個路徑點', en: 'Need at least 1 waypoint' },
   'dock.speed': { zh: '速度', en: 'Speed' },
   'dock.heading': { zh: '方向', en: 'Heading' },
   'dock.sensitivity': { zh: '靈敏度', en: 'Sensitivity' },
   'dock.wander_zone': { zh: '漫步區域', en: 'Wander zone' },
   'dock.wandering': { zh: '漫步中', en: 'Wandering' },
+  'dock.route_submode_aria': { zh: '路線模式', en: 'Route mode' },
+  'dock.flower_segments': { zh: '點數', en: 'Points' },
+  'dock.flower_laps': { zh: '圈數', en: 'Laps' },
+  'dock.flower_rounds': { zh: '輪數', en: 'Rounds' },
+  'dock.flower_wait_before': { zh: '繞圈前等待', en: 'Wait before' },
+  'dock.flower_wait_after': { zh: '繞圈後等待', en: 'Wait after' },
+  'dock.flower_transfer': { zh: '移動方式', en: 'Transfer' },
+  'dock.flower_walk': { zh: '步行', en: 'Walk' },
+  'dock.flower_teleport': { zh: '瞬移', en: 'Teleport' },
+  'dock.flower_forever': { zh: '不限次數', en: 'Until stopped' },
+  'panel.flower_hint': { zh: '在每個路徑點周圍繞一圈,讓花鋪成一片', en: 'Walks a circle around each waypoint so flowers cover an area' },
 
   // ── ETA ─────────────────────────────────────────
   'eta.progress_aria': { zh: '進度', en: 'Progress' },

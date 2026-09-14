@@ -7,6 +7,7 @@ import type { DeviceLostCause } from './hooks/useDevice'
 import { STORAGE_KEYS } from './lib/storage-keys'
 import { readLS, writeLS } from './lib/local-storage'
 import { haversineM, polylineDistanceM } from './lib/geo'
+import { estimateFlowerPlan, flowerPlanDistanceM } from './lib/flower'
 import { useUsageCapture } from './services/usage'
 
 // Context providers
@@ -94,6 +95,7 @@ const SIM_CRASH_MODE_KEYS: Record<string, StringKey> = {
   loop: 'mode.loop',
   multi_stop: 'mode.multi_stop',
   random_walk: 'mode.random_walk',
+  flower: 'mode.flower',
 }
 
 function App() {
@@ -184,8 +186,12 @@ function AppShell() {
     if (mode === SimMode.MultiStop) {
       return waypoints.length < 2 ? 0 : polylineDistanceM(waypoints)
     }
+    if (mode === SimMode.Flower) {
+      const plan = estimateFlowerPlan(waypoints, simSettings.flowerSettings, simCurrentPos)
+      return flowerPlanDistanceM(plan) ?? 0
+    }
     return 0
-  }, [sim.mode, sim.waypoints, simCurrentPos, simDestPos])
+  }, [sim.mode, sim.waypoints, simCurrentPos, simDestPos, simSettings.flowerSettings])
 
   const plannedEtaSeconds = useMemo(() => {
     if (plannedDistanceM <= 0) return 0
@@ -346,7 +352,9 @@ function AppShell() {
       }
       if (!isInput && e.key >= '1' && e.key <= '4') {
         const modeForKey: SimMode[] = [SimMode.Teleport, SimMode.Navigate, SimMode.Loop, SimMode.Joystick]
-        handleModeChange(modeForKey[parseInt(e.key) - 1])
+        const next = modeForKey[parseInt(e.key) - 1]
+        // Like the Route tab: pressing 3 while in Flower stays in Flower.
+        handleModeChange(next === SimMode.Loop && sim.mode === SimMode.Flower ? SimMode.Flower : next)
         return
       }
       if (!isInput && e.key === ' ' && sim.status.running) {
@@ -359,7 +367,7 @@ function AppShell() {
     return () => window.removeEventListener('keydown', handler)
     // Deps are stable actions + the two run-state booleans — the listener
     // re-subscribes when the run/pause state flips, not on position ticks.
-  }, [libraryOpen, handleModeChange, sim.status.running, sim.status.paused, handlePause, handleResume])
+  }, [libraryOpen, handleModeChange, sim.mode, sim.status.running, sim.status.paused, handlePause, handleResume])
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
@@ -389,6 +397,7 @@ function AppShell() {
           destination={simDestPos}
           waypoints={mapWaypoints}
           routePath={sim.routePath}
+          flowerRadiusM={sim.mode === SimMode.Flower ? simSettings.flowerSettings.radiusM : null}
           randomWalkRadius={
             sim.mode === SimMode.RandomWalk ? simSettings.randomWalkRadius :
             (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) ? simSettings.wpGenRadius :
@@ -399,7 +408,7 @@ function AppShell() {
           onNavigate={simActions.handleNavigate}
           onAddBookmark={bm.handleAddBookmark}
           onAddWaypoint={simActions.handleAddWaypoint}
-          showWaypointOption={sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop}
+          showWaypointOption={sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop || sim.mode === SimMode.Flower}
           onSaveRoute={() => setSaveRouteOpen(true)}
           showSaveRouteOption={sim.waypoints.length > 0}
           deviceConnected={device.connectedDevice !== null}

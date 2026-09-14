@@ -42,9 +42,11 @@ const dockModes: DockModeEntry[] = [
     labelKey: 'mode.route',
     kbd: '3',
     isActive: (m) => isRouteSubMode(m),
-    // Only the Loop sub-mode is exposed in the UI now; Multi-Stop / Random
-    // Walk remain in the engine but are no longer reachable from the dock.
-    onSelect: () => SimMode.Loop,
+    // Loop and Flower are the sub-modes exposed in the UI (the dock's
+    // Loop | Flower switch picks between them); Multi-Stop / Random Walk
+    // remain in the engine but are no longer reachable from the dock.
+    // Re-selecting the tab keeps Flower instead of resetting to Loop.
+    onSelect: (m) => (m === SimMode.Flower ? SimMode.Flower : SimMode.Loop),
   },
   {
     id: 'joystick',

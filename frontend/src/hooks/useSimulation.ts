@@ -19,6 +19,8 @@ import {
   type PauseSetting,
 } from './sim/usePauseSettings'
 import { MoveMode, useSpeedPrefs, type SpeedPrefs } from './sim/useSpeedPrefs'
+import type { FlowerSettings } from '../lib/flower'
+import type { FlowerOpts } from '../services/locationApi'
 import {
   useSimGroupActions,
   type FanoutOutcome,
@@ -51,9 +53,23 @@ export enum SimMode {
   Joystick = 'joystick',
   MultiStop = 'multistop',
   RandomWalk = 'randomwalk',
+  Flower = 'flower',
 }
 
-/** Loop / MultiStop / RandomWalk are the three "Route" sub-modes: they live
+/** Wire payload for a flower run (backend `FlowerRequest` field names). */
+export function flowerOpts(s: FlowerSettings): FlowerOpts {
+  return {
+    radius_m: s.radiusM,
+    segments: s.segments,
+    laps: s.laps,
+    rounds: s.rounds,
+    wait_before_s: s.waitBeforeS,
+    wait_after_s: s.waitAfterS,
+    transfer: s.transfer,
+  }
+}
+
+/** Loop / MultiStop / RandomWalk / Flower are the "Route" sub-modes: they live
  *  behind the single "Route" tab in the mode bar and share one staged
  *  waypoint chain. Defined next to SimMode (not in a component) so both the
  *  UI and `setMode`'s guard can reference one definition. */
@@ -61,6 +77,7 @@ export const ROUTE_SUB_MODES: ReadonlySet<SimMode> = new Set([
   SimMode.Loop,
   SimMode.MultiStop,
   SimMode.RandomWalk,
+  SimMode.Flower,
 ])
 
 export function isRouteSubMode(mode: SimMode): boolean {
@@ -81,6 +98,7 @@ function stateToMode(state: string): SimMode | null {
     case 'looping': return SimMode.Loop
     case 'multi_stop': return SimMode.MultiStop
     case 'random_walk': return SimMode.RandomWalk
+    case 'flower': return SimMode.Flower
     case 'joystick': return SimMode.Joystick
     default: return null
   }
@@ -95,6 +113,7 @@ function modeToState(mode: SimMode): string | null {
     case SimMode.Loop: return 'looping'
     case SimMode.MultiStop: return 'multi_stop'
     case SimMode.RandomWalk: return 'random_walk'
+    case SimMode.Flower: return 'flower'
     case SimMode.Joystick: return 'joystick'
     default: return null
   }
@@ -312,13 +331,14 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     })
   }, [clearStagedRoute])
 
-  // Load a saved route into the Route (Loop) editor. Uses the raw mode
+  // Load a saved route into the Route editor (Loop, or Flower when that
+  // sub-mode is already selected). Uses the raw mode
   // setter (like the internal start-handlers): combining setMode with
   // setWaypoints is ordering-sensitive (points staged before the mode
   // switch get wiped by setMode's clear), so route-load gets one explicit
   // action that can't be broken by call order.
   const loadRouteWaypoints = useCallback((wps: LatLng[]) => {
-    _setMode(SimMode.Loop)
+    _setMode((prev) => (prev === SimMode.Flower ? prev : SimMode.Loop))
     clearStagedRoute()
     setWaypoints(wps)
   }, [clearStagedRoute])
@@ -433,6 +453,28 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     },
     // Body uses only pauseRandomWalk — drop the other two pause settings.
     [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseRandomWalk, straightLine, patchPrimaryRuntime],
+  )
+
+  const startFlower = useCallback(
+    async (wps: LatLng[], settings: FlowerSettings) => {
+      setError(null)
+      const prevMode = modeRef.current
+      _setMode(SimMode.Flower)
+      // See startLoop — the UI waypoints stay as the user staged them.
+      patchPrimaryRuntime({ progress: 0 })
+      setLapProgress(settings.rounds != null ? { current: 0, total: settings.rounds } : null)
+      try {
+        const res = await api.startFlower(wps, moveMode, flowerOpts(settings), { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, undefined, straightLine)
+        patchPrimaryRuntime({ state: 'flower' })
+        setEffectiveSpeed({ mode: moveMode, kmh: customSpeedKmh, min: speedMinKmh, max: speedMaxKmh })
+        return res
+      } catch (err) {
+        _setMode(prevMode)
+        setLapProgress(null)
+        throw err
+      }
+    },
+    [moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, straightLine, patchPrimaryRuntime],
   )
 
   const joystickStart = useCallback(async () => {
@@ -625,7 +667,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   // patches after the fan-out.
   const {
     teleportAll, navigateAll, startLoopAll, multiStopAll, randomWalkAll,
-    applySpeedAll, pauseAll, resumeAll, stopAll, restoreAll,
+    startFlowerAll, applySpeedAll, pauseAll, resumeAll, stopAll, restoreAll,
     joystickStartAll, joystickStopAll,
   } = useSimGroupActions({
     currentPosition,
@@ -650,6 +692,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     startLoopAll,
     multiStopAll,
     randomWalkAll,
+    startFlowerAll,
     applySpeedAll,
     pauseAll,
     resumeAll,
@@ -706,6 +749,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
     startLoop,
     multiStop,
     randomWalk,
+    startFlower,
     joystickStart,
     joystickStop,
     pause,

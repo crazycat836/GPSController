@@ -11,6 +11,7 @@ import { useDestinationMarker } from './map/useDestinationMarker';
 import { useWaypointMarkers } from './map/useWaypointMarkers';
 import { useRoutePolyline } from './map/useRoutePolyline';
 import { useRandomWalkRadius } from './map/useRandomWalkRadius';
+import { useFlowerCircles } from './map/useFlowerCircles';
 import { useMapTiles } from './map/useMapTiles';
 
 interface MapViewProps {
@@ -23,6 +24,9 @@ interface MapViewProps {
   destination: Position | null;
   waypoints: Waypoint[];
   routePath: Position[];
+  /** Flower mode: circle radius drawn around every waypoint. Null hides
+   *  the preview (any other mode). */
+  flowerRadiusM?: number | null;
   randomWalkRadius: number | null;
   onMapClick: (lat: number, lng: number) => void;
   onTeleport: (lat: number, lng: number) => void;
@@ -55,6 +59,7 @@ function MapView({
   destination,
   waypoints,
   routePath,
+  flowerRadiusM = null,
   randomWalkRadius,
   onMapClick,
   onTeleport,
@@ -198,6 +203,8 @@ function MapView({
   useWaypointMarkers(mapRef, waypoints, t);
 
   useRoutePolyline(mapRef, routePath);
+
+  useFlowerCircles(mapRef, waypoints, flowerRadiusM);
 
   useRandomWalkRadius(mapRef, randomWalkRadius, currentPosition);
 

@@ -96,6 +96,9 @@ function blockReason(
   if (mode === SimMode.Loop || mode === SimMode.MultiStop) {
     return waypointCount < MIN_WAYPOINTS_FOR_PATH ? 'action.disabled_min_waypoints' : null
   }
+  if (mode === SimMode.Flower) {
+    return waypointCount < 1 ? 'action.disabled_min_one_waypoint' : null
+  }
   return null
 }
 

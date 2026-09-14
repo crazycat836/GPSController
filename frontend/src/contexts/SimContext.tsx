@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSimulation, SimMode, MoveMode, type SpeedSelection } from '../hooks/useSimulation'
+import { useSimulation, SimMode, MoveMode, flowerOpts, type SpeedSelection } from '../hooks/useSimulation'
 import type { SimErrorCode } from '../hooks/useSimulation'
 import { useJoystick } from '../hooks/useJoystick'
 import * as api from '../services/api'
@@ -155,6 +155,7 @@ export function SimProvider({ children }: SimProviderProps) {
     setWpGenCount,
     joystickSensitivity,
     autoJitter,
+    flowerSettings,
   } = useSimSettings()
 
   // Sensitivity stepper is 1-5 with 3 = baseline 1.0×; the wire value is
@@ -182,6 +183,7 @@ export function SimProvider({ children }: SimProviderProps) {
     randomWalkRadius,
     wpGenRadius,
     wpGenCount,
+    flowerSettings,
   })
   useEffect(() => {
     latest.current = {
@@ -193,6 +195,7 @@ export function SimProvider({ children }: SimProviderProps) {
       randomWalkRadius,
       wpGenRadius,
       wpGenCount,
+      flowerSettings,
     }
   })
 
@@ -365,6 +368,7 @@ export function SimProvider({ children }: SimProviderProps) {
         break
       case SimMode.Loop:
       case SimMode.MultiStop:
+      case SimMode.Flower:
         sim.setWaypoints((prev) => {
           if (prev.length === 0 && sim.currentPosition) {
             return [
@@ -467,9 +471,12 @@ export function SimProvider({ children }: SimProviderProps) {
   }, [])
 
   const handleStartWaypointRoute = useCallback(async () => {
-    const { sim, connectedDevices, t, showToast } = latest.current
+    const { sim, connectedDevices, t, showToast, flowerSettings } = latest.current
     const route = sim.waypoints
-    if (route.length < 2) {
+    // Flower circles every staged point, so one spot is enough; the
+    // path modes need a leg.
+    const minPoints = sim.mode === SimMode.Flower ? 1 : 2
+    if (route.length < minPoints) {
       showToast(t('toast.no_waypoints'))
       return
     }
@@ -497,6 +504,23 @@ export function SimProvider({ children }: SimProviderProps) {
             await sim.multiStop(route, 0, false)
           },
           multi: (us) => sim.multiStopAll(us, route, 0, false),
+          t,
+          showToast,
+        })
+      } else if (sim.mode === SimMode.Flower) {
+        const settings = flowerSettings
+        await runWithFanout({
+          udids,
+          devices: connectedDevices,
+          action: t('mode.flower'),
+          // Walking to the first spot starts from the device position, so
+          // a cached one needs the user's consent first. Teleport transfers
+          // jump straight to the spot and don't depend on it.
+          single: async () => {
+            if (settings.transfer === 'walk' && !(await confirmStartFromCached())) return
+            await sim.startFlower(route, settings)
+          },
+          multi: (us) => sim.startFlowerAll(us, route, flowerOpts(settings)),
           t,
           showToast,
         })
@@ -561,7 +585,7 @@ export function SimProvider({ children }: SimProviderProps) {
           t,
           showToast,
         })
-      } else if (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop) {
+      } else if (sim.mode === SimMode.Loop || sim.mode === SimMode.MultiStop || sim.mode === SimMode.Flower) {
         // `handleStartWaypointRoute` toasts its own failures; awaiting
         // here keeps the start button disabled-state consistent.
         await handleStartWaypointRoute()

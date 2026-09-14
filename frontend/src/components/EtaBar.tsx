@@ -21,7 +21,7 @@ interface EtaBarProps {
 
 // Keep `paused` here — the pause/resume button lives inside this pill,
 // so hiding it on pause would trap the user with no visible way to resume.
-const ACTIVE_STATES = ['navigating', 'looping', 'multi_stop', 'random_walk', 'paused']
+const ACTIVE_STATES = ['navigating', 'looping', 'multi_stop', 'random_walk', 'flower', 'paused']
 
 // Single source of truth for "is the ETA pill on screen". Mirrors the
 // visibility gate below so callers (e.g. App.tsx, which stacks the toast
