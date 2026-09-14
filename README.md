@@ -1,15 +1,12 @@
 # GPSController
 
-**iOS 虛擬定位模擬器** — 在 Windows 與 macOS 上控制 iPhone 的 GPS,支援瞬移、導航、路線循環、多點停留、隨機漫步、搖桿操控,經 USB 或 WiFi 連線。**全程不修改 iPhone 系統或使用者資料,斷開後裝置自動恢復真實 GPS。**
+在 macOS 或 Windows 上模擬 iPhone 的 GPS 位置。支援瞬移、沿道路導航、路線循環與搖桿操控，透過 USB 或 WiFi 連線。不修改 iPhone 的系統或使用者資料；清除虛擬定位或中斷連線後，iPhone 會回到真實 GPS。
 
 <p align="center">
   <img src="frontend/build/icon.png" width="160" alt="GPSController">
 </p>
 
 <p align="center">
-  <a href="https://github.com/crazycat836/GPSController/releases/latest">
-    <img alt="下載安裝檔" src="https://img.shields.io/badge/下載安裝檔-4285f4?style=for-the-badge&logo=github&logoColor=white">
-  </a>
   <a href="https://github.com/crazycat836/GPSController/releases/latest">
     <img alt="最新版本" src="https://img.shields.io/github/v/release/crazycat836/GPSController?style=for-the-badge&color=2d3748">
   </a>
@@ -19,21 +16,21 @@
 </p>
 
 > ⚠️ **定位類遊戲使用者請注意**
-> 這類平台多半禁止虛擬定位,使用本工具可能導致帳號警告或封禁。**開發者不負任何帳號損失責任**,請自行評估風險後再用。
+> 多數定位類遊戲與社群平台禁止虛擬定位，使用本工具可能導致帳號被警告或停權。開發者不負責任何帳號損失，請自行評估。
 
 ---
 
 ## 目錄
 
-- [目錄](#目錄)
 - [功能](#功能)
-- [Quick Start](#quick-start-3-步開始模擬)
-- [使用者端需求](#使用者端需求)
+- [系統需求](#系統需求)
+- [安裝與啟動](#安裝與啟動)
+- [第一次連線](#第一次連線)
 - [疑難排解](#疑難排解)
-- [iOS 相容性](#ios-相容性)
-- [給開發者](#給開發者)
+- [資料與外部服務](#資料與外部服務)
+- [開發](#開發)
 - [License](#license)
-- [Disclaimer(免責聲明)](#disclaimer免責聲明)
+- [免責聲明](#免責聲明)
 
 ---
 
@@ -41,203 +38,292 @@
 
 ### 移動模式
 
+底部模式列有四種模式，也可以用數字鍵 `1`～`4` 切換。
+
 | 模式 | 說明 |
 | --- | --- |
-| **Teleport** | 瞬間跳到指定座標 |
-| **Navigate** | 從目前位置沿 OSRM 路線步行 / 跑步 / 開車到目的地 |
-| **Route Loop** | 閉路線無限循環,每圈隨機停頓 |
-| **Multi-Stop** | 依序經過多個停靠點,每點可自訂停頓 |
-| **Random Walk** | 在指定半徑內隨機漫遊,半徑可選 200 m / 500 m / 1 km / 2 km |
-| **Joystick** | 以方向 + 力度即時操控,支援 WASD / 方向鍵,Shift 衝刺 |
+| **瞬移 Teleport** | 跳到指定座標。啟動前顯示依距離估算的冷卻時間；可開啟「自動抖動」 |
+| **導航 Navigate** | 從目前位置沿 OSRM 規劃的道路移動到目的地 |
+| **路線 Route** | 依序走過地圖上的路徑點並循環。可設定圈數（無限或 2～99 圈），每圈之間會隨機停頓 |
+| **搖桿 Joystick** | 用 WASD／方向鍵或拖曳搖桿即時移動，可調整靈敏度 |
 
-左鍵點擊地圖依目前模式自動新增點位。Loop / Multi-Stop 可設**圈數上限**,到數自動停止。
+- **速度**：走路 10.8、跑步 19.8、開車 60 km/h。移動中切換速度會立即套用，從目前位置繼續。
+- **預估時間**：導航與路線模式啟動前，依距離、速度與圈數顯示預估時間。
+- **路線無法規劃時**：OSRM 找不到可行道路時，模擬會停止並顯示「路線規劃失敗」，不會改走直線。
 
-### 連線與雙裝置
+### 路徑點與路線
 
-- **USB 有線** — 插上即自動連線,鎖屏不影響;熱插拔偵測,重插自動重連
-- **WiFi Tunnel** — mDNS 廣播失敗自動退回 /24 TCP 掃描;成功 IP / Port 記入 localStorage 供下次預填
-- **USB → WiFi 自動接手** — USB 拔線時若已有運行中的 WiFi Tunnel,裝置會自動切到 WiFi 繼續運作,不必重新連線
-- **雙裝置群組** — 同時連接兩台 iPhone,所有操作同步發送;裝置 chip 顯示各台連線狀態
+- 路線模式下左鍵點地圖新增路徑點，或在右鍵選單選「新增路徑點」。
+- 路徑點可拖曳重排，也可以隨機產生（指定半徑與數量）。
+- 3 個以上路徑點時可「最佳化順序」，縮短總距離。
+- 路線可存進路線庫，依分類管理、搜尋、排序、批次移動或刪除；支援 GPX 匯入／匯出，以及整個路線庫的 JSON 匯出／匯入。
 
-### 速度控制
+### 收藏
 
-- **預設三檔**:走路 10.8 / 跑步 19.8 / 開車 60 km/h
-- **自訂固定 / 隨機範圍**:輸入任意 km/h,或 min ~ max 讓後端每段重抽模擬真實路況
-- **運行中即時套用**:導航 / 巡迴 / 多點 / 隨機漫步 / 搖桿進行中可修改速度後按「套用新速度」,從當前位置接續執行
+- 以「地點」與「標籤」分類，可篩選、排序、多選、搬移，並顯示國旗。
+- JSON 匯出／匯入。匯入的資料會加在現有收藏之後，不會覆蓋。
+- 批次貼上座標，支援 `(lat, lng)`、全形括號，以及 Google Maps 網址中的 `@lat,lng,15z`，每行可附名稱。
 
-### 路線與地圖
+### 地圖與搜尋
 
-- **ETA 預覽** — Navigate / Loop / Multi-Stop 啟動前依距離 × 速度 × 圈數即時顯示預估時間
-- **冷卻預覽** — Teleport 啟動前依目的地距離顯示預估冷卻時間(對齊距離分級表)
-- **目的地 reverse geocode** — 自動顯示地址(Nominatim,帶去抖動 + 快取)
-- **收藏** — 自訂名稱、分類、JSON 匯出 / 匯入(合併不覆蓋)、批次貼上座標(支援 `(lat, lng)` / 全形括號 / `@lat,lng,15z` Google Maps 格式)、右鍵複製
-- **Route library** — WaypointChain 儲存整段多點路線、GPX 匯入 / 匯出、依分類瀏覽
-- **Waypoint 互動** — 點 chain 上的 stop 飛到該點(保留目前模式);右鍵地圖新增;拖曳重排
-- **地址搜尋** — Nominatim,座標格式 DD / DMS / DM
-- **OSRM fallback** — 無覆蓋區域自動走密化直線,不再等待逾時
+- **地址搜尋**：預設使用 Photon，可在設定改成 Nominatim，或填入自己的 Google Places API key。搜尋框也可以直接貼上 `緯度, 經度`。
+- **右鍵選單**：這裡是哪裡、複製座標、瞬移或導航到此、加入收藏、新增路徑點、快速儲存路線。
+- **目的地地址**：以 Nominatim 反查地址並顯示。
+- **定位我的電腦**：用電腦的定位在地圖上標出位置，可選擇只移動地圖，或連 iPhone 一起瞬移過去。
+- **地圖圖層**：OpenStreetMap（預設）、CARTO、Esri。
+- **天氣**：顯示目前位置的天氣（open-meteo）。
 
-### 輔助工具
+### 連線
 
-- **Locate PC**(定位我的電腦)— 用瀏覽器 Geolocation API 抓電腦實際座標,在地圖上標獨立 pin,可選「只飛過去」或「把 iPhone 也帶過去」
-- **清除虛擬定位** — 一鍵清掉 iPhone 上的虛擬 GPS override,恢復裝置真實 GPS(雙裝置模式自動同步兩台)
-- **自訂預設畫面** — 設定啟動時的地圖中心座標,僅影響地圖視角,不觸發虛擬 GPS
-- **上次位置記憶** — backend 在關機前寫檔,下次開啟前端直接 pre-render 上次座標,idle state 不再空白
+- **USB**：插上並信任後，在裝置清單按「連線」。拔線會被偵測到並中斷連線。
+- **WiFi**：透過 WiFi Tunnel 連線。會先用 mDNS 找裝置，找不到時掃描同網段；成功的 IP 與 port 會記住。
+- **USB 轉 WiFi**：已有 WiFi Tunnel 時拔掉 USB，會自動改用 WiFi 繼續。
+- **雙裝置**：最多同時連兩台 iPhone，操作會同步送到兩台。雙裝置模式下不套用冷卻。
+- **螢幕暗掉時維持 WiFi 連線**（設定中開啟）：閒置時定期重送目前位置，避免 iPhone 螢幕變暗後 Tunnel 中斷。
 
-### 無障礙
+### 其他
 
-WCAG AA 對比(≥ 4.5:1)、44 / 36 / 24 px 分層觸控目標、焦點圈、ARIA dialog / switch / menu 語意及鍵盤導航,符合 iOS HIG 規範。
+- **清除虛擬定位**：讓 iPhone 回到真實 GPS（雙裝置時兩台一起）。
+- **啟動位置**：設定開啟 app 時地圖的中心點，只影響地圖，不會送出定位。
+- **記住上次位置**：後端每 2 秒記錄一次目前位置，下次開啟時直接顯示。
+- **Gold Ditto**（Pikmin Bloom）：跳到設定好的位置後，自動恢復真實 GPS。
+- **冷卻**：可在設定中開關，畫面上顯示剩餘時間。
+- **地圖圖釘頭像**：可選內建圖示或上傳圖片。
+- **介面語言**：繁體中文、English。
+- **更新提醒**：啟動時檢查 GitHub 最新 release；選「稍後」會 6 小時內不再提示。
+
+### 快捷鍵
+
+| 按鍵 | 動作 |
+| --- | --- |
+| `1`～`4` | 切換瞬移／導航／路線／搖桿 |
+| `Space` | 暫停／繼續 |
+| `⌘/Ctrl + K` | 搜尋 |
+| `⌘ + B` | 開啟收藏與路線庫 |
+| `Esc` | 關閉收藏與路線庫 |
+| `W A S D`／方向鍵 | 搖桿移動 |
 
 ---
 
-## Quick Start(3 步開始模擬)
+## 系統需求
 
-1. [**下載對應平台的安裝檔**](https://github.com/crazycat836/GPSController/releases/latest) — Windows `.exe` 或 macOS `.dmg`
-2. **首次使用**先完成 [使用者端需求](#使用者端需求)(iTunes / 信任 / 開發者模式)
-3. **啟動 GPSController**,USB 插上 iPhone,左鍵地圖任一點 → 按 Teleport 的 **Move**
+| 項目 | 需求 |
+| --- | --- |
+| 電腦 | macOS（Apple Silicon）或 Windows 10／11 |
+| iPhone | iOS 16 以上，已開啟開發者模式（iOS 15 以下不支援） |
+| Python | 3.13 |
+| Node.js | 22.22 以上 |
+| 權限 | iOS 17 以上需要以系統管理員／`sudo` 執行，USB 與 WiFi 都一樣 |
+| Windows 另需 | [Apple 官網的 iTunes for Windows](https://www.apple.com/itunes/)（64-bit）。Microsoft Store 的「Apple Devices」不相容 |
+| 網路 | 第一次連線 iOS 17 以上的裝置時，需要從 GitHub 下載開發者映像檔（約 15 MB） |
 
-首次連線 GPSController 會自動下載並掛載 Developer Disk Image(約 20 MB)。
+目前 GitHub Releases 沒有附上安裝檔，請從原始碼執行，或依[建置安裝檔](#建置安裝檔)自行打包。
 
 ---
 
-## 使用者端需求
+## 安裝與啟動
 
-**[從 Releases 頁面下載安裝檔](https://github.com/crazycat836/GPSController/releases/latest)**
+```bash
+git clone https://github.com/crazycat836/GPSController.git
+cd GPSController
 
-### Windows
+# 安裝依賴（不要用 sudo）
+python3 -m pip install -r backend/requirements.txt
+cd frontend && npm install && cd ..
 
-1. **iTunes for Windows(必裝)** — 從 [Apple 官網](https://www.apple.com/itunes/)下載 iTunes for Windows (64-bit) 並安裝。
-   > ⚠️ **勿用 Microsoft Store 版本的「Apple Devices」**,不相容。
-2. **信任此電腦** — 首次 USB 連接,iPhone 跳出「信任這台電腦?」時點 **信任** 並輸入密碼。
-3. **開發者模式(iOS 16+)** — 設定 → 隱私權與安全性 → 開發者模式 → 開啟,重啟確認。若選項未顯示,見下方[附錄](#附錄iphone-開啟開發者模式)。
-4. **WiFi Tunnel(選用)** — iPhone 與電腦需同一 WiFi 網段;首次需先 USB 配對,按 **啟動 WiFi Tunnel** 後可拔除。需以系統管理員身份啟動 GPSController。
+# 讓瀏覽器版前端可以連到後端
+cp .env.dev.example .env.dev
+```
 
-### macOS(Apple Silicon)
+啟動：
 
-1. **Apple 簽章** — DMG 未經 notarize,首次開啟會被 Gatekeeper 擋,請在 **系統設定 → 隱私權與安全性** 點「強制開啟」。
-2. **信任此電腦** — 和 Windows 同。
-3. **開發者模式** — 和 Windows 同。
-4. **WiFi Tunnel / iOS 17+** — 需 `sudo python3 start.py`(或安裝後給 App 管理員權限)才能建立 TUN 介面。
+```bash
+# macOS
+sudo python3 start.py --open
 
-### 連線模式對照
+# Windows：以系統管理員身分開啟 PowerShell 後
+python start.py --open
+```
 
-| 連線 | 鎖屏影響 | 適用 |
-| --- | --- | --- |
-| **USB** | 可自由鎖定 | 開發測試 / 長時間跑路線 |
-| **WiFi Tunnel** | 鎖屏會中斷 Tunnel;設定 → 自動鎖定 → **永不** | 不想被線綁住時 |
+`start.py` 會啟動後端（`127.0.0.1:8777`）與前端（`http://127.0.0.1:5173`），`--open` 會自動開啟瀏覽器。停止時按 `Ctrl+C`，或執行 `python3 stop.py`。
+
+`.env.dev` 裡的 `GPSCONTROLLER_DEV_NOAUTH=1` 會關閉後端的 token 驗證，因為瀏覽器版前端無法取得 Electron 注入的 token。這台電腦上的任何瀏覽器分頁都能呼叫 API，不要在共用電腦上使用。
+
+### 建置安裝檔
+
+```bash
+python3 build.py
+```
+
+依執行的平台產生安裝檔，輸出到 `frontend/release/`：
+
+- Windows：NSIS 安裝檔
+- macOS：`.dmg` 與 `.zip`（arm64）
+
+macOS 安裝檔沒有經過 Apple 公證，第一次開啟會被擋；到「系統設定 → 隱私權與安全性」選擇仍要開啟。
+
+---
+
+## 第一次連線
+
+1. **信任電腦**：用 USB 接上 iPhone，在 iPhone 上點「信任」並輸入密碼。
+2. **開啟開發者模式**（iOS 16 以上）：設定 → 隱私權與安全性 → 開發者模式 → 開啟，重新開機後確認。找不到這個選項時，用 USB 連線後在錯誤提示中按「顯示開發者模式」，或參考[附錄](#附錄開發者模式選項沒有出現)。
+3. **連線**：在 GPSController 右上角開啟裝置清單，對 iPhone 按「連線」。
+4. **準備開發者映像檔**（iOS 17 以上）：連線時會自動處理，畫面會顯示目前的步驟：
+   - **步驟 1/2 下載**：只有第一次使用或 pymobiledevice3 更新後才需要。後端啟動時會先在背景下載，所以多數時候會直接跳到掛載。
+   - **步驟 2/2 掛載**：約 10～30 秒，過程中請保持 iPhone 解鎖。
+   - 失敗時，畫面上方會說明原因（網路、iPhone 鎖定、連線中斷或開發者模式關閉），處理後按「重試」即可，不用重新接線。
+5. 在瞬移模式下點地圖上的一個位置，按底部的「瞬移」。
+
+### 使用 WiFi
+
+- iPhone 與電腦要在同一個網段，且 iPhone 必須先用 USB 完成信任。
+- iPhone 螢幕鎖定會中斷 Tunnel。長時間使用時，把「設定 → 螢幕顯示與亮度 → 自動鎖定」設為「永不」，或在 GPSController 設定中開啟「螢幕暗掉時維持 WiFi 連線」。
+- WiFi Tunnel 無法啟動時，用 USB 接上後在裝置清單按「重新配對」。
 
 ---
 
 ## 疑難排解
 
-| 症狀 | 可能原因 / 解法 |
+| 狀況 | 處理方式 |
 | --- | --- |
-| **打開 App 白屏 / 無反應** | 確認 backend port 8777 沒被其他程式佔用(netstat / lsof);防毒軟體可能擋 Electron app,加入白名單 |
-| **iPhone 已連接但 GPSController 顯示未連線** | 先在 iPhone 上點「信任這台電腦」;若已點過仍失敗,拔 cable 重插 |
-| **Tunnel 啟動後 backend 連不上** | 確認以系統管理員 / sudo 身份啟動 |
-| `No such service: com.apple.instruments.dtservicehub` | 自動掛載 DDI 失敗。關閉再重新開啟開發者模式後重插裝置;確認能連 github.com(DDI 約 20 MB) |
-| **DDI 下載卡住 / 逾時** | 公司或校園網路可能封鎖 raw.githubusercontent.com;改用手機熱點重試一次 |
-| **開發者模式選項未顯示**(iOS 16+) | 需先側載自簽 IPA 觸發選項出現,見下方附錄 |
-| **WiFi Tunnel 建立後突然斷線** | iPhone 鎖屏會中斷 Tunnel,請把自動鎖定設成「永不」 |
+| 畫面空白或一直連不到後端 | 確認 port 8777、5173 沒被其他程式佔用；瀏覽器版需要 `.env.dev` |
+| iPhone 已接上但連線失敗 | 在 iPhone 上點「信任」；已經點過的話，拔掉重插 |
+| iOS 17 以上連線失敗，提示需要系統管理員 | macOS 用 `sudo python3 start.py`；Windows 以系統管理員身分執行 |
+| 開發者映像檔下載太久或失敗 | 公司或校園網路可能擋 `raw.githubusercontent.com`，改用手機熱點後按「重試」。下載逾時後會在背景繼續，稍後重試會直接用已下載的檔案 |
+| 提示 iPhone 鎖定 | 解鎖 iPhone 後按「重試」 |
+| 提示掛載途中連線中斷 | 確認 iPhone 已解鎖、USB 或 WiFi 正常，按「重試」 |
+| 提示開發者模式已關閉 | 大版本 iOS 更新會把開發者模式關掉，重新開啟並重開機後按「重試」 |
+| WiFi Tunnel 連上後不久就斷線 | iPhone 螢幕鎖定會中斷 Tunnel，見[使用 WiFi](#使用-wifi) |
+| 導航或路線顯示「路線規劃失敗」 | 該路段 OSRM 規劃不出道路，換一個目的地或調整路徑點 |
 
-### 附錄:iPhone 開啟開發者模式
+回報問題請[開 Issue](https://github.com/crazycat836/GPSController/issues)，並附上 `backend.log`（設定 → Log 資料夾）。
 
-iOS 16+ 的「開發者模式」預設不顯示,需先側載任一自簽 IPA 觸發。使用 [Sideloadly](https://sideloadly.io/) 側載任意小型 IPA 後,回到 **設定 → 隱私權與安全性 → 開發者模式** 開啟並重啟裝置即可。IPA 可至 [Decrypt IPA Store](https://decrypt.day/) 或 [ARM Converter Decrypted App Store](https://armconverter.com/decryptedappstore/us) 取得,建議挑小的以縮短側載時間。
+### 附錄：開發者模式選項沒有出現
 
-完成後回 GPSController 建立連線;首次連線時會自動下載並掛載 Developer Disk Image。
+iOS 16 以上的「開發者模式」選項，要在裝置曾連接開發工具後才會出現。依序嘗試：
 
-**問題回報**:[開 Issue](https://github.com/crazycat836/GPSController/issues),請附上 backend.log(設定 → Log 資料夾可找到)。
-
----
-
-## iOS 相容性
-
-| iOS 版本 | 支援狀態 | 備註 |
-| --- | --- | --- |
-| **iOS 26.x** | ✅ 開發者實測 | 主要測試環境(iPhone 16 Pro Max / iOS 26.5) |
-| **iOS 17–25** | ✅ 社群回報可用 | 大致無問題 |
-| **iOS 16.x** | ✅ 社群維護 | 走 LegacyLocationService(較舊 API) |
-| **iOS 15 以下** | ❌ 不支援 | pymobiledevice3 的 DDI / 新 Tunnel 語意無法套用 |
+1. 用 USB 連線，在 GPSController 的錯誤提示中按「顯示開發者模式」，再到 iPhone 設定中找選項。
+2. 仍然沒有出現時，用 [Sideloadly](https://sideloadly.io/) 側載任一個小型 IPA，再回到「設定 → 隱私權與安全性 → 開發者模式」。
 
 ---
 
-## 給開發者
+## 資料與外部服務
+
+### 本機資料（`~/.gpscontroller/`）
+
+| 檔案 | 內容 |
+| --- | --- |
+| `settings.json` | 設定與上次位置 |
+| `bookmarks.json` | 收藏、地點、標籤 |
+| `routes.json` | 路線與分類 |
+| `token` | 後端 session token（每次啟動重新產生） |
+| `logs/backend.log` | 後端 log |
+| `usage/usage-YYYY-MM.jsonl` | 介面操作紀錄（點擊的按鈕、開關的對話框、API 路徑與結果），只存在本機，不含座標與輸入內容，用來評估介面調整 |
+
+開發者映像檔快取在 pymobiledevice3 的資料夾下的 `Xcode_iOS_DDI_Personalized/`（既有安裝為 `~/.pymobiledevice3/`，新安裝為 `~/.local/share/pymobiledevice3/`）。
+
+### 會連線的外部服務
+
+| 服務 | 用途 |
+| --- | --- |
+| OpenStreetMap／CARTO／Esri | 地圖圖磚 |
+| OSRM（`router.project-osrm.org`） | 導航與路線規劃 |
+| Photon／Nominatim／Google Places | 地址搜尋與反查；Google 只在填入自己的 key 時使用 |
+| open-meteo | 天氣 |
+| GitHub（`raw.githubusercontent.com`） | 下載開發者映像檔 |
+| Apple 簽章伺服器 | 掛載開發者映像檔時的裝置簽章 |
+| GitHub API | 檢查新版本 |
+
+OSRM、Nominatim、Photon、Google Places 的網址可以用環境變數 `OSRM_BASE_URL`、`NOMINATIM_BASE_URL`、`PHOTON_BASE_URL`、`GOOGLE_PLACES_BASE_URL` 改成自架服務。
+
+---
+
+## 開發
 
 <details>
-<summary>架構圖 / Stack / 專案結構 / 開發環境(點擊展開)</summary>
+<summary>架構、技術、指令（點擊展開）</summary>
 
 ### 架構
 
 ```
-┌─────────────────┐      IPC / HTTP + WS       ┌──────────────────┐
-│ Electron + React│ ─────────────────────────► │ FastAPI backend  │
-│  (port 5173 dev)│ ◄───────────────────────── │  (port 8777)     │
-└─────────────────┘                            └────────┬─────────┘
-                                                        │ pymobiledevice3
-                                                        ▼
-                                              ┌──────────────────┐
-                                              │ iPhone (USB/WiFi)│
-                                              └──────────────────┘
+┌──────────────────────────┐   HTTP + WebSocket   ┌──────────────────────┐
+│ React 前端                │ ───────────────────► │ FastAPI 後端          │
+│ Vite :5173 或 Electron    │ ◄─────────────────── │ 127.0.0.1:8777        │
+└──────────────────────────┘                      └──────────┬───────────┘
+                                                             │ pymobiledevice3
+                                                             ▼
+                                                  ┌──────────────────────┐
+                                                  │ iPhone（USB／WiFi）   │
+                                                  └──────────────────────┘
 ```
 
 | 層 | 技術 |
 | --- | --- |
-| Frontend | Electron 41, React 19, TypeScript 6, Vite 8, Tailwind CSS 4.2, Leaflet 1.9 |
-| Backend | Python 3.13, FastAPI, uvicorn, websockets, pymobiledevice3 9.9+, pydantic 2, httpx, gpxpy |
-| 外部服務 | OSRM(`router.project-osrm.org`)、Nominatim、CartoDB Voyager tiles(皆免費、無需 API key) |
-| 打包 | PyInstaller + electron-builder(Windows NSIS / macOS DMG) |
+| 前端 | React 19、TypeScript 7、Vite 8、Tailwind CSS 4、Leaflet 1.9、Electron 44 |
+| 後端 | Python 3.13、FastAPI、uvicorn、pydantic 2、pymobiledevice3 11.10 以上、httpx、gpxpy |
+| 打包 | PyInstaller、electron-builder |
 
 ### 專案結構
 
 ```
-gpscontroller/
-├── backend/          # FastAPI + pymobiledevice3 (api/, core/, services/)
-├── frontend/         # Electron + React (electron/, src/)
-├── start.py          # Dev launcher (Windows + macOS)
-└── build.py          # Installer builder (Windows + macOS)
+GPSController/
+├── backend/          # FastAPI + pymobiledevice3（api/ → core/ → services/）
+├── frontend/         # React 前端與 Electron 殼（src/、electron/）
+├── tools/            # 分層檢查、WS 型別產生、使用紀錄報表
+├── start.py / stop.py
+└── build.py
 ```
 
-### 開發環境
-
-**先決條件**:Windows 10/11 或 macOS(Apple Silicon)、Python 3.13、Node.js 18+、iPhone 已配對(iOS 16+ 需開啟開發者模式)。
+### 常用指令
 
 ```bash
-# 安裝依賴
-python -m pip install -r backend/requirements.txt pyinstaller  # Windows 用 py -3.13
-cd frontend && npm install && cd ..
+# 開發：後端 + Vite（瀏覽器）
+sudo python3 start.py --open
+# 開發：Electron 殼（另外啟動後端）
+cd frontend && npm start
 
-# 啟動 dev(兩平台共用);iOS 17+ 的 tunnel 需 admin / sudo
-python start.py
-# macOS: sudo python3 start.py
-# Windows: 以系統管理員身份開啟 CMD / PowerShell 後執行
+# 測試與檢查
+cd backend && python3 -m pytest tests
+cd frontend && npm test
+cd frontend && ./node_modules/.bin/tsc --noEmit -p tsconfig.json
+python3 tools/check_layers.py        # 後端分層規則 api → core → services
+python3 tools/gen_ws_types.py        # 改了 backend/models/ws_events.py 後重新產生前端型別
 
-# 建置安裝檔(自動偵測平台,Win → NSIS、Mac → DMG)
-python build.py
+# 介面操作紀錄報表
+python3 tools/usage_report.py --days 30
 ```
 
-產物位置:
-- Windows → `frontend/release/GPSController Setup X.Y.Z.exe`
-- macOS → `frontend/release/GPSController-X.Y.Z-arm64.dmg`
+CI（`.github/workflows/ci.yml`）在 push 與 PR 到 `main` 時執行：分層檢查、WS 型別是否為最新、前端 tsc 與 vitest、後端 pytest。
+
+### 發布
+
+1. 更新 `frontend/package.json` 的 `version`
+2. commit 到 `main`
+3. `git tag vX.Y.Z && git push origin main --tags`
+4. `gh release create vX.Y.Z`（要發布，不能是草稿，app 內的更新提醒才看得到）
+
+Commit 採 [Conventional Commits](https://www.conventionalcommits.org/)。
 
 </details>
-
-歡迎開 PR 或 Issue 討論。Commit 採 [Conventional Commits](https://www.conventionalcommits.org/) 格式。
 
 ---
 
 ## License
 
-本專案採用 **MIT License** 授權釋出,詳見 [LICENSE](LICENSE)。
+MIT License，見 [LICENSE](LICENSE)。
 
 ---
 
-## Disclaimer(免責聲明)
+## 免責聲明
 
-> **TL;DR** — 這工具不會改 iPhone 裡的任何資料,斷開後裝置恢復真實 GPS。但用在 location-based games 可能違反平台 ToS 導致帳號被 ban,開發者不負責。WiFi Tunnel 模式要管理員權限,可能和 VPN / 防火牆衝突,使用前請自行評估。
+本專案用於 GIS 研究、行動應用程式開發測試與位置服務原型驗證。請勿用於違反第三方服務條款或平台政策的用途。用於定位類遊戲或社群應用可能違反該平台條款，導致帳號被警告或停權；**開發者不負責任何帳號損失或衍生糾紛**。
 
-本專案開發初衷僅供 GIS 研究、行動應用程式開發測試及位置服務原型驗證使用。請勿將本工具用於任何違反第三方服務條款或平台政策之行為。若將本工具用於基於地理位置的遊戲或社交類應用,可能違反該平台服務條款,導致帳號遭警告或封禁。**開發者對因使用本工具所造成之任何帳號損失或衍生糾紛,概不負責。**
+- 本工具不修改 iOS 裝置內的使用者資料，也不變更作業系統檔案。
+- iOS 17 以上需要以系統管理員權限建立虛擬網路介面，可能與 VPN 或防火牆軟體衝突。
+- 地圖、路線與地址資料來自第三方服務，不保證正確或即時。
+- 使用者應遵守所在地法律，濫用或違法使用的責任由使用者自行承擔。
 
-WiFi Tunnel 模式需以系統管理員權限執行以建立 TUN 虛擬網路介面。本工具可能與 VPN 軟體或第三方防火牆發生衝突,使用者應自行評估風險。地圖底圖與路線資訊(CartoDB、OSRM、Nominatim)僅供參考,開發者不保證其完整性或即時性。本工具**不會修改 iOS 裝置內任何使用者資料,亦不會變更作業系統核心檔案**。使用者應自行遵守所在地法律法規,因濫用或違法使用所引發之責任由使用者個人承擔。
+GPSController 是個人維護的開源專案，不是商業產品，不保證能在所有裝置與系統設定下運作，也不保證持續維護。
 
-GPSController 為個人獨立維護之開源專案(hobby project),非商業產品,亦無專職團隊。開發者將盡力維護與更新,然僅保證於**開發者本人測試環境**(iPhone 16 Pro Max / iOS 26.5 + Windows 11 專業版)下運作正常,不保證於其他裝置或系統配置下皆能穩定使用。本專案不保證永續維護,亦不承擔因使用所生之任何責任。
-
-**下載、安裝或執行本軟體,即視為您已完整閱讀並同意上述免責條款。**
+**下載、安裝或執行本軟體，即表示你已閱讀並同意以上條款。**
