@@ -2,7 +2,7 @@
 # PyInstaller spec for GPSController backend (Python 3.13).
 # Build: py -3.13 -m PyInstaller backend/gpscontroller-backend.spec --noconfirm
 
-from PyInstaller.utils.hooks import collect_all, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
 
 # pymobiledevice3 has a LOT of dynamic imports — collect everything
 pmd_datas, pmd_binaries, pmd_hiddenimports = collect_all('pymobiledevice3')
@@ -18,6 +18,22 @@ pytun_datas, pytun_binaries, pytun_hidden = collect_all('pytun_pmd3')
 # accepts the call but iOS rejects it without DDI.
 ddi_datas, ddi_binaries, ddi_hidden = collect_all('developer_disk_image')
 
+# pmd_pytcp is the userspace TCP/IP stack behind the iOS 17+ WiFi tunnel
+# (pymobiledevice3 remote/userspace_tunnel.py). The modules it needs today are
+# found by static analysis, but its sysctl registry resolves modules through
+# sys.modules at runtime; collecting the package keeps a future release that
+# loads handlers by name from breaking only the frozen build.
+pytcp_datas, pytcp_binaries, pytcp_hidden = collect_all('pmd_pytcp')
+
+# The personalized DDI mount imports pyimg4, which imports apple_compress, and
+# both call importlib.metadata.version() on themselves at import time.
+# PyInstaller bundles their code but not their .dist-info, so in the frozen
+# build that lookup raised PackageNotFoundError and the whole
+# mobile_image_mounter import (and with it every iOS 17+ DDI mount) failed.
+pyimg4_datas, pyimg4_binaries, pyimg4_hidden = collect_all('pyimg4')
+compress_datas, compress_binaries, compress_hidden = collect_all('apple_compress')
+dist_metadata = [*copy_metadata('pyimg4'), *copy_metadata('apple_compress')]
+
 # uvicorn/fastapi also need their sub-modules collected
 uvicorn_hidden = collect_submodules('uvicorn')
 fastapi_hidden = collect_submodules('fastapi')
@@ -26,6 +42,9 @@ hidden = [
     *pmd_hiddenimports,
     *pytun_hidden,
     *ddi_hidden,
+    *pytcp_hidden,
+    *pyimg4_hidden,
+    *compress_hidden,
     *uvicorn_hidden,
     *fastapi_hidden,
     'uvicorn.logging',
@@ -50,8 +69,10 @@ hidden = [
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[*pmd_binaries, *pytun_binaries, *ddi_binaries],
-    datas=[*pmd_datas, *pytun_datas, *ddi_datas],
+    binaries=[*pmd_binaries, *pytun_binaries, *pytcp_binaries, *ddi_binaries,
+              *pyimg4_binaries, *compress_binaries],
+    datas=[*pmd_datas, *pytun_datas, *pytcp_datas, *ddi_datas,
+           *pyimg4_datas, *compress_datas, *dist_metadata],
     hiddenimports=hidden,
     hookspath=[],
     hooksconfig={},

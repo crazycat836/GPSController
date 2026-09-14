@@ -424,8 +424,13 @@ async def root():
 
 
 if __name__ == "__main__":
+    # Pass the app object, not the "main:app" import string: in the
+    # PyInstaller build this file runs as the entry script and is not
+    # importable as a module, so the string form fails at startup with
+    # 'Could not import module "main"'. Reload is off, so nothing needs
+    # the string form.
     uvicorn.run(
-        "main:app",
+        app,
         host=API_HOST,
         port=API_PORT,
         reload=False,
