@@ -192,7 +192,7 @@ class WaypointProgressEvent(BaseModel):
 class StateChangeEvent(BaseModel):
     """Coarse state transition — frontend WS dispatcher routes these into
     the appropriate per-mode reducer (navigating / looping / multi_stop /
-    random_walk / paused / completed / errored)."""
+    random_walk / flower / paused / completed / errored)."""
     state: str
     udid: str | None = None
     detail: dict[str, Any] | None = None
@@ -206,7 +206,7 @@ class RoutePathEvent(BaseModel):
     coords: list[dict[str, float]]
 
 
-PauseSource = Literal["loop", "multi_stop", "random_walk"]
+PauseSource = Literal["loop", "multi_stop", "random_walk", "flower"]
 
 
 class PauseCountdownEvent(BaseModel):
@@ -220,7 +220,7 @@ class PauseCountdownEvent(BaseModel):
 class PauseCountdownEndEvent(BaseModel):
     """Pause finished — countdown UI clears and movement resumes.
 
-    Currently informational only; the frontend treats all three pause
+    Currently informational only; the frontend treats every pause
     sources identically.
     """
     udid: str | None = None
@@ -228,7 +228,7 @@ class PauseCountdownEndEvent(BaseModel):
 
 
 class LapCompleteEvent(BaseModel):
-    """One loop / multi-stop lap finished. Frontend increments the lap
+    """One loop / multi-stop lap (or flower round) finished. Frontend increments the lap
     counter; the simulation continues until ``multi_stop_complete`` /
     ``state_change=idle`` arrives.
 

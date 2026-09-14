@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Shared coordinate bounds. Annotated metadata merges with any extra
 # Field() a call site adds (e.g. description, default).
@@ -24,6 +24,7 @@ class SimulationState(str, Enum):
     JOYSTICK = "joystick"
     RANDOM_WALK = "random_walk"
     MULTI_STOP = "multi_stop"
+    FLOWER = "flower"
     PAUSED = "paused"
     DISCONNECTED = "disconnected"
     # NOTE: "reconnecting" is no longer a SimulationState. Tunnel/DVT
@@ -155,6 +156,47 @@ class RandomWalkRequest(BaseModel):
     # Dual-device group mode: both devices pass the same seed so they pick
     # identical sequences of random destinations, keeping their paths synced.
     seed: int | None = None
+
+
+# Flower-mode bounds. Radii stay small: the mode circles a spot on foot.
+FLOWER_RADIUS_BOUNDS = {"ge": 5.0, "le": 100.0}
+FLOWER_SEGMENT_BOUNDS = {"ge": 6, "le": 24}
+FLOWER_LAP_BOUNDS = {"ge": 0.5, "le": 10.0}
+FLOWER_ROUND_BOUNDS = {"ge": 1, "le": 99}
+FLOWER_WAIT_BOUNDS = {"ge": 0.0, "le": 600.0}
+FLOWER_LAP_STEP = 0.5
+
+
+class FlowerRequest(BaseModel):
+    """Walk a small circle around each waypoint in turn."""
+    waypoints: list[Coordinate] = Field(min_length=1, max_length=_MAX_WAYPOINTS)
+    mode: MovementMode = MovementMode.WALKING
+    radius_m: float = Field(default=20.0, **FLOWER_RADIUS_BOUNDS)
+    # Vertices per circle; more = rounder path.
+    segments: int = Field(default=12, **FLOWER_SEGMENT_BOUNDS)
+    # Laps around each spot, in half-lap steps (0.5 = half the circle).
+    laps: float = Field(default=1.0, **FLOWER_LAP_BOUNDS)
+    # Passes over the whole spot list. None = repeat until stopped.
+    rounds: int | None = Field(default=1, **FLOWER_ROUND_BOUNDS)
+    wait_before_s: float = Field(default=0.0, **FLOWER_WAIT_BOUNDS)
+    wait_after_s: float = Field(default=0.0, **FLOWER_WAIT_BOUNDS)
+    # How the device gets from one spot to the next.
+    transfer: Literal["walk", "teleport"] = "walk"
+    speed_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
+    speed_min_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
+    speed_max_kmh: float | None = Field(default=None, **_SPEED_BOUNDS)
+    # Optional random pause added after each spot's wait. Off by default
+    # so the explicit waits are the whole story unless the user opts in.
+    pause_enabled: bool = False
+    pause_min: float = Field(default=5.0, **_PAUSE_BOUNDS)
+    pause_max: float = Field(default=20.0, **_PAUSE_BOUNDS)
+    straight_line: bool = False
+    udid: str | None = None
+
+    @field_validator("laps")
+    @classmethod
+    def _snap_laps(cls, v: float) -> float:
+        return round(v / FLOWER_LAP_STEP) * FLOWER_LAP_STEP
 
 
 class JoystickStartRequest(BaseModel):

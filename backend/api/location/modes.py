@@ -1,9 +1,10 @@
 """Per-mode dispatch endpoints under /api/location.
 
-Each mode (teleport / navigate / loop / multistop / random-walk / joystick)
+Each mode (teleport / navigate / loop / multistop / random-walk / flower /
+joystick)
 posts a typed request, resolves an engine (lazily rebuilt on demand), and
 either runs synchronously (teleport / joystick) or fires-and-forgets a
-movement task (navigate / loop / multistop / random-walk). Gold-Ditto
+movement task (navigate / loop / multistop / random-walk / flower). Gold-Ditto
 shares teleport's resilience semantics so it lives here too.
 """
 
@@ -24,6 +25,7 @@ from api.location._helpers import (
 )
 from models.schemas import (
     Coordinate,
+    FlowerRequest,
     JoystickStartRequest,
     Latitude,
     Longitude,
@@ -139,6 +141,45 @@ async def random_walk(req: RandomWalkRequest):
         straight_line=req.straight_line,
     ), label="random_walk", udid=req.udid)
     return {"status": "started", "radius_m": req.radius_m, "mode": req.mode}
+
+
+@router.post("/flower")
+async def flower(req: FlowerRequest):
+    engine = await get_engine(req.udid)
+    if req.transfer == "walk" and engine.current_position is None:
+        raise http_err(400, ErrorCode.NO_POSITION, "No current position; teleport to a coordinate first")
+
+    # Teleport transfers follow the teleport endpoint's cooldown rules:
+    # group mode bypasses cooldown; otherwise an active cooldown refuses
+    # the start, and each hop during the run waits out / starts one.
+    cooldown = None
+    if req.transfer == "teleport":
+        dual_mode = len(get_app_state().simulation_engines) >= 2
+        if not dual_mode:
+            cooldown = get_cooldown_timer()
+            if cooldown.enabled and cooldown.is_active and cooldown.remaining > 0:
+                raise http_err(
+                    429, ErrorCode.COOLDOWN_ACTIVE,
+                    f"Cooldown active; wait {int(cooldown.remaining)} more seconds",
+                    remaining_seconds=cooldown.remaining,
+                )
+
+    spawn(engine.flower(
+        req.waypoints, req.mode,
+        radius_m=req.radius_m,
+        segments=req.segments,
+        laps=req.laps,
+        rounds=req.rounds,
+        wait_before_s=req.wait_before_s,
+        wait_after_s=req.wait_after_s,
+        transfer=req.transfer,
+        speed_kmh=req.speed_kmh,
+        speed_min_kmh=req.speed_min_kmh, speed_max_kmh=req.speed_max_kmh,
+        pause_enabled=req.pause_enabled, pause_min=req.pause_min, pause_max=req.pause_max,
+        straight_line=req.straight_line,
+        cooldown=cooldown,
+    ), label="flower", udid=req.udid)
+    return {"status": "started", "spots": len(req.waypoints), "mode": req.mode}
 
 
 @router.post("/joystick/start")
