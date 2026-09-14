@@ -83,6 +83,7 @@ export default function BulkCoordsDialog({ open, mode, onCancel, onConfirm }: Bu
     >
       <div
         ref={dialogRef}
+        data-fc="modal.bulk-coords"
         className="modal-dialog anim-scale-in"
         role="dialog"
         aria-modal="true"

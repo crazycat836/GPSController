@@ -124,7 +124,7 @@ export default function GoldDittoDialog({ open, onClose }: GoldDittoDialogProps)
   }, [parsed, busy, showToast, t, onClose])
 
   return (
-    <Modal open={open} onClose={onClose} title={t('settings.gold_ditto_title')}>
+    <Modal open={open} onClose={onClose} title={t('settings.gold_ditto_title')} dataFc="modal.gold-ditto">
       <div className="flex flex-col gap-3 p-4 min-w-[320px]">
         <p className="text-[11px] text-[var(--color-text-3)]">
           {t('settings.gold_ditto_help')}

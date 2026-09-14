@@ -271,6 +271,29 @@ export async function authedFetch(
   return attempt()
 }
 
+/** Outcome of one `request()` call, as reported to the request observer. */
+export interface RequestOutcome {
+  method: string
+  path: string
+  /** HTTP status; undefined when the request never got a response. */
+  status: number | undefined
+  ok: boolean
+  /** Backend `ErrorCode` when the call failed with an envelope error. */
+  code: string | undefined
+  ms: number
+}
+
+let requestObserver: ((outcome: RequestOutcome) => void) | null = null
+
+/**
+ * Register a single observer notified after every `request()` settles.
+ * Used by the local usage log (`services/usage.ts`); it never sees request
+ * or response bodies. Pass `null` to detach.
+ */
+export function setRequestObserver(fn: ((outcome: RequestOutcome) => void) | null): void {
+  requestObserver = fn
+}
+
 /**
  * JSON request against the backend: attaches the session token, applies the
  * GET-only retry policy, and unwraps the standard response envelope.
@@ -281,14 +304,28 @@ export async function request<T>(
   body?: unknown,
   extraHeaders?: Record<string, string>,
 ): Promise<T> {
-  const res = await authedFetch(`${API}${path}`, (headers) => {
-    headers['Content-Type'] = 'application/json'
-    if (extraHeaders) Object.assign(headers, extraHeaders)
-    const opts: RequestInit = { method, headers }
-    if (body !== undefined) opts.body = JSON.stringify(body)
-    return opts
-  })
-  return unwrapEnvelope<T>(res)
+  const started = Date.now()
+  let status: number | undefined
+  let code: string | undefined
+  let ok = false
+  try {
+    const res = await authedFetch(`${API}${path}`, (headers) => {
+      headers['Content-Type'] = 'application/json'
+      if (extraHeaders) Object.assign(headers, extraHeaders)
+      const opts: RequestInit = { method, headers }
+      if (body !== undefined) opts.body = JSON.stringify(body)
+      return opts
+    })
+    status = res.status
+    const data = await unwrapEnvelope<T>(res)
+    ok = true
+    return data
+  } catch (e) {
+    if (e instanceof ApiError) code = e.code
+    throw e
+  } finally {
+    requestObserver?.({ method, path, status, ok, code, ms: Date.now() - started })
+  }
 }
 
 /**

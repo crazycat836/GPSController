@@ -1,4 +1,5 @@
 import { useEffect, type RefObject } from 'react'
+import { useDialogUsage } from '../services/usage'
 
 export const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -39,4 +40,7 @@ export function useFocusTrap(
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [active, containerRef])
+  // Every modal, drawer and popover traps focus, so this is the one place
+  // that sees them all open and close.
+  useDialogUsage(containerRef, active)
 }

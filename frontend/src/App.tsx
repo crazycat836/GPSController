@@ -7,6 +7,7 @@ import type { DeviceLostCause } from './hooks/useDevice'
 import { STORAGE_KEYS } from './lib/storage-keys'
 import { readLS, writeLS } from './lib/local-storage'
 import { haversineM, polylineDistanceM } from './lib/geo'
+import { useUsageCapture } from './services/usage'
 
 // Context providers
 import { ToastProvider, useToastContext } from './contexts/ToastContext'
@@ -91,6 +92,7 @@ const SIM_CRASH_MODE_KEYS: Record<string, StringKey> = {
 }
 
 function App() {
+  useUsageCapture()
   return (
     <ToastProvider>
       <WebSocketProvider>

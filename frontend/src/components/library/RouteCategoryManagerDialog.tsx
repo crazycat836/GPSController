@@ -64,7 +64,7 @@ export default function RouteCategoryManagerDialog(props: RouteCategoryManagerDi
 
   return (
     <>
-      <Modal open={open} onClose={onClose} title={t('panel.route_category_manage')}>
+      <Modal open={open} onClose={onClose} title={t('panel.route_category_manage')} dataFc="modal.route-category-manager">
         <div className="flex flex-col gap-3 p-4 min-w-[320px]">
           {/* New category form */}
           <div className="flex items-center gap-2">
