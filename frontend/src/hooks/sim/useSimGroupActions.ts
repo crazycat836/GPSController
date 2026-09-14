@@ -21,6 +21,7 @@ import type { LatLng } from './types'
 import type { RuntimesMap } from './useSimRuntimes'
 import type { PauseSetting } from './usePauseSettings'
 import type { MoveMode, SpeedPrefs } from './useSpeedPrefs'
+import type { FlowerOpts } from '../../services/locationApi'
 
 export interface FanoutOutcome<T> {
   ok: Array<{ udid: string; value: T }>
@@ -134,6 +135,11 @@ export function useSimGroupActions(deps: SimGroupActionsDeps) {
     const seed = udids.length >= 2 ? Date.now() : null
     return fanout(udids, (u) => api.randomWalk(center, r, moveMode, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, { pause_enabled: pauseRandomWalk.enabled, pause_min: pauseRandomWalk.min, pause_max: pauseRandomWalk.max }, u, seed, straightLine))
   }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, pauseRandomWalk, straightLine])
+  const startFlowerAll = useCallback(async (udids: string[], wps: LatLng[], flower: FlowerOpts) => {
+    await preSyncStart(udids)
+    setLapProgress(flower.rounds != null ? { current: 0, total: flower.rounds } : null)
+    return fanout(udids, (u) => api.startFlower(wps, moveMode, flower, { speed_kmh: customSpeedKmh, speed_min_kmh: speedMinKmh, speed_max_kmh: speedMaxKmh }, u, straightLine))
+  }, [fanout, preSyncStart, moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh, straightLine])
   const applySpeedAll = useCallback((udids: string[], sel?: SpeedPrefs) => {
     const s = sel ?? { moveMode, customSpeedKmh, speedMinKmh, speedMaxKmh }
     return fanout(udids, (u) => api.applySpeed(s.moveMode, { speed_kmh: s.customSpeedKmh, speed_min_kmh: s.speedMinKmh, speed_max_kmh: s.speedMaxKmh }, u))
@@ -175,6 +181,7 @@ export function useSimGroupActions(deps: SimGroupActionsDeps) {
     startLoopAll,
     multiStopAll,
     randomWalkAll,
+    startFlowerAll,
     applySpeedAll,
     pauseAll,
     resumeAll,

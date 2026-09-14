@@ -11,6 +11,13 @@ import { useT } from '../../../i18n'
 import { haversineM, polylineDistanceM } from '../../../lib/geo'
 import { KM_THRESHOLD_M, formatDistanceM } from '../../../lib/format'
 import { RADIUS_PRESETS, SPEED_MAP, cooldownForDistM, type SpeedPresetMode } from '../../../lib/constants'
+import {
+  FLOWER_LIMITS,
+  stepFlowerRounds,
+  stepFlowerWait,
+  type FlowerSettings,
+  type FlowerTransfer,
+} from '../../../lib/flower'
 
 // ── Shared visual primitives ──────────────────────────────────────────
 
@@ -98,19 +105,27 @@ function StatCell({ label, value, accent = false, divider = false }: StatCellPro
 interface ControlCellProps {
   label: string
   divider?: boolean
+  /** Tighter padding + smaller label for dense settings grids. */
+  compact?: boolean
   children: React.ReactNode
 }
 
-function ControlCell({ label, divider = false, children }: ControlCellProps) {
+function ControlCell({ label, divider = false, compact = false, children }: ControlCellProps) {
   return (
     <div
       className={[
-        'flex items-center justify-between gap-3 px-[18px] py-3.5',
+        'flex items-center justify-between',
+        compact ? 'gap-2 px-3 py-2' : 'gap-3 px-[18px] py-3.5',
         divider ? 'relative' : '',
       ].join(' ')}
     >
       {divider && <ColDivider />}
-      <span className="text-[13px] font-medium text-[var(--color-text-2)]">
+      <span
+        className={[
+          'font-medium text-[var(--color-text-2)]',
+          compact ? 'text-[12px] truncate min-w-0' : 'text-[13px]',
+        ].join(' ')}
+      >
         {label}
       </span>
       {children}
@@ -148,18 +163,35 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange?: (v: 
 
 // ── Stepper ──────────────────────────────────────────────────────────
 
-function Stepper({ value, onDec, onInc }: { value: string; onDec?: () => void; onInc?: () => void }) {
-  const btnCls = 'w-7 h-7 rounded-lg grid place-items-center text-[14px] text-[var(--color-text-2)] bg-white/[0.06] hover:bg-[rgba(167,139,250,0.18)] hover:text-[var(--color-text-1)] transition-colors cursor-pointer'
+interface StepperProps {
+  value: string
+  onDec?: () => void
+  onInc?: () => void
+  /** Accessible name for the −/+ buttons (e.g. the control's label). */
+  label?: string
+  compact?: boolean
+}
+
+function Stepper({ value, onDec, onInc, label, compact = false }: StepperProps) {
+  const btnCls = [
+    compact ? 'w-6 h-6 text-[13px]' : 'w-7 h-7 text-[14px]',
+    'rounded-lg grid place-items-center text-[var(--color-text-2)] bg-white/[0.06] hover:bg-[rgba(167,139,250,0.18)] hover:text-[var(--color-text-1)] transition-colors cursor-pointer',
+  ].join(' ')
   return (
     <div
-      className="inline-flex items-center gap-0.5 h-6 px-0.5 rounded-xl"
+      className="inline-flex items-center gap-0.5 h-6 px-0.5 rounded-xl shrink-0"
       style={{ background: 'rgba(255,255,255,0.12)' }}
     >
-      <button type="button" className={btnCls} onClick={onDec}>−</button>
-      <span className="font-mono text-[13px] font-semibold text-[var(--color-text-1)] min-w-[28px] text-center tabular-nums">
+      <button type="button" className={btnCls} onClick={onDec} aria-label={label ? `${label} −` : undefined}>−</button>
+      <span
+        className={[
+          'font-mono font-semibold text-[var(--color-text-1)] text-center tabular-nums',
+          compact ? 'text-[12px] min-w-[34px]' : 'text-[13px] min-w-[28px]',
+        ].join(' ')}
+      >
         {value}
       </span>
-      <button type="button" className={btnCls} onClick={onInc}>+</button>
+      <button type="button" className={btnCls} onClick={onInc} aria-label={label ? `${label} +` : undefined}>+</button>
     </div>
   )
 }
@@ -382,6 +414,131 @@ function MultiStopCard() {
   )
 }
 
+// ── Flower card ──────────────────────────────────────────────────────
+
+function formatWait(secs: number): string {
+  return secs >= 60 ? `${secs / 60}m` : `${secs}s`
+}
+
+function TransferSwitch({ value, onChange }: { value: FlowerTransfer; onChange: (v: FlowerTransfer) => void }) {
+  const t = useT()
+  const options: ReadonlyArray<{ v: FlowerTransfer; label: string }> = [
+    { v: 'walk', label: t('dock.flower_walk') },
+    { v: 'teleport', label: t('dock.flower_teleport') },
+  ]
+  return (
+    <div
+      role="radiogroup"
+      aria-label={t('dock.flower_transfer')}
+      className="inline-flex gap-0.5 p-0.5 rounded-lg bg-white/[0.06] shrink-0"
+    >
+      {options.map(({ v, label }) => {
+        const on = value === v
+        return (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(v)}
+            className={[
+              'h-6 px-2 rounded-md text-[12px] font-medium whitespace-nowrap transition-colors cursor-pointer',
+              on
+                ? 'bg-[var(--color-accent-dim)] text-[var(--color-accent-strong)]'
+                : 'text-[var(--color-text-2)] hover:text-[var(--color-text-1)]',
+            ].join(' ')}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Settings only — the plan distance / ETA read-out lives in the dock
+// header subtitle, because seven controls plus a stat row don't fit the
+// dock's fixed body height.
+function FlowerCard() {
+  const t = useT()
+  const { flowerSettings: s, setFlowerSettings } = useSimSettings()
+  const L = FLOWER_LIMITS
+  const set = (patch: Partial<FlowerSettings>) => setFlowerSettings({ ...s, ...patch })
+  const clampStep = (v: number, lim: { min: number; max: number }) =>
+    Math.min(lim.max, Math.max(lim.min, v))
+
+  return (
+    <CardShell>
+      <div className="grid grid-cols-2 relative">
+        <ControlCell compact label={t('dock.radius')}>
+          <Stepper
+            compact
+            label={t('dock.radius')}
+            value={`${s.radiusM}m`}
+            onDec={() => set({ radiusM: clampStep(s.radiusM - L.radiusM.step, L.radiusM) })}
+            onInc={() => set({ radiusM: clampStep(s.radiusM + L.radiusM.step, L.radiusM) })}
+          />
+        </ControlCell>
+        <ControlCell compact divider label={t('dock.flower_segments')}>
+          <Stepper
+            compact
+            label={t('dock.flower_segments')}
+            value={String(s.segments)}
+            onDec={() => set({ segments: clampStep(s.segments - L.segments.step, L.segments) })}
+            onInc={() => set({ segments: clampStep(s.segments + L.segments.step, L.segments) })}
+          />
+        </ControlCell>
+        <RowDivider />
+      </div>
+      <div className="grid grid-cols-2 relative">
+        <ControlCell compact label={t('dock.flower_laps')}>
+          <Stepper
+            compact
+            label={t('dock.flower_laps')}
+            value={String(s.laps)}
+            onDec={() => set({ laps: clampStep(s.laps - L.laps.step, L.laps) })}
+            onInc={() => set({ laps: clampStep(s.laps + L.laps.step, L.laps) })}
+          />
+        </ControlCell>
+        <ControlCell compact divider label={t('dock.flower_rounds')}>
+          <Stepper
+            compact
+            label={t('dock.flower_rounds')}
+            value={s.rounds === null ? '∞' : String(s.rounds)}
+            onDec={() => set({ rounds: stepFlowerRounds(s.rounds, -1) })}
+            onInc={() => set({ rounds: stepFlowerRounds(s.rounds, 1) })}
+          />
+        </ControlCell>
+        <RowDivider />
+      </div>
+      <div className="grid grid-cols-2 relative">
+        <ControlCell compact label={t('dock.flower_wait_before')}>
+          <Stepper
+            compact
+            label={t('dock.flower_wait_before')}
+            value={formatWait(s.waitBeforeS)}
+            onDec={() => set({ waitBeforeS: stepFlowerWait(s.waitBeforeS, -1) })}
+            onInc={() => set({ waitBeforeS: stepFlowerWait(s.waitBeforeS, 1) })}
+          />
+        </ControlCell>
+        <ControlCell compact divider label={t('dock.flower_wait_after')}>
+          <Stepper
+            compact
+            label={t('dock.flower_wait_after')}
+            value={formatWait(s.waitAfterS)}
+            onDec={() => set({ waitAfterS: stepFlowerWait(s.waitAfterS, -1) })}
+            onInc={() => set({ waitAfterS: stepFlowerWait(s.waitAfterS, 1) })}
+          />
+        </ControlCell>
+        <RowDivider />
+      </div>
+      <ControlCell compact label={t('dock.flower_transfer')}>
+        <TransferSwitch value={s.transfer} onChange={(transfer) => set({ transfer })} />
+      </ControlCell>
+    </CardShell>
+  )
+}
+
 // ── Random Walk card ──────────────────────────────────────────────────
 
 function RandomWalkCard() {
@@ -482,6 +639,8 @@ export default function ModeStatsCard() {
       return <MultiStopCard />
     case SimMode.RandomWalk:
       return <RandomWalkCard />
+    case SimMode.Flower:
+      return <FlowerCard />
     case SimMode.Joystick:
       return <JoystickCard />
   }

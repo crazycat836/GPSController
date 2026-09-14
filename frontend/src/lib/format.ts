@@ -34,6 +34,16 @@ export function formatDistanceM(m: number, kmPrecision: 1 | 2 = 2): string {
   return `${Math.round(m)} m`
 }
 
+/** Coarse duration for estimates: "< 1 min", "12 min", "1 h 5 m". */
+export function formatDurationS(totalSeconds: number): string {
+  const mins = Math.round(totalSeconds / 60)
+  if (mins < 1) return '< 1 min'
+  if (mins < 60) return `${mins} min`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m === 0 ? `${h} h` : `${h} h ${m} m`
+}
+
 /** Cooldown countdown: "M:SS" under an hour, "H:MM:SS" from one hour up. */
 export function formatCountdown(totalSeconds: number): string {
   const total = Math.round(totalSeconds)

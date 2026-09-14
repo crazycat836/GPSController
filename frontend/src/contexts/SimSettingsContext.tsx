@@ -6,6 +6,9 @@ import {
   DEFAULT_WP_GEN_RADIUS,
 } from '../lib/constants'
 import { useCooldownSync } from '../hooks/useCooldownSync'
+import { sanitizeFlowerSettings, type FlowerSettings } from '../lib/flower'
+import { readJSON, writeJSON } from '../lib/local-storage'
+import { STORAGE_KEYS } from '../lib/storage-keys'
 import { useWebSocketContext } from './WebSocketContext'
 import { useToastContext } from './ToastContext'
 import { useT } from '../i18n'
@@ -27,6 +30,8 @@ export interface SimSettingsContextValue {
   setJoystickSensitivity: (n: number) => void
   autoJitter: boolean
   setAutoJitter: (v: boolean) => void
+  flowerSettings: FlowerSettings
+  setFlowerSettings: (s: FlowerSettings) => void
   cooldown: number
   cooldownEnabled: boolean
   handleToggleCooldown: (enabled: boolean) => void
@@ -54,6 +59,14 @@ export function SimSettingsProvider({ children }: SimSettingsProviderProps) {
   const [wpGenCount, setWpGenCount] = useState(DEFAULT_WP_GEN_COUNT)
   const [joystickSensitivity, setJoystickSensitivity] = useState(JOYSTICK_SENSITIVITY_DEFAULT)
   const [autoJitter, setAutoJitter] = useState(false)
+  const [flowerSettings, setFlowerSettingsState] = useState<FlowerSettings>(
+    () => sanitizeFlowerSettings(readJSON(STORAGE_KEYS.flowerSettings)),
+  )
+  const setFlowerSettings = useCallback((s: FlowerSettings) => {
+    const next = sanitizeFlowerSettings(s)
+    setFlowerSettingsState(next)
+    writeJSON(STORAGE_KEYS.flowerSettings, next)
+  }, [])
   const [cooldown, setCooldown] = useState(0)
   const [cooldownEnabled, setCooldownEnabled] = useState(false)
 
@@ -84,6 +97,8 @@ export function SimSettingsProvider({ children }: SimSettingsProviderProps) {
     setJoystickSensitivity,
     autoJitter,
     setAutoJitter,
+    flowerSettings,
+    setFlowerSettings,
     cooldown,
     cooldownEnabled,
     handleToggleCooldown,
@@ -93,6 +108,8 @@ export function SimSettingsProvider({ children }: SimSettingsProviderProps) {
     wpGenCount,
     joystickSensitivity,
     autoJitter,
+    flowerSettings,
+    setFlowerSettings,
     cooldown,
     cooldownEnabled,
     handleToggleCooldown,

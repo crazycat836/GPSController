@@ -1,6 +1,6 @@
 """Changing speed while a multi-leg mode is between legs must stick.
 
-Loop, multi-stop and random walk pause between legs / laps. During that
+Loop, multi-stop, random walk and flower pause between legs / laps. During that
 gap no leg is active, and ``apply_speed`` used to reject the change
 ("no active route"); a change that landed after a leg's last point was
 also silently dropped. Both now carry into the next leg.
@@ -31,6 +31,7 @@ def _engine() -> SimulationEngine:
 
 @pytest.mark.parametrize("state", [
     SimulationState.LOOPING, SimulationState.MULTI_STOP, SimulationState.RANDOM_WALK,
+    SimulationState.FLOWER,
 ])
 def test_between_legs_change_is_used_by_the_next_leg(state):
     engine = _engine()

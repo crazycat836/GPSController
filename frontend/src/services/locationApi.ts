@@ -39,6 +39,18 @@ export const multiStop = (waypoints: { lat: number; lng: number }[], mode: strin
   request<StatusResponse>('POST', '/api/location/multistop', { waypoints, mode, stop_duration, loop, ...sp(speed), ...pp(pause), ...sl(straightLine), ...ud(udid), ...lc(lapCount) })
 export const randomWalk = (center: { lat: number; lng: number }, radius_m: number, mode: string, speed?: SpeedOpts, pause?: PauseOpts, udid?: string, seed?: number | null, straightLine?: boolean) =>
   request<StatusResponse>('POST', '/api/location/randomwalk', { center, radius_m, mode, ...sp(speed), ...pp(pause), ...sl(straightLine), ...ud(udid), ...(seed != null ? { seed } : {}) })
+export interface FlowerOpts {
+  radius_m: number
+  segments: number
+  laps: number
+  /** null = repeat until stopped. */
+  rounds: number | null
+  wait_before_s: number
+  wait_after_s: number
+  transfer: 'walk' | 'teleport'
+}
+export const startFlower = (waypoints: { lat: number; lng: number }[], mode: string, flower: FlowerOpts, speed?: SpeedOpts, udid?: string, straightLine?: boolean) =>
+  request<StatusResponse>('POST', '/api/location/flower', { waypoints, mode, ...flower, ...sp(speed), ...sl(straightLine), ...ud(udid) })
 export const joystickStart = (mode: string, udid?: string) =>
   request<StatusResponse>('POST', '/api/location/joystick/start', { mode, ...ud(udid) })
 export const joystickStop = (udid?: string) => request<StatusResponse>('POST', `/api/location/joystick/stop${qs(udid)}`)

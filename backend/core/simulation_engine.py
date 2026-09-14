@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from models.schemas import (
     Coordinate,
@@ -30,6 +30,7 @@ from core.navigator import Navigator
 from core.route_loop import RouteLooper
 from core.joystick import JoystickHandler
 from core.multi_stop import MultiStopNavigator
+from core.flower import FlowerHandler, TransferMode
 from core.random_walk import RandomWalkHandler
 from core.restore import RestoreHandler
 # Extracted cohesive units. Re-imported here (not just used internally) so
@@ -38,12 +39,16 @@ from core.restore import RestoreHandler
 from core.eta_tracker import EtaTracker
 from core.simulation_snapshot import SimulationSnapshot, SnapshotMode
 
+if TYPE_CHECKING:
+    from services.cooldown import CooldownTimer
+
 # Modes that run several ``_move_along_route`` legs with gaps in between, so a
 # speed change can arrive while no leg is active and still apply to the next.
 _MULTI_LEG_STATES = frozenset({
     SimulationState.LOOPING,
     SimulationState.MULTI_STOP,
     SimulationState.RANDOM_WALK,
+    SimulationState.FLOWER,
 })
 
 logger = logging.getLogger(__name__)
@@ -175,6 +180,7 @@ class SimulationEngine:
         self._joystick = JoystickHandler(self)
         self._multi_stop = MultiStopNavigator(self)
         self._random_walk = RandomWalkHandler(self)
+        self._flower = FlowerHandler(self)
         self._restore_handler = RestoreHandler(self)
         # Game-assist sub-handler — distinct from the movement modes
         # because the cycle is a one-shot location swap, not a
@@ -494,6 +500,69 @@ class SimulationEngine:
                     straight_line=straight_line,
                 ),
                 "Random walk",
+            )
+        finally:
+            if self.state == SimulationState.IDLE:
+                self.snapshot = None
+
+    async def flower(
+        self,
+        waypoints: list[Coordinate],
+        mode: MovementMode,
+        *,
+        radius_m: float,
+        segments: int,
+        laps: float,
+        rounds: int | None,
+        wait_before_s: float = 0.0,
+        wait_after_s: float = 0.0,
+        transfer: TransferMode = "walk",
+        speed_kmh: float | None = None,
+        speed_min_kmh: float | None = None,
+        speed_max_kmh: float | None = None,
+        pause_enabled: bool = False,
+        pause_min: float = DEFAULT_PAUSE_MIN,
+        pause_max: float = DEFAULT_PAUSE_MAX,
+        straight_line: bool = False,
+        cooldown: "CooldownTimer | None" = None,
+    ) -> None:
+        """Walk a small circle around each waypoint in turn."""
+        await self._ensure_stopped()
+        self._stop_event.clear()
+        self._pause_event.set()
+        self.snapshot = SimulationSnapshot(
+            mode="flower",
+            movement_mode=mode.value,
+            speed_kmh=speed_kmh,
+            speed_min_kmh=speed_min_kmh,
+            speed_max_kmh=speed_max_kmh,
+            waypoints=[{"lat": w.lat, "lng": w.lng} for w in waypoints],
+            radius_m=radius_m,
+            segments=segments,
+            laps=laps,
+            wait_before_s=wait_before_s,
+            wait_after_s=wait_after_s,
+            transfer=transfer,
+            pause_enabled=pause_enabled,
+            pause_min=pause_min,
+            pause_max=pause_max,
+            straight_line=straight_line,
+            lap_count=rounds,
+        )
+        try:
+            await self._run_handler(
+                self._flower.start(
+                    waypoints, mode,
+                    radius_m=radius_m, segments=segments, laps=laps, rounds=rounds,
+                    wait_before_s=wait_before_s, wait_after_s=wait_after_s,
+                    transfer=transfer,
+                    speed_kmh=speed_kmh,
+                    speed_min_kmh=speed_min_kmh, speed_max_kmh=speed_max_kmh,
+                    pause_enabled=pause_enabled, pause_min=pause_min, pause_max=pause_max,
+                    straight_line=straight_line,
+                    cooldown=cooldown,
+                ),
+                "Flower",
             )
         finally:
             if self.state == SimulationState.IDLE:

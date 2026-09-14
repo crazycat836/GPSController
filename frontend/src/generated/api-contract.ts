@@ -144,16 +144,16 @@ export interface RoutePathEvent {
 export interface PauseCountdownEvent {
   duration_seconds: number
   udid?: string
-  source?: 'loop' | 'multi_stop' | 'random_walk'
+  source?: 'loop' | 'multi_stop' | 'random_walk' | 'flower'
 }
 
 /** Pause finished — countdown UI clears and movement resumes. */
 export interface PauseCountdownEndEvent {
   udid?: string
-  source?: 'loop' | 'multi_stop' | 'random_walk'
+  source?: 'loop' | 'multi_stop' | 'random_walk' | 'flower'
 }
 
-/** One loop / multi-stop lap finished. Frontend increments the lap */
+/** One loop / multi-stop lap (or flower round) finished. Frontend increments the lap */
 export interface LapCompleteEvent {
   udid?: string
   lap: number

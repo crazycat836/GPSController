@@ -6,13 +6,14 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from config import DEFAULT_PAUSE_ENABLED, DEFAULT_PAUSE_MAX, DEFAULT_PAUSE_MIN
+from core.flower import TransferMode
 from models.schemas import Coordinate, MovementMode
 
 if TYPE_CHECKING:
     from core.simulation_engine import SimulationEngine
 
 
-SnapshotMode = Literal["navigate", "loop", "multi_stop", "random_walk"]
+SnapshotMode = Literal["navigate", "loop", "multi_stop", "random_walk", "flower"]
 
 
 @dataclass
@@ -42,6 +43,12 @@ class SimulationSnapshot:
     center: dict | None = None  # {lat, lng}
     radius_m: float | None = None
     seed: int | None = None
+    # flower (reuses waypoints, radius_m, and lap_count as the round cap)
+    segments: int = 12
+    laps: float = 1.0
+    wait_before_s: float = 0.0
+    wait_after_s: float = 0.0
+    transfer: TransferMode = "walk"
     # shared options
     pause_enabled: bool = DEFAULT_PAUSE_ENABLED
     pause_min: float = DEFAULT_PAUSE_MIN
@@ -108,6 +115,27 @@ class SimulationSnapshot:
                 pause_max=self.pause_max,
                 straight_line=self.straight_line,
                 lap_count=self.lap_count,
+            )
+        elif self.mode == "flower" and self.waypoints and self.radius_m:
+            # Replay targets a secondary device in group mode, where the
+            # teleport cooldown is bypassed — so no cooldown is passed.
+            wps = [Coordinate(lat=w["lat"], lng=w["lng"]) for w in self.waypoints]
+            await engine.flower(
+                wps, mmode,
+                radius_m=self.radius_m,
+                segments=self.segments,
+                laps=self.laps,
+                rounds=self.lap_count,
+                wait_before_s=self.wait_before_s,
+                wait_after_s=self.wait_after_s,
+                transfer=self.transfer,
+                speed_kmh=self.speed_kmh,
+                speed_min_kmh=self.speed_min_kmh,
+                speed_max_kmh=self.speed_max_kmh,
+                pause_enabled=self.pause_enabled,
+                pause_min=self.pause_min,
+                pause_max=self.pause_max,
+                straight_line=self.straight_line,
             )
         elif self.mode == "random_walk" and self.center and self.radius_m:
             await engine.random_walk(
