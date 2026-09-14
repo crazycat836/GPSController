@@ -1,24 +1,28 @@
 """WiFi-tunnel keep-alive loop.
 
 When the user enables keep-alive (Settings → "Keep WiFi connection alive
-when the screen dims"), this loop periodically re-asserts each *idle*
-engine's current virtual location. Re-pushing the same coordinate keeps
-the DVT channel warm so iOS doesn't suspend the RSD tunnel a few seconds
-after the iPhone screen locks — which is what otherwise drops a WiFi
-connection while the device is sitting idle on a teleported location.
+when the screen dims"), this loop re-sends an engine's current virtual
+location whenever the device hasn't received one for a few seconds.
+Re-pushing the same coordinate keeps the DVT channel warm so iOS doesn't
+suspend the RSD tunnel after the iPhone screen locks — which otherwise
+drops a WiFi connection while the device sits on a teleported location,
+during a user pause, or while a route waits between legs / laps.
 
 Design notes:
 
   - Opt-in. The flag lives on ``AppState`` (persisted in settings.json) and
     is read fresh every tick, so toggling it in the UI takes effect without
     a restart.
-  - Only IDLE engines with a position are touched. An engine actively
-    running Navigate / Loop / etc. already streams ``position_update``
-    frames at ~10 Hz, which keeps its own channel warm — re-asserting there
-    would fight the live movement.
+  - Quiet channels only, whatever the engine state. An engine that is
+    actually moving pushes a point every update interval (≤1s), so its
+    ``last_push_at`` stays fresh and it is skipped — no fighting the live
+    movement. Pauses and waits between legs keep the running state but go
+    quiet, and those are exactly the gaps that used to drop the tunnel.
+  - ``engine.reassert_position`` re-sends without changing state or
+    emitting events, so a paused run resumes untouched.
   - Re-asserting the *same* coordinate never moves the dot and never stomps
-    the phone's real GPS (an engine only has a ``current_position`` after the
-    user explicitly teleported / navigated this session).
+    the phone's real GPS: only engines with ``location_active`` are touched,
+    which a push sets and "restore real GPS" clears.
   - Cooperative stop via an ``asyncio.Event`` mirrors ``tunnel_liveness``.
 
 Layering: part of the **connection-orchestration group** (see
@@ -33,14 +37,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Re-assert cadence. iOS tends to suspend an idle RSD tunnel within ~30s of
-# the screen locking; 20s leaves comfortable headroom without spamming the
-# device. Kept here next to the rationale.
-KEEPALIVE_INTERVAL_S = 20.0
+# How often the loop checks, and how long a channel may stay quiet before
+# the position is re-sent. iOS can suspend a quiet RSD tunnel within tens of
+# seconds of the screen locking; a few seconds of silence leaves headroom
+# while costing one tiny DVT message per quiet engine.
+KEEPALIVE_TICK_S = 1.0
+KEEPALIVE_QUIET_S = 3.0
 
 
 async def wifi_keepalive_loop(stop: asyncio.Event, app_state=None) -> None:
-    """Re-assert idle engines' virtual locations until ``stop`` is set.
+    """Re-send quiet engines' virtual locations until ``stop`` is set.
 
     No-op on every tick while keep-alive is disabled, so the loop is cheap
     to leave running for the whole process lifetime.
@@ -50,6 +56,8 @@ async def wifi_keepalive_loop(stop: asyncio.Event, app_state=None) -> None:
     load-bearing for the unit tests, which patch ``context.ctx`` and start
     the loop without arguments.
     """
+    import time
+
     from models.schemas import SimulationState
     from services.location_service import DeviceLostError
 
@@ -57,12 +65,12 @@ async def wifi_keepalive_loop(stop: asyncio.Event, app_state=None) -> None:
         from context import ctx
         app_state = getattr(ctx, "app_state", None)
 
-    logger.info("WiFi keep-alive loop started (interval=%.1fs)", KEEPALIVE_INTERVAL_S)
+    logger.info("WiFi keep-alive loop started (re-send after %.1fs quiet)", KEEPALIVE_QUIET_S)
 
     try:
         while not stop.is_set():
             try:
-                await asyncio.wait_for(stop.wait(), timeout=KEEPALIVE_INTERVAL_S)
+                await asyncio.wait_for(stop.wait(), timeout=KEEPALIVE_TICK_S)
                 break
             except asyncio.TimeoutError:
                 pass
@@ -73,15 +81,17 @@ async def wifi_keepalive_loop(stop: asyncio.Event, app_state=None) -> None:
             # Snapshot the registry so a concurrent connect/terminate can't
             # mutate it mid-iteration.
             engines = list(app_state.simulation_engines.items())
+            now = time.monotonic()
             for udid, engine in engines:
-                pos = engine.current_position
-                if pos is None:
+                if engine.current_position is None or not engine.location_active:
                     continue
-                if engine.state != SimulationState.IDLE:
+                if engine.state == SimulationState.DISCONNECTED:
+                    continue
+                if now - engine.last_push_at < KEEPALIVE_QUIET_S:
                     continue
                 try:
-                    await engine.teleport(pos.lat, pos.lng)
-                    logger.debug("Keep-alive re-asserted %s at %.6f,%.6f", udid, pos.lat, pos.lng)
+                    await engine.reassert_position()
+                    logger.debug("Keep-alive re-sent position for %s (%s)", udid, engine.state.value)
                 except (DeviceLostError, ConnectionError, OSError):
                     # Expected: a dead device / mid-teardown engine — the
                     # liveness probe and watchdog own real reconnection; just

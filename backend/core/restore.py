@@ -32,6 +32,7 @@ class RestoreHandler:
         # Clear the simulated location on the device
         try:
             await engine.location_service.clear()
+            engine.location_active = False
             logger.info("Device location simulation cleared (restored real GPS)")
         except Exception:
             logger.exception("Failed to clear device location")

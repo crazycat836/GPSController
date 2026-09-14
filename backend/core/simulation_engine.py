@@ -106,6 +106,14 @@ class SimulationEngine:
         # ── Per-run mutable state ─────────────────────────────────────
         self.state: SimulationState = SimulationState.IDLE
         self.current_position: Coordinate | None = None
+        # time.monotonic() of the last successful push to the device, so the
+        # WiFi keep-alive can tell when the channel has gone quiet (idle,
+        # paused, or waiting between legs) regardless of engine state.
+        self.last_push_at: float = 0.0
+        # True while the device shows a simulated location. Cleared by
+        # restore (real GPS back), so the keep-alive never re-imposes the
+        # last virtual position on a phone the user just released.
+        self.location_active: bool = False
 
         # Most recent long-running action. Populated by navigate/start_loop/
         # multi_stop/random_walk at the moment each begins, cleared when the
@@ -583,6 +591,24 @@ class SimulationEngine:
         """Push a coordinate to the device and update internal state."""
         await self.location_service.set(lat, lng)
         self.current_position = Coordinate(lat=lat, lng=lng)
+        self.last_push_at = time.monotonic()
+        self.location_active = True
+
+    async def reassert_position(self) -> bool:
+        """Re-send the current position without touching engine state.
+
+        Used by the WiFi keep-alive while the device would otherwise hear
+        nothing (idle, user pause, pause between legs). Emits no events and
+        leaves ``state`` alone, so a running mode resumes exactly where it
+        was. Returns False when there is nothing simulated to re-send (no
+        position yet, or real GPS was restored).
+        """
+        pos = self.current_position
+        if pos is None or not self.location_active:
+            return False
+        await self.location_service.set(pos.lat, pos.lng)
+        self.last_push_at = time.monotonic()
+        return True
 
     def pick_speed_profile(
         self,
