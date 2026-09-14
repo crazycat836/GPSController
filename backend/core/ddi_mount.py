@@ -21,7 +21,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+import plistlib
+import threading
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
 
@@ -40,8 +43,34 @@ logger = logging.getLogger(__name__)
 # ``reason`` value the frontend keys on to swap the generic "mount DDI
 # manually" hint for the Developer-Mode-specific one (with a reveal button).
 REASON_DEVELOPER_MODE_DISABLED = "developer_mode_disabled"
+REASON_DOWNLOAD_TIMEOUT = "download_timeout"
+REASON_DOWNLOAD_FAILED = "download_failed"
+REASON_DEVICE_LOCKED = "device_locked"
+REASON_DEVICE_UNREACHABLE = "device_unreachable"
 HINT_KEY_DEFAULT = "ddi.missing_hint"
 HINT_KEY_DEVELOPER_MODE = "ddi.developer_mode_disabled"
+HINT_KEY_DOWNLOAD_TIMEOUT = "ddi.download_timeout"
+HINT_KEY_DOWNLOAD_FAILED = "ddi.download_failed"
+HINT_KEY_DEVICE_LOCKED = "ddi.device_locked"
+HINT_KEY_DEVICE_UNREACHABLE = "ddi.device_unreachable"
+
+# ``ddi_mounting`` stages, so the overlay can say which step is running.
+STAGE_DOWNLOADING = "downloading"
+STAGE_MOUNTING = "mounting"
+
+# Waiting on the personalized image download (~15 MB from GitHub) before
+# telling the user. The download itself keeps running after this.
+DDI_DOWNLOAD_TIMEOUT_S = 60.0
+# (connect, read) socket timeouts for each download request. The read
+# timeout is the longest silence tolerated between chunks, so a slow but
+# moving download is never cut off.
+DDI_HTTP_TIMEOUT = (10.0, 30.0)
+# Image upload + TSS signing + mount on the device, once the image is local.
+DDI_MOUNT_TIMEOUT_S = 45.0
+# The frontend overlay's safety timeout (App.tsx DDI_SAFETY_TIMEOUT_MS)
+# must stay above DDI_DOWNLOAD_TIMEOUT_S + DDI_MOUNT_TIMEOUT_S.
+
+_T = TypeVar("_T")
 
 
 async def broadcast_ddi_mount_failure(
@@ -69,6 +98,139 @@ async def broadcast_ddi_mount_failure(
         logger.debug("ddi broadcast failed", exc_info=True)
 
 
+async def _broadcast_mounting(udid: str, stage: str) -> None:
+    try:
+        from services.ws_broadcaster import broadcast
+        await broadcast("ddi_mounting", {"udid": udid, "stage": stage})
+    except Exception:
+        logger.debug("ddi_mounting WS broadcast failed (%s)", stage, exc_info=True)
+
+
+# ── Personalized image download ──────────────────────────────────
+#
+# pymobiledevice3's ``fetch_personalized_ddi`` downloads ~15 MB from
+# raw.githubusercontent.com with a synchronous ``requests.get`` and no
+# timeout. Called on the event loop (as ``auto_mount_personalized`` does)
+# it freezes the whole backend for the length of the download: WebSocket
+# frames stop, the WiFi tunnel misses its keep-alives and drops, and the
+# mount then fails on a dead connection. So the download runs in a
+# daemon thread, bounded per request, and the mount only starts once the
+# image is on disk.
+
+def _personalized_ddi_cached() -> bool:
+    """True when the local cache already holds the image pymobiledevice3
+    expects, i.e. ``fetch_personalized_ddi`` will not touch the network."""
+    try:
+        import pymobiledevice3.services.mobile_image_mounter as mim
+        manifest = mim.get_home_folder() / "Xcode_iOS_DDI_Personalized" / "BuildManifest.plist"
+        return plistlib.loads(manifest.read_bytes()).get("ProductBuildVersion") == mim.LATEST_DDI_BUILD_ID
+    except Exception:
+        return False
+
+
+class _BoundedRequests:
+    """Stand-in for the ``requests`` module inside ``developer_disk_image.repo``
+    that adds socket timeouts to ``get``. A stalled connection then raises
+    instead of pinning the download thread forever."""
+
+    def __init__(self, real: Any) -> None:
+        self._real = real
+
+    def get(self, *args: Any, **kwargs: Any) -> Any:
+        kwargs.setdefault("timeout", DDI_HTTP_TIMEOUT)
+        return self._real.get(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._real, name)
+
+
+def _fetch_personalized_ddi() -> tuple[Path, Path, Path]:
+    import pymobiledevice3.services.mobile_image_mounter as mim
+    try:
+        import developer_disk_image.repo as ddi_repo
+        if not isinstance(ddi_repo.requests, _BoundedRequests):
+            ddi_repo.requests = _BoundedRequests(ddi_repo.requests)
+    except (ImportError, AttributeError):
+        logger.debug("developer_disk_image.repo layout changed; downloading without socket timeouts")
+    return mim.fetch_personalized_ddi()
+
+
+def _run_in_daemon_thread(fn: Callable[[], _T]) -> "asyncio.Future[_T]":
+    """Like ``asyncio.to_thread`` but on a daemon thread, so a download
+    still in flight never holds up backend shutdown."""
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future[_T] = loop.create_future()
+
+    def settle(setter: Callable[[Any], None], value: Any) -> None:
+        if not fut.done():
+            setter(value)
+
+    def runner() -> None:
+        try:
+            result = fn()
+        except BaseException as exc:  # noqa: BLE001 — handed to the awaiting coroutine
+            outcome: tuple[Callable[[Any], None], Any] = (fut.set_exception, exc)
+        else:
+            outcome = (fut.set_result, result)
+        try:
+            loop.call_soon_threadsafe(settle, *outcome)
+        except RuntimeError:
+            pass  # loop already closed (shutdown) — nobody is waiting
+
+    threading.Thread(target=runner, name="ddi-download", daemon=True).start()
+    # Mark the exception retrieved when every waiter has timed out and left.
+    fut.add_done_callback(lambda f: None if f.cancelled() else f.exception())
+    return fut
+
+
+_download_future: "asyncio.Future[tuple[Path, Path, Path]] | None" = None
+
+
+def _ensure_download() -> "asyncio.Future[tuple[Path, Path, Path]]":
+    """Single-flight download: callers share one in-flight fetch. A
+    finished (or failed) fetch is not reused, so the next call re-checks
+    the cache and retries."""
+    global _download_future
+    if _download_future is None or _download_future.done():
+        _download_future = _run_in_daemon_thread(_fetch_personalized_ddi)
+    return _download_future
+
+
+async def prefetch_personalized_ddi() -> None:
+    """Warm the image cache at startup so connecting never waits on
+    GitHub. Only downloads after a pymobiledevice3 upgrade or a cleared
+    cache; failures are logged and retried on the next connect."""
+    if _personalized_ddi_cached():
+        return
+    logger.info("Personalized DDI not cached; downloading in background")
+    try:
+        await asyncio.shield(_ensure_download())
+        logger.info("Personalized DDI downloaded")
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.warning("Background DDI download failed; will retry on connect", exc_info=True)
+
+
+def _classify_mount_error(exc: BaseException, timed_out: bool) -> tuple[str, str]:
+    """Map a mount failure to the (reason, hint_key) pair the banner shows."""
+    if timed_out:
+        return REASON_DEVICE_UNREACHABLE, HINT_KEY_DEVICE_UNREACHABLE
+    if "DeviceLocked" in str(exc):
+        return REASON_DEVICE_LOCKED, HINT_KEY_DEVICE_LOCKED
+    try:
+        from pymobiledevice3.exceptions import ConnectionTerminatedError
+    except ImportError:  # pragma: no cover - version drift
+        ConnectionTerminatedError = OSError  # type: ignore[misc,assignment]
+    # On Python 3.11+ an OS socket timeout is a TimeoutError too; since our
+    # own timeout was ruled out above, it can only come from the device link.
+    if isinstance(exc, (OSError, ConnectionTerminatedError)) or (
+        isinstance(exc, RuntimeError) and "closed" in str(exc)
+    ):
+        return REASON_DEVICE_UNREACHABLE, HINT_KEY_DEVICE_UNREACHABLE
+    return f"{type(exc).__name__}: {exc}", HINT_KEY_DEFAULT
+
+
 async def ensure_personalized_ddi_mounted(
     conn: "_ActiveConnection", mount_lock: asyncio.Lock
 ) -> None:
@@ -76,15 +238,17 @@ async def ensure_personalized_ddi_mounted(
     is mounted. Without the DDI, the DVT service hub won't advertise and
     DvtProvider will fail with "No such service: com.apple.instruments.dtservicehub".
 
-    If already mounted, this is a no-op. Otherwise it downloads the image
-    from the pymobiledevice3 DDI repository (GitHub) and mounts it. The
-    per-device signing (TSS) is handled internally by pymobiledevice3.
+    If already mounted, this is a no-op. Otherwise it makes sure the image
+    is downloaded (off the event loop, see ``_ensure_download``) and then
+    mounts it. The per-device signing (TSS) is handled by pymobiledevice3.
+    Each failure is reported with its own ``reason`` / ``hint_key`` so the
+    UI can say what actually went wrong.
     """
     try:
+        import pymobiledevice3.services.mobile_image_mounter as mim
         from pymobiledevice3.exceptions import DeveloperModeIsNotEnabledError
         from pymobiledevice3.services.mobile_image_mounter import (
             MobileImageMounterService,
-            auto_mount_personalized,
             AlreadyMountedError,
         )
     except ImportError as exc:
@@ -111,43 +275,57 @@ async def ensure_personalized_ddi_mounted(
     except Exception:
         logger.warning("Could not query image mount status; will attempt to mount anyway", exc_info=True)
 
-    # 2. Not mounted — download + mount. Notify frontend so the user
-    # sees a "preparing device" overlay instead of a frozen UI.
-    logger.info("Personalized DDI not mounted on %s; mounting (may download ~20MB)...", conn.udid)
+    # 2. Not mounted. Get the image on disk first — only the network step,
+    # in a thread, so the loop (and the WiFi tunnel) stay alive — then
+    # mount it on the loop, where the lockdown connection's futures live.
+    cached = _personalized_ddi_cached()
+    logger.info(
+        "Personalized DDI not mounted on %s; %s",
+        conn.udid, "mounting from cache" if cached else "downloading image first (~15MB)",
+    )
+    await _broadcast_mounting(conn.udid, STAGE_MOUNTING if cached else STAGE_DOWNLOADING)
+
+    download_timeout = asyncio.timeout(DDI_DOWNLOAD_TIMEOUT_S)
     try:
-        from services.ws_broadcaster import broadcast
-        await broadcast("ddi_mounting", {"udid": conn.udid})
-    except Exception:
-        logger.debug("ddi_mounting WS broadcast failed (personalized)", exc_info=True)
+        async with download_timeout:
+            # shield: a timed-out waiter must not cancel the shared download,
+            # which keeps going so the next attempt finds the image cached.
+            image, build_manifest, trustcache = await asyncio.shield(_ensure_download())
+    except Exception as exc:
+        if isinstance(exc, TimeoutError) and download_timeout.expired():
+            logger.error(
+                "DDI download not finished after %.0fs for %s; continuing in background",
+                DDI_DOWNLOAD_TIMEOUT_S, conn.udid,
+            )
+            await broadcast_ddi_mount_failure(
+                conn.udid, "download", REASON_DOWNLOAD_TIMEOUT, hint_key=HINT_KEY_DOWNLOAD_TIMEOUT,
+            )
+            raise RuntimeError(
+                "DDI download timed out — check network access to raw.githubusercontent.com"
+            ) from exc
+        logger.error("DDI download failed for %s", conn.udid, exc_info=True)
+        await broadcast_ddi_mount_failure(
+            conn.udid, "download", REASON_DOWNLOAD_FAILED, hint_key=HINT_KEY_DOWNLOAD_FAILED,
+        )
+        raise
+
+    if not cached:
+        await _broadcast_mounting(conn.udid, STAGE_MOUNTING)
+    mount_timeout = asyncio.timeout(DDI_MOUNT_TIMEOUT_S)
     mount_succeeded = False
     try:
-        # auto_mount_personalized is a coroutine that talks to the device
-        # over the same lockdown connection — its async resources are
-        # bound to the running event loop, so it MUST run on the main
-        # loop. We previously delegated this to a thread executor via
-        # asyncio.run(...) to keep the loop responsive during the GitHub
-        # DDI download, but that hits "Future attached to a different
-        # loop" because lockdown sockets/futures stay tied to the main
-        # loop. Trade-off: the GitHub fetch may briefly stall the loop
-        # for a couple of seconds — acceptable vs. a hard crash.
-        # Serialise across devices so parallel connects don't corrupt
-        # the shared DDI cache.
+        # Serialise across devices: two mounts on one Mac race the TSS
+        # ticket request and the image upload.
         async with mount_lock:
-            await asyncio.wait_for(
-                auto_mount_personalized(conn.lockdown), timeout=120.0,
-            )
+            async with mount_timeout:
+                await mim.PersonalizedImageMounter(lockdown=conn.lockdown).mount(
+                    image, build_manifest, trustcache,
+                )
         logger.info("Personalized DDI mounted successfully for %s", conn.udid)
         mount_succeeded = True
     except AlreadyMountedError:
         logger.info("DDI was mounted concurrently for %s", conn.udid)
         mount_succeeded = True
-    except asyncio.TimeoutError:
-        logger.error("DDI mount timed out after 120s for %s", conn.udid)
-        await broadcast_ddi_mount_failure(
-            conn.udid, "personalized",
-            "TimeoutError: DDI download/mount timed out after 120s",
-        )
-        raise RuntimeError("DDI mount timed out — check network access to github.com")
     except DeveloperModeIsNotEnabledError:
         # Personalized DDI cannot mount while Developer Mode is off (a
         # major iOS upgrade resets it). Mounting via Xcode / 3uTools
@@ -165,10 +343,14 @@ async def ensure_personalized_ddi_mounted(
         )
         raise
     except Exception as exc:
-        logger.exception("auto_mount_personalized failed for %s", conn.udid)
-        await broadcast_ddi_mount_failure(
-            conn.udid, "personalized", f"{type(exc).__name__}: {exc}",
-        )
+        timed_out = isinstance(exc, TimeoutError) and mount_timeout.expired()
+        reason, hint_key = _classify_mount_error(exc, timed_out)
+        logger.error("Personalized DDI mount failed for %s (%s)", conn.udid, reason, exc_info=True)
+        await broadcast_ddi_mount_failure(conn.udid, "personalized", reason, hint_key=hint_key)
+        if timed_out:
+            raise RuntimeError(
+                f"DDI mount timed out after {DDI_MOUNT_TIMEOUT_S:.0f}s — iPhone stopped responding"
+            ) from exc
         raise
     finally:
         if mount_succeeded:

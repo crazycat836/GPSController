@@ -35,6 +35,7 @@ import MiniStatusBar from './components/shell/MiniStatusBar'
 import TopBarActions from './components/shell/TopBarActions'
 import SettingsMenu from './components/shell/SettingsMenu'
 import TopCenterStack from './components/shell/TopCenterStack'
+import DdiMountingOverlay from './components/shell/DdiMountingOverlay'
 
 // Contexts consumed inside AppShell
 import { useConnectionHealth } from './contexts/ConnectionHealthContext'
@@ -74,7 +75,11 @@ const DEVICE_LOST_TOAST_KEYS: Record<DeviceLostCause, StringKey> = {
 // an elapsed hint + a Cancel escape hatch; after the hard timeout it clears
 // itself (so a lost terminating WS frame can't leave the user stuck).
 const DDI_TAKING_LONG_MS = 20_000
-const DDI_SAFETY_TIMEOUT_MS = 60_000
+// Per stage (the timers restart when downloading turns into mounting).
+// Must stay above the backend's own per-stage timeouts in core/ddi_mount.py
+// (download 60s, mount 45s) so the backend's specific failure reason
+// arrives before this generic fallback fires.
+const DDI_SAFETY_TIMEOUT_MS = 90_000
 
 // device_error events carrying a stable `code` (backend exceptions that
 // expose `.code`, forwarded by api/location/_helpers.py) get a specific
@@ -303,11 +308,16 @@ function AppShell() {
   //   3. clear immediately if the WS transport goes offline (the offline
   //      banner then explains the real problem).
   const [ddiTakingLong, setDdiTakingLong] = useState(false)
+  // Whether this mount started with a download, so the mounting stage can
+  // read "step 2 of 2" instead of looking like a fresh, unrelated wait.
+  const [ddiDownloaded, setDdiDownloaded] = useState(false)
   useEffect(() => {
+    setDdiTakingLong(false)
     if (!sim.ddiMounting) {
-      setDdiTakingLong(false)
+      setDdiDownloaded(false)
       return
     }
+    if (sim.ddiMounting === 'downloading') setDdiDownloaded(true)
     const graceTimer = setTimeout(() => setDdiTakingLong(true), DDI_TAKING_LONG_MS)
     const safetyTimer = setTimeout(() => {
       clearDdiMounting()
@@ -364,40 +374,13 @@ function AppShell() {
       {/* Full-screen map layer */}
       <div id="map-canvas" className="absolute inset-0">
 
-        {/* DDI mounting overlay */}
         {sim.ddiMounting && (
-          <div className="absolute inset-0 z-[var(--z-overlay)] bg-[rgba(20,22,32,0.85)] backdrop-blur-[3px] flex items-center justify-center">
-            <div className="surface-popup rounded-2xl px-7 py-5 max-w-[420px] text-center">
-              <svg
-                width="32" height="32" viewBox="0 0 24 24" fill="none"
-                stroke="#a78bfa" strokeWidth="2"
-                className="animate-spin mx-auto mb-2.5"
-              >
-                <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="16" />
-              </svg>
-              <div className="text-sm font-semibold mb-1.5 text-[var(--color-text-1)]">
-                {t('ddi.mounting_title')}
-              </div>
-              <div className="text-xs text-[var(--color-text-2)] leading-relaxed">
-                {t('ddi.mounting_hint')}
-              </div>
-              {ddiTakingLong && (
-                <>
-                  <div className="text-xs text-[var(--color-text-3)] leading-relaxed mt-2.5">
-                    {t('ddi.taking_long')}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={clearDdiMounting}
-                    className="mt-3 inline-flex items-center justify-center h-8 px-4 rounded-lg text-[12px] font-medium text-[var(--color-text-2)] hover:text-[var(--color-text-1)] cursor-pointer transition-colors"
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)' }}
-                  >
-                    {t('ddi.cancel')}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
+          <DdiMountingOverlay
+            stage={sim.ddiMounting}
+            afterDownload={ddiDownloaded}
+            takingLong={ddiTakingLong}
+            onCancel={clearDdiMounting}
+          />
         )}
 
         <MapView

@@ -139,6 +139,37 @@ async def forget_device(udid: str):
     }
 
 
+@router.post("/{udid}/ddi/retry")
+async def retry_ddi_mount(udid: str):
+    """Mount the Developer Disk Image again after a failure (download
+    timed out, phone was locked, Developer Mode just turned on).
+
+    Rebuilds the location service and engine on the existing connection,
+    which re-runs the mount. The outcome reaches the UI the same way as on
+    connect: ``ddi_mounting`` → ``ddi_mounted`` or ``ddi_mount_missing``.
+    """
+    app_state = get_app_state()
+    dm = get_device_manager()
+    if not dm.is_connected(udid):
+        raise http_err(404, ErrorCode.DEVICE_NOT_CONNECTED, "Device is not currently connected")
+    # Engine first: it holds the location service we're about to close.
+    await app_state.terminate_engine(udid)
+    await dm.reset_location_service(udid)
+    try:
+        # Same rollback wrapper as connect: a failed rebuild must not leave
+        # the store advertising a connected device with no engine behind it.
+        await connection_state.create_engine_with_rollback(
+            dm, app_state, udid,
+            cause="engine_create_failed",
+            stage="ddi_retry",
+            error="Simulation engine creation failed",
+        )
+    except Exception:
+        logger.exception("DDI retry failed to rebuild the engine", extra={"udid": udid})
+        raise http_err(500, ErrorCode.CONNECT_FAILED, "Device connection failed; please retry")
+    return {"status": "retried", "udid": udid}
+
+
 # ── AMFI: "Reveal Developer Mode in Settings" (iOS 16+) ─────────────
 #
 # Same end state as sideloading a dev-signed IPA via Sideloadly / Xcode,

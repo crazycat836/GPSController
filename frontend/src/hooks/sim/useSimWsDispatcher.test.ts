@@ -45,7 +45,7 @@ interface GlobalState {
   pauseEndAt: number | null
   waypointProgress: { current: number; next: number; total: number } | null
   lapProgress: { current: number; total: number | null } | null
-  ddiMounting: boolean
+  ddiMounting: false | 'downloading' | 'mounting'
   ddiMissing: {
     reason: string
     stage?: string
@@ -114,7 +114,7 @@ function createHarness(seed?: { runtimes?: RuntimesMap; globals?: Partial<Global
     setPauseEndAt: track<number | null>('pauseEndAt'),
     setWaypointProgress: track<GlobalState['waypointProgress']>('waypointProgress'),
     setLapProgress: track<GlobalState['lapProgress']>('lapProgress'),
-    setDdiMounting: track<boolean>('ddiMounting'),
+    setDdiMounting: track<GlobalState['ddiMounting']>('ddiMounting'),
     setDdiMissing: track<GlobalState['ddiMissing']>('ddiMissing'),
     setError: track<string | null>('error'),
     localizeError: vi.fn((code) => `localized:${code}`),
@@ -572,13 +572,25 @@ describe('pause_countdown / ddi / tunnel_lost / device_disconnected', () => {
 
   it('ddi_mount_missing defaults reason to "unknown" and stamps ts with Date.now', () => {
     vi.spyOn(Date, 'now').mockReturnValue(2_000_000)
-    const h = createHarness({ globals: { ddiMounting: true } })
+    const h = createHarness({ globals: { ddiMounting: 'mounting' } })
     h.send('ddi_mount_missing', {})
     expect(h.globals.ddiMounting).toBe(false)
     expect(h.globals.ddiMissing).toEqual({ reason: 'unknown', stage: undefined, ts: 2_000_000 })
 
     h.send('ddi_mount_missing', { reason: 'no_image', stage: 'download' })
     expect(h.globals.ddiMissing).toEqual({ reason: 'no_image', stage: 'download', ts: 2_000_000 })
+  })
+
+  it('ddi_mounting tracks the download → mount stages; a missing stage means mounting', () => {
+    const h = createHarness()
+    h.send('ddi_mounting', { udid: UDID_A, stage: 'downloading' })
+    expect(h.globals.ddiMounting).toBe('downloading')
+    h.send('ddi_mounting', { udid: UDID_A, stage: 'mounting' })
+    expect(h.globals.ddiMounting).toBe('mounting')
+    h.send('ddi_mounted', { udid: UDID_A })
+    expect(h.globals.ddiMounting).toBe(false)
+    h.send('ddi_mounting', { udid: UDID_A })
+    expect(h.globals.ddiMounting).toBe('mounting')
   })
 
   it('ddi_mount_missing carries udid and hint_key so the banner can pick a specific message', () => {

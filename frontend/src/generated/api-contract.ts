@@ -65,6 +65,7 @@ export interface TunnelRecoveredEvent {
 /** In-progress mount — surfaces a transient "mounting Developer Disk */
 export interface DdiMountingEvent {
   udid: string
+  stage?: 'downloading' | 'mounting'
 }
 
 /** Mount completed successfully. */

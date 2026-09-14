@@ -215,6 +215,12 @@ async def lifespan(application: FastAPI):
         wifi_keepalive_loop(keepalive_stop, app_state),
     )
 
+    # Download the iOS 17+ Developer Disk Image now (only when the cache is
+    # missing or outdated, e.g. after a pymobiledevice3 upgrade) so the
+    # first connect mounts from disk instead of waiting on GitHub.
+    from core.ddi_mount import prefetch_personalized_ddi
+    ddi_prefetch_task = asyncio.create_task(prefetch_personalized_ddi())
+
     yield
 
     # ── Shutdown ──
@@ -223,6 +229,9 @@ async def lifespan(application: FastAPI):
     await _stop_background_task(liveness_task, liveness_stop, label="liveness loop")
     await _stop_background_task(keepalive_task, keepalive_stop, label="keep-alive loop")
 
+    # The download runs on a daemon thread; cancelling only stops waiting.
+    ddi_prefetch_task.cancel()
+    await asyncio.gather(ddi_prefetch_task, return_exceptions=True)
     watchdog_task.cancel()
     try:
         await watchdog_task

@@ -366,6 +366,26 @@ export const STRINGS = {
   },
   // Developer Mode is off on the iPhone (a major iOS upgrade resets it).
   // Mounting DDI manually cannot help; the toggle must be turned on first.
+  // Download / device-side failures get their own hints so the banner
+  // doesn't send the user to Xcode for a slow network or a locked phone.
+  'ddi.download_timeout': {
+    zh: '開發者映像檔下載太久,可能是網路較慢或 GitHub 連線受阻。下載仍在背景繼續,稍後按「重試」即可。',
+    en: 'The Developer Disk Image download is taking too long — possibly a slow network or blocked GitHub access. It keeps downloading in the background; press Retry in a moment.',
+  },
+  'ddi.download_failed': {
+    zh: '開發者映像檔下載失敗,連不到 GitHub(raw.githubusercontent.com)。公司或校園網路可能會擋,可改用手機熱點後按「重試」。',
+    en: 'Could not download the Developer Disk Image from GitHub (raw.githubusercontent.com). Office or campus networks may block it; try a phone hotspot, then press Retry.',
+  },
+  'ddi.device_locked': {
+    zh: 'iPhone 鎖定中,無法掛載開發者映像檔。請解鎖 iPhone 後按「重試」。',
+    en: 'The iPhone is locked, so the Developer Disk Image cannot be mounted. Unlock it, then press Retry.',
+  },
+  'ddi.device_unreachable': {
+    zh: '掛載途中和 iPhone 的連線中斷了。請確認 iPhone 已解鎖、USB 或 WiFi 連線正常,然後按「重試」。',
+    en: 'The connection to the iPhone dropped while mounting. Make sure it is unlocked and the USB or WiFi link is up, then press Retry.',
+  },
+  'ddi.retry': { zh: '重試', en: 'Retry' },
+  'ddi.retry_failed': { zh: '重試失敗', en: 'Retry failed' },
   'ddi.developer_mode_disabled': {
     zh: 'iPhone 的開發者模式已關閉,無法模擬定位。請到「設定 → 隱私權與安全性 → 開發者模式」開啟並重新開機,然後重新連線。',
     en: 'Developer Mode is off on the iPhone, so location simulation cannot start. Enable it under Settings → Privacy & Security → Developer Mode, restart the phone, then reconnect.',
@@ -482,8 +502,11 @@ export const STRINGS = {
   'pause.random_walk': { zh: '每段隨機暫停', en: 'Random pause between legs' },
 
   // ── DDI mount overlay ───────────────────────
-  'ddi.mounting_title': { zh: '首次設定裝置中', en: 'Preparing device' },
-  'ddi.mounting_hint': { zh: '正在下載並掛載 Developer Disk Image(約 20MB),請保持網路連線,約需 10~30 秒...', en: 'Downloading and mounting the Developer Disk Image (~20MB). Please keep your internet connected. This takes 10–30 seconds...' },
+  'ddi.downloading_title': { zh: '正在下載開發者映像檔', en: 'Downloading Developer Disk Image' },
+  'ddi.downloading_hint': { zh: '約 15MB,從 GitHub 下載。只有第一次使用或更新後需要,請保持網路連線。', en: 'About 15MB from GitHub. Only needed the first time or after an update; keep your internet connected.' },
+  'ddi.mounting_title': { zh: '正在掛載開發者映像檔', en: 'Mounting Developer Disk Image' },
+  'ddi.mounting_hint': { zh: '正在把映像檔掛載到 iPhone,約需 10~30 秒。請保持 iPhone 解鎖。', en: 'Mounting the image on the iPhone. This takes 10–30 seconds; keep the iPhone unlocked.' },
+  'ddi.step': { zh: '步驟 {n}/2', en: 'Step {n} of 2' },
 
   // ── Shell (aria labels, buttons without visible text) ──
   'shell.dock_aria': { zh: '模擬控制列', en: 'Simulation dock' },
@@ -623,7 +646,8 @@ export const STRINGS = {
   // ── Device connect / DDI feedback (UX fixes) ──
   'device.connecting': { zh: '連線中…', en: 'Connecting…' },
   'toast.connect_failed_trust': { zh: '連線失敗,請在 iPhone 上點「信任這台電腦」後再試', en: 'Connection failed — tap "Trust This Computer" on the iPhone, then retry' },
-  'ddi.taking_long': { zh: '比預期久,可能是網路較慢。可繼續等待,或取消。', en: 'Taking longer than usual — possibly a slow network. Keep waiting, or cancel.' },
+  'ddi.taking_long': { zh: '比預期久。請確認 iPhone 已解鎖、連線正常。可繼續等待,或取消。', en: 'Taking longer than usual. Check that the iPhone is unlocked and connected. Keep waiting, or cancel.' },
+  'ddi.taking_long_download': { zh: '下載比預期久,可能是網路較慢。可繼續等待;取消只會關閉這個畫面,下載仍在背景進行,結果會再通知你。', en: 'The download is slower than usual — possibly a slow network. Keep waiting; Cancel only closes this screen — the download keeps going and you will be told how it ends.' },
   'ddi.cancel': { zh: '取消並關閉', en: 'Cancel' },
   'toast.ddi_timeout': { zh: 'DDI 掛載逾時,請重新連線裝置', en: 'DDI mount timed out. Please reconnect the device.' },
 

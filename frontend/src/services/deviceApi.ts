@@ -48,6 +48,8 @@ export const wifiTunnelStatus = () => request<WifiTunnelStatus>('GET', '/api/dev
 export const wifiTunnelDiscover = () => request<{ devices: { ip: string; port: number; host: string; name: string }[] }>('GET', '/api/device/wifi/tunnel/discover')
 export const wifiTunnelStop = () => request<StatusResponse>('POST', '/api/device/wifi/tunnel/stop')
 export const wifiRepair = () => request<{ status: string; udid: string; name: string; ios_version: string; remote_record_regenerated: boolean }>('POST', '/api/device/wifi/repair')
+export const retryDdiMount = (udid: string) =>
+  request<{ status: string; udid: string }>('POST', `/api/device/${encodeURIComponent(udid)}/ddi/retry`)
 export const revealDeveloperMode = (udid: string) =>
   request<{ status: string; udid: string }>(
     'POST',

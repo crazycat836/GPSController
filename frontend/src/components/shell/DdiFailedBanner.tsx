@@ -4,7 +4,7 @@ import { useSimState } from '../../contexts/SimContext'
 import { useToastContext } from '../../contexts/ToastContext'
 import { useT } from '../../i18n'
 import type { StringKey } from '../../i18n'
-import { revealDeveloperMode } from '../../services/api'
+import { retryDdiMount, revealDeveloperMode } from '../../services/api'
 
 // Persistent, dismissible banner for a failed DDI (Developer Disk Image)
 // mount. Replaces the old 10s toast, which the single-slot ToastContext let
@@ -12,9 +12,11 @@ import { revealDeveloperMode } from '../../services/api'
 // device and no explanation. Driven by the one-shot `ddiMissing` signal; a
 // fresh mount attempt (ddiMounting) clears a stale failure.
 //
-// The backend picks the message via `hint_key`. When the cause is the
-// iPhone's Developer Mode toggle being off, the banner also offers the
-// AMFI "reveal" action so the user can find the toggle in Settings.
+// The backend picks the message via `hint_key` (slow/blocked download,
+// locked phone, dropped link, Developer Mode off, or the generic manual-mount
+// fallback). Every variant offers Retry, which re-runs the mount on the
+// existing connection; when the cause is Developer Mode being off the banner
+// also offers the AMFI "reveal" action so the user can find the toggle.
 
 const REASON_DEVELOPER_MODE_DISABLED = 'developer_mode_disabled'
 
@@ -23,6 +25,10 @@ const REASON_DEVELOPER_MODE_DISABLED = 'developer_mode_disabled'
 const HINT_KEYS: ReadonlySet<string> = new Set<StringKey>([
   'ddi.missing_hint',
   'ddi.developer_mode_disabled',
+  'ddi.download_timeout',
+  'ddi.download_failed',
+  'ddi.device_locked',
+  'ddi.device_unreachable',
 ])
 
 function resolveHintKey(hintKey: string | undefined, reason: string): StringKey {
@@ -38,6 +44,7 @@ export default function DdiFailedBanner() {
   const lastTs = useRef(0)
   const [visible, setVisible] = useState(false)
   const [revealing, setRevealing] = useState(false)
+  const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
     if (!ddiMissing) return
@@ -63,6 +70,21 @@ export default function DdiFailedBanner() {
       showToast(`${t('dev_mode.reveal_failed')}: ${msg}`)
     } finally {
       setRevealing(false)
+    }
+  }, [udid, showToast, t])
+
+  // Success needs no handling here: the retry's `ddi_mounting` frame hides
+  // the banner, and a repeat failure brings it back with the new cause.
+  const handleRetry = useCallback(async () => {
+    if (!udid) return
+    setRetrying(true)
+    try {
+      await retryDdiMount(udid)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showToast(`${t('ddi.retry_failed')}: ${msg}`)
+    } finally {
+      setRetrying(false)
     }
   }, [udid, showToast, t])
 
@@ -99,6 +121,19 @@ export default function DdiFailedBanner() {
               className="underline underline-offset-2 cursor-pointer disabled:opacity-60 disabled:cursor-default"
             >
               {t('dev_mode.reveal_button')}
+            </button>
+          </>
+        )}
+        {udid && (
+          <>
+            {' '}
+            <button
+              type="button"
+              onClick={handleRetry}
+              disabled={retrying}
+              className="underline underline-offset-2 cursor-pointer font-semibold disabled:opacity-60 disabled:cursor-default"
+            >
+              {t('ddi.retry')}
             </button>
           </>
         )}

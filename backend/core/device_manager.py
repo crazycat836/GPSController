@@ -476,26 +476,7 @@ class DeviceManager:
             except Exception as exc:
                 logger.warning("Error clearing location on disconnect for %s: %s", udid, exc)
 
-        # Close whatever DvtProvider the location service holds NOW. After
-        # a DVT reconnect, conn.dvt_provider points at the OLD provider and
-        # the live one would otherwise leak its dtx reader tasks (asyncio
-        # "Task was destroyed but it is pending!" at the next GC). Bounded
-        # wait: aclose() shares the reconnect lock, and a reconnect ladder
-        # in flight can hold it for ~15s we don't want to spend here.
-        if conn.location_service is not None:
-            try:
-                await asyncio.wait_for(conn.location_service.aclose(), timeout=5.0)
-            except Exception as exc:
-                logger.warning(
-                    "Error closing location service for %s: %s", udid, exc,
-                )
-
-        # Shut down the DVT provider if it was opened.
-        if conn.dvt_provider is not None:
-            try:
-                await conn.dvt_provider.__aexit__(None, None, None)
-            except Exception as exc:
-                logger.warning("Error closing DvtProvider for %s: %s", udid, exc)
+        await self._close_location_stack(conn, udid)
 
         # Close RSD.
         if conn.rsd is not None:
@@ -660,6 +641,44 @@ class DeviceManager:
     def connected_count(self) -> int:
         """Return the number of currently connected devices."""
         return len(self._connections)
+
+    @staticmethod
+    async def _close_location_stack(conn: _ActiveConnection, udid: str) -> None:
+        """Close the location service and its DvtProvider, and forget both."""
+        # Close whatever DvtProvider the location service holds NOW. After
+        # a DVT reconnect, conn.dvt_provider points at the OLD provider and
+        # the live one would otherwise leak its dtx reader tasks (asyncio
+        # "Task was destroyed but it is pending!" at the next GC). Bounded
+        # wait: aclose() shares the reconnect lock, and a reconnect ladder
+        # in flight can hold it for ~15s we don't want to spend here.
+        if conn.location_service is not None:
+            try:
+                await asyncio.wait_for(conn.location_service.aclose(), timeout=5.0)
+            except Exception as exc:
+                logger.warning(
+                    "Error closing location service for %s: %s", udid, exc,
+                )
+
+        # Shut down the DVT provider if it was opened.
+        if conn.dvt_provider is not None:
+            try:
+                await conn.dvt_provider.__aexit__(None, None, None)
+            except Exception as exc:
+                logger.warning("Error closing DvtProvider for %s: %s", udid, exc)
+
+        conn.location_service = None
+        conn.dvt_provider = None
+
+    async def reset_location_service(self, udid: str) -> None:
+        """Drop the cached location service so the next
+        :meth:`get_location_service` builds a fresh one — and re-runs the
+        DDI mount. Used to retry after a failed mount, when the cached
+        service may be the legacy fallback picked at failure time."""
+        async with self._lock:
+            conn = self._connections.get(udid)
+        if conn is None:
+            raise RuntimeError(f"Device {udid} is not connected.")
+        await self._close_location_stack(conn, udid)
 
     def is_connected(self, udid: str) -> bool:
         """Check whether a device is currently connected."""

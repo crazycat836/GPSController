@@ -104,8 +104,12 @@ class TunnelRecoveredEvent(BaseModel):
 
 class DdiMountingEvent(BaseModel):
     """In-progress mount — surfaces a transient "mounting Developer Disk
-    Image" hint. Frontend may suppress this if the mount completes fast."""
+    Image" hint. Frontend may suppress this if the mount completes fast.
+    ``stage`` is ``downloading`` while the image is fetched from GitHub and
+    ``mounting`` once it is on disk; a download is followed by a second
+    frame for the mount."""
     udid: str
+    stage: Literal["downloading", "mounting"] | None = None
 
 
 class DdiMountedEvent(BaseModel):

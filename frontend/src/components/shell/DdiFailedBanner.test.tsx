@@ -12,12 +12,13 @@ type DdiMissing = {
   ts: number
 } | null
 
-const simState: { ddiMissing: DdiMissing; ddiMounting: boolean } = {
+const simState: { ddiMissing: DdiMissing; ddiMounting: false | 'downloading' | 'mounting' } = {
   ddiMissing: null,
   ddiMounting: false,
 }
 const showToast = vi.fn()
 const revealDeveloperMode = vi.fn()
+const retryDdiMount = vi.fn()
 
 vi.mock('../../contexts/SimContext', () => ({
   useSimState: () => simState,
@@ -27,6 +28,7 @@ vi.mock('../../contexts/ToastContext', () => ({
 }))
 vi.mock('../../services/api', () => ({
   revealDeveloperMode: (udid: string) => revealDeveloperMode(udid),
+  retryDdiMount: (udid: string) => retryDdiMount(udid),
 }))
 
 afterEach(() => {
@@ -76,10 +78,30 @@ describe('DdiFailedBanner', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/開發者模式|Developer Mode/)
   })
 
+  it.each([
+    ['ddi.download_timeout', /背景繼續|in the background/],
+    ['ddi.download_failed', /raw\.githubusercontent\.com/],
+    ['ddi.device_locked', /鎖定|locked/],
+    ['ddi.device_unreachable', /連線中斷|connection to the iPhone dropped/],
+  ])('renders its own message for %s instead of the manual-mount fallback', (hintKey, pattern) => {
+    renderBanner({ reason: 'x', udid: 'udid-A', hintKey, ts: 1 })
+    const text = screen.getByRole('alert').textContent ?? ''
+    expect(text).toMatch(pattern)
+    expect(text).not.toMatch(/Xcode|3uTools/)
+  })
+
+  it('Retry re-runs the mount for that device and toasts on failure', async () => {
+    retryDdiMount.mockRejectedValueOnce(new Error('nope'))
+    renderBanner({ reason: 'device_locked', udid: 'udid-A', hintKey: 'ddi.device_locked', ts: 1 })
+    fireEvent.click(screen.getByRole('button', { name: /重試|Retry/ }))
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/nope/)))
+    expect(retryDdiMount).toHaveBeenCalledWith('udid-A')
+  })
+
   it('hides once a new mount attempt starts', () => {
     const { rerender } = renderBanner({ reason: 'x', ts: 1 })
     expect(screen.getByRole('alert')).toBeTruthy()
-    simState.ddiMounting = true
+    simState.ddiMounting = 'mounting'
     rerender(
       <I18nProvider>
         <DdiFailedBanner />

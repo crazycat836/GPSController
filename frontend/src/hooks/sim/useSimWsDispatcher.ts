@@ -28,7 +28,7 @@
  */
 
 import { useEffect, useRef } from 'react'
-import type { DdiMissingSignal } from '../useSimulation'
+import type { DdiMissingSignal, DdiMountingState } from '../useSimulation'
 import { asNumber, asObject, asString } from '../../lib/ws-guards'
 import type { LatLng } from './types'
 import type { DeviceRuntime, RuntimesMap } from './useSimRuntimes'
@@ -202,7 +202,7 @@ export interface SimWsSetters {
   setLapProgress: React.Dispatch<
     React.SetStateAction<{ current: number; total: number | null } | null>
   >
-  setDdiMounting: React.Dispatch<React.SetStateAction<boolean>>
+  setDdiMounting: React.Dispatch<React.SetStateAction<DdiMountingState>>
   setDdiMissing: React.Dispatch<React.SetStateAction<DdiMissingSignal | null>>
   setError: React.Dispatch<React.SetStateAction<string | null>>
   localizeError: (code: SimErrorCode) => string
@@ -344,7 +344,10 @@ export function useSimWsDispatcher(
           break
         }
         case 'ddi_mounting': {
-          s.setDdiMounting(true)
+          // `downloading` precedes `mounting` when the image isn't cached;
+          // frames without a stage (older backends) mean mounting.
+          const stage = asString(asObject(wsMessage.data)?.stage)
+          s.setDdiMounting(stage === 'downloading' ? 'downloading' : 'mounting')
           break
         }
         case 'ddi_mounted': {

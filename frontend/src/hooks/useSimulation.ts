@@ -27,6 +27,9 @@ import {
 /** One-shot DDI-failure signal. `hintKey` picks the banner text (backend
  *  `hint_key`); `udid` lets the banner offer a per-device action such as
  *  revealing the Developer Mode toggle. */
+/** `false` when idle; otherwise which DDI step the backend is on. */
+export type DdiMountingState = false | 'downloading' | 'mounting'
+
 export type DdiMissingSignal = {
   reason: string
   stage?: string
@@ -174,7 +177,7 @@ export function useSimulation(subscribe?: WsSubscribe, options?: UseSimulationOp
   // Random-walk pause countdown (unix epoch seconds of when pause ends)
   const [pauseEndAt, setPauseEndAt] = useState<number | null>(null)
   const [pauseRemaining, setPauseRemaining] = useState<number | null>(null)
-  const [ddiMounting, setDdiMounting] = useState(false)
+  const [ddiMounting, setDdiMounting] = useState<DdiMountingState>(false)
   // One-shot signal consumed by SimContext's toast observer. `ts`
   // deduplicates repeats of the same failure across re-renders.
   const [ddiMissing, setDdiMissing] = useState<DdiMissingSignal | null>(null)
